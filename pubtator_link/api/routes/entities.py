@@ -91,67 +91,67 @@ async def search_entity_ids(
         description="Free text search query for biomedical entities",
         min_length=1,
         max_length=500,
-        examples={
-            "disease_query": {
+        examples=[
+            {
                 "summary": "Disease search",
                 "description": "Search for disease entities",
                 "value": "breast cancer",
             },
-            "gene_query": {
+            {
                 "summary": "Gene search",
                 "description": "Search for gene entities",
                 "value": "BRCA1",
             },
-            "chemical_query": {
+            {
                 "summary": "Chemical search",
                 "description": "Search for chemical entities",
                 "value": "aspirin",
             },
-            "complex_query": {
+            {
                 "summary": "Complex term",
                 "description": "Search for complex biomedical terms",
                 "value": "tumor suppressor protein p53",
             },
-        },
+        ],
     ),
     concept: Optional[str] = Query(
         default=None,
         description="Filter results by bioconcept type",
-        examples={
-            "gene": {
+        examples=[
+            {
                 "summary": "Gene filter",
                 "description": "Only return gene entities",
                 "value": "Gene",
             },
-            "disease": {
+            {
                 "summary": "Disease filter",
                 "description": "Only return disease entities",
                 "value": "Disease",
             },
-            "chemical": {
+            {
                 "summary": "Chemical filter",
                 "description": "Only return chemical entities",
                 "value": "Chemical",
             },
-        },
+        ],
     ),
     limit: int = Query(
         default=10,
         description="Maximum number of results to return",
         ge=1,
         le=100,
-        examples={
-            "default": {
+        examples=[
+            {
                 "summary": "Default limit",
                 "description": "Return up to 10 results",
                 "value": 10,
             },
-            "more_results": {
+            {
                 "summary": "More results",
                 "description": "Return up to 25 results",
                 "value": 25,
             },
-        },
+        ],
     ),
 ) -> EntityAutocompleteResponse:
     """Find biomedical entity identifiers through autocomplete search.

@@ -95,18 +95,18 @@ async def export_publication_annotations(
     service: PublicationServiceDep,
     pmids: str = Query(
         description="Comma-separated list of PubMed IDs",
-        examples={
-            "single_pmid": {
+        examples=[
+            {
                 "summary": "Single PMID",
                 "description": "Export annotations for one publication",
                 "value": "29355051",
             },
-            "multiple_pmids": {
+            {
                 "summary": "Multiple PMIDs",
                 "description": "Export annotations for multiple publications",
                 "value": "29355051,32511357,34170578",
             },
-        },
+        ],
     ),
     full: bool = Query(
         default=False,
@@ -257,18 +257,18 @@ async def export_pmc_publications(
     service: PublicationServiceDep,
     pmcids: str = Query(
         description="Comma-separated list of PMC IDs",
-        examples={
-            "single_pmcid": {
+        examples=[
+            {
                 "summary": "Single PMCID",
                 "description": "Export annotations for one PMC publication",
                 "value": "PMC7696669",
             },
-            "multiple_pmcids": {
+            {
                 "summary": "Multiple PMCIDs",
                 "description": "Export annotations for multiple PMC publications",
                 "value": "PMC7696669,PMC8869656,PMC9123456",
             },
-        },
+        ],
     ),
 ) -> PublicationExportResponse:
     """Export PMC publication annotations in the specified format.

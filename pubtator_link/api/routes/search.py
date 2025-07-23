@@ -87,78 +87,78 @@ async def search_publications(
         description="Search query (free text, entity ID, or relation query)",
         min_length=1,
         max_length=1000,
-        examples={
-            "free_text": {
+        examples=[
+            {
                 "summary": "Free text search",
                 "description": "Search using natural language",
                 "value": "breast cancer treatment",
             },
-            "entity_search": {
+            {
                 "summary": "Entity ID search",
                 "description": "Search using specific entity identifier",
                 "value": "@CHEMICAL_remdesivir",
             },
-            "boolean_search": {
+            {
                 "summary": "Boolean search",
                 "description": "Search using boolean operators",
                 "value": "@CHEMICAL_Doxorubicin AND @DISEASE_Neoplasms",
             },
-            "relation_search": {
+            {
                 "summary": "Relation search",
                 "description": "Search for entity relationships",
                 "value": "relations:ANY|@CHEMICAL_Doxorubicin|@DISEASE_Neoplasms",
             },
-            "relation_type_search": {
+            {
                 "summary": "Specific relation search",
                 "description": "Search for specific relationship types",
                 "value": "relations:treat|@CHEMICAL_remdesivir|Disease",
             },
-        },
+        ],
     ),
     page: int = Query(
         default=1,
         description="Page number for pagination",
         ge=1,
         le=1000,
-        examples={
-            "first_page": {
+        examples=[
+            {
                 "summary": "First page",
                 "description": "Get the first page of results",
                 "value": 1,
             },
-            "specific_page": {
+            {
                 "summary": "Specific page",
                 "description": "Get a specific page of results",
                 "value": 5,
             },
-        },
+        ],
     ),
     sort: Annotated[
         Optional[SearchSortOrder],
         Query(
             description="Sort order for search results (default: score desc)",
-            examples={
-                "relevance": {
+            examples=[
+                {
                     "summary": "By relevance",
                     "description": "Sort by relevance score (highest first)",
                     "value": "score desc",
                 },
-                "date_newest": {
+                {
                     "summary": "By date (newest)",
                     "description": "Sort by publication date (newest first)",
                     "value": "date desc",
                 },
-                "date_oldest": {
+                {
                     "summary": "By date (oldest)",
                     "description": "Sort by publication date (oldest first)",
                     "value": "date asc",
                 },
-                "score_lowest": {
+                {
                     "summary": "By relevance (lowest)",
                     "description": "Sort by relevance score (lowest first)",
                     "value": "score asc",
                 },
-            },
+            ],
         ),
     ] = None,
 ) -> SearchResponse:

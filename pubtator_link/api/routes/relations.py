@@ -101,75 +101,75 @@ async def find_related_entities(
     e1: str = Query(
         description="Primary entity ID (must start with @)",
         min_length=1,
-        examples={
-            "chemical_entity": {
+        examples=[
+            {
                 "summary": "Chemical entity",
                 "description": "Find entities related to a chemical compound",
                 "value": "@CHEMICAL_remdesivir",
             },
-            "gene_entity": {
+            {
                 "summary": "Gene entity",
                 "description": "Find entities related to a gene",
                 "value": "@GENE_BRCA1",
             },
-            "disease_entity": {
+            {
                 "summary": "Disease entity",
                 "description": "Find entities related to a disease",
                 "value": "@DISEASE_COVID-19",
             },
-            "drug_entity": {
+            {
                 "summary": "Drug entity",
                 "description": "Find entities related to a drug",
                 "value": "@CHEMICAL_Doxorubicin",
             },
-        },
+        ],
     ),
     type: Optional[str] = Query(
         default=None,
         description="Filter by specific relation type",
-        examples={
-            "treatment": {
+        examples=[
+            {
                 "summary": "Treatment relations",
                 "description": "Find entities that the primary entity treats",
                 "value": "treat",
             },
-            "causation": {
+            {
                 "summary": "Causation relations",
                 "description": "Find entities caused by the primary entity",
                 "value": "cause",
             },
-            "interaction": {
+            {
                 "summary": "Interaction relations",
                 "description": "Find entities that interact with the primary entity",
                 "value": "interact",
             },
-            "association": {
+            {
                 "summary": "Association relations",
                 "description": "Find entities associated with the primary entity",
                 "value": "associate",
             },
-        },
+        ],
     ),
     e2: Optional[str] = Query(
         default=None,
         description="Filter by target entity type",
-        examples={
-            "disease_targets": {
+        examples=[
+            {
                 "summary": "Disease targets",
                 "description": "Only find related diseases",
                 "value": "Disease",
             },
-            "gene_targets": {
+            {
                 "summary": "Gene targets",
                 "description": "Only find related genes",
                 "value": "Gene",
             },
-            "chemical_targets": {
+            {
                 "summary": "Chemical targets",
                 "description": "Only find related chemicals",
                 "value": "Chemical",
             },
-        },
+        ],
     ),
 ) -> RelationsResponse:
     """Find entities related to a specific biomedical entity.

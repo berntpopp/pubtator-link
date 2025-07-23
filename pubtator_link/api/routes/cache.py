@@ -205,33 +205,33 @@ async def clear_cache(
     pattern: Optional[str] = Query(
         default=None,
         description="Cache key pattern to clear (clears all if not specified)",
-        examples={
-            "clear_all": {
+        examples=[
+            {
                 "summary": "Clear all cache",
                 "description": "Clear all cached items",
                 "value": None,
             },
-            "publications_only": {
+            {
                 "summary": "Clear publication cache",
                 "description": "Clear only publication export cache",
                 "value": "pub_export:*",
             },
-            "entities_only": {
+            {
                 "summary": "Clear entity cache",
                 "description": "Clear only entity autocomplete cache",
                 "value": "entity_ac:*",
             },
-            "search_only": {
+            {
                 "summary": "Clear search cache",
                 "description": "Clear only literature search cache",
                 "value": "search:*",
             },
-            "relations_only": {
+            {
                 "summary": "Clear relations cache",
                 "description": "Clear only entity relations cache",
                 "value": "relations:*",
             },
-        },
+        ],
     ),
 ) -> CacheClearResponse:
     """Clear cached data with optional pattern-based filtering.

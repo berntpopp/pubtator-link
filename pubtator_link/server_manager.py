@@ -1,12 +1,12 @@
 """Unified server manager for PubTator-Link."""
 
-import asyncio
 from contextlib import asynccontextmanager
 from typing import Optional
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastmcp import FastMCP
 from structlog.typing import FilteringBoundLogger
 
 from .api.client import PubTator3Client
@@ -37,6 +37,7 @@ class UnifiedServerManager:
         self.client: Optional[PubTator3Client] = None
         self.publication_service: Optional[PublicationService] = None
         self.app: Optional[FastAPI] = None
+        self.mcp: Optional[FastMCP] = None
         self.server: Optional[uvicorn.Server] = None
 
     @asynccontextmanager
@@ -114,11 +115,67 @@ class UnifiedServerManager:
         self.app = app
         return app
 
+    async def create_mcp_server(self, app: FastAPI) -> FastMCP:
+        """Create FastMCP server from FastAPI app."""
+        try:
+            # Import MCP configuration classes
+            from fastmcp.server.openapi import MCPType, RouteMap
+
+            # Define custom tool names for better LLM experience
+            mcp_custom_names = {
+                "export_publication_annotations": "export_publications",
+                "export_pmc_publications": "export_pmc_articles",
+                "search_entity_ids": "search_biomedical_entities",
+                "search_publications": "search_literature",
+                "find_related_entities": "find_entity_relations",
+                "submit_text_annotation": "annotate_text",
+                "get_annotation_results": "get_text_annotations",
+                "get_cache_statistics": "get_cache_stats",
+                "clear_cache": "clear_api_cache",
+            }
+
+            # Define route filtering to exclude utility endpoints from MCP
+            mcp_route_maps = [
+                # Exclude health and monitoring endpoints
+                RouteMap(pattern=r"^/health$", mcp_type=MCPType.EXCLUDE),
+                RouteMap(pattern=r"^/cache/.*$", mcp_type=MCPType.EXCLUDE),
+                # Exclude root and docs endpoints
+                RouteMap(pattern=r"^/$", mcp_type=MCPType.EXCLUDE),
+                RouteMap(pattern=r"^/docs$", mcp_type=MCPType.EXCLUDE),
+                RouteMap(pattern=r"^/openapi.json$", mcp_type=MCPType.EXCLUDE),
+                RouteMap(pattern=r"^/redoc$", mcp_type=MCPType.EXCLUDE),
+            ]
+
+            # Create MCP server from FastAPI app
+            mcp = FastMCP.from_fastapi(
+                app=app,
+                name="PubTator-Link Server",
+                mcp_names=mcp_custom_names,
+                route_maps=mcp_route_maps,
+            )
+
+            self.logger.info("FastMCP server created successfully")
+            return mcp
+
+        except Exception as e:
+            self.logger.error(f"Failed to create MCP server: {e}")
+            raise RuntimeError(f"MCP server creation failed: {e}") from e
+
     async def start_unified_server(
         self, host: str = "127.0.0.1", port: int = 8000, reload: bool = False
     ):
         """Start unified server (HTTP + MCP)."""
+        # Create FastAPI app
         app = self.create_app()
+
+        # Create and mount MCP server
+        self.mcp = await self.create_mcp_server(app)
+        app.mount("/mcp", self.mcp.http_app())
+
+        self.logger.info("MCP HTTP interface mounted at /mcp")
+        self.logger.info(f"REST API available at http://{host}:{port}")
+        self.logger.info(f"MCP HTTP available at http://{host}:{port}/mcp")
+        self.logger.info(f"API documentation at http://{host}:{port}/docs")
 
         config = uvicorn.Config(
             app,
@@ -157,21 +214,26 @@ class UnifiedServerManager:
 
         await self.server.serve()
 
-    async def start_stdio_server(self):
+    async def start_stdio_server(self) -> None:
         """Start STDIO MCP server."""
         self.logger.info("Starting STDIO MCP server", transport="stdio")
 
-        # Initialize services for STDIO mode
-        async with self.lifespan(None):
-            # Simple STDIO MCP server loop
-            self.logger.info("STDIO server ready for MCP communication")
+        # Create FastAPI app (for MCP introspection)
+        app = self.create_app()
 
-            # Keep server running
-            try:
-                while True:
-                    await asyncio.sleep(1)
-            except KeyboardInterrupt:
-                pass
+        # Manually initialize app state for STDIO mode (since lifespan won't trigger)
+        self.logger.info("Initializing app state for STDIO mode...")
+        self.client = PubTator3Client(logger=self.logger)
+        self.publication_service = PublicationService(client=self.client, logger=self.logger)
+        self.logger.info("App state initialization complete")
+
+        # Create MCP server
+        self.mcp = await self.create_mcp_server(app)
+
+        self.logger.info("STDIO MCP server ready")
+
+        # Run MCP server in STDIO mode
+        await self.mcp.run_async(transport="stdio")
 
     async def shutdown(self):
         """Shutdown server."""

@@ -3,11 +3,16 @@
 import argparse
 import asyncio
 import sys
+from pathlib import Path
 from typing import Optional
 
 from .api.client import PubTator3Client
 from .logging_config import configure_logging
-from .mcp_server import serve_mcp
+
+# Add root directory to path for mcp_server import
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from mcp_server import main as mcp_main
+
 from .server_manager import UnifiedServerManager
 from .services.publication_service import PublicationService
 
@@ -114,13 +119,13 @@ async def serve_unified(host: str = "127.0.0.1", port: int = 8000, reload: bool 
         sys.exit(1)
 
 
-async def serve_mcp_only():
+def serve_mcp_only():
     """Start MCP-only server."""
     logger = configure_logging()
 
     try:
         logger.info("Starting MCP server")
-        await serve_mcp()
+        mcp_main()
     except KeyboardInterrupt:
         logger.info("MCP server stopped by user")
     except Exception as e:
@@ -207,7 +212,7 @@ def main():
         elif args.serve_mode == "unified":
             asyncio.run(serve_unified(args.host, args.port, getattr(args, "reload", False)))
         elif args.serve_mode == "mcp":
-            asyncio.run(serve_mcp_only())
+            serve_mcp_only()
     elif args.command == "entities":
         asyncio.run(search_entities(args.query, args.concept, args.limit))
     elif args.command == "search":
