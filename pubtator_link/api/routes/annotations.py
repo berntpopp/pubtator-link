@@ -7,9 +7,9 @@ from pydantic import BaseModel
 
 from ...config import text_processing_config
 from ...models.responses import (
-    TextAnnotationSubmitResponse,
-    TextAnnotationResultResponse,
     AnnotationEntity,
+    TextAnnotationResultResponse,
+    TextAnnotationSubmitResponse,
 )
 from .dependencies import (
     ClientDep,
@@ -81,9 +81,7 @@ class TextAnnotationSubmitRequestBody(BaseModel):
         422: {
             "description": "Validation error",
             "content": {
-                "application/json": {
-                    "example": {"detail": "Text is required and cannot be empty"}
-                }
+                "application/json": {"example": {"detail": "Text is required and cannot be empty"}}
             },
         },
     },
@@ -163,9 +161,7 @@ async def submit_text_annotation(
 
     # Validate bioconcept types
     invalid_bioconcepts = [
-        bc
-        for bc in bioconcept_list
-        if bc not in text_processing_config.supported_bioconcepts
+        bc for bc in bioconcept_list if bc not in text_processing_config.supported_bioconcepts
     ]
     if invalid_bioconcepts:
         raise HTTPException(
@@ -182,9 +178,7 @@ async def submit_text_annotation(
         )
 
     if not text.strip():
-        raise HTTPException(
-            status_code=422, detail="Text is required and cannot be empty"
-        )
+        raise HTTPException(status_code=422, detail="Text is required and cannot be empty")
 
     # Submit to PubTator3 text processing service
     # Note: PubTator3 API processes one bioconcept at a time, so we use the first one
@@ -215,16 +209,16 @@ async def submit_text_annotation(
         )
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except ConnectionError as e:
         raise HTTPException(
             status_code=503, detail="Text processing service temporarily unavailable"
-        )
-    except TimeoutError:
+        ) from e
+    except TimeoutError as e:
         raise HTTPException(
             status_code=504,
             detail="Request timeout while submitting text for processing",
-        )
+        ) from e
 
 
 @router.get(
@@ -279,17 +273,13 @@ async def submit_text_annotation(
             "description": "Session not found or expired",
             "content": {
                 "application/json": {
-                    "example": {
-                        "detail": "Session ABC123DEF456 not found or has expired"
-                    }
+                    "example": {"detail": "Session ABC123DEF456 not found or has expired"}
                 }
             },
         },
         422: {
             "description": "Invalid session ID format",
-            "content": {
-                "application/json": {"example": {"detail": "Invalid session ID format"}}
-            },
+            "content": {"application/json": {"example": {"detail": "Invalid session ID format"}}},
         },
     },
 )
@@ -414,27 +404,25 @@ async def get_annotation_results(
 
         else:
             # Unknown status
-            raise HTTPException(
-                status_code=500, detail=f"Unknown processing status: {status}"
-            )
+            raise HTTPException(status_code=500, detail=f"Unknown processing status: {status}")
 
     except HTTPException:
         # Re-raise HTTP exceptions as-is
         raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except ConnectionError as e:
         raise HTTPException(
             status_code=503, detail="Text processing service temporarily unavailable"
-        )
-    except TimeoutError:
+        ) from e
+    except TimeoutError as e:
         raise HTTPException(
             status_code=504,
             detail="Request timeout while retrieving annotation results",
-        )
+        ) from e
     except Exception as e:
         # Session not found or other error
         logger.error(f"Error retrieving annotation results: {e}")
         raise HTTPException(
             status_code=404, detail=f"Session {session_id} not found or has expired"
-        )
+        ) from e

@@ -1,13 +1,14 @@
 """Comprehensive tests for PubTator3 API client."""
 
-import pytest
-import httpx
-import respx
 from unittest.mock import Mock
+
+import httpx
+import pytest
+import respx
 
 from pubtator_link.api.client import PubTator3Client, PubTatorAPIError, RateLimiter
 from pubtator_link.config import APIConfig, TextProcessingConfig
-from tests.fixtures.api_responses import MockPubTatorResponses, MockErrorResponses
+from tests.fixtures.api_responses import MockErrorResponses, MockPubTatorResponses
 
 
 class TestRateLimiter:
@@ -94,13 +95,9 @@ class TestPubTator3Client:
         assert client.client is not None
 
     @pytest.mark.asyncio
-    async def test_client_initialization_with_logger(
-        self, api_config, text_config, mock_logger
-    ):
+    async def test_client_initialization_with_logger(self, api_config, text_config, mock_logger):
         """Test client initialization with logger."""
-        client = PubTator3Client(
-            config=api_config, text_config=text_config, logger=mock_logger
-        )
+        client = PubTator3Client(config=api_config, text_config=text_config, logger=mock_logger)
 
         assert client.logger == mock_logger
 
@@ -116,9 +113,7 @@ class TestPubTator3Client:
     @pytest.mark.asyncio
     async def test_client_context_manager(self, api_config, text_config):
         """Test client as async context manager."""
-        async with PubTator3Client(
-            config=api_config, text_config=text_config
-        ) as client:
+        async with PubTator3Client(config=api_config, text_config=text_config) as client:
             assert client.client is not None
 
         assert client.client.is_closed
@@ -133,9 +128,7 @@ class TestPubTator3Client:
             "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/publications/export/biocjson"
         ).mock(return_value=httpx.Response(200, json=mock_response))
 
-        result = await client.export_publications(
-            pmids=["29355051"], format="biocjson", full=False
-        )
+        result = await client.export_publications(pmids=["29355051"], format="biocjson", full=False)
 
         assert result == mock_response
 
@@ -164,9 +157,7 @@ class TestPubTator3Client:
             "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/publications/pmc_export/biocjson"
         ).mock(return_value=httpx.Response(200, json=mock_response))
 
-        result = await client.export_pmc_publications(
-            pmcids=["PMC7696669"], format="biocjson"
-        )
+        result = await client.export_pmc_publications(pmcids=["PMC7696669"], format="biocjson")
 
         assert result == mock_response
 
@@ -190,9 +181,9 @@ class TestPubTator3Client:
         """Test successful entity autocomplete."""
         mock_response = MockPubTatorResponses.entity_autocomplete_response()
 
-        respx.get(
-            "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/entity/autocomplete/"
-        ).mock(return_value=httpx.Response(200, json=mock_response))
+        respx.get("https://www.ncbi.nlm.nih.gov/research/pubtator3-api/entity/autocomplete/").mock(
+            return_value=httpx.Response(200, json=mock_response)
+        )
 
         result = await client.autocomplete_entity(query="cancer", limit=10)
 
@@ -218,9 +209,9 @@ class TestPubTator3Client:
         """Test successful text annotation submission."""
         mock_response = MockPubTatorResponses.text_annotation_submit_response()
 
-        respx.post(
-            "https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/RESTful/request.cgi"
-        ).mock(return_value=httpx.Response(200, json={"content": mock_response}))
+        respx.post("https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/RESTful/request.cgi").mock(
+            return_value=httpx.Response(200, json={"content": mock_response})
+        )
 
         result = await client.submit_text_annotation(
             text="The ESR1 gene mutations are associated with breast cancer risk.",
@@ -235,13 +226,11 @@ class TestPubTator3Client:
         """Test successful text annotation retrieval."""
         mock_response = MockPubTatorResponses.text_annotation_results_completed()
 
-        respx.post(
-            "https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/RESTful/retrieve.cgi"
-        ).mock(return_value=httpx.Response(200, json=mock_response))
-
-        result = await client.retrieve_text_annotation(
-            session_id="0DA64A2FE4D635D5820C"
+        respx.post("https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/RESTful/retrieve.cgi").mock(
+            return_value=httpx.Response(200, json=mock_response)
         )
+
+        result = await client.retrieve_text_annotation(session_id="0DA64A2FE4D635D5820C")
 
         assert result == mock_response
 
@@ -251,9 +240,9 @@ class TestPubTator3Client:
         """Test get_annotation_results as alias for retrieve_text_annotation."""
         mock_response = MockPubTatorResponses.text_annotation_results_completed()
 
-        respx.post(
-            "https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/RESTful/retrieve.cgi"
-        ).mock(return_value=httpx.Response(200, json=mock_response))
+        respx.post("https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/RESTful/retrieve.cgi").mock(
+            return_value=httpx.Response(200, json=mock_response)
+        )
 
         result = await client.get_annotation_results(session_id="0DA64A2FE4D635D5820C")
 
@@ -315,9 +304,7 @@ class TestPubTator3Client:
                 f"https://www.ncbi.nlm.nih.gov/research/pubtator3-api/publications/export/{format_name}"
             ).mock(return_value=httpx.Response(200, json=mock_response))
 
-            result = await client.export_publications(
-                pmids=["29355051"], format=format_name
-            )
+            result = await client.export_publications(pmids=["29355051"], format=format_name)
 
             assert result == mock_response
 
@@ -327,9 +314,9 @@ class TestPubTator3Client:
         """Test proper encoding of request parameters."""
         mock_response = MockPubTatorResponses.search_publications_response()
 
-        route = respx.get(
-            "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/search/"
-        ).mock(return_value=httpx.Response(200, json=mock_response))
+        route = respx.get("https://www.ncbi.nlm.nih.gov/research/pubtator3-api/search/").mock(
+            return_value=httpx.Response(200, json=mock_response)
+        )
 
         await client.search_publications(text="breast cancer & mutations", page=2)
 
@@ -369,8 +356,7 @@ class TestPubTator3Client:
         # Make multiple concurrent requests
         start_time = asyncio.get_event_loop().time()
         tasks = [
-            client.export_publications(pmids=[f"2935505{i}"], format="biocjson")
-            for i in range(3)
+            client.export_publications(pmids=[f"2935505{i}"], format="biocjson") for i in range(3)
         ]
 
         results = await asyncio.gather(*tasks)

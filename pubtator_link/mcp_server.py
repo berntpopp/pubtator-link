@@ -1,21 +1,20 @@
 """MCP server implementation for PubTator-Link."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from mcp.server import Server
 
 from .api.client import PubTator3Client
 from .api.routes.dependencies import (
-    validate_pmids,
-    validate_pmcids,
     validate_entity_id,
-    validate_page_number,
     validate_limit,
+    validate_page_number,
+    validate_pmcids,
+    validate_pmids,
 )
 from .config import api_config
 from .logging_config import configure_logging
 from .services.publication_service import PublicationService
-
 
 # Initialize the MCP server
 server = Server("pubtator-link")
@@ -57,7 +56,7 @@ async def cleanup_services():
 @server.call_tool()
 async def export_publication_annotations(
     format: str, pmids: str, full: bool = False
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Export publication annotations in specified format."""
     if not client or not publication_service:
         raise RuntimeError("MCP server not initialized")
@@ -81,7 +80,7 @@ async def export_publication_annotations(
 
 
 @server.call_tool()
-async def export_pmc_publications(format: str, pmcids: str) -> Dict[str, Any]:
+async def export_pmc_publications(format: str, pmcids: str) -> dict[str, Any]:
     """Export PMC publication annotations in specified format."""
     if not client or not publication_service:
         raise RuntimeError("MCP server not initialized")
@@ -106,7 +105,7 @@ async def export_pmc_publications(format: str, pmcids: str) -> Dict[str, Any]:
 @server.call_tool()
 async def search_entity_ids(
     query: str, concept: Optional[str] = None, limit: int = 10
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Find biomedical entity identifiers through autocomplete search."""
     if not client:
         raise RuntimeError("MCP server not initialized")
@@ -154,7 +153,7 @@ async def search_entity_ids(
 
 
 @server.call_tool()
-async def search_publications(text: str, page: int = 1) -> Dict[str, Any]:
+async def search_publications(text: str, page: int = 1) -> dict[str, Any]:
     """Search biomedical literature using flexible query types."""
     if not client:
         raise RuntimeError("MCP server not initialized")
@@ -202,7 +201,7 @@ async def search_publications(text: str, page: int = 1) -> Dict[str, Any]:
 @server.call_tool()
 async def find_related_entities(
     e1: str, type: Optional[str] = None, e2: Optional[str] = None
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Find entities related to a specific biomedical entity."""
     if not client:
         raise RuntimeError("MCP server not initialized")
@@ -223,9 +222,7 @@ async def find_related_entities(
         )
 
     # Call API client
-    result = await client.find_relations(
-        e1=validated_entity_id, relation_type=type, e2=e2
-    )
+    result = await client.find_relations(e1=validated_entity_id, relation_type=type, e2=e2)
 
     # Parse response
     related_entities = []
@@ -254,7 +251,7 @@ async def find_related_entities(
 
 
 @server.call_tool()
-async def submit_text_annotation(text: str, bioconcepts: str = "all") -> Dict[str, Any]:
+async def submit_text_annotation(text: str, bioconcepts: str = "all") -> dict[str, Any]:
     """Submit text for biomedical entity annotation."""
     if not client:
         raise RuntimeError("MCP server not initialized")
@@ -284,9 +281,7 @@ async def submit_text_annotation(text: str, bioconcepts: str = "all") -> Dict[st
 
 
 @server.call_tool()
-async def get_annotation_results(
-    session_id: str, format: str = "pubtator"
-) -> Dict[str, Any]:
+async def get_annotation_results(session_id: str, format: str = "pubtator") -> dict[str, Any]:
     """Retrieve annotation results for a submitted text processing job."""
     if not client:
         raise RuntimeError("MCP server not initialized")
@@ -305,7 +300,7 @@ async def get_annotation_results(
 
 
 @server.call_tool()
-async def get_cache_statistics(detailed: bool = False) -> Dict[str, Any]:
+async def get_cache_statistics(detailed: bool = False) -> dict[str, Any]:
     """Get comprehensive cache performance statistics."""
     if not publication_service:
         raise RuntimeError("MCP server not initialized")
@@ -337,7 +332,7 @@ async def get_cache_statistics(detailed: bool = False) -> Dict[str, Any]:
 
 
 @server.call_tool()
-async def clear_cache(pattern: Optional[str] = None) -> Dict[str, Any]:
+async def clear_cache(pattern: Optional[str] = None) -> dict[str, Any]:
     """Clear cached data with optional pattern-based filtering."""
     if not publication_service:
         raise RuntimeError("MCP server not initialized")

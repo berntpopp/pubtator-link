@@ -11,7 +11,6 @@ from ...api.client import PubTator3Client
 from ...logging_config import configure_logging
 from ...services.publication_service import PublicationService
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -66,19 +65,17 @@ def handle_api_errors(func: Callable) -> Callable:
             raise
         except ValueError as e:
             # Client-side validation errors
-            raise HTTPException(status_code=400, detail=str(e))
-        except ConnectionError:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except ConnectionError as e:
             # Network/connection errors
-            raise HTTPException(
-                status_code=503, detail="Service temporarily unavailable"
-            )
-        except TimeoutError:
+            raise HTTPException(status_code=503, detail="Service temporarily unavailable") from e
+        except TimeoutError as e:
             # Request timeout errors
-            raise HTTPException(status_code=504, detail="Request timeout")
+            raise HTTPException(status_code=504, detail="Request timeout") from e
         except Exception as e:
             # Generic server errors
             logger.error(f"Unexpected error in {func.__name__}: {e}")
-            raise HTTPException(status_code=500, detail="Internal server error")
+            raise HTTPException(status_code=500, detail="Internal server error") from e
 
     return wrapper
 

@@ -1,13 +1,13 @@
 """Tests for entity autocomplete route endpoints."""
 
-import pytest
-from fastapi.testclient import TestClient
 from unittest.mock import patch
 
-from pubtator_link.server_manager import UnifiedServerManager
-from pubtator_link.api.client import PubTator3Client
-from tests.fixtures.api_responses import MockPubTatorResponses
+import pytest
+from fastapi.testclient import TestClient
 
+from pubtator_link.api.client import PubTator3Client
+from pubtator_link.server_manager import UnifiedServerManager
+from tests.fixtures.api_responses import MockPubTatorResponses
 
 # Mock response for entity testing
 MOCK_ENTITY_AUTOCOMPLETE_RESPONSE = MockPubTatorResponses.entity_autocomplete_response()
@@ -43,9 +43,7 @@ class TestEntityRoutes:
         assert data["matches"][0]["type"] == "disease"
 
     @patch.object(PubTator3Client, "autocomplete_entity")
-    def test_search_entity_ids_with_concept_filter(
-        self, mock_autocomplete, test_client
-    ):
+    def test_search_entity_ids_with_concept_filter(self, mock_autocomplete, test_client):
         """Test entity search with concept type filter."""
         mock_autocomplete.return_value = MOCK_ENTITY_AUTOCOMPLETE_RESPONSE
 
@@ -142,9 +140,7 @@ class TestEntityRoutes:
         """Test entity search with default limit."""
         mock_autocomplete.return_value = MOCK_ENTITY_AUTOCOMPLETE_RESPONSE
 
-        response = test_client.get(
-            "/api/entities/autocomplete", params={"query": "cancer"}
-        )
+        response = test_client.get("/api/entities/autocomplete", params={"query": "cancer"})
 
         assert response.status_code == 200
         data = response.json()
@@ -203,9 +199,7 @@ class TestEntityRoutes:
 
         mock_autocomplete.side_effect = PubTatorAPIError("API Error", status_code=503)
 
-        response = test_client.get(
-            "/api/entities/autocomplete", params={"query": "cancer"}
-        )
+        response = test_client.get("/api/entities/autocomplete", params={"query": "cancer"})
 
         # API errors get caught and converted to 500 status by dependencies.py
         assert response.status_code == 500
@@ -261,9 +255,7 @@ class TestEntityRoutes:
         """Test entity search with unicode characters."""
         mock_autocomplete.return_value = []
 
-        response = test_client.get(
-            "/api/entities/autocomplete", params={"query": "癌症"}
-        )
+        response = test_client.get("/api/entities/autocomplete", params={"query": "癌症"})
 
         assert response.status_code == 200
         data = response.json()

@@ -11,12 +11,12 @@ from structlog.typing import FilteringBoundLogger
 
 from .api.client import PubTator3Client
 from .api.routes import (
-    publications_router,
-    entities_router,
-    search_router,
-    relations_router,
     annotations_router,
     cache_router,
+    entities_router,
+    publications_router,
+    relations_router,
+    search_router,
 )
 from .api.routes.dependencies import cleanup_dependencies
 from .config import settings
@@ -49,9 +49,7 @@ class UnifiedServerManager:
         self.client = PubTator3Client(logger=self.logger)
 
         # Initialize services
-        self.publication_service = PublicationService(
-            client=self.client, logger=self.logger
-        )
+        self.publication_service = PublicationService(client=self.client, logger=self.logger)
 
         self.logger.info("Server started successfully")
 
@@ -134,9 +132,7 @@ class UnifiedServerManager:
 
         self.server = uvicorn.Server(config)
 
-        self.logger.info(
-            "Starting unified server", host=host, port=port, transport="unified"
-        )
+        self.logger.info("Starting unified server", host=host, port=port, transport="unified")
 
         await self.server.serve()
 

@@ -5,7 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
-from ...models.responses import CacheStatsResponse, CacheClearResponse, CacheStats
+from ...models.responses import CacheClearResponse, CacheStats, CacheStatsResponse
 from .dependencies import (
     PublicationServiceDep,
     handle_api_errors,
@@ -69,9 +69,7 @@ router = APIRouter(prefix="/api/cache", tags=["Cache Management"])
         500: {
             "description": "Error retrieving cache statistics",
             "content": {
-                "application/json": {
-                    "example": {"detail": "Failed to retrieve cache statistics"}
-                }
+                "application/json": {"example": {"detail": "Failed to retrieve cache statistics"}}
             },
         },
     },
@@ -152,9 +150,7 @@ async def get_cache_statistics(
 
     except Exception as e:
         logger.error(f"Error retrieving cache statistics: {e}")
-        raise HTTPException(
-            status_code=500, detail="Failed to retrieve cache statistics"
-        )
+        raise HTTPException(status_code=500, detail="Failed to retrieve cache statistics") from e
 
 
 @router.delete(
@@ -194,16 +190,12 @@ async def get_cache_statistics(
         400: {
             "description": "Invalid clear pattern",
             "content": {
-                "application/json": {
-                    "example": {"detail": "Invalid cache pattern format"}
-                }
+                "application/json": {"example": {"detail": "Invalid cache pattern format"}}
             },
         },
         500: {
             "description": "Error clearing cache",
-            "content": {
-                "application/json": {"example": {"detail": "Failed to clear cache"}}
-            },
+            "content": {"application/json": {"example": {"detail": "Failed to clear cache"}}},
         },
     },
 )
@@ -312,9 +304,7 @@ async def clear_cache(
                 "text_proc:",
             ]
             if not any(pattern.startswith(prefix) for prefix in valid_prefixes):
-                logger.warning(
-                    f"Pattern '{pattern}' doesn't match known cache prefixes"
-                )
+                logger.warning(f"Pattern '{pattern}' doesn't match known cache prefixes")
 
         # Clear cache using the service
         cleared_count = await service.clear_cache(pattern=pattern)
@@ -333,7 +323,7 @@ async def clear_cache(
         # Re-raise HTTP exceptions as-is
         raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Error clearing cache: {e}")
-        raise HTTPException(status_code=500, detail="Failed to clear cache")
+        raise HTTPException(status_code=500, detail="Failed to clear cache") from e

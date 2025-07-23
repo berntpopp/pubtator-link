@@ -1,13 +1,13 @@
 """Tests for entity relations route endpoints."""
 
-import pytest
-from fastapi.testclient import TestClient
 from unittest.mock import patch
 
-from pubtator_link.server_manager import UnifiedServerManager
-from pubtator_link.api.client import PubTator3Client
-from tests.fixtures.api_responses import MockPubTatorResponses
+import pytest
+from fastapi.testclient import TestClient
 
+from pubtator_link.api.client import PubTator3Client
+from pubtator_link.server_manager import UnifiedServerManager
+from tests.fixtures.api_responses import MockPubTatorResponses
 
 # Mock response for relations testing
 MOCK_RELATIONS_RESPONSE = MockPubTatorResponses.entity_relations_response()
@@ -29,9 +29,7 @@ class TestRelationsRoutes:
         """Test basic entity relations search."""
         mock_relations.return_value = MOCK_RELATIONS_RESPONSE
 
-        response = test_client.get(
-            "/api/relations/", params={"e1": "@CHEMICAL_remdesivir"}
-        )
+        response = test_client.get("/api/relations/", params={"e1": "@CHEMICAL_remdesivir"})
 
         assert response.status_code == 200
         data = response.json()
@@ -56,9 +54,7 @@ class TestRelationsRoutes:
         assert any(rel["relation_type"] == "treat" for rel in data["related_entities"])
 
     @patch.object(PubTator3Client, "find_relations")
-    def test_find_related_entities_with_entity_filter(
-        self, mock_relations, test_client
-    ):
+    def test_find_related_entities_with_entity_filter(self, mock_relations, test_client):
         """Test relations search with target entity type filter."""
         mock_relations.return_value = MOCK_RELATIONS_RESPONSE
 
@@ -72,9 +68,7 @@ class TestRelationsRoutes:
 
     def test_find_related_entities_invalid_entity_id(self, test_client):
         """Test relations search with invalid entity ID format."""
-        response = test_client.get(
-            "/api/relations/", params={"e1": "invalid_entity_id"}
-        )
+        response = test_client.get("/api/relations/", params={"e1": "invalid_entity_id"})
 
         assert response.status_code == 400
         data = response.json()
@@ -113,9 +107,7 @@ class TestRelationsRoutes:
         """Test relations search with no results."""
         mock_relations.return_value = []
 
-        response = test_client.get(
-            "/api/relations/", params={"e1": "@CHEMICAL_nonexistent"}
-        )
+        response = test_client.get("/api/relations/", params={"e1": "@CHEMICAL_nonexistent"})
 
         # Empty results return 404 in the route implementation
         assert response.status_code == 404
@@ -127,9 +119,7 @@ class TestRelationsRoutes:
 
         mock_relations.side_effect = PubTatorAPIError("API Error", status_code=503)
 
-        response = test_client.get(
-            "/api/relations/", params={"e1": "@CHEMICAL_remdesivir"}
-        )
+        response = test_client.get("/api/relations/", params={"e1": "@CHEMICAL_remdesivir"})
 
         # API errors get caught and converted to 500 status by dependencies.py
         assert response.status_code == 500
@@ -201,9 +191,7 @@ class TestRelationsRoutes:
         assert len(data["related_entities"]) == 1
 
     @patch.object(PubTator3Client, "find_relations")
-    def test_find_related_entities_high_publication_count(
-        self, mock_relations, test_client
-    ):
+    def test_find_related_entities_high_publication_count(self, mock_relations, test_client):
         """Test relations search with high publication counts."""
         high_count_relations = [
             {
@@ -260,9 +248,7 @@ class TestRelationsRoutes:
         """Test relations search with unicode characters in entity names."""
         mock_relations.return_value = []
 
-        response = test_client.get(
-            "/api/relations/", params={"e1": "@CHEMICAL_阿司匹林"}
-        )
+        response = test_client.get("/api/relations/", params={"e1": "@CHEMICAL_阿司匹林"})
 
         # Unicode entity IDs may not be found, return 404
         assert response.status_code == 404

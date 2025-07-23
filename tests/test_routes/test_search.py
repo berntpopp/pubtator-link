@@ -1,13 +1,13 @@
 """Tests for publication search route endpoints."""
 
-import pytest
-from fastapi.testclient import TestClient
 from unittest.mock import patch
 
-from pubtator_link.server_manager import UnifiedServerManager
-from pubtator_link.api.client import PubTator3Client
-from tests.fixtures.api_responses import MockPubTatorResponses
+import pytest
+from fastapi.testclient import TestClient
 
+from pubtator_link.api.client import PubTator3Client
+from pubtator_link.server_manager import UnifiedServerManager
+from tests.fixtures.api_responses import MockPubTatorResponses
 
 # Mock response for search testing
 MOCK_SEARCH_RESPONSE = MockPubTatorResponses.search_publications_response()
@@ -124,9 +124,7 @@ class TestSearchRoutes:
         """Test search with gene entity ID."""
         mock_search.return_value = MOCK_SEARCH_RESPONSE
 
-        response = test_client.get(
-            "/api/search/", params={"text": "@GENE_BRCA1", "page": 1}
-        )
+        response = test_client.get("/api/search/", params={"text": "@GENE_BRCA1", "page": 1})
 
         assert response.status_code == 200
         data = response.json()
@@ -138,9 +136,7 @@ class TestSearchRoutes:
         """Test search with disease entity ID."""
         mock_search.return_value = MOCK_SEARCH_RESPONSE
 
-        response = test_client.get(
-            "/api/search/", params={"text": "@DISEASE_COVID_19", "page": 1}
-        )
+        response = test_client.get("/api/search/", params={"text": "@DISEASE_COVID_19", "page": 1})
 
         assert response.status_code == 200
         data = response.json()
@@ -174,9 +170,7 @@ class TestSearchRoutes:
         }
         mock_search.return_value = empty_response
 
-        response = test_client.get(
-            "/api/search/", params={"text": "very_rare_nonexistent_term"}
-        )
+        response = test_client.get("/api/search/", params={"text": "very_rare_nonexistent_term"})
 
         assert response.status_code == 200
         data = response.json()
@@ -195,9 +189,7 @@ class TestSearchRoutes:
         """Test search with unicode characters."""
         mock_search.return_value = MOCK_SEARCH_RESPONSE
 
-        response = test_client.get(
-            "/api/search/", params={"text": "癌症 breast cancer"}
-        )
+        response = test_client.get("/api/search/", params={"text": "癌症 breast cancer"})
 
         assert response.status_code == 200
         data = response.json()

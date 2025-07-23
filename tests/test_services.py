@@ -1,15 +1,16 @@
 """Comprehensive tests for service layer classes."""
 
-import pytest
 from unittest.mock import AsyncMock, Mock
 
-from pubtator_link.services.publication_service import PublicationService
+import pytest
+
 from pubtator_link.api.client import PubTator3Client, PubTatorAPIError
 from pubtator_link.models.responses import (
-    PublicationExportResponse,
     PMCExportResponse,
+    PublicationExportResponse,
     SearchResponse,
 )
+from pubtator_link.services.publication_service import PublicationService
 from tests.fixtures.api_responses import MockPubTatorResponses
 
 
@@ -86,23 +87,15 @@ class TestPublicationService:
         assert result.count >= 1
 
     @pytest.mark.asyncio
-    async def test_export_publications_api_error(
-        self, publication_service, mock_client
-    ):
+    async def test_export_publications_api_error(self, publication_service, mock_client):
         """Test publication export with API error."""
-        mock_client.export_publications.side_effect = PubTatorAPIError(
-            "API Error", status_code=503
-        )
+        mock_client.export_publications.side_effect = PubTatorAPIError("API Error", status_code=503)
 
         with pytest.raises(PubTatorAPIError):
-            await publication_service.export_publications(
-                pmids_str="29355051", format="biocjson"
-            )
+            await publication_service.export_publications(pmids_str="29355051", format="biocjson")
 
     @pytest.mark.asyncio
-    async def test_export_publications_list_interface(
-        self, publication_service, mock_client
-    ):
+    async def test_export_publications_list_interface(self, publication_service, mock_client):
         """Test publication export with list interface."""
         mock_response = MockPubTatorResponses.publication_export_biocjson()
         mock_client.export_publications.return_value = mock_response
@@ -119,9 +112,7 @@ class TestPublicationService:
         )
 
     @pytest.mark.asyncio
-    async def test_export_pmc_publications_biocjson(
-        self, publication_service, mock_client
-    ):
+    async def test_export_pmc_publications_biocjson(self, publication_service, mock_client):
         """Test PMC publication export in biocjson format."""
         mock_response = MockPubTatorResponses.pmc_export_response()
         mock_client.export_pmc_publications.return_value = mock_response
@@ -140,9 +131,7 @@ class TestPublicationService:
         )
 
     @pytest.mark.asyncio
-    async def test_export_pmc_publications_list_interface(
-        self, publication_service, mock_client
-    ):
+    async def test_export_pmc_publications_list_interface(self, publication_service, mock_client):
         """Test PMC export with list interface."""
         mock_response = MockPubTatorResponses.pmc_export_response()
         mock_client.export_pmc_publications.return_value = mock_response
@@ -155,9 +144,7 @@ class TestPublicationService:
         assert result.pmcids == ["PMC7696669", "PMC8869656"]
 
     @pytest.mark.asyncio
-    async def test_export_pmc_publications_api_error(
-        self, publication_service, mock_client
-    ):
+    async def test_export_pmc_publications_api_error(self, publication_service, mock_client):
         """Test PMC export with API error."""
         mock_client.export_pmc_publications.side_effect = PubTatorAPIError(
             "PMC API Error", status_code=404
@@ -174,9 +161,7 @@ class TestPublicationService:
         mock_response = MockPubTatorResponses.search_publications_response()
         mock_client.search_publications.return_value = mock_response
 
-        result = await publication_service.search_publications(
-            text="breast cancer", page=1
-        )
+        result = await publication_service.search_publications(text="breast cancer", page=1)
 
         assert isinstance(result, SearchResponse)
         assert result.query == "breast cancer"
@@ -187,29 +172,21 @@ class TestPublicationService:
         assert len(result.results) == 3
         assert result.success is True
 
-        mock_client.search_publications.assert_called_once_with(
-            text="breast cancer", page=1
-        )
+        mock_client.search_publications.assert_called_once_with(text="breast cancer", page=1)
 
     @pytest.mark.asyncio
-    async def test_search_publications_entity_query(
-        self, publication_service, mock_client
-    ):
+    async def test_search_publications_entity_query(self, publication_service, mock_client):
         """Test publication search with entity ID."""
         mock_response = MockPubTatorResponses.search_publications_response()
         mock_client.search_publications.return_value = mock_response
 
-        result = await publication_service.search_publications(
-            text="@CHEMICAL_remdesivir", page=1
-        )
+        result = await publication_service.search_publications(text="@CHEMICAL_remdesivir", page=1)
 
         assert result.query == "@CHEMICAL_remdesivir"
         assert "37711410" in str(result.results[0].pmid)
 
     @pytest.mark.asyncio
-    async def test_search_publications_boolean_query(
-        self, publication_service, mock_client
-    ):
+    async def test_search_publications_boolean_query(self, publication_service, mock_client):
         """Test publication search with boolean operators."""
         mock_response = MockPubTatorResponses.search_publications_response()
         mock_client.search_publications.return_value = mock_response
@@ -222,25 +199,19 @@ class TestPublicationService:
         assert result.success is True
 
     @pytest.mark.asyncio
-    async def test_search_publications_no_results(
-        self, publication_service, mock_client
-    ):
+    async def test_search_publications_no_results(self, publication_service, mock_client):
         """Test publication search with no results."""
         empty_response = {"results": [], "total": 0, "per_page": 20}
         mock_client.search_publications.return_value = empty_response
 
-        result = await publication_service.search_publications(
-            text="nonexistent_term", page=1
-        )
+        result = await publication_service.search_publications(text="nonexistent_term", page=1)
 
         assert result.total_results == 0
         assert len(result.results) == 0
         assert result.total_pages == 0
 
     @pytest.mark.asyncio
-    async def test_search_publications_api_error(
-        self, publication_service, mock_client
-    ):
+    async def test_search_publications_api_error(self, publication_service, mock_client):
         """Test publication search with API error."""
         mock_client.search_publications.side_effect = PubTatorAPIError(
             "Search API Error", status_code=503
@@ -338,9 +309,7 @@ class TestPublicationService:
         formats_to_test = ["biocjson", "pubtator", "biocxml"]
 
         for format_name in formats_to_test:
-            mock_response = getattr(
-                MockPubTatorResponses, f"publication_export_{format_name}"
-            )()
+            mock_response = getattr(MockPubTatorResponses, f"publication_export_{format_name}")()
             mock_client.export_publications.return_value = mock_response
 
             result = await publication_service.export_publications(
@@ -356,9 +325,7 @@ class TestPublicationService:
         mock_response = MockPubTatorResponses.search_publications_response()
         mock_client.search_publications.return_value = mock_response
 
-        result = await publication_service.search_publications(
-            text="test query", page=1
-        )
+        result = await publication_service.search_publications(text="test query", page=1)
 
         # Check that results are properly structured
         assert len(result.results) == 3

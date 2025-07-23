@@ -1,13 +1,13 @@
 """Mock API response fixtures for PubTator3 API testing."""
 
-from typing import Dict, List, Any
+from typing import Any
 
 
 class MockPubTatorResponses:
     """Collection of mock PubTator3 API responses for testing."""
 
     @staticmethod
-    def publication_export_biocjson() -> Dict[str, Any]:
+    def publication_export_biocjson() -> dict[str, Any]:
         """Mock publication export response in biocjson format."""
         return {
             "PubTator3": [
@@ -88,7 +88,7 @@ class MockPubTatorResponses:
         }
 
     @staticmethod
-    def publication_export_pubtator() -> Dict[str, str]:
+    def publication_export_pubtator() -> dict[str, str]:
         """Mock publication export response in pubtator format."""
         return {
             "content": (
@@ -107,7 +107,7 @@ class MockPubTatorResponses:
         }
 
     @staticmethod
-    def publication_export_biocxml() -> Dict[str, str]:
+    def publication_export_biocxml() -> dict[str, str]:
         """Mock publication export response in biocxml format."""
         return {
             "content": """<?xml version="1.0" encoding="UTF-8"?>
@@ -140,7 +140,7 @@ class MockPubTatorResponses:
         }
 
     @staticmethod
-    def pmc_export_response() -> Dict[str, Any]:
+    def pmc_export_response() -> dict[str, Any]:
         """Mock PMC publication export response."""
         return {
             "PubTator3": [
@@ -192,7 +192,7 @@ class MockPubTatorResponses:
         }
 
     @staticmethod
-    def entity_autocomplete_response() -> List[Dict[str, Any]]:
+    def entity_autocomplete_response() -> list[dict[str, Any]]:
         """Mock entity autocomplete response."""
         return [
             {
@@ -230,7 +230,7 @@ class MockPubTatorResponses:
         ]
 
     @staticmethod
-    def search_publications_response() -> Dict[str, Any]:
+    def search_publications_response() -> dict[str, Any]:
         """Mock publication search response."""
         return {
             "results": [
@@ -275,7 +275,7 @@ class MockPubTatorResponses:
         }
 
     @staticmethod
-    def entity_relations_response() -> List[Dict[str, Any]]:
+    def entity_relations_response() -> list[dict[str, Any]]:
         """Mock entity relations response."""
         return [
             {
@@ -310,7 +310,7 @@ class MockPubTatorResponses:
         return "0DA64A2FE4D635D5820C"
 
     @staticmethod
-    def text_annotation_results_completed() -> Dict[str, Any]:
+    def text_annotation_results_completed() -> dict[str, Any]:
         """Mock text annotation results response (completed)."""
         return {
             "status": "completed",
@@ -338,7 +338,7 @@ class MockPubTatorResponses:
         }
 
     @staticmethod
-    def text_annotation_results_processing() -> Dict[str, Any]:
+    def text_annotation_results_processing() -> dict[str, Any]:
         """Mock text annotation results response (still processing)."""
         return {
             "status": "processing",
@@ -349,7 +349,7 @@ class MockPubTatorResponses:
         }
 
     @staticmethod
-    def text_annotation_results_failed() -> Dict[str, Any]:
+    def text_annotation_results_failed() -> dict[str, Any]:
         """Mock text annotation results response (failed)."""
         return {
             "status": "failed",
@@ -364,7 +364,7 @@ class MockErrorResponses:
     """Collection of mock error responses for testing."""
 
     @staticmethod
-    def rate_limit_error() -> Dict[str, Any]:
+    def rate_limit_error() -> dict[str, Any]:
         """Mock rate limit error response."""
         return {
             "error": "Rate limit exceeded",
@@ -374,7 +374,7 @@ class MockErrorResponses:
         }
 
     @staticmethod
-    def not_found_error() -> Dict[str, Any]:
+    def not_found_error() -> dict[str, Any]:
         """Mock not found error response."""
         return {
             "error": "Not found",
@@ -383,7 +383,7 @@ class MockErrorResponses:
         }
 
     @staticmethod
-    def validation_error() -> Dict[str, Any]:
+    def validation_error() -> dict[str, Any]:
         """Mock validation error response."""
         return {
             "error": "Validation error",
@@ -396,7 +396,7 @@ class MockErrorResponses:
         }
 
     @staticmethod
-    def server_error() -> Dict[str, Any]:
+    def server_error() -> dict[str, Any]:
         """Mock internal server error response."""
         return {
             "error": "Internal server error",
@@ -405,7 +405,7 @@ class MockErrorResponses:
         }
 
     @staticmethod
-    def service_unavailable_error() -> Dict[str, Any]:
+    def service_unavailable_error() -> dict[str, Any]:
         """Mock service unavailable error response."""
         return {
             "error": "Service unavailable",
@@ -418,7 +418,7 @@ class MockCacheResponses:
     """Collection of mock cache-related responses for testing."""
 
     @staticmethod
-    def cache_statistics() -> Dict[str, Any]:
+    def cache_statistics() -> dict[str, Any]:
         """Mock cache statistics response."""
         return {
             "total_size": 1500,
@@ -450,7 +450,7 @@ class MockCacheResponses:
         }
 
     @staticmethod
-    def cache_clear_response() -> Dict[str, Any]:
+    def cache_clear_response() -> dict[str, Any]:
         """Mock cache clear response."""
         return {
             "success": True,

@@ -192,7 +192,7 @@ class TestHealthAndRoot:
         assert isinstance(data, dict)
 
         # Should contain valid string values
-        for key, value in data.items():
+        for _key, value in data.items():
             assert isinstance(value, str)
             assert len(value.strip()) > 0
 

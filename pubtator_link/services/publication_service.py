@@ -1,7 +1,7 @@
 """Publication service with caching for PubTator-Link."""
 
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from async_lru import alru_cache
 from structlog.typing import FilteringBoundLogger
@@ -10,9 +10,9 @@ from ..api.client import PubTator3Client, PubTatorAPIError
 from ..config import cache_config
 from ..logging_config import log_cache_event
 from ..models.publications import (
+    EXPORT_FORMATS,
     AnnotatedPublication,
     ExportFormat,
-    EXPORT_FORMATS,
     PublicationBatch,
     PublicationMetadata,
 )
@@ -27,9 +27,7 @@ from ..models.responses import (
 class PublicationService:
     """Service for publication operations with caching."""
 
-    def __init__(
-        self, client: PubTator3Client, logger: Optional[FilteringBoundLogger] = None
-    ):
+    def __init__(self, client: PubTator3Client, logger: Optional[FilteringBoundLogger] = None):
         """Initialize publication service.
 
         Args:
@@ -65,9 +63,7 @@ class PublicationService:
             )
 
         try:
-            raw_data = await self.client.export_publications(
-                pmids=pmids, format=format, full=full
-            )
+            raw_data = await self.client.export_publications(pmids=pmids, format=format, full=full)
 
             documents = self._parse_export_data(raw_data, format)
 
@@ -90,7 +86,7 @@ class PublicationService:
             raise
 
     async def export_publications_list(
-        self, pmids: List[str], format: str = "biocjson", full: bool = False
+        self, pmids: list[str], format: str = "biocjson", full: bool = False
     ) -> PublicationExportResponse:
         """Export publications with list interface.
 
@@ -130,9 +126,7 @@ class PublicationService:
             )
 
         try:
-            raw_data = await self.client.export_pmc_publications(
-                pmcids=pmcids, format=format
-            )
+            raw_data = await self.client.export_pmc_publications(pmcids=pmcids, format=format)
 
             documents = self._parse_export_data(raw_data, format)
 
@@ -145,13 +139,11 @@ class PublicationService:
 
         except PubTatorAPIError as e:
             if self.logger:
-                self.logger.error(
-                    "PMC export failed", pmcids=pmcids, format=format, error=str(e)
-                )
+                self.logger.error("PMC export failed", pmcids=pmcids, format=format, error=str(e))
             raise
 
     async def export_pmc_publications_list(
-        self, pmcids: List[str], format: str = "biocjson"
+        self, pmcids: list[str], format: str = "biocjson"
     ) -> PMCExportResponse:
         """Export PMC publications with list interface.
 
@@ -177,9 +169,7 @@ class PublicationService:
             Search response
         """
         if self.logger:
-            log_cache_event(
-                self.logger, event="miss", cache_key=f"search:{text}:{page}", hit=False
-            )
+            log_cache_event(self.logger, event="miss", cache_key=f"search:{text}:{page}", hit=False)
 
         try:
             raw_data = await self.client.search_publications(text=text, page=page)
@@ -187,14 +177,12 @@ class PublicationService:
 
         except PubTatorAPIError as e:
             if self.logger:
-                self.logger.error(
-                    "Publication search failed", query=text, page=page, error=str(e)
-                )
+                self.logger.error("Publication search failed", query=text, page=page, error=str(e))
             raise
 
     async def batch_export_publications(
         self,
-        pmids: List[str],
+        pmids: list[str],
         format: str = "biocjson",
         full: bool = False,
         batch_size: int = 50,
@@ -214,14 +202,11 @@ class PublicationService:
         batch = PublicationBatch(batch_id=batch_id, processing_status="processing")
 
         # Split PMIDs into batches
-        pmid_batches = [
-            pmids[i : i + batch_size] for i in range(0, len(pmids), batch_size)
-        ]
+        pmid_batches = [pmids[i : i + batch_size] for i in range(0, len(pmids), batch_size)]
 
         # Process batches concurrently
         tasks = [
-            self.export_publications_list(batch_pmids, format, full)
-            for batch_pmids in pmid_batches
+            self.export_publications_list(batch_pmids, format, full) for batch_pmids in pmid_batches
         ]
 
         try:
@@ -251,12 +236,10 @@ class PublicationService:
             batch.processing_status = "failed"
             batch.error_count = len(pmid_batches)
             if self.logger:
-                self.logger.error(
-                    "Batch export failed completely", batch_id=batch_id, error=str(e)
-                )
+                self.logger.error("Batch export failed completely", batch_id=batch_id, error=str(e))
             raise
 
-    def _parse_export_data(self, raw_data: Dict[str, Any], format: str) -> List[Any]:
+    def _parse_export_data(self, raw_data: dict[str, Any], format: str) -> list[Any]:
         """Parse export data based on format.
 
         Args:
@@ -336,7 +319,7 @@ class PublicationService:
         return [{"content": content, "format": format}]
 
     def _parse_search_results(
-        self, raw_data: Dict[str, Any], query: str, page: int
+        self, raw_data: dict[str, Any], query: str, page: int
     ) -> SearchResponse:
         """Parse search results from API response.
 
@@ -368,9 +351,7 @@ class PublicationService:
             for item in results_data:
                 result = SearchResult(
                     pmid=str(item.get("pmid", item.get("id", ""))),
-                    title=item.get(
-                        "title", item.get("passages", [{}])[0].get("text", "")
-                    ),
+                    title=item.get("title", item.get("passages", [{}])[0].get("text", "")),
                     abstract=self._extract_abstract(item),
                     authors=item.get("authors", []),
                     journal=item.get("journal", ""),
@@ -391,7 +372,7 @@ class PublicationService:
             total_pages=total_pages,
         )
 
-    def _extract_abstract(self, item: Dict[str, Any]) -> Optional[str]:
+    def _extract_abstract(self, item: dict[str, Any]) -> Optional[str]:
         """Extract abstract text from different response formats."""
         # Try direct abstract field
         if "abstract" in item:
@@ -432,7 +413,7 @@ class PublicationService:
             annotation_metadata={"source": "pubtator3", "format": "unknown"},
         )
 
-    def get_supported_formats(self) -> Dict[str, ExportFormat]:
+    def get_supported_formats(self) -> dict[str, ExportFormat]:
         """Get supported export formats."""
         return EXPORT_FORMATS
 
@@ -459,7 +440,7 @@ class PublicationService:
 
         return cache_size
 
-    def get_cache_stats(self) -> Dict[str, Any]:
+    def get_cache_stats(self) -> dict[str, Any]:
         """Get cache statistics.
 
         Returns:

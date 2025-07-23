@@ -89,7 +89,7 @@ ignore = [
 "tests/**/*" = ["S101", "T20"]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
@@ -102,6 +102,11 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
+exclude = [
+    ".*site-packages.*",
+    ".*/miniforge3/.*",
+    ".*/venv/.*",
+]
 
 [[tool.mypy.overrides]]
 module = [
@@ -111,6 +116,12 @@ module = [
     "beautifulsoup4.*",
     "bs4.*",
     "lxml.*",
+    "mcp.*",
+    "fastapi.*",
+    "pydantic.*",
+    "pydantic_settings.*",
+    "httpx.*",
+    "uvicorn.*",
 ]
 ignore_missing_imports = true
 

@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import httpx
 from structlog.typing import FilteringBoundLogger
@@ -56,7 +56,7 @@ class PubTatorAPIError(Exception):
         self,
         message: str,
         status_code: Optional[int] = None,
-        response_data: Optional[Dict[str, Any]] = None,
+        response_data: Optional[dict[str, Any]] = None,
     ):
         """Initialize PubTator API error.
 
@@ -129,10 +129,10 @@ class PubTator3Client:
         self,
         method: str,
         url: str,
-        params: Optional[Dict[str, Any]] = None,
-        data: Optional[Dict[str, Any]] = None,
+        params: Optional[dict[str, Any]] = None,
+        data: Optional[dict[str, Any]] = None,
         use_text_client: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Make rate-limited HTTP request.
 
         Args:
@@ -195,19 +195,19 @@ class PubTator3Client:
             try:
                 error_data = e.response.json()
             except Exception:
-                pass
+                self.logger.warning("Failed to parse error response as JSON")
 
             raise PubTatorAPIError(
                 f"HTTP {e.response.status_code}: {e.response.text}",
                 status_code=e.response.status_code,
                 response_data=error_data,
-            )
+            ) from e
         except httpx.RequestError as e:
-            raise PubTatorAPIError(f"Request failed: {str(e)}")
+            raise PubTatorAPIError(f"Request failed: {str(e)}") from e
 
     async def export_publications(
-        self, pmids: List[str], format: str = "biocjson", full: bool = False
-    ) -> Dict[str, Any]:
+        self, pmids: list[str], format: str = "biocjson", full: bool = False
+    ) -> dict[str, Any]:
         """Export publication annotations.
 
         Args:
@@ -233,8 +233,8 @@ class PubTator3Client:
         return await self._make_request("GET", url, params=params)
 
     async def export_pmc_publications(
-        self, pmcids: List[str], format: str = "biocjson"
-    ) -> Dict[str, Any]:
+        self, pmcids: list[str], format: str = "biocjson"
+    ) -> dict[str, Any]:
         """Export PMC publication annotations.
 
         Args:
@@ -245,9 +245,7 @@ class PubTator3Client:
             Export data
         """
         if format not in ["biocxml", "biocjson"]:
-            raise ValueError(
-                f"PMC export only supports biocxml/biocjson, got: {format}"
-            )
+            raise ValueError(f"PMC export only supports biocxml/biocjson, got: {format}")
 
         url = f"{self.config.base_url}/publications/pmc_export/{format}"
         params = {"pmcids": ",".join(pmcids)}
@@ -256,7 +254,7 @@ class PubTator3Client:
 
     async def autocomplete_entity(
         self, query: str, concept: Optional[str] = None, limit: int = 10
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Find entity ID through autocomplete.
 
         Args:
@@ -277,7 +275,7 @@ class PubTator3Client:
 
         return await self._make_request("GET", url, params=params)
 
-    async def search_publications(self, text: str, page: int = 1) -> Dict[str, Any]:
+    async def search_publications(self, text: str, page: int = 1) -> dict[str, Any]:
         """Search for publications.
 
         Args:
@@ -294,7 +292,7 @@ class PubTator3Client:
 
     async def find_relations(
         self, e1: str, relation_type: Optional[str] = None, e2: Optional[str] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Find related entities.
 
         Args:
@@ -339,9 +337,7 @@ class PubTator3Client:
         url = f"{self.text_config.base_url}/request.cgi"
         data = {"text": text, "bioconcept": bioconcept}
 
-        response = await self._make_request(
-            "POST", url, data=data, use_text_client=True
-        )
+        response = await self._make_request("POST", url, data=data, use_text_client=True)
 
         # Extract session ID from response
         session_id = response.get("content", "").strip()
@@ -350,7 +346,7 @@ class PubTator3Client:
 
         return session_id
 
-    async def retrieve_text_annotation(self, session_id: str) -> Dict[str, Any]:
+    async def retrieve_text_annotation(self, session_id: str) -> dict[str, Any]:
         """Retrieve text annotation results.
 
         Args:
@@ -364,7 +360,7 @@ class PubTator3Client:
 
         return await self._make_request("POST", url, data=data, use_text_client=True)
 
-    async def get_annotation_results(self, session_id: str) -> Dict[str, Any]:
+    async def get_annotation_results(self, session_id: str) -> dict[str, Any]:
         """Alias for retrieve_text_annotation to match test expectations.
 
         Args:

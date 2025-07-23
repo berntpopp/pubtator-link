@@ -1,6 +1,6 @@
 """Entity models for PubTator-Link."""
 
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -11,9 +11,9 @@ class BioConcept(BaseModel):
     identifier: str = Field(..., description="Entity identifier")
     name: str = Field(..., description="Primary name")
     type: str = Field(..., description="Bioconcept type")
-    synonyms: List[str] = Field(default_factory=list, description="Alternative names")
+    synonyms: list[str] = Field(default_factory=list, description="Alternative names")
     description: Optional[str] = Field(default=None, description="Entity description")
-    external_ids: Dict[str, str] = Field(
+    external_ids: dict[str, str] = Field(
         default_factory=dict, description="External database identifiers"
     )
 
@@ -35,9 +35,7 @@ class Disease(BioConcept):
     type: str = Field(default="Disease", description="Entity type")
     mesh_id: Optional[str] = Field(default=None, description="MeSH identifier")
     omim_id: Optional[str] = Field(default=None, description="OMIM identifier")
-    disease_class: Optional[str] = Field(
-        default=None, description="Disease classification"
-    )
+    disease_class: Optional[str] = Field(default=None, description="Disease classification")
 
 
 class Chemical(BioConcept):
@@ -47,9 +45,7 @@ class Chemical(BioConcept):
     mesh_id: Optional[str] = Field(default=None, description="MeSH identifier")
     cas_number: Optional[str] = Field(default=None, description="CAS registry number")
     pubchem_cid: Optional[str] = Field(default=None, description="PubChem CID")
-    molecular_formula: Optional[str] = Field(
-        default=None, description="Molecular formula"
-    )
+    molecular_formula: Optional[str] = Field(default=None, description="Molecular formula")
 
 
 class Species(BioConcept):
@@ -76,9 +72,7 @@ class CellLine(BioConcept):
     """Cell line entity model."""
 
     type: str = Field(default="CellLine", description="Entity type")
-    cellosaurus_id: Optional[str] = Field(
-        default=None, description="Cellosaurus identifier"
-    )
+    cellosaurus_id: Optional[str] = Field(default=None, description="Cellosaurus identifier")
     source_organism: Optional[str] = Field(default=None, description="Source organism")
     tissue_origin: Optional[str] = Field(default=None, description="Tissue of origin")
 
@@ -93,9 +87,7 @@ class EntityRelation(BaseModel):
     confidence: Optional[float] = Field(
         default=None, description="Confidence score", ge=0.0, le=1.0
     )
-    evidence_pmids: List[str] = Field(
-        default_factory=list, description="Supporting PubMed IDs"
-    )
+    evidence_pmids: list[str] = Field(default_factory=list, description="Supporting PubMed IDs")
     evidence_count: int = Field(default=0, description="Number of supporting articles")
 
     @field_validator("relation_type")

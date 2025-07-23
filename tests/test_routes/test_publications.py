@@ -1,13 +1,13 @@
 """Tests for publication export route endpoints."""
 
-import pytest
-from fastapi.testclient import TestClient
 from unittest.mock import patch
 
-from pubtator_link.server_manager import UnifiedServerManager
-from pubtator_link.api.client import PubTator3Client
-from tests.fixtures.api_responses import MockPubTatorResponses
+import pytest
+from fastapi.testclient import TestClient
 
+from pubtator_link.api.client import PubTator3Client
+from pubtator_link.server_manager import UnifiedServerManager
+from tests.fixtures.api_responses import MockPubTatorResponses
 
 # Mock responses for publications testing
 MOCK_PUBLICATION_EXPORT_RESPONSE = MockPubTatorResponses.publication_export_biocjson()
@@ -66,9 +66,7 @@ class TestPublicationRoutes:
 
     def test_export_publications_invalid_format(self, test_client):
         """Test publication export with invalid format."""
-        response = test_client.get(
-            "/api/publications/export/invalid", params={"pmids": "29355051"}
-        )
+        response = test_client.get("/api/publications/export/invalid", params={"pmids": "29355051"})
 
         assert response.status_code == 400
         data = response.json()
@@ -136,9 +134,7 @@ class TestPublicationRoutes:
 
     def test_export_publications_empty_pmids(self, test_client):
         """Test publication export with empty PMIDs parameter."""
-        response = test_client.get(
-            "/api/publications/export/biocjson", params={"pmids": ""}
-        )
+        response = test_client.get("/api/publications/export/biocjson", params={"pmids": ""})
 
         assert response.status_code == 400  # ValueError converted to 400
 

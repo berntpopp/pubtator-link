@@ -8,15 +8,11 @@ from pydantic import BaseModel, Field, field_validator
 class PublicationExportRequest(BaseModel):
     """Request model for publication export."""
 
-    pmids: list[str] = Field(
-        ..., description="List of PubMed IDs", min_length=1, max_length=100
-    )
+    pmids: list[str] = Field(..., description="List of PubMed IDs", min_length=1, max_length=100)
     format: Literal["pubtator", "biocxml", "biocjson"] = Field(
         default="biocjson", description="Export format"
     )
-    full: bool = Field(
-        default=False, description="Include full text (only for biocxml/biocjson)"
-    )
+    full: bool = Field(default=False, description="Include full text (only for biocxml/biocjson)")
 
     @field_validator("pmids")
     @classmethod
@@ -35,9 +31,7 @@ class PublicationExportRequest(BaseModel):
 class PMCExportRequest(BaseModel):
     """Request model for PMC export."""
 
-    pmcids: list[str] = Field(
-        ..., description="List of PMC IDs", min_length=1, max_length=100
-    )
+    pmcids: list[str] = Field(..., description="List of PMC IDs", min_length=1, max_length=100)
     format: Literal["biocxml", "biocjson"] = Field(
         default="biocjson",
         description="Export format (PMC only supports biocxml/biocjson)",
@@ -61,15 +55,11 @@ class PMCExportRequest(BaseModel):
 class EntityAutocompleteRequest(BaseModel):
     """Request model for entity autocomplete."""
 
-    query: str = Field(
-        ..., description="Search query for entity", min_length=1, max_length=500
+    query: str = Field(..., description="Search query for entity", min_length=1, max_length=500)
+    concept: Optional[Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"]] = (
+        Field(default=None, description="Filter by bioconcept type")
     )
-    concept: Optional[
-        Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"]
-    ] = Field(default=None, description="Filter by bioconcept type")
-    limit: int = Field(
-        default=10, description="Maximum number of results", ge=1, le=100
-    )
+    limit: int = Field(default=10, description="Maximum number of results", ge=1, le=100)
 
 
 class SearchRequest(BaseModel):
@@ -87,9 +77,7 @@ class SearchRequest(BaseModel):
 class RelationsRequest(BaseModel):
     """Request model for finding related entities."""
 
-    e1: str = Field(
-        ..., description="Primary entity ID (e.g., @CHEMICAL_remdesivir)", min_length=1
-    )
+    e1: str = Field(..., description="Primary entity ID (e.g., @CHEMICAL_remdesivir)", min_length=1)
     type: Optional[
         Literal[
             "treat",
@@ -107,38 +95,32 @@ class RelationsRequest(BaseModel):
             "drug_interact",
         ]
     ] = Field(default=None, description="Relation type filter")
-    e2: Optional[
-        Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"]
-    ] = Field(default=None, description="Target entity type filter")
+    e2: Optional[Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"]] = Field(
+        default=None, description="Target entity type filter"
+    )
 
     @field_validator("e1")
     @classmethod
     def validate_entity_id(cls, v: str) -> str:
         """Validate entity ID format."""
         if not v.startswith("@"):
-            raise ValueError(
-                "Entity ID must start with '@' (e.g., @CHEMICAL_remdesivir)"
-            )
+            raise ValueError("Entity ID must start with '@' (e.g., @CHEMICAL_remdesivir)")
         return v
 
 
 class TextAnnotationRequest(BaseModel):
     """Request model for text annotation."""
 
-    text: str = Field(
-        ..., description="Text to annotate", min_length=1, max_length=10000
+    text: str = Field(..., description="Text to annotate", min_length=1, max_length=10000)
+    bioconcept: Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"] = Field(
+        default="Gene", description="Type of bioconcept to extract"
     )
-    bioconcept: Literal[
-        "Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"
-    ] = Field(default="Gene", description="Type of bioconcept to extract")
 
 
 class CacheStatsRequest(BaseModel):
     """Request model for cache statistics."""
 
-    detailed: bool = Field(
-        default=False, description="Include detailed cache information"
-    )
+    detailed: bool = Field(default=False, description="Include detailed cache information")
 
 
 class CacheClearRequest(BaseModel):

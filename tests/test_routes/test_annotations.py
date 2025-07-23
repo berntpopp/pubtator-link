@@ -1,12 +1,12 @@
 """Tests for text annotation route endpoints."""
 
-import pytest
-from fastapi.testclient import TestClient
 from unittest.mock import patch
 
-from pubtator_link.server_manager import UnifiedServerManager
-from pubtator_link.api.client import PubTator3Client
+import pytest
+from fastapi.testclient import TestClient
 
+from pubtator_link.api.client import PubTator3Client
+from pubtator_link.server_manager import UnifiedServerManager
 
 # Mock responses based on actual API responses
 MOCK_TEXT_ANNOTATION_SUBMIT_RESPONSE = "0DA64A2FE4D635D5820C"

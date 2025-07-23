@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from ...config import api_config
 from ...models.requests import RelationsRequest
-from ...models.responses import RelationsResponse, RelatedEntity
+from ...models.responses import RelatedEntity, RelationsResponse
 from .dependencies import (
     ClientDep,
     handle_api_errors,
@@ -83,18 +83,14 @@ router = APIRouter(prefix="/api/relations", tags=["Relations"])
             "description": "No relations found",
             "content": {
                 "application/json": {
-                    "example": {
-                        "detail": "No related entities found for @CHEMICAL_nonexistent"
-                    }
+                    "example": {"detail": "No related entities found for @CHEMICAL_nonexistent"}
                 }
             },
         },
         422: {
             "description": "Validation error",
             "content": {
-                "application/json": {
-                    "example": {"detail": "Entity ID parameter is required"}
-                }
+                "application/json": {"example": {"detail": "Entity ID parameter is required"}}
             },
         },
     },
@@ -291,12 +287,12 @@ async def find_related_entities(
         )
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except ConnectionError as e:
         raise HTTPException(
             status_code=503, detail="PubTator3 service temporarily unavailable"
-        )
-    except TimeoutError:
+        ) from e
+    except TimeoutError as e:
         raise HTTPException(
             status_code=504, detail="Request timeout while finding related entities"
-        )
+        ) from e

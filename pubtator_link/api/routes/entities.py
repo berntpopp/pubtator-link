@@ -199,9 +199,7 @@ async def search_entity_ids(
     validated_limit = validate_limit(limit, max_limit=100)
 
     # Create request object
-    request = EntityAutocompleteRequest(
-        query=query.strip(), concept=concept, limit=validated_limit
-    )
+    request = EntityAutocompleteRequest(query=query.strip(), concept=concept, limit=validated_limit)
 
     # Call PubTator3 API
     try:
@@ -237,12 +235,12 @@ async def search_entity_ids(
         )
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except ConnectionError as e:
         raise HTTPException(
             status_code=503, detail="PubTator3 service temporarily unavailable"
-        )
-    except TimeoutError:
+        ) from e
+    except TimeoutError as e:
         raise HTTPException(
             status_code=504, detail="Request timeout while searching entities"
-        )
+        ) from e

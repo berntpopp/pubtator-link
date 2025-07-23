@@ -48,9 +48,7 @@ class TestCacheRoutes:
 
     def test_clear_cache_with_pattern(self, test_client):
         """Test clearing cache with pattern."""
-        response = test_client.delete(
-            "/api/cache/clear", params={"pattern": "pub_export:"}
-        )
+        response = test_client.delete("/api/cache/clear", params={"pattern": "pub_export:"})
 
         assert response.status_code == 200
         data = response.json()
@@ -112,9 +110,7 @@ class TestCacheRoutes:
         ]
 
         for pattern in patterns_to_test:
-            response = test_client.delete(
-                "/api/cache/clear", params={"pattern": pattern}
-            )
+            response = test_client.delete("/api/cache/clear", params={"pattern": pattern})
 
             assert response.status_code == 200
             data = response.json()
@@ -190,9 +186,7 @@ class TestCacheRoutes:
 
     def test_clear_cache_with_whitespace_pattern(self, test_client):
         """Test clearing cache with whitespace in pattern."""
-        response = test_client.delete(
-            "/api/cache/clear", params={"pattern": "  pub_export:  "}
-        )
+        response = test_client.delete("/api/cache/clear", params={"pattern": "  pub_export:  "})
 
         assert response.status_code == 200
         data = response.json()

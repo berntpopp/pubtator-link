@@ -5,13 +5,13 @@ import logging
 from fastapi import APIRouter, HTTPException, Query
 
 from ...config import api_config
-from ...models.requests import PublicationExportRequest, PMCExportRequest
+from ...models.requests import PMCExportRequest, PublicationExportRequest
 from ...models.responses import PublicationExportResponse
 from .dependencies import (
     PublicationServiceDep,
     handle_api_errors,
-    validate_pmids,
     validate_pmcids,
+    validate_pmids,
 )
 
 logger = logging.getLogger(__name__)
@@ -44,9 +44,7 @@ router = APIRouter(prefix="/api/publications", tags=["Publications"])
                                                 {
                                                     "id": "@GENE_BRCA1",
                                                     "text": "BRCA1",
-                                                    "locations": [
-                                                        {"offset": 0, "length": 5}
-                                                    ],
+                                                    "locations": [{"offset": 0, "length": 5}],
                                                     "infons": {
                                                         "type": "Gene",
                                                         "identifier": "672",
@@ -85,9 +83,7 @@ router = APIRouter(prefix="/api/publications", tags=["Publications"])
             "description": "Validation error",
             "content": {
                 "application/json": {
-                    "example": {
-                        "detail": "Invalid PMID format: abc123. PMIDs must be numeric."
-                    }
+                    "example": {"detail": "Invalid PMID format: abc123. PMIDs must be numeric."}
                 }
             },
         },
@@ -174,12 +170,12 @@ async def export_publication_annotations(
         return result
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except FileNotFoundError:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except FileNotFoundError as e:
         raise HTTPException(
             status_code=404,
             detail=f"No publications found for PMIDs: {', '.join(pmid_list)}",
-        )
+        ) from e
 
 
 @router.get(
@@ -208,9 +204,7 @@ async def export_publication_annotations(
                                                 {
                                                     "id": "@DISEASE_COVID-19",
                                                     "text": "COVID-19",
-                                                    "locations": [
-                                                        {"offset": 0, "length": 8}
-                                                    ],
+                                                    "locations": [{"offset": 0, "length": 8}],
                                                     "infons": {
                                                         "type": "Disease",
                                                         "identifier": "COVID-19",
@@ -241,9 +235,7 @@ async def export_publication_annotations(
             "description": "PMC publications not found",
             "content": {
                 "application/json": {
-                    "example": {
-                        "detail": "No PMC publications found for PMCIDs: PMC99999999"
-                    }
+                    "example": {"detail": "No PMC publications found for PMCIDs: PMC99999999"}
                 }
             },
         },
@@ -335,9 +327,9 @@ async def export_pmc_publications(
         )
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except FileNotFoundError:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except FileNotFoundError as e:
         raise HTTPException(
             status_code=404,
             detail=f"No PMC publications found for PMCIDs: {', '.join(pmcid_list)}",
-        )
+        ) from e

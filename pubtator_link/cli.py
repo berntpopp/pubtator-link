@@ -33,15 +33,12 @@ async def search_entities(query: str, concept: Optional[str] = None, limit: int 
 
     async with PubTator3Client(logger=logger) as client:
         try:
-            result = await client.autocomplete_entity(
-                query=query, concept=concept, limit=limit
-            )
+            result = await client.autocomplete_entity(query=query, concept=concept, limit=limit)
 
-            print(f"Entity search results for '{query}':")
             if isinstance(result, dict) and "content" in result:
-                print(result["content"])
+                pass
             else:
-                print(result)
+                pass
 
         except Exception as e:
             logger.error("Entity search failed", error=str(e))
@@ -57,14 +54,9 @@ async def search_publications(query: str, page: int = 1):
             service = PublicationService(client, logger)
             result = await service.search_publications(text=query, page=page)
 
-            print(f"Publication search results for '{query}' (page {page}):")
-            print(f"Total results: {result.total_results}")
-
-            for i, pub in enumerate(result.results, 1):
-                print(f"\n{i}. PMID: {pub.pmid}")
-                print(f"   Title: {pub.title}")
+            for _i, pub in enumerate(result.results, 1):
                 if pub.abstract:
-                    print(f"   Abstract: {pub.abstract[:200]}...")
+                    pass
 
         except Exception as e:
             logger.error("Publication search failed", error=str(e))
@@ -79,19 +71,13 @@ async def export_publications(pmids: str, format: str = "biocjson", full: bool =
     async with PubTator3Client(logger=logger) as client:
         try:
             service = PublicationService(client, logger)
-            result = await service.export_publications(
-                pmids=pmid_list, format=format, full=full
-            )
+            result = await service.export_publications(pmids=pmid_list, format=format, full=full)
 
-            print(f"Export results for PMIDs {pmids} in {format} format:")
-            print(f"Total documents: {result.total_documents}")
-
-            for i, doc in enumerate(result.documents, 1):
-                print(f"\nDocument {i}:")
+            for _i, doc in enumerate(result.documents, 1):
                 if isinstance(doc, dict):
-                    print(f"  Keys: {list(doc.keys())}")
+                    pass
                 else:
-                    print(f"  Type: {type(doc)}")
+                    pass
 
         except Exception as e:
             logger.error("Publication export failed", error=str(e))
@@ -113,9 +99,7 @@ async def serve_http(host: str = "127.0.0.1", port: int = 8000, reload: bool = F
         sys.exit(1)
 
 
-async def serve_unified(
-    host: str = "127.0.0.1", port: int = 8000, reload: bool = False
-):
+async def serve_unified(host: str = "127.0.0.1", port: int = 8000, reload: bool = False):
     """Start unified server (HTTP + MCP)."""
     logger = configure_logging()
     manager = UnifiedServerManager(logger=logger)
@@ -154,9 +138,7 @@ def main():
 
     # Server commands
     serve_parser = subparsers.add_parser("serve", help="Start server")
-    serve_subparsers = serve_parser.add_subparsers(
-        dest="serve_mode", help="Server modes"
-    )
+    serve_subparsers = serve_parser.add_subparsers(dest="serve_mode", help="Server modes")
 
     # HTTP server
     http_parser = serve_subparsers.add_parser("http", help="Start HTTP-only server")
@@ -171,9 +153,7 @@ def main():
         "unified", help="Start unified server (HTTP + MCP)"
     )
     unified_parser.add_argument("--host", default="127.0.0.1", help="Host to bind to")
-    unified_parser.add_argument(
-        "--port", type=int, default=8000, help="Port to bind to"
-    )
+    unified_parser.add_argument("--port", type=int, default=8000, help="Port to bind to")
     unified_parser.add_argument(
         "--reload", action="store_true", help="Enable hot reloading for development"
     )
@@ -197,9 +177,7 @@ def main():
     search_parser.add_argument("--page", type=int, default=1, help="Page number")
 
     # Export command
-    export_parser = subparsers.add_parser(
-        "export", help="Export publication annotations"
-    )
+    export_parser = subparsers.add_parser("export", help="Export publication annotations")
     export_parser.add_argument("pmids", help="Comma-separated PMIDs")
     export_parser.add_argument(
         "--format",
@@ -225,13 +203,9 @@ def main():
             return
 
         if args.serve_mode == "http":
-            asyncio.run(
-                serve_http(args.host, args.port, getattr(args, "reload", False))
-            )
+            asyncio.run(serve_http(args.host, args.port, getattr(args, "reload", False)))
         elif args.serve_mode == "unified":
-            asyncio.run(
-                serve_unified(args.host, args.port, getattr(args, "reload", False))
-            )
+            asyncio.run(serve_unified(args.host, args.port, getattr(args, "reload", False)))
         elif args.serve_mode == "mcp":
             asyncio.run(serve_mcp_only())
     elif args.command == "entities":

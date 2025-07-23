@@ -41,9 +41,7 @@ class ServerSettings(BaseSettings):
         default="https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/RESTful",
         description="Text processing API base URL",
     )
-    text_api_timeout: int = Field(
-        default=60, description="Text processing timeout in seconds"
-    )
+    text_api_timeout: int = Field(default=60, description="Text processing timeout in seconds")
 
     # Cache configuration
     cache_size: int = Field(default=1000, description="LRU cache size")
@@ -57,9 +55,7 @@ class ServerSettings(BaseSettings):
 
     # Logging configuration
     log_level: str = Field(default="INFO", description="Logging level")
-    log_format: Literal["json", "console"] = Field(
-        default="console", description="Log format"
-    )
+    log_format: Literal["json", "console"] = Field(default="console", description="Log format")
 
     # Feature flags
     enable_docs: bool = Field(default=True, description="Enable API documentation")
@@ -93,9 +89,7 @@ class APIConfig:
     rate_limit_per_second: float
 
     # Supported formats
-    export_formats: list[str] = field(
-        default_factory=lambda: ["pubtator", "biocxml", "biocjson"]
-    )
+    export_formats: list[str] = field(default_factory=lambda: ["pubtator", "biocxml", "biocjson"])
 
     # Bioconcept types
     bioconcept_types: list[str] = field(

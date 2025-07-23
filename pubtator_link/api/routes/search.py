@@ -225,12 +225,12 @@ async def search_publications(
         )
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except ConnectionError as e:
         raise HTTPException(
             status_code=503, detail="PubTator3 service temporarily unavailable"
-        )
-    except TimeoutError:
+        ) from e
+    except TimeoutError as e:
         raise HTTPException(
             status_code=504, detail="Request timeout while searching publications"
-        )
+        ) from e

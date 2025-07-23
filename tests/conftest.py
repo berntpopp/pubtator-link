@@ -1,16 +1,18 @@
 """Test configuration and shared fixtures for PubTator-Link tests."""
 
 import asyncio
-import pytest
-from typing import AsyncGenerator, Dict, Any, List
+from collections.abc import AsyncGenerator
+from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 
-from pubtator_link.server_manager import UnifiedServerManager
 from pubtator_link.api.client import PubTator3Client
-from pubtator_link.services.publication_service import PublicationService
 from pubtator_link.config import settings
+from pubtator_link.server_manager import UnifiedServerManager
+from pubtator_link.services.publication_service import PublicationService
 
 
 @pytest.fixture(scope="session")
@@ -91,19 +93,19 @@ async def async_client(app) -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest.fixture
-def sample_pmids() -> List[str]:
+def sample_pmids() -> list[str]:
     """Sample PMIDs for testing."""
     return ["29355051", "32511357", "34170578"]
 
 
 @pytest.fixture
-def sample_pmcids() -> List[str]:
+def sample_pmcids() -> list[str]:
     """Sample PMC IDs for testing."""
     return ["PMC7696669", "PMC8869656", "PMC9123456"]
 
 
 @pytest.fixture
-def sample_export_response() -> Dict[str, Any]:
+def sample_export_response() -> dict[str, Any]:
     """Sample publication export response."""
     return {
         "PubTator3": [
@@ -150,7 +152,7 @@ def sample_export_response() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def sample_autocomplete_response() -> List[Dict[str, Any]]:
+def sample_autocomplete_response() -> list[dict[str, Any]]:
     """Sample entity autocomplete response."""
     return [
         {
@@ -173,7 +175,7 @@ def sample_autocomplete_response() -> List[Dict[str, Any]]:
 
 
 @pytest.fixture
-def sample_search_response() -> Dict[str, Any]:
+def sample_search_response() -> dict[str, Any]:
     """Sample publication search response."""
     return {
         "results": [
@@ -206,7 +208,7 @@ def sample_search_response() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def sample_relations_response() -> List[Dict[str, Any]]:
+def sample_relations_response() -> list[dict[str, Any]]:
     """Sample entity relations response."""
     return [
         {
@@ -231,7 +233,7 @@ def sample_text_annotation_submit_response() -> str:
 
 
 @pytest.fixture
-def sample_text_annotation_results_response() -> Dict[str, Any]:
+def sample_text_annotation_results_response() -> dict[str, Any]:
     """Sample text annotation results response."""
     return {
         "status": "completed",
@@ -307,19 +309,19 @@ def rate_limit_error():
 
 # Test data fixtures
 @pytest.fixture
-def valid_bioconcepts() -> List[str]:
+def valid_bioconcepts() -> list[str]:
     """Return valid bioconcept types for testing."""
     return ["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"]
 
 
 @pytest.fixture
-def valid_export_formats() -> List[str]:
+def valid_export_formats() -> list[str]:
     """Return valid export formats for testing."""
     return ["biocjson", "biocxml", "pubtator"]
 
 
 @pytest.fixture
-def valid_relation_types() -> List[str]:
+def valid_relation_types() -> list[str]:
     """Return valid relation types for testing."""
     return [
         "treat",
@@ -340,7 +342,7 @@ def valid_relation_types() -> List[str]:
 
 # Performance test fixtures
 @pytest.fixture
-def large_pmid_list() -> List[str]:
+def large_pmid_list() -> list[str]:
     """Large list of PMIDs for performance testing."""
     return [str(i) for i in range(30000000, 30000100)]  # 100 PMIDs
 
