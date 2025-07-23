@@ -363,3 +363,14 @@ class PubTator3Client:
         data = {"id": session_id}
 
         return await self._make_request("POST", url, data=data, use_text_client=True)
+
+    async def get_annotation_results(self, session_id: str) -> Dict[str, Any]:
+        """Alias for retrieve_text_annotation to match test expectations.
+
+        Args:
+            session_id: Session ID from submission
+
+        Returns:
+            Annotation results or status
+        """
+        return await self.retrieve_text_annotation(session_id)

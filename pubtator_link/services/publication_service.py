@@ -41,23 +41,26 @@ class PublicationService:
 
     @alru_cache(maxsize=cache_config.size, ttl=cache_config.ttl)
     async def export_publications(
-        self, pmids: List[str], format: str = "biocjson", full: bool = False
+        self, pmids_str: str, format: str = "biocjson", full: bool = False
     ) -> PublicationExportResponse:
         """Export publication annotations with caching.
 
         Args:
-            pmids: List of PubMed IDs
+            pmids_str: Comma-separated PMIDs string for caching
             format: Export format
             full: Include full text
 
         Returns:
             Publication export response
         """
+        # Parse pmids string back to list
+        pmids = [pmid.strip() for pmid in pmids_str.split(",") if pmid.strip()]
+
         if self.logger:
             log_cache_event(
                 self.logger,
                 event="miss",
-                cache_key=f"pub_export:{','.join(pmids)}:{format}:{full}",
+                cache_key=f"pub_export:{pmids_str}:{format}:{full}",
                 hit=False,
             )
 
@@ -69,10 +72,11 @@ class PublicationService:
             documents = self._parse_export_data(raw_data, format)
 
             return PublicationExportResponse(
-                documents=documents,
                 format=format,
                 pmids=pmids,
-                total_documents=len(documents),
+                full_text=full,
+                export_data={"documents": documents},
+                count=len(documents),
             )
 
         except PubTatorAPIError as e:
@@ -85,24 +89,43 @@ class PublicationService:
                 )
             raise
 
+    async def export_publications_list(
+        self, pmids: List[str], format: str = "biocjson", full: bool = False
+    ) -> PublicationExportResponse:
+        """Export publications with list interface.
+
+        Args:
+            pmids: List of PubMed IDs
+            format: Export format
+            full: Include full text
+
+        Returns:
+            Publication export response
+        """
+        pmids_str = ",".join(pmids)
+        return await self.export_publications(pmids_str, format, full)
+
     @alru_cache(maxsize=cache_config.size, ttl=cache_config.ttl)
     async def export_pmc_publications(
-        self, pmcids: List[str], format: str = "biocjson"
+        self, pmcids_str: str, format: str = "biocjson"
     ) -> PMCExportResponse:
         """Export PMC publication annotations with caching.
 
         Args:
-            pmcids: List of PMC IDs
+            pmcids_str: Comma-separated PMC IDs string for caching
             format: Export format
 
         Returns:
             PMC export response
         """
+        # Parse pmcids string back to list
+        pmcids = [pmcid.strip() for pmcid in pmcids_str.split(",") if pmcid.strip()]
+
         if self.logger:
             log_cache_event(
                 self.logger,
                 event="miss",
-                cache_key=f"pmc_export:{','.join(pmcids)}:{format}",
+                cache_key=f"pmc_export:{pmcids_str}:{format}",
                 hit=False,
             )
 
@@ -126,6 +149,21 @@ class PublicationService:
                     "PMC export failed", pmcids=pmcids, format=format, error=str(e)
                 )
             raise
+
+    async def export_pmc_publications_list(
+        self, pmcids: List[str], format: str = "biocjson"
+    ) -> PMCExportResponse:
+        """Export PMC publications with list interface.
+
+        Args:
+            pmcids: List of PMC IDs
+            format: Export format
+
+        Returns:
+            PMC export response
+        """
+        pmcids_str = ",".join(pmcids)
+        return await self.export_pmc_publications(pmcids_str, format)
 
     @alru_cache(maxsize=cache_config.size, ttl=cache_config.ttl)
     async def search_publications(self, text: str, page: int = 1) -> SearchResponse:
@@ -182,7 +220,7 @@ class PublicationService:
 
         # Process batches concurrently
         tasks = [
-            self.export_publications(batch_pmids, format, full)
+            self.export_publications_list(batch_pmids, format, full)
             for batch_pmids in pmid_batches
         ]
 
@@ -233,13 +271,19 @@ class PublicationService:
 
         if format == "biocjson":
             # BioC JSON format
-            if isinstance(raw_data, dict) and "documents" in raw_data:
-                return raw_data["documents"]
+            if isinstance(raw_data, dict):
+                # Check for PubTator3 response format
+                if "PubTator3" in raw_data:
+                    return raw_data["PubTator3"]
+                elif "documents" in raw_data:
+                    return raw_data["documents"]
             elif content:
                 try:
                     import json
 
                     parsed = json.loads(content)
+                    if "PubTator3" in parsed:
+                        return parsed["PubTator3"]
                     return parsed.get("documents", [parsed])
                 except json.JSONDecodeError:
                     return [{"content": content, "format": format}]
@@ -247,7 +291,12 @@ class PublicationService:
         elif format == "biocxml":
             # BioC XML format
             return [
-                {"content": content, "format": format, "content_type": content_type}
+                {
+                    "id": "biocxml_document",
+                    "content": content,
+                    "format": format,
+                    "content_type": content_type,
+                }
             ]
 
         elif format == "pubtator":
@@ -414,17 +463,64 @@ class PublicationService:
         """Get cache statistics.
 
         Returns:
-            Cache statistics
+            Cache statistics in expected format
         """
-        # async-lru has limited stats
-        return {
-            "export_publications": {
-                "cache_info": str(self.export_publications.cache_info())
+        # Get cache info from async-lru for each cached method
+        export_info = self.export_publications.cache_info()
+        pmc_info = self.export_pmc_publications.cache_info()
+        search_info = self.search_publications.cache_info()
+
+        # Calculate totals
+        total_hits = export_info.hits + pmc_info.hits + search_info.hits
+        total_misses = export_info.misses + pmc_info.misses + search_info.misses
+        total_requests = total_hits + total_misses
+
+        hit_rate = total_hits / total_requests if total_requests > 0 else 0.0
+        miss_rate = total_misses / total_requests if total_requests > 0 else 0.0
+
+        # Current size is the sum of current entries in all caches
+        current_size = export_info.currsize + pmc_info.currsize + search_info.currsize
+
+        basic_stats = {
+            "total_size": cache_config.size * 3,  # 3 cached methods
+            "current_size": current_size,
+            "hit_rate": round(hit_rate, 3),
+            "miss_rate": round(miss_rate, 3),
+            "total_hits": total_hits,
+            "total_misses": total_misses,
+        }
+
+        detailed_stats = {
+            "publication_export": {
+                "size": export_info.currsize,
+                "hits": export_info.hits,
+                "misses": export_info.misses,
+                "hit_rate": (
+                    round(export_info.hits / (export_info.hits + export_info.misses), 3)
+                    if (export_info.hits + export_info.misses) > 0
+                    else 0.0
+                ),
             },
-            "export_pmc_publications": {
-                "cache_info": str(self.export_pmc_publications.cache_info())
+            "pmc_export": {
+                "size": pmc_info.currsize,
+                "hits": pmc_info.hits,
+                "misses": pmc_info.misses,
+                "hit_rate": (
+                    round(pmc_info.hits / (pmc_info.hits + pmc_info.misses), 3)
+                    if (pmc_info.hits + pmc_info.misses) > 0
+                    else 0.0
+                ),
             },
-            "search_publications": {
-                "cache_info": str(self.search_publications.cache_info())
+            "search": {
+                "size": search_info.currsize,
+                "hits": search_info.hits,
+                "misses": search_info.misses,
+                "hit_rate": (
+                    round(search_info.hits / (search_info.hits + search_info.misses), 3)
+                    if (search_info.hits + search_info.misses) > 0
+                    else 0.0
+                ),
             },
         }
+
+        return {**basic_stats, "detailed_stats": detailed_stats}

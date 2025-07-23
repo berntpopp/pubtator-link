@@ -1,8 +1,8 @@
 """Response models for PubTator-Link API."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class BaseResponse(BaseModel):
@@ -49,12 +49,12 @@ class PublicationAnnotation(BaseModel):
 class PublicationExportResponse(BaseResponse):
     """Response model for publication export."""
 
-    documents: List[PublicationAnnotation] = Field(
-        default_factory=list, description="Exported publication documents"
-    )
     format: str = Field(..., description="Export format used")
-    pmids: List[str] = Field(..., description="Requested PMIDs")
-    total_documents: int = Field(..., description="Total number of documents")
+    pmids: Optional[List[str]] = Field(default=None, description="Requested PMIDs")
+    pmcids: Optional[List[str]] = Field(default=None, description="Requested PMC IDs")
+    full_text: bool = Field(default=False, description="Whether full text was included")
+    export_data: Dict[str, Any] = Field(..., description="Exported data")
+    count: int = Field(..., description="Number of exported items")
 
 
 class PMCExportResponse(BaseResponse):
@@ -71,11 +71,32 @@ class PMCExportResponse(BaseResponse):
 class EntityMatch(BaseModel):
     """Entity autocomplete match."""
 
-    identifier: str = Field(..., description="Entity identifier")
+    identifier: str = Field(..., description="Entity identifier")  # _id from API
     name: str = Field(..., description="Entity name")
-    type: str = Field(..., description="Entity type")
+    type: str = Field(..., description="Entity type")  # biotype from API
     score: Optional[float] = Field(default=None, description="Match score")
     synonyms: List[str] = Field(default_factory=list, description="Entity synonyms")
+
+    # Additional fields from actual API response
+    db_id: Optional[str] = Field(default=None, description="Database ID")
+    db: Optional[str] = Field(default=None, description="Database name")
+    match: Optional[str] = Field(default=None, description="Match description")
+
+    @field_validator("identifier", mode="before")
+    @classmethod
+    def map_id_field(cls, v, info):
+        """Map _id field to identifier if present."""
+        if isinstance(info.data, dict) and "_id" in info.data:
+            return info.data["_id"]
+        return v
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def map_biotype_field(cls, v, info):
+        """Map biotype field to type if present."""
+        if isinstance(info.data, dict) and "biotype" in info.data:
+            return info.data["biotype"]
+        return v
 
 
 class EntityAutocompleteResponse(BaseResponse):
@@ -96,6 +117,13 @@ class SearchResult(BaseModel):
 
     pmid: str = Field(..., description="PubMed ID")
     title: str = Field(..., description="Article title")
+
+    @field_validator("pmid", mode="before")
+    @classmethod
+    def convert_pmid_to_string(cls, v: Union[str, int]) -> str:
+        """Convert PMID to string if it's an integer."""
+        return str(v)
+
     abstract: Optional[str] = Field(default=None, description="Article abstract")
     authors: List[str] = Field(default_factory=list, description="Authors")
     journal: Optional[str] = Field(default=None, description="Journal name")
@@ -104,6 +132,23 @@ class SearchResult(BaseModel):
         default_factory=list, description="Annotations found"
     )
     score: Optional[float] = Field(default=None, description="Relevance score")
+
+    # Additional fields from actual API response
+    pmcid: Optional[str] = Field(default=None, description="PMC ID if available")
+    doi: Optional[str] = Field(default=None, description="DOI")
+    date: Optional[str] = Field(default=None, description="Publication date ISO format")
+    text_hl: Optional[str] = Field(default=None, description="Highlighted text snippet")
+    citations: Optional[Dict[str, str]] = Field(
+        default=None, description="Citation formats"
+    )
+
+    @field_validator("pub_date", mode="before")
+    @classmethod
+    def map_date_fields(cls, v, info):
+        """Map date field to pub_date if present."""
+        if v is None and isinstance(info.data, dict) and "date" in info.data:
+            return info.data["date"]
+        return v
 
 
 class SearchResponse(BaseResponse):
@@ -122,12 +167,35 @@ class SearchResponse(BaseResponse):
 class RelatedEntity(BaseModel):
     """Related entity information."""
 
-    entity_id: str = Field(..., description="Entity identifier")
-    entity_name: str = Field(..., description="Entity name")
-    entity_type: str = Field(..., description="Entity type")
-    relation_type: str = Field(..., description="Relation type")
+    entity_id: str = Field(..., description="Entity identifier")  # target from API
+    entity_name: Optional[str] = Field(default=None, description="Entity name")
+    entity_type: Optional[str] = Field(default=None, description="Entity type")
+    relation_type: str = Field(..., description="Relation type")  # type from API
     confidence: Optional[float] = Field(default=None, description="Relation confidence")
     pmids: List[str] = Field(default_factory=list, description="Supporting PMIDs")
+
+    # Fields from actual API response
+    source: Optional[str] = Field(default=None, description="Source entity")
+    target: str = Field(..., description="Target entity")
+    publications: Optional[int] = Field(
+        default=None, description="Number of publications"
+    )
+
+    @field_validator("entity_id", mode="before")
+    @classmethod
+    def map_target_to_entity_id(cls, v, info):
+        """Map target field to entity_id if present."""
+        if v is None and isinstance(info.data, dict) and "target" in info.data:
+            return info.data["target"]
+        return v
+
+    @field_validator("relation_type", mode="before")
+    @classmethod
+    def map_type_to_relation_type(cls, v, info):
+        """Map type field to relation_type if present."""
+        if isinstance(info.data, dict) and "type" in info.data:
+            return info.data["type"]
+        return v
 
 
 class RelationsResponse(BaseResponse):
@@ -164,6 +232,7 @@ class TextAnnotationSubmitResponse(BaseResponse):
 
     session_id: str = Field(..., description="Session ID for retrieval")
     status: str = Field(default="submitted", description="Processing status")
+    bioconcepts: List[str] = Field(..., description="Bioconcept types being processed")
     estimated_time: Optional[int] = Field(
         default=None, description="Estimated processing time in seconds"
     )

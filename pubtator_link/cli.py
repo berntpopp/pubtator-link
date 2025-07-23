@@ -7,6 +7,8 @@ from typing import Optional
 
 from .api.client import PubTator3Client
 from .logging_config import configure_logging
+from .mcp_server import serve_mcp
+from .server_manager import UnifiedServerManager
 from .services.publication_service import PublicationService
 
 
@@ -96,6 +98,52 @@ async def export_publications(pmids: str, format: str = "biocjson", full: bool =
             sys.exit(1)
 
 
+async def serve_http(host: str = "127.0.0.1", port: int = 8000, reload: bool = False):
+    """Start HTTP-only server."""
+    logger = configure_logging()
+    manager = UnifiedServerManager(logger=logger)
+
+    try:
+        logger.info("Starting HTTP server", host=host, port=port, reload=reload)
+        await manager.start_http_only_server(host=host, port=port, reload=reload)
+    except KeyboardInterrupt:
+        logger.info("Server stopped by user")
+    except Exception as e:
+        logger.error("Server error", error=str(e))
+        sys.exit(1)
+
+
+async def serve_unified(
+    host: str = "127.0.0.1", port: int = 8000, reload: bool = False
+):
+    """Start unified server (HTTP + MCP)."""
+    logger = configure_logging()
+    manager = UnifiedServerManager(logger=logger)
+
+    try:
+        logger.info("Starting unified server", host=host, port=port, reload=reload)
+        await manager.start_unified_server(host=host, port=port, reload=reload)
+    except KeyboardInterrupt:
+        logger.info("Server stopped by user")
+    except Exception as e:
+        logger.error("Server error", error=str(e))
+        sys.exit(1)
+
+
+async def serve_mcp_only():
+    """Start MCP-only server."""
+    logger = configure_logging()
+
+    try:
+        logger.info("Starting MCP server")
+        await serve_mcp()
+    except KeyboardInterrupt:
+        logger.info("MCP server stopped by user")
+    except Exception as e:
+        logger.error("MCP server error", error=str(e))
+        sys.exit(1)
+
+
 def main():
     """CLI entry point."""
     parser = argparse.ArgumentParser(description="PubTator-Link CLI")
@@ -103,6 +151,35 @@ def main():
 
     # Test connection command
     subparsers.add_parser("test", help="Test connection to PubTator3 API")
+
+    # Server commands
+    serve_parser = subparsers.add_parser("serve", help="Start server")
+    serve_subparsers = serve_parser.add_subparsers(
+        dest="serve_mode", help="Server modes"
+    )
+
+    # HTTP server
+    http_parser = serve_subparsers.add_parser("http", help="Start HTTP-only server")
+    http_parser.add_argument("--host", default="127.0.0.1", help="Host to bind to")
+    http_parser.add_argument("--port", type=int, default=8000, help="Port to bind to")
+    http_parser.add_argument(
+        "--reload", action="store_true", help="Enable hot reloading for development"
+    )
+
+    # Unified server
+    unified_parser = serve_subparsers.add_parser(
+        "unified", help="Start unified server (HTTP + MCP)"
+    )
+    unified_parser.add_argument("--host", default="127.0.0.1", help="Host to bind to")
+    unified_parser.add_argument(
+        "--port", type=int, default=8000, help="Port to bind to"
+    )
+    unified_parser.add_argument(
+        "--reload", action="store_true", help="Enable hot reloading for development"
+    )
+
+    # MCP server
+    serve_subparsers.add_parser("mcp", help="Start MCP-only server")
 
     # Entity search command
     entity_parser = subparsers.add_parser("entities", help="Search for entity IDs")
@@ -142,6 +219,21 @@ def main():
     if args.command == "test":
         success = asyncio.run(test_connection())
         sys.exit(0 if success else 1)
+    elif args.command == "serve":
+        if not args.serve_mode:
+            serve_parser.print_help()
+            return
+
+        if args.serve_mode == "http":
+            asyncio.run(
+                serve_http(args.host, args.port, getattr(args, "reload", False))
+            )
+        elif args.serve_mode == "unified":
+            asyncio.run(
+                serve_unified(args.host, args.port, getattr(args, "reload", False))
+            )
+        elif args.serve_mode == "mcp":
+            asyncio.run(serve_mcp_only())
     elif args.command == "entities":
         asyncio.run(search_entities(args.query, args.concept, args.limit))
     elif args.command == "search":
