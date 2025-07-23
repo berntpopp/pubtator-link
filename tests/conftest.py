@@ -11,7 +11,6 @@ from pubtator_link.server_manager import UnifiedServerManager
 from pubtator_link.api.client import PubTator3Client
 from pubtator_link.services.publication_service import PublicationService
 from pubtator_link.config import settings
-from pubtator_link.logging_config import configure_logging
 
 
 @pytest.fixture(scope="session")
@@ -309,19 +308,19 @@ def rate_limit_error():
 # Test data fixtures
 @pytest.fixture
 def valid_bioconcepts() -> List[str]:
-    """Valid bioconcept types for testing."""
+    """Return valid bioconcept types for testing."""
     return ["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"]
 
 
 @pytest.fixture
 def valid_export_formats() -> List[str]:
-    """Valid export formats for testing."""
+    """Return valid export formats for testing."""
     return ["biocjson", "biocxml", "pubtator"]
 
 
 @pytest.fixture
 def valid_relation_types() -> List[str]:
-    """Valid relation types for testing."""
+    """Return valid relation types for testing."""
     return [
         "treat",
         "cause",
@@ -348,7 +347,7 @@ def large_pmid_list() -> List[str]:
 
 @pytest.fixture
 def concurrent_requests():
-    """Configuration for concurrent request testing."""
+    """Return configuration for concurrent request testing."""
     return {
         "concurrent_users": 10,
         "requests_per_user": 5,

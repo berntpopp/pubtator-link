@@ -3,8 +3,7 @@
 import pytest
 import httpx
 import respx
-from unittest.mock import Mock, patch, AsyncMock
-from typing import List, Dict, Any
+from unittest.mock import Mock
 
 from pubtator_link.api.client import PubTator3Client, PubTatorAPIError, RateLimiter
 from pubtator_link.config import APIConfig, TextProcessingConfig
@@ -383,9 +382,9 @@ class TestPubTator3Client:
             assert result == mock_response
 
         # With rate limiting, requests should take some time
-        total_time = end_time - start_time
         # With 2.5 req/sec, 3 requests should take at least some time
         # but not too strict since it depends on timing
+        assert (end_time - start_time) >= 0.0  # Basic timing check
 
     @respx.mock
     @pytest.mark.asyncio

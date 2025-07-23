@@ -1,8 +1,7 @@
 """Comprehensive tests for service layer classes."""
 
 import pytest
-from unittest.mock import AsyncMock, Mock, patch
-from typing import Dict, List, Any
+from unittest.mock import AsyncMock, Mock
 
 from pubtator_link.services.publication_service import PublicationService
 from pubtator_link.api.client import PubTator3Client, PubTatorAPIError
@@ -278,7 +277,7 @@ class TestPublicationService:
         mock_client.export_publications.return_value = mock_response
 
         # Test with comma-separated PMIDs and whitespace
-        result = await publication_service.export_publications(
+        await publication_service.export_publications(
             pmids_str="29355051, 32511357 , 12345678", format="biocjson"
         )
 
@@ -294,7 +293,7 @@ class TestPublicationService:
         mock_client.export_pmc_publications.return_value = mock_response
 
         # Test with comma-separated PMCIDs and whitespace
-        result = await publication_service.export_pmc_publications(
+        await publication_service.export_pmc_publications(
             pmcids_str="PMC7696669, PMC8869656 ", format="biocjson"
         )
 
@@ -376,7 +375,7 @@ class TestPublicationService:
         mock_client.export_publications.return_value = mock_response
 
         # Test with string containing only commas and whitespace
-        result = await publication_service.export_publications(
+        await publication_service.export_publications(
             pmids_str="29355051,  ,  , 32511357", format="biocjson"
         )
 

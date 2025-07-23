@@ -49,7 +49,10 @@ class MockPubTatorResponses:
                         {
                             "infons": {"type": "abstract"},
                             "offset": 72,
-                            "text": "This study investigates the antioxidant properties of polysaccharides extracted from Lycium barbarum.",
+                            "text": (
+                                "This study investigates the antioxidant properties of "
+                                "polysaccharides extracted from Lycium barbarum."
+                            ),
                             "sentences": [],
                             "annotations": [
                                 {
@@ -90,7 +93,8 @@ class MockPubTatorResponses:
         return {
             "content": (
                 "29355051|t|Fraction From Lycium barbarum Polysaccharides Reduces Oxidative Stress\n"
-                "29355051|a|This study investigates the antioxidant properties of polysaccharides extracted from Lycium barbarum.\n"
+                "29355051|a|This study investigates the antioxidant properties of "
+                "polysaccharides extracted from Lycium barbarum.\n"
                 "29355051\t14\t29\tLycium barbarum\tSpecies\t112863\n"
                 "29355051\t158\t173\tLycium barbarum\tSpecies\t112863\n"
                 "\n"

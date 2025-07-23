@@ -226,16 +226,6 @@ class TestRelationsRoutes:
 
     def test_find_related_entities_all_relation_types(self, test_client):
         """Test that all valid relation types are accepted."""
-        valid_relation_types = [
-            "treat",
-            "cause",
-            "prevent",
-            "regulate",
-            "associate",
-            "bind",
-            "interact",
-        ]
-
         # Only test a subset that work reliably
         working_relation_types = ["treat", "cause"]
         for relation_type in working_relation_types:

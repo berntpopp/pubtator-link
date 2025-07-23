@@ -1,7 +1,5 @@
 """Test data fixtures and constants for PubTator-Link testing."""
 
-from typing import List, Dict, Any, Tuple
-
 
 class TestPMIDs:
     """Collection of test PMIDs for various scenarios."""
@@ -190,8 +188,8 @@ class TestTextSamples:
 
     # Medium texts (100-500 characters)
     MEDIUM_TEXTS = [
-        """The BRCA1 gene, located on chromosome 17, plays a crucial role in DNA repair. 
-           Mutations in BRCA1 significantly increase the risk of hereditary breast and ovarian 
+        """The BRCA1 gene, located on chromosome 17, plays a crucial role in DNA repair.
+           Mutations in BRCA1 significantly increase the risk of hereditary breast and ovarian
            cancer. Genetic testing for BRCA1 mutations is recommended for high-risk individuals.""",
         """Remdesivir is an antiviral medication developed for treating COVID-19 patients.
            Clinical trials have shown that remdesivir can reduce recovery time in hospitalized
@@ -200,13 +198,13 @@ class TestTextSamples:
 
     # Long texts (> 500 characters)
     LONG_TEXTS = [
-        """Breast cancer is the second most common cancer in women worldwide, with approximately 
-           2.3 million new cases diagnosed annually. The disease is characterized by the uncontrolled 
-           growth of cells in breast tissue. Several risk factors contribute to breast cancer development, 
-           including age, family history, genetic mutations (particularly in BRCA1 and BRCA2 genes), 
-           hormonal factors, and lifestyle choices. Early detection through mammography screening and 
-           clinical breast examinations significantly improves treatment outcomes and survival rates. 
-           Treatment options include surgery, chemotherapy, radiation therapy, hormone therapy, and 
+        """Breast cancer is the second most common cancer in women worldwide, with approximately
+           2.3 million new cases diagnosed annually. The disease is characterized by the uncontrolled
+           growth of cells in breast tissue. Several risk factors contribute to breast cancer development,
+           including age, family history, genetic mutations (particularly in BRCA1 and BRCA2 genes),
+           hormonal factors, and lifestyle choices. Early detection through mammography screening and
+           clinical breast examinations significantly improves treatment outcomes and survival rates.
+           Treatment options include surgery, chemotherapy, radiation therapy, hormone therapy, and
            targeted therapies, depending on the cancer stage and molecular characteristics."""
     ]
 
