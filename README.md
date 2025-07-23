@@ -161,37 +161,93 @@ curl "http://127.0.0.1:8000/api/annotations/abc123def456"
 
 ### Configuration for AI Assistants
 
-Add to your MCP configuration (e.g., Claude Desktop):
+#### Claude Desktop (STDIO Mode)
+
+Add to your Claude Desktop configuration (`claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "pubtator-link": {
       "command": "python",
-      "args": ["/path/to/pubtator-link/mcp_server.py"],
+      "args": ["/absolute/path/to/pubtator-link/mcp_server.py"],
       "env": {
-        "PYTHONUNBUFFERED": "1"
+        "PYTHONUNBUFFERED": "1",
+        "LOG_LEVEL": "WARNING"
       }
     }
   }
 }
 ```
 
+#### Web-based AI (HTTP Mode)
+
+For HTTP-based MCP integration:
+
+```json
+{
+  "mcpServers": {
+    "pubtator-link": {
+      "transport": {
+        "type": "http",
+        "url": "http://localhost:8000/mcp"
+      }
+    }
+  }
+}
+```
+
+### Configuration Files
+
+**Find your Claude Desktop config file:**
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+**Example configurations are provided:**
+- See `claude_desktop_config_example.json` for complete examples
+- Copy and modify paths to match your installation
+
 ### Available MCP Tools
 
-- `export_publication_annotations` - Export annotations for publications
-- `search_entity_ids` - Find entity identifiers
-- `search_publications` - Search biomedical literature
-- `find_related_entities` - Discover entity relationships
-- `process_text_annotations` - Extract entities from text
+- `export_publication_annotations` - Export annotations for publications by PMIDs
+- `export_pmc_publications` - Export PMC publications by PMC IDs
+- `search_entity_ids` - Find biomedical entity identifiers with autocomplete
+- `search_publications` - Search biomedical literature with pagination
+- `find_related_entities` - Discover entity relationships and associations
+- `submit_text_annotation` - Submit text for biomedical entity extraction
+- `get_annotation_results` - Retrieve text annotation results
+- `get_cache_statistics` - Monitor cache performance
+- `clear_cache` - Clear cached data
 
-### STDIO Mode
+### Transport Modes
 
-For direct MCP integration:
-
+#### STDIO Mode (Recommended for Claude Desktop)
 ```bash
-python server.py --transport stdio
+# Direct STDIO mode for maximum performance
+python mcp_server.py
 ```
+
+#### HTTP Mode (For web-based AI)
+```bash
+# Start unified server with MCP HTTP endpoint
+python server.py --transport unified
+# MCP available at http://localhost:8000/mcp
+```
+
+#### Unified Mode (REST + MCP)
+```bash
+# Both REST API and MCP in one server
+python server.py --transport unified
+# REST API: http://localhost:8000/docs
+# MCP: http://localhost:8000/mcp
+```
+
+### 📚 Additional Documentation
+
+- **[MCP Connection Guide](docs/MCP_CONNECTION_GUIDE.md)** - Detailed setup instructions for all transport modes
+- **[Configuration Examples](claude_desktop_config_example.json)** - Ready-to-use Claude Desktop configurations
+- **Interactive API Docs** - Available at http://localhost:8000/docs when server is running
 
 ## 🛠️ CLI Usage
 
