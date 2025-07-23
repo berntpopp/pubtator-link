@@ -115,18 +115,33 @@ curl "http://127.0.0.1:8000/api/entities/autocomplete?query=BRCA1&concept=Gene"
 
 ### Publication Search  
 
-- `GET /api/search` - Search publications by text, entity IDs, or relations
+- `GET /api/search` - Search publications by text, entity IDs, or relations with sorting
 
 ```bash
-# Free text search
+# Free text search (default: relevance-based sorting)
 curl "http://127.0.0.1:8000/api/search?text=breast%20cancer&page=1"
 
-# Entity-based search
-curl "http://127.0.0.1:8000/api/search?text=@CHEMICAL_remdesivir"
+# Sort by publication date (newest first)
+curl "http://127.0.0.1:8000/api/search?text=breast%20cancer&sort=date%20desc"
+
+# Sort by publication date (oldest first)
+curl "http://127.0.0.1:8000/api/search?text=autism&sort=date%20asc"
+
+# Sort by relevance score (highest first)
+curl "http://127.0.0.1:8000/api/search?text=epilepsy&sort=score%20desc"
+
+# Entity-based search with sorting
+curl "http://127.0.0.1:8000/api/search?text=@CHEMICAL_remdesivir&sort=date%20desc"
 
 # Relation-based search
 curl "http://127.0.0.1:8000/api/search?text=relations:ANY|@CHEMICAL_Doxorubicin|@DISEASE_Neoplasms"
 ```
+
+**Supported sort options:**
+- `date desc` - Newest publications first (default for date sorting)
+- `date asc` - Oldest publications first  
+- `score desc` - Highest relevance first (default for relevance sorting)
+- `score asc` - Lowest relevance first
 
 ### Entity Relations
 
@@ -213,7 +228,7 @@ For HTTP-based MCP integration:
 - `export_publication_annotations` - Export annotations for publications by PMIDs
 - `export_pmc_publications` - Export PMC publications by PMC IDs
 - `search_entity_ids` - Find biomedical entity identifiers with autocomplete
-- `search_publications` - Search biomedical literature with pagination
+- `search_publications` - Search biomedical literature with pagination and sorting
 - `find_related_entities` - Discover entity relationships and associations
 - `submit_text_annotation` - Submit text for biomedical entity extraction
 - `get_annotation_results` - Retrieve text annotation results

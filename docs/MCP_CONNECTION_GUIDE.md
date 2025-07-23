@@ -198,6 +198,13 @@ CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 Ask Claude: "Find entity IDs for 'breast cancer' using PubTator"
 ```
 
+### Search Publications with Sorting
+```
+Ask Claude: "Search for recent publications about autism sorted by date"
+Ask Claude: "Find the most relevant papers about epilepsy sorted by score"
+Ask Claude: "Search for papers about intellectual disability, sorted newest first"
+```
+
 ### Export Publication Data
 ```
 Ask Claude: "Export annotations for PMIDs 29355051 and 32511357 in BioC JSON format"
