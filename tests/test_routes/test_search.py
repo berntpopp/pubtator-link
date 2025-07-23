@@ -111,7 +111,9 @@ class TestSearchRoutes:
         data = response.json()
         assert data["sort_order"] == "date desc"
         # Verify the API client was called with the sort parameter
-        mock_search.assert_called_once_with(text="breast cancer", page=1, sort="date desc")
+        mock_search.assert_called_once_with(
+            text="breast cancer", page=1, sort="date desc", filters=None, sections=None
+        )
 
     @patch.object(PubTator3Client, "search_publications")
     def test_search_publications_with_sort_score_asc(self, mock_search, test_client):
@@ -126,7 +128,9 @@ class TestSearchRoutes:
         assert response.status_code == 200
         data = response.json()
         assert data["sort_order"] == "score asc"
-        mock_search.assert_called_once_with(text="BRCA1", page=1, sort="score asc")
+        mock_search.assert_called_once_with(
+            text="BRCA1", page=1, sort="score asc", filters=None, sections=None
+        )
 
     @patch.object(PubTator3Client, "search_publications")
     def test_search_publications_default_sort(self, mock_search, test_client):
@@ -141,7 +145,9 @@ class TestSearchRoutes:
         assert response.status_code == 200
         data = response.json()
         assert data["sort_order"] is None  # No sort applied
-        mock_search.assert_called_once_with(text="covid", page=1, sort=None)
+        mock_search.assert_called_once_with(
+            text="covid", page=1, sort=None, filters=None, sections=None
+        )
 
     def test_search_publications_invalid_sort(self, test_client):
         """Test search with invalid sort parameter."""

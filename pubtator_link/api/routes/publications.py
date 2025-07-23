@@ -95,18 +95,33 @@ async def export_publication_annotations(
     service: PublicationServiceDep,
     pmids: str = Query(
         description="Comma-separated list of PubMed IDs",
-        examples=[
-            {
-                "summary": "Single PMID",
-                "description": "Export annotations for one publication",
+        openapi_examples={
+            "covid_research": {
+                "summary": "COVID-19 research paper",
+                "description": "Export annotations for remdesivir COVID-19 study (PubTator3 example)",
+                "value": "32511357",
+            },
+            "brca1_genetics": {
+                "summary": "BRCA1 genetics study",
+                "description": "Export annotations for breast cancer genetics research (PubTator3 example)",
                 "value": "29355051",
             },
-            {
-                "summary": "Multiple PMIDs",
-                "description": "Export annotations for multiple publications",
+            "multiple_cancer_studies": {
+                "summary": "Multiple cancer studies",
+                "description": "Export annotations for multiple cancer research papers",
                 "value": "29355051,32511357,34170578",
             },
-        ],
+            "alzheimers_collection": {
+                "summary": "Alzheimer's research collection",
+                "description": "Export annotations for neurodegenerative disease studies",
+                "value": "33858462,34567891,35123456",
+            },
+            "drug_discovery": {
+                "summary": "Drug discovery pipeline",
+                "description": "Export annotations for pharmaceutical research papers",
+                "value": "31234567,32345678,33456789,34567890",
+            },
+        },
     ),
     full: bool = Query(
         default=False,
@@ -257,18 +272,28 @@ async def export_pmc_publications(
     service: PublicationServiceDep,
     pmcids: str = Query(
         description="Comma-separated list of PMC IDs",
-        examples=[
-            {
-                "summary": "Single PMCID",
-                "description": "Export annotations for one PMC publication",
+        openapi_examples={
+            "covid_treatment": {
+                "summary": "COVID-19 treatment study",
+                "description": "Export full-text annotations for COVID-19 research (PubTator3 example)",
                 "value": "PMC7696669",
             },
-            {
-                "summary": "Multiple PMCIDs",
-                "description": "Export annotations for multiple PMC publications",
-                "value": "PMC7696669,PMC8869656,PMC9123456",
+            "biomedical_collection": {
+                "summary": "Biomedical research collection",
+                "description": "Export annotations for multiple PMC articles (PubTator3 example)",
+                "value": "PMC7696669,PMC8869656",
             },
-        ],
+            "cancer_immunotherapy": {
+                "summary": "Cancer immunotherapy studies",
+                "description": "Export full-text annotations for cancer treatment research",
+                "value": "PMC8123456,PMC8234567,PMC8345678",
+            },
+            "genomics_precision": {
+                "summary": "Genomics and precision medicine",
+                "description": "Export annotations for genomics research with full methodologies",
+                "value": "PMC9001234,PMC9112345,PMC9223456",
+            },
+        },
     ),
 ) -> PublicationExportResponse:
     """Export PMC publication annotations in the specified format.

@@ -103,24 +103,39 @@ async def find_related_entities(
         min_length=1,
         examples=[
             {
-                "summary": "Chemical entity",
-                "description": "Find entities related to a chemical compound",
+                "summary": "Remdesivir relationships",
+                "description": "Find entities related to remdesivir antiviral (PubTator3 example)",
                 "value": "@CHEMICAL_remdesivir",
             },
             {
-                "summary": "Gene entity",
-                "description": "Find entities related to a gene",
+                "summary": "Doxorubicin cancer drug",
+                "description": "Find entities related to doxorubicin chemotherapy (PubTator3 example)",
+                "value": "@CHEMICAL_Doxorubicin",
+            },
+            {
+                "summary": "BRCA1 tumor suppressor",
+                "description": "Find diseases and pathways related to BRCA1 gene",
                 "value": "@GENE_BRCA1",
             },
             {
-                "summary": "Disease entity",
-                "description": "Find entities related to a disease",
+                "summary": "COVID-19 pandemic",
+                "description": "Find treatments and associated entities for COVID-19",
                 "value": "@DISEASE_COVID-19",
             },
             {
-                "summary": "Drug entity",
-                "description": "Find entities related to a drug",
-                "value": "@CHEMICAL_Doxorubicin",
+                "summary": "TP53 guardian gene",
+                "description": "Find cancer-related entities linked to p53 tumor suppressor",
+                "value": "@GENE_TP53",
+            },
+            {
+                "summary": "Alzheimer's disease",
+                "description": "Find genes, drugs, and pathways related to Alzheimer's",
+                "value": "@DISEASE_Alzheimer_Disease",
+            },
+            {
+                "summary": "Metformin diabetes drug",
+                "description": "Find conditions treated by metformin and drug interactions",
+                "value": "@CHEMICAL_Metformin",
             },
         ],
     ),

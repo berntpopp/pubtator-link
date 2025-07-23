@@ -89,9 +89,67 @@ class TextAnnotationSubmitRequestBody(BaseModel):
 @handle_api_errors
 async def submit_text_annotation(
     client: ClientDep,
-    text: str = Query(..., description="Text to annotate"),
+    text: str = Query(
+        ...,
+        description="Text to annotate with biomedical entities",
+        examples=[
+            {
+                "summary": "BRCA1 gene mutation text (PubTator3 example)",
+                "description": "Text about BRCA1 gene mutations for gene entity extraction",
+                "value": "The ESR1 Mutations: From Bedside to Bench to Bedside.",
+            },
+            {
+                "summary": "COVID-19 clinical text",
+                "description": "Clinical text about COVID-19 for disease entity extraction",
+                "value": "Patients with COVID-19 and diabetes mellitus require careful monitoring of blood glucose levels.",
+            },
+            {
+                "summary": "Drug interaction text",
+                "description": "Pharmacological text for chemical entity extraction",
+                "value": "Aspirin and warfarin interaction increases bleeding risk in elderly patients.",
+            },
+            {
+                "summary": "Cancer research abstract",
+                "description": "Research abstract with multiple entity types",
+                "value": "TP53 mutations in breast cancer patients treated with doxorubicin showed resistance to chemotherapy.",
+            },
+            {
+                "summary": "Alzheimer's disease research",
+                "description": "Neuroscience research text with disease and gene entities",
+                "value": "APOE4 genotype is associated with increased risk of Alzheimer's disease and accelerated cognitive decline.",
+            },
+            {
+                "summary": "Pharmacogenomics study",
+                "description": "Personalized medicine text with genes, drugs, and diseases",
+                "value": "CYP2D6 polymorphisms affect metabolism of codeine and tramadol in chronic pain management.",
+            },
+        ],
+    ),
     bioconcepts: str = Query(
-        default="Gene", description="Comma-separated bioconcept types or 'all'"
+        default="Gene",
+        description="Bioconcept type to extract from text",
+        examples=[
+            {
+                "summary": "Gene entities",
+                "description": "Extract gene names and symbols",
+                "value": "Gene",
+            },
+            {
+                "summary": "Disease entities",
+                "description": "Extract disease and condition names",
+                "value": "Disease",
+            },
+            {
+                "summary": "Chemical entities",
+                "description": "Extract drug and chemical compound names",
+                "value": "Chemical",
+            },
+            {
+                "summary": "All entity types",
+                "description": "Extract all supported biomedical entities",
+                "value": "all",
+            },
+        ],
     ),
 ) -> TextAnnotationSubmitResponse:
     """Submit text for biomedical named entity recognition.

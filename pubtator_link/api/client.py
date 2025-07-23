@@ -276,23 +276,46 @@ class PubTator3Client:
         return await self._make_request("GET", url, params=params)
 
     async def search_publications(
-        self, text: str, page: int = 1, sort: Optional[str] = None
+        self,
+        text: str,
+        page: int = 1,
+        sort: Optional[str] = None,
+        filters: Optional[str] = None,
+        sections: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Search for publications.
+        """Search for publications with advanced filtering.
 
         Args:
             text: Search query (free text, entity ID, or relation)
-            page: Page number
+            page: Page number for pagination
             sort: Sort order ("date desc", "date asc", "score desc", "score asc")
+            filters: JSON string with advanced filters (type, journal, author, year)
+            sections: Comma-separated list of sections to search within
 
         Returns:
-            Search results
+            Search results with publications matching criteria
+
+        Example:
+            # Basic search
+            await client.search_publications("breast cancer")
+
+            # Advanced search with filters
+            filters = '{"type":["Review"],"journal":["Nature"],"year":{"min":2020}}'
+            await client.search_publications(
+                text="BRCA1 mutations",
+                filters=filters,
+                sections="title,abstract"
+            )
         """
         url = f"{self.config.base_url}/search/"
         params = {"text": text, "page": page}
 
         if sort is not None:
             params["sort"] = sort
+        if filters is not None and filters.strip():
+            params["filters"] = filters
+        if sections is not None and sections.strip():
+            params["sections"] = sections
 
         return await self._make_request("GET", url, params=params)
 

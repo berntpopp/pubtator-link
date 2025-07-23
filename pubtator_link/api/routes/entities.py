@@ -91,67 +91,87 @@ async def search_entity_ids(
         description="Free text search query for biomedical entities",
         min_length=1,
         max_length=500,
-        examples=[
-            {
-                "summary": "Disease search",
-                "description": "Search for disease entities",
-                "value": "breast cancer",
+        openapi_examples={
+            "remdesivir_drug": {
+                "summary": "Remdesivir drug search",
+                "description": "Search for remdesivir chemical entity (PubTator3 example)",
+                "value": "remdesivir",
             },
-            {
-                "summary": "Gene search",
-                "description": "Search for gene entities",
+            "brca1_gene": {
+                "summary": "BRCA1 gene search",
+                "description": "Search for BRCA1 tumor suppressor gene",
                 "value": "BRCA1",
             },
-            {
-                "summary": "Chemical search",
-                "description": "Search for chemical entities",
-                "value": "aspirin",
+            "covid19_disease": {
+                "summary": "COVID-19 disease search",
+                "description": "Search for coronavirus disease 2019",
+                "value": "COVID-19",
             },
-            {
-                "summary": "Complex term",
-                "description": "Search for complex biomedical terms",
+            "doxorubicin_chemo": {
+                "summary": "Doxorubicin chemotherapy",
+                "description": "Search for doxorubicin cancer drug (PubTator3 example)",
+                "value": "doxorubicin",
+            },
+            "p53_suppressor": {
+                "summary": "p53 tumor suppressor",
+                "description": "Search for TP53 gene and protein variants",
                 "value": "tumor suppressor protein p53",
             },
-        ],
+            "alzheimers_disease": {
+                "summary": "Alzheimer's disease",
+                "description": "Search for neurodegenerative disease entities",
+                "value": "Alzheimer disease",
+            },
+            "sars_cov2_virus": {
+                "summary": "SARS-CoV-2 virus",
+                "description": "Search for severe acute respiratory syndrome coronavirus 2",
+                "value": "SARS-CoV-2",
+            },
+            "metformin_diabetes": {
+                "summary": "Metformin diabetes drug",
+                "description": "Search for type 2 diabetes medication",
+                "value": "metformin",
+            },
+        },
     ),
     concept: Optional[str] = Query(
         default=None,
         description="Filter results by bioconcept type",
-        examples=[
-            {
+        openapi_examples={
+            "gene_filter": {
                 "summary": "Gene filter",
                 "description": "Only return gene entities",
                 "value": "Gene",
             },
-            {
+            "disease_filter": {
                 "summary": "Disease filter",
                 "description": "Only return disease entities",
                 "value": "Disease",
             },
-            {
+            "chemical_filter": {
                 "summary": "Chemical filter",
                 "description": "Only return chemical entities",
                 "value": "Chemical",
             },
-        ],
+        },
     ),
     limit: int = Query(
         default=10,
         description="Maximum number of results to return",
         ge=1,
         le=100,
-        examples=[
-            {
+        openapi_examples={
+            "default_limit": {
                 "summary": "Default limit",
                 "description": "Return up to 10 results",
                 "value": 10,
             },
-            {
+            "more_results": {
                 "summary": "More results",
                 "description": "Return up to 25 results",
                 "value": 25,
             },
-        ],
+        },
     ),
 ) -> EntityAutocompleteResponse:
     """Find biomedical entity identifiers through autocomplete search.

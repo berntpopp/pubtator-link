@@ -3,9 +3,9 @@
 import logging
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, status
 
-from ...models.requests import SearchRequest, SearchSortOrder
+from ...models.requests import SearchFilters, SearchRequest, SearchSection, SearchSortOrder
 from ...models.responses import SearchResponse, SearchResult
 from .dependencies import (
     ClientDep,
@@ -87,86 +87,177 @@ async def search_publications(
         description="Search query (free text, entity ID, or relation query)",
         min_length=1,
         max_length=1000,
-        examples=[
-            {
-                "summary": "Free text search",
-                "description": "Search using natural language",
-                "value": "breast cancer treatment",
+        openapi_examples={
+            "covid_research": {
+                "summary": "COVID-19 research",
+                "description": "Free text search for coronavirus research",
+                "value": "COVID-19 vaccine efficacy",
             },
-            {
-                "summary": "Entity ID search",
-                "description": "Search using specific entity identifier",
+            "remdesivir_studies": {
+                "summary": "Remdesivir studies",
+                "description": "Search for remdesivir antiviral research (PubTator3 example)",
                 "value": "@CHEMICAL_remdesivir",
             },
-            {
-                "summary": "Boolean search",
-                "description": "Search using boolean operators",
+            "cancer_drug_combination": {
+                "summary": "Cancer drug combination",
+                "description": "Boolean search for doxorubicin in cancer treatment",
                 "value": "@CHEMICAL_Doxorubicin AND @DISEASE_Neoplasms",
             },
-            {
-                "summary": "Relation search",
-                "description": "Search for entity relationships",
+            "brca_genetics": {
+                "summary": "BRCA1/BRCA2 genetics",
+                "description": "Hereditary breast cancer gene research",
+                "value": "(@GENE_BRCA1 OR @GENE_BRCA2) AND breast cancer",
+            },
+            "drug_disease_relations": {
+                "summary": "Drug-disease relationships",
+                "description": "Find any relationship between doxorubicin and neoplasms",
                 "value": "relations:ANY|@CHEMICAL_Doxorubicin|@DISEASE_Neoplasms",
             },
-            {
-                "summary": "Specific relation search",
-                "description": "Search for specific relationship types",
+            "treatment_relations": {
+                "summary": "Treatment relationships",
+                "description": "Find drugs that treat diseases (specific relation type)",
                 "value": "relations:treat|@CHEMICAL_remdesivir|Disease",
             },
-        ],
+            "alzheimers_research": {
+                "summary": "Alzheimer's disease research",
+                "description": "Neurodegenerative disease and amyloid research",
+                "value": "@DISEASE_Alzheimer_Disease AND amyloid plaques",
+            },
+            "diabetes_mechanisms": {
+                "summary": "Diabetes drug mechanisms",
+                "description": "Metformin mechanism of action research",
+                "value": "@CHEMICAL_Metformin AND glucose metabolism",
+            },
+        },
     ),
     page: int = Query(
         default=1,
         description="Page number for pagination",
         ge=1,
         le=1000,
-        examples=[
-            {
+        openapi_examples={
+            "first_page": {
                 "summary": "First page",
                 "description": "Get the first page of results",
                 "value": 1,
             },
-            {
+            "specific_page": {
                 "summary": "Specific page",
                 "description": "Get a specific page of results",
                 "value": 5,
             },
-        ],
+        },
     ),
     sort: Annotated[
         Optional[SearchSortOrder],
         Query(
             description="Sort order for search results (default: score desc)",
-            examples=[
-                {
+            openapi_examples={
+                "by_relevance": {
                     "summary": "By relevance",
                     "description": "Sort by relevance score (highest first)",
                     "value": "score desc",
                 },
-                {
+                "by_date_newest": {
                     "summary": "By date (newest)",
                     "description": "Sort by publication date (newest first)",
                     "value": "date desc",
                 },
-                {
+                "by_date_oldest": {
                     "summary": "By date (oldest)",
                     "description": "Sort by publication date (oldest first)",
                     "value": "date asc",
                 },
-                {
+                "by_relevance_lowest": {
                     "summary": "By relevance (lowest)",
                     "description": "Sort by relevance score (lowest first)",
                     "value": "score asc",
                 },
-            ],
+            },
+        ),
+    ] = None,
+    filters: Annotated[
+        Optional[str],
+        Query(
+            description="Advanced search filters as JSON string (type, journal, author, year)",
+            openapi_examples={
+                "recent_reviews": {
+                    "summary": "Recent reviews only",
+                    "description": "Filter for review articles published recently",
+                    "value": '{"type":["Review"],"year":{"min":2020}}',
+                },
+                "high_impact_journals": {
+                    "summary": "High-impact journals",
+                    "description": "Research from top-tier biomedical journals",
+                    "value": '{"journal":["Nature","Science","Cell","NEJM"]}',
+                },
+                "clinical_trials": {
+                    "summary": "Clinical trials filter",
+                    "description": "Randomized controlled trials and clinical studies",
+                    "value": '{"type":["Randomized Controlled Trial","Clinical Trial"]}',
+                },
+                "seizure_reviews": {
+                    "summary": "Seizure journal reviews",
+                    "description": "Review articles in Seizure journal (PubTator3 example)",
+                    "value": '{"type":["Review"],"journal":["Seizure"]}',
+                },
+                "covid_era_research": {
+                    "summary": "COVID-19 era research",
+                    "description": "Publications from the pandemic period with specific authors",
+                    "value": '{"year":{"min":2020,"max":2023},"author":["Fauci A","Collins F"]}',
+                },
+                "cancer_research": {
+                    "summary": "Cancer research focus",
+                    "description": "Recent cancer research in oncology journals",
+                    "value": '{"type":["Journal Article","Research Article"],"journal":["Cancer Research","Oncogene"],"year":{"min":2021}}',
+                },
+            },
+        ),
+    ] = None,
+    sections: Annotated[
+        Optional[str],
+        Query(
+            description="Comma-separated list of document sections to search within",
+            openapi_examples={
+                "title_abstract": {
+                    "summary": "Title and abstract focus",
+                    "description": "Search only in titles and abstracts (PubTator3 example)",
+                    "value": "title,abstract",
+                },
+                "methods_only": {
+                    "summary": "Methods section targeting",
+                    "description": "Find methodology mentions (PubTator3 example)",
+                    "value": "methods",
+                },
+                "results_discussion": {
+                    "summary": "Results and discussion",
+                    "description": "Focus on research findings and interpretation",
+                    "value": "results,discussion",
+                },
+                "comprehensive_search": {
+                    "summary": "Comprehensive search",
+                    "description": "Search across core paper sections",
+                    "value": "title,abstract,introduction,methods,results,discussion,conclusion",
+                },
+                "intro_background": {
+                    "summary": "Introduction and background",
+                    "description": "Focus on literature review and rationale sections",
+                    "value": "introduction,background",
+                },
+                "figures_tables": {
+                    "summary": "Figure and table content",
+                    "description": "Search within figure captions and table descriptions",
+                    "value": "figure_captions,table_captions",
+                },
+            },
         ),
     ] = None,
 ) -> SearchResponse:
-    """Search biomedical literature using flexible query types.
+    """Search biomedical literature with advanced filtering and section targeting.
 
     This endpoint provides comprehensive search capabilities across PubTator3's
-    annotated literature database. It supports multiple query types for different
-    use cases and research needs.
+    annotated literature database with advanced filtering options and section-specific
+    searching for precise research targeting.
 
     **Query Types Supported:**
 
@@ -186,6 +277,29 @@ async def search_publications(
        - Format: "relations:TYPE|ENTITY1|ENTITY2"
        - Example: "relations:treat|@CHEMICAL_Doxorubicin|@DISEASE_Neoplasms"
        - Example: "relations:ANY|@CHEMICAL_remdesivir|Disease"
+
+    **Advanced Filtering:**
+
+    The `filters` parameter accepts a JSON string with the following options:
+    - `type`: Filter by publication types (e.g., ["Review", "Research Article"])
+    - `journal`: Filter by specific journal names (e.g., ["Nature", "Science"])
+    - `author`: Filter by author names (e.g., ["Smith J", "Johnson M"])
+    - `year`: Filter by publication year range (e.g., {"min": 2020, "max": 2023})
+
+    **Section Targeting:**
+
+    The `sections` parameter allows limiting search to specific document sections:
+    - Available sections: title, abstract, methods, results, discussion, conclusion,
+      introduction, background, fulltext
+    - Multiple sections can be specified as comma-separated values
+    - Example: "title,abstract" focuses search on titles and abstracts only
+
+    **Example Advanced Search:**
+    ```
+    GET /api/search/?text=epilepsy&filters={"type":["Review"],"journal":["Seizure"]}&sections=title,methods
+    ```
+    This searches for "epilepsy" in review articles from the Seizure journal,
+    limiting the search to title and methods sections only.
 
     **Supported Relation Types:**
     - treat, cause, cotreat, convert, compare, interact, associate
@@ -213,13 +327,50 @@ async def search_publications(
     # Validate page number
     validated_page = validate_page_number(page)
 
+    # Parse filters if provided
+    parsed_filters = None
+    if filters:
+        try:
+            import json
+
+            filter_data = json.loads(filters)
+            parsed_filters = SearchFilters(**filter_data)
+        except (json.JSONDecodeError, ValueError) as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid filters JSON format: {str(e)}",
+            ) from e
+
+    # Parse sections if provided
+    parsed_sections = None
+    if sections:
+        section_list = [s.strip() for s in sections.split(",") if s.strip()]
+        try:
+            parsed_sections = [SearchSection(s) for s in section_list]
+        except ValueError as e:
+            valid_sections = [s.value for s in SearchSection]
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid section: {str(e)}. Valid sections: {', '.join(valid_sections)}",
+            ) from e
+
     # Create request object
-    request = SearchRequest(text=text.strip(), page=validated_page, sort=sort)
+    request = SearchRequest(
+        text=text.strip(),
+        page=validated_page,
+        sort=sort,
+        filters=parsed_filters,
+        sections=parsed_sections,
+    )
 
     # Call PubTator3 API
     try:
         result = await client.search_publications(
-            text=request.text, page=request.page, sort=request.sort.value if request.sort else None
+            text=request.text,
+            page=request.page,
+            sort=request.sort.value if request.sort else None,
+            filters=request.filters.to_json_string() if request.filters else None,
+            sections=",".join([s.value for s in request.sections]) if request.sections else None,
         )
 
         # Parse API response and create SearchResult objects
