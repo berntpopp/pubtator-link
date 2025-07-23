@@ -221,19 +221,16 @@ class UnifiedServerManager:
         # Create FastAPI app (for MCP introspection)
         app = self.create_app()
 
-        # Manually initialize app state for STDIO mode (since lifespan won't trigger)
-        self.logger.info("Initializing app state for STDIO mode...")
-        self.client = PubTator3Client(logger=self.logger)
-        self.publication_service = PublicationService(client=self.client, logger=self.logger)
-        self.logger.info("App state initialization complete")
+        # Use lifespan context manager for consistency with HTTP mode
+        self.logger.info("Initializing app state using lifespan context...")
+        async with self.lifespan(app):
+            # Create MCP server within the lifespan context
+            self.mcp = await self.create_mcp_server(app)
 
-        # Create MCP server
-        self.mcp = await self.create_mcp_server(app)
+            self.logger.info("STDIO MCP server ready")
 
-        self.logger.info("STDIO MCP server ready")
-
-        # Run MCP server in STDIO mode
-        await self.mcp.run_async(transport="stdio")
+            # Run MCP server in STDIO mode
+            await self.mcp.run_async(transport="stdio")
 
     async def shutdown(self):
         """Shutdown server."""
