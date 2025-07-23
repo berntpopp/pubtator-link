@@ -1,7 +1,7 @@
 """Configuration management for PubTator-Link server."""
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -73,11 +73,11 @@ class ServerSettings(BaseSettings):
 
     @field_validator("cors_origins", mode="before")
     @classmethod
-    def parse_cors_origins(cls, v):
+    def parse_cors_origins(cls, v: Any) -> list[str]:
         """Parse CORS origins from string or list."""
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
+        return v  # type: ignore[no-any-return]
 
 
 @dataclass

@@ -1,6 +1,6 @@
 """Entity models for PubTator-Link."""
 
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -123,7 +123,7 @@ class AnnotationLocation(BaseModel):
 
     @field_validator("end")
     @classmethod
-    def validate_end_position(cls, v: int, values) -> int:
+    def validate_end_position(cls, v: int, values: Any) -> int:
         """Validate end position is after start."""
         if "start" in values and v <= values["start"]:
             raise ValueError("End position must be greater than start position")
@@ -154,7 +154,7 @@ EntityType = Union[
 ]
 
 
-def create_entity_from_type(entity_type: str, **kwargs) -> AnyEntity:
+def create_entity_from_type(entity_type: str, **kwargs: Any) -> AnyEntity:
     """Create entity from type string."""
     entity_classes = {
         "Gene": Gene,
@@ -169,4 +169,4 @@ def create_entity_from_type(entity_type: str, **kwargs) -> AnyEntity:
     if not entity_class:
         raise ValueError(f"Unknown entity type: {entity_type}")
 
-    return entity_class(**kwargs)
+    return entity_class(**kwargs)  # type: ignore[no-any-return]

@@ -80,7 +80,7 @@ class EntityMatch(BaseModel):
 
     @field_validator("identifier", mode="before")
     @classmethod
-    def map_id_field(cls, v, info):
+    def map_id_field(cls, v: Any, info: Any) -> Any:
         """Map _id field to identifier if present."""
         if isinstance(info.data, dict) and "_id" in info.data:
             return info.data["_id"]
@@ -88,7 +88,7 @@ class EntityMatch(BaseModel):
 
     @field_validator("type", mode="before")
     @classmethod
-    def map_biotype_field(cls, v, info):
+    def map_biotype_field(cls, v: Any, info: Any) -> Any:
         """Map biotype field to type if present."""
         if isinstance(info.data, dict) and "biotype" in info.data:
             return info.data["biotype"]
@@ -132,7 +132,7 @@ class SearchResult(BaseModel):
 
     @field_validator("pub_date", mode="before")
     @classmethod
-    def map_date_fields(cls, v, info):
+    def map_date_fields(cls, v: Any, info: Any) -> Any:
         """Map date field to pub_date if present."""
         if v is None and isinstance(info.data, dict) and "date" in info.data:
             return info.data["date"]
@@ -168,7 +168,7 @@ class RelatedEntity(BaseModel):
 
     @field_validator("entity_id", mode="before")
     @classmethod
-    def map_target_to_entity_id(cls, v, info):
+    def map_target_to_entity_id(cls, v: Any, info: Any) -> Any:
         """Map target field to entity_id if present."""
         if v is None and isinstance(info.data, dict) and "target" in info.data:
             return info.data["target"]
@@ -176,7 +176,7 @@ class RelatedEntity(BaseModel):
 
     @field_validator("relation_type", mode="before")
     @classmethod
-    def map_type_to_relation_type(cls, v, info):
+    def map_type_to_relation_type(cls, v: Any, info: Any) -> Any:
         """Map type field to relation_type if present."""
         if isinstance(info.data, dict) and "type" in info.data:
             return info.data["type"]

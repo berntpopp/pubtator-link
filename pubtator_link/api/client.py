@@ -22,8 +22,8 @@ class RateLimiter:
             burst: Maximum burst size
         """
         self.rate = rate
-        self.burst = burst
-        self.tokens = burst
+        self.burst = float(burst)
+        self.tokens = float(burst)
         self.last_update = time.time()
         self._lock = asyncio.Lock()
 
@@ -117,11 +117,11 @@ class PubTator3Client:
         await self.client.aclose()
         await self.text_client.aclose()
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "PubTator3Client":
         """Async context manager entry."""
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Async context manager exit."""
         await self.close()
 
@@ -182,7 +182,7 @@ class PubTator3Client:
             # Handle different response types
             content_type = response.headers.get("content-type", "").lower()
             if "application/json" in content_type:
-                return response.json()
+                return response.json()  # type: ignore[no-any-return]
             elif "text/plain" in content_type or "text/html" in content_type:
                 return {"content": response.text, "content_type": content_type}
             elif "application/xml" in content_type:
@@ -195,7 +195,8 @@ class PubTator3Client:
             try:
                 error_data = e.response.json()
             except Exception:
-                self.logger.warning("Failed to parse error response as JSON")
+                if self.logger:
+                    self.logger.warning("Failed to parse error response as JSON")
 
             raise PubTatorAPIError(
                 f"HTTP {e.response.status_code}: {e.response.text}",
@@ -369,7 +370,7 @@ class PubTator3Client:
         response = await self._make_request("POST", url, data=data, use_text_client=True)
 
         # Extract session ID from response
-        session_id = response.get("content", "").strip()
+        session_id = str(response.get("content", "")).strip()
         if not session_id:
             raise PubTatorAPIError("Failed to get session ID")
 

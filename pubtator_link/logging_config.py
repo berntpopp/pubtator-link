@@ -65,7 +65,7 @@ def configure_logging() -> FilteringBoundLogger:
         logging.getLogger("uvicorn.access").setLevel(logging.INFO)
         logging.getLogger("httpx").setLevel(logging.INFO)
 
-    return structlog.get_logger("pubtator_link")
+    return structlog.get_logger("pubtator_link")  # type: ignore[no-any-return]
 
 
 def log_api_request(

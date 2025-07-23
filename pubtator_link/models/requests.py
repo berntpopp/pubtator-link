@@ -2,7 +2,7 @@
 
 import json
 from enum import Enum
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -149,7 +149,7 @@ class SearchFilters(BaseModel):
 
     @field_validator("year_max")
     @classmethod
-    def validate_year_range(cls, v: Optional[int], info) -> Optional[int]:
+    def validate_year_range(cls, v: Optional[int], info: Any) -> Optional[int]:
         """Validate year range consistency."""
         if v is not None and info.data.get("year_min") is not None:
             if v < info.data["year_min"]:
@@ -158,7 +158,7 @@ class SearchFilters(BaseModel):
 
     def to_json_string(self) -> str:
         """Convert filters to JSON string for API."""
-        filter_dict = {}
+        filter_dict: dict[str, Any] = {}
 
         if self.type:
             filter_dict["type"] = [t.value for t in self.type]
@@ -167,7 +167,7 @@ class SearchFilters(BaseModel):
         if self.author:
             filter_dict["author"] = self.author
         if self.year_min is not None or self.year_max is not None:
-            year_range = {}
+            year_range: dict[str, int] = {}
             if self.year_min is not None:
                 year_range["min"] = self.year_min
             if self.year_max is not None:
