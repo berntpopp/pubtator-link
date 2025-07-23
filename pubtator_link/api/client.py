@@ -275,18 +275,24 @@ class PubTator3Client:
 
         return await self._make_request("GET", url, params=params)
 
-    async def search_publications(self, text: str, page: int = 1) -> dict[str, Any]:
+    async def search_publications(
+        self, text: str, page: int = 1, sort: Optional[str] = None
+    ) -> dict[str, Any]:
         """Search for publications.
 
         Args:
             text: Search query (free text, entity ID, or relation)
             page: Page number
+            sort: Sort order ("date desc", "date asc", "score desc", "score asc")
 
         Returns:
             Search results
         """
         url = f"{self.config.base_url}/search/"
         params = {"text": text, "page": page}
+
+        if sort is not None:
+            params["sort"] = sort
 
         return await self._make_request("GET", url, params=params)
 

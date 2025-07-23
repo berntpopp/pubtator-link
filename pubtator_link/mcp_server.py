@@ -153,16 +153,27 @@ async def search_entity_ids(
 
 
 @server.call_tool()
-async def search_publications(text: str, page: int = 1) -> dict[str, Any]:
-    """Search biomedical literature using flexible query types."""
+async def search_publications(text: str, page: int = 1, sort: str = None) -> dict[str, Any]:
+    """Search biomedical literature using flexible query types.
+
+    Args:
+        text: Search query (free text, entity ID, or relation)
+        page: Page number for pagination (default: 1)
+        sort: Sort order - "date desc", "date asc", "score desc", "score asc" (default: score desc)
+    """
     if not client:
         raise RuntimeError("MCP server not initialized")
 
     # Validate page number
     validated_page = validate_page_number(page)
 
+    # Validate sort parameter
+    valid_sorts = ["date desc", "date asc", "score desc", "score asc"]
+    if sort is not None and sort not in valid_sorts:
+        raise ValueError(f"Invalid sort order. Must be one of: {', '.join(valid_sorts)}")
+
     # Call API client
-    result = await client.search_publications(text=text.strip(), page=validated_page)
+    result = await client.search_publications(text=text.strip(), page=validated_page, sort=sort)
 
     # Parse response
     search_results = []
@@ -195,6 +206,7 @@ async def search_publications(text: str, page: int = 1) -> dict[str, Any]:
         "page": validated_page,
         "per_page": per_page,
         "total_pages": total_pages,
+        "sort_order": sort or "score desc (default)",
     }
 
 

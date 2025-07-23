@@ -98,6 +98,61 @@ class TestSearchRoutes:
         assert response.status_code == 422  # Pydantic validation error
 
     @patch.object(PubTator3Client, "search_publications")
+    def test_search_publications_with_sort_date_desc(self, mock_search, test_client):
+        """Test search with date descending sort."""
+        mock_search.return_value = MOCK_SEARCH_RESPONSE
+
+        response = test_client.get(
+            "/api/search/",
+            params={"text": "breast cancer", "page": 1, "sort": "date desc"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["sort_order"] == "date desc"
+        # Verify the API client was called with the sort parameter
+        mock_search.assert_called_once_with(text="breast cancer", page=1, sort="date desc")
+
+    @patch.object(PubTator3Client, "search_publications")
+    def test_search_publications_with_sort_score_asc(self, mock_search, test_client):
+        """Test search with score ascending sort."""
+        mock_search.return_value = MOCK_SEARCH_RESPONSE
+
+        response = test_client.get(
+            "/api/search/",
+            params={"text": "BRCA1", "page": 1, "sort": "score asc"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["sort_order"] == "score asc"
+        mock_search.assert_called_once_with(text="BRCA1", page=1, sort="score asc")
+
+    @patch.object(PubTator3Client, "search_publications")
+    def test_search_publications_default_sort(self, mock_search, test_client):
+        """Test search without sort parameter (default behavior)."""
+        mock_search.return_value = MOCK_SEARCH_RESPONSE
+
+        response = test_client.get(
+            "/api/search/",
+            params={"text": "covid", "page": 1},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["sort_order"] is None  # No sort applied
+        mock_search.assert_called_once_with(text="covid", page=1, sort=None)
+
+    def test_search_publications_invalid_sort(self, test_client):
+        """Test search with invalid sort parameter."""
+        response = test_client.get(
+            "/api/search/",
+            params={"text": "cancer", "page": 1, "sort": "invalid_sort"},
+        )
+
+        assert response.status_code == 422  # Pydantic validation error
+
+    @patch.object(PubTator3Client, "search_publications")
     def test_search_publications_default_page(self, mock_search, test_client):
         """Test search with default page number."""
         mock_search.return_value = MOCK_SEARCH_RESPONSE

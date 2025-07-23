@@ -148,6 +148,7 @@ class SearchResponse(BaseResponse):
     page: int = Field(..., description="Current page number")
     per_page: int = Field(default=20, description="Results per page")
     total_pages: int = Field(..., description="Total number of pages")
+    sort_order: Optional[str] = Field(default=None, description="Applied sort order")
 
 
 class RelatedEntity(BaseModel):

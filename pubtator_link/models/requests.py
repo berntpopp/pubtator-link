@@ -1,8 +1,18 @@
 """Request models for PubTator-Link API."""
 
+from enum import Enum
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
+
+
+class SearchSortOrder(str, Enum):
+    """Supported sort orders for publication search."""
+
+    DATE_DESC = "date desc"
+    DATE_ASC = "date asc"
+    SCORE_DESC = "score desc"
+    SCORE_ASC = "score asc"
 
 
 class PublicationExportRequest(BaseModel):
@@ -72,6 +82,10 @@ class SearchRequest(BaseModel):
         max_length=1000,
     )
     page: int = Field(default=1, description="Page number for results", ge=1)
+    sort: Optional[SearchSortOrder] = Field(
+        default=None,
+        description="Sort order for results (default: score desc)",
+    )
 
 
 class RelationsRequest(BaseModel):

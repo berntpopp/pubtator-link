@@ -1,10 +1,11 @@
 """Publication search API routes for PubTator3 data."""
 
 import logging
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
-from ...models.requests import SearchRequest
+from ...models.requests import SearchRequest, SearchSortOrder
 from ...models.responses import SearchResponse, SearchResult
 from .dependencies import (
     ClientDep,
@@ -132,6 +133,34 @@ async def search_publications(
             },
         },
     ),
+    sort: Annotated[
+        Optional[SearchSortOrder],
+        Query(
+            description="Sort order for search results (default: score desc)",
+            examples={
+                "relevance": {
+                    "summary": "By relevance",
+                    "description": "Sort by relevance score (highest first)",
+                    "value": "score desc",
+                },
+                "date_newest": {
+                    "summary": "By date (newest)",
+                    "description": "Sort by publication date (newest first)",
+                    "value": "date desc",
+                },
+                "date_oldest": {
+                    "summary": "By date (oldest)",
+                    "description": "Sort by publication date (oldest first)",
+                    "value": "date asc",
+                },
+                "score_lowest": {
+                    "summary": "By relevance (lowest)",
+                    "description": "Sort by relevance score (lowest first)",
+                    "value": "score asc",
+                },
+            },
+        ),
+    ] = None,
 ) -> SearchResponse:
     """Search biomedical literature using flexible query types.
 
@@ -185,11 +214,13 @@ async def search_publications(
     validated_page = validate_page_number(page)
 
     # Create request object
-    request = SearchRequest(text=text.strip(), page=validated_page)
+    request = SearchRequest(text=text.strip(), page=validated_page, sort=sort)
 
     # Call PubTator3 API
     try:
-        result = await client.search_publications(text=request.text, page=request.page)
+        result = await client.search_publications(
+            text=request.text, page=request.page, sort=request.sort.value if request.sort else None
+        )
 
         # Parse API response and create SearchResult objects
         search_results = []
@@ -222,6 +253,7 @@ async def search_publications(
             page=validated_page,
             per_page=per_page,
             total_pages=total_pages,
+            sort_order=request.sort.value if request.sort else None,
         )
 
     except ValueError as e:
