@@ -1,5 +1,6 @@
 """Unified server manager for PubTator-Link."""
 
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -37,11 +38,11 @@ class UnifiedServerManager:
         self.client: Optional[PubTator3Client] = None
         self.publication_service: Optional[PublicationService] = None
         self.app: Optional[FastAPI] = None
-        self.mcp: Optional[FastMCP] = None
+        self.mcp: Optional[FastMCP] = None  # type: ignore[type-arg]
         self.server: Optional[uvicorn.Server] = None
 
     @asynccontextmanager
-    async def lifespan(self, app: FastAPI):
+    async def lifespan(self, app: FastAPI) -> AsyncGenerator[None, None]:
         """Manage FastAPI lifespan context."""
         # Startup
         self.logger.info("Starting PubTator-Link server")
@@ -86,7 +87,7 @@ class UnifiedServerManager:
 
         # Add basic routes
         @app.get("/")
-        async def root():
+        async def root() -> dict[str, str]:
             """Root endpoint."""
             return {
                 "name": "PubTator-Link",
@@ -96,7 +97,7 @@ class UnifiedServerManager:
             }
 
         @app.get("/health")
-        async def health():
+        async def health() -> dict[str, str]:
             """Health check endpoint."""
             return {
                 "status": "healthy",
@@ -115,7 +116,7 @@ class UnifiedServerManager:
         self.app = app
         return app
 
-    async def create_mcp_server(self, app: FastAPI) -> FastMCP:
+    async def create_mcp_server(self, app: FastAPI) -> FastMCP:  # type: ignore[type-arg]
         """Create FastMCP server from FastAPI app."""
         try:
             # Import MCP configuration classes
@@ -163,7 +164,7 @@ class UnifiedServerManager:
 
     async def start_unified_server(
         self, host: str = "127.0.0.1", port: int = 8000, reload: bool = False
-    ):
+    ) -> None:
         """Start unified server (HTTP + MCP)."""
         # Create FastAPI app
         app = self.create_app()
@@ -195,7 +196,7 @@ class UnifiedServerManager:
 
     async def start_http_only_server(
         self, host: str = "127.0.0.1", port: int = 8000, reload: bool = False
-    ):
+    ) -> None:
         """Start HTTP-only server."""
         app = self.create_app()
 
@@ -230,9 +231,10 @@ class UnifiedServerManager:
             self.logger.info("STDIO MCP server ready")
 
             # Run MCP server in STDIO mode
+            # Note: FastMCP needs direct access to sys.stdout.buffer for STDIO protocol
             await self.mcp.run_async(transport="stdio")
 
-    async def shutdown(self):
+    async def shutdown(self) -> None:
         """Shutdown server."""
         if self.server:
             self.server.should_exit = True

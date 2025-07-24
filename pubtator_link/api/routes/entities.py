@@ -1,7 +1,7 @@
 """Entity autocomplete API routes for PubTator3 data."""
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -219,7 +219,11 @@ async def search_entity_ids(
     validated_limit = validate_limit(limit, max_limit=100)
 
     # Create request object
-    request = EntityAutocompleteRequest(query=query.strip(), concept=concept, limit=validated_limit)
+    request = EntityAutocompleteRequest(
+        query=query.strip(),
+        concept=concept,  # type: ignore[arg-type]
+        limit=validated_limit,
+    )
 
     # Call PubTator3 API
     try:
@@ -230,7 +234,7 @@ async def search_entity_ids(
         # Parse API response and create EntityMatch objects
         matches = []
         # API returns a list directly, not a dict with "results" key
-        api_results = result if isinstance(result, list) else []
+        api_results: list[dict[str, Any]] = result if isinstance(result, list) else []  # type: ignore[unreachable]
 
         for item in api_results:
             # Extract entity information from PubTator3 response

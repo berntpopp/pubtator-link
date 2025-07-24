@@ -131,7 +131,7 @@ class PublicationService:
             documents = self._parse_export_data(raw_data, format)
 
             return PMCExportResponse(
-                documents=documents,
+                documents=documents,  # type: ignore[arg-type]
                 format=format,
                 pmcids=pmcids,
                 total_documents=len(documents),
@@ -221,8 +221,10 @@ class PublicationService:
                             "Batch export error", batch_id=batch_id, error=str(result)
                         )
                 else:
-                    batch.success_count += len(result.documents)
-                    all_documents.extend(result.documents)
+                    # Type guard - ensure result is PublicationExportResponse
+                    if hasattr(result, "documents") and result.documents is not None:
+                        batch.success_count += len(result.documents)
+                        all_documents.extend(result.documents)
 
             # Create publications from documents
             publications = [self._document_to_publication(doc) for doc in all_documents]
@@ -239,7 +241,7 @@ class PublicationService:
                 self.logger.error("Batch export failed completely", batch_id=batch_id, error=str(e))
             raise
 
-    def _parse_export_data(self, raw_data: dict[str, Any], format: str) -> list[Any]:
+    def _parse_export_data(self, raw_data: dict[str, Any], format: str) -> list[dict[str, Any]]:
         """Parse export data based on format.
 
         Args:
@@ -257,17 +259,18 @@ class PublicationService:
             if isinstance(raw_data, dict):
                 # Check for PubTator3 response format
                 if "PubTator3" in raw_data:
-                    return raw_data["PubTator3"]
+                    return raw_data["PubTator3"]  # type: ignore[no-any-return]
                 elif "documents" in raw_data:
-                    return raw_data["documents"]
-            elif content:
+                    return raw_data["documents"]  # type: ignore[no-any-return]
+
+            if content:
                 try:
                     import json
 
                     parsed = json.loads(content)
                     if "PubTator3" in parsed:
-                        return parsed["PubTator3"]
-                    return parsed.get("documents", [parsed])
+                        return parsed["PubTator3"]  # type: ignore[no-any-return]
+                    return parsed.get("documents", [parsed])  # type: ignore[no-any-return]
                 except json.JSONDecodeError:
                     return [{"content": content, "format": format}]
 
@@ -376,14 +379,16 @@ class PublicationService:
         """Extract abstract text from different response formats."""
         # Try direct abstract field
         if "abstract" in item:
-            return item["abstract"]
+            abstract = item["abstract"]
+            return str(abstract) if abstract is not None else None
 
         # Try passages array
         passages = item.get("passages", [])
         for passage in passages:
             infons = passage.get("infons", {})
             if infons.get("section") == "abstract" or infons.get("type") == "abstract":
-                return passage.get("text", "")
+                text = passage.get("text", "")
+                return str(text) if text else None
 
         return None
 

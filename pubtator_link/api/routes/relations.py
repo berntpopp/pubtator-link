@@ -1,7 +1,7 @@
 """Entity relations API routes for PubTator3 data."""
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -257,7 +257,11 @@ async def find_related_entities(
         )
 
     # Create request object
-    request = RelationsRequest(e1=validated_entity_id, type=type, e2=e2)
+    request = RelationsRequest(
+        e1=validated_entity_id,
+        type=type,  # type: ignore[arg-type]
+        e2=e2,  # type: ignore[arg-type]
+    )
 
     # Call PubTator3 API
     try:
@@ -268,7 +272,7 @@ async def find_related_entities(
         # Parse API response and create RelatedEntity objects
         related_entities = []
         # API returns a list directly, not a dict with "results" key
-        api_results = result if isinstance(result, list) else []
+        api_results: list[dict[str, Any]] = result if isinstance(result, list) else []  # type: ignore[unreachable]
 
         for item in api_results:
             # Extract relationship information from PubTator3 response

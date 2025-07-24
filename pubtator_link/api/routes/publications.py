@@ -174,7 +174,11 @@ async def export_publication_annotations(
     pmid_list = validate_pmids(pmids)
 
     # Create request object
-    request = PublicationExportRequest(pmids=pmid_list, format=format, full=full)
+    request = PublicationExportRequest(
+        pmids=pmid_list,
+        format=format,  # type: ignore[arg-type]
+        full=full,
+    )
 
     # Call service
     try:
@@ -334,7 +338,10 @@ async def export_pmc_publications(
     pmcid_list = validate_pmcids(pmcids)
 
     # Create request object
-    request = PMCExportRequest(pmcids=pmcid_list, format=format)
+    request = PMCExportRequest(
+        pmcids=pmcid_list,
+        format=format,  # type: ignore[arg-type]
+    )
 
     # Call service
     try:

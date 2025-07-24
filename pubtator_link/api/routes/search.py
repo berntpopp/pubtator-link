@@ -5,7 +5,12 @@ from typing import Annotated, Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from ...models.requests import SearchFilters, SearchRequest, SearchSection, SearchSortOrder
+from ...models.requests import (
+    SearchFilters,
+    SearchRequest,
+    SearchSection,
+    SearchSortOrder,
+)
 from ...models.responses import SearchResponse, SearchResult
 from .dependencies import (
     ClientDep,
@@ -209,7 +214,10 @@ async def search_publications(
                 "cancer_research": {
                     "summary": "Cancer research focus",
                     "description": "Recent cancer research in oncology journals",
-                    "value": '{"type":["Journal Article","Research Article"],"journal":["Cancer Research","Oncogene"],"year":{"min":2021}}',
+                    "value": (
+                        '{"type":["Journal Article","Research Article"],'
+                        '"journal":["Cancer Research","Oncogene"],"year":{"min":2021}}'
+                    ),
                 },
             },
         ),
@@ -370,7 +378,7 @@ async def search_publications(
             page=request.page,
             sort=request.sort.value if request.sort else None,
             filters=request.filters.to_json_string() if request.filters else None,
-            sections=",".join([s.value for s in request.sections]) if request.sections else None,
+            sections=(",".join([s.value for s in request.sections]) if request.sections else None),
         )
 
         # Parse API response and create SearchResult objects

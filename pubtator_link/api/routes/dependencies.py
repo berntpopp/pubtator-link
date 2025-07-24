@@ -53,11 +53,11 @@ ClientDep = Annotated[PubTator3Client, Depends(get_api_client)]
 PublicationServiceDep = Annotated[PublicationService, Depends(get_publication_service)]
 
 
-def handle_api_errors(func: Callable) -> Callable:
+def handle_api_errors(func: Callable[..., Any]) -> Callable[..., Any]:
     """Handle common API errors and convert to HTTP exceptions."""
 
     @functools.wraps(func)
-    async def wrapper(*args, **kwargs):
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return await func(*args, **kwargs)
         except HTTPException:
@@ -162,7 +162,7 @@ def validate_limit(limit: int, max_limit: int = 100) -> int:
     return limit
 
 
-async def cleanup_dependencies():
+async def cleanup_dependencies() -> None:
     """Cleanup function for graceful shutdown."""
     global _api_client, _publication_service, _logger
 

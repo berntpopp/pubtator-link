@@ -14,13 +14,13 @@ from rich.table import Table
 
 from .api.client import PubTator3Client
 from .logging_config import configure_logging
+from .server_manager import UnifiedServerManager
+from .services.publication_service import PublicationService
 
 # Add root directory to path for mcp_server import
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from mcp_server import main as mcp_main
-
-from .server_manager import UnifiedServerManager
-from .services.publication_service import PublicationService
+# Import after path modification to avoid flake8 E402
+import mcp_server  # noqa: E402
 
 # Initialize rich console
 console = Console()
@@ -89,12 +89,10 @@ async def search_entities(query: str, concept: Optional[str] = None, limit: int 
 
                 # Handle both list and dict response formats
                 entities: list[dict[str, Any]] = []
-                if isinstance(result, list):
-                    entities = result  # type: ignore[assignment]
+                if isinstance(result, list):  # type: ignore[unreachable]
+                    entities = result  # type: ignore[unreachable]
                 elif isinstance(result, dict):
-                    entities = result.get("results", [])  # type: ignore[assignment]
-                else:
-                    entities = []
+                    entities = result.get("results", [])
 
                 for entity in entities[:limit]:
                     entity_id = entity.get("_id", entity.get("identifier", "N/A"))
@@ -106,7 +104,7 @@ async def search_entities(query: str, concept: Optional[str] = None, limit: int 
                         entity_id,
                         name[:60] + "..." if len(name) > 60 else name,
                         entity_type,
-                        f"{score:.2f}" if isinstance(score, (int, float)) else str(score),
+                        (f"{score:.2f}" if isinstance(score, (int, float)) else str(score)),
                     )
 
                 console.print(table)
@@ -251,7 +249,11 @@ async def export_publications(pmids: str, format: str = "biocjson", full: bool =
 
                 # Display each document
                 # Extract documents from export_data
-                documents = result.export_data.get("documents", []) if isinstance(result.export_data, dict) else []
+                documents = (
+                    result.export_data.get("documents", [])
+                    if isinstance(result.export_data, dict)
+                    else []
+                )
                 for i, doc in enumerate(documents, 1):
                     if isinstance(doc, dict):
                         # Handle dictionary format
@@ -301,7 +303,10 @@ async def export_publications(pmids: str, format: str = "biocjson", full: bool =
                                 else json.dumps(doc, indent=2)
                             )
                             syntax = Syntax(
-                                json_preview, "json", theme="monokai", line_numbers=False
+                                json_preview,
+                                "json",
+                                theme="monokai",
+                                line_numbers=False,
                             )
                             console.print(Panel(syntax, title="JSON Preview", border_style="dim"))
 
@@ -380,7 +385,7 @@ def serve_mcp_only() -> None:
 
     try:
         logger.info("Starting MCP server")
-        mcp_main()
+        mcp_server.main()
     except KeyboardInterrupt:
         logger.info("MCP server stopped by user")
     except Exception as e:

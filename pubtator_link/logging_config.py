@@ -1,6 +1,7 @@
 """Logging configuration for PubTator-Link."""
 
 import logging
+import os
 import sys
 from typing import Any
 
@@ -11,10 +12,22 @@ from .config import settings
 
 
 def configure_logging() -> FilteringBoundLogger:
-    """Configure structured logging for the application."""
+    """Configure structured logging for the application with transport-aware stream routing."""
+    # Determine output stream based on transport mode
+    # CRITICAL: STDIO mode MUST use stderr to avoid contaminating JSON protocol on stdout
+    log_stream = sys.stderr if settings.transport == "stdio" else sys.stdout
+
+    # Configure color support based on transport and environment
+    use_colors = (
+        settings.transport != "stdio"
+        and not settings.log_format == "json"
+        and sys.stdout.isatty() is not False
+        and "NO_COLOR" not in os.environ
+    )
+
     # Configure structlog
     if settings.log_format == "json":
-        # JSON logging for production
+        # JSON logging for production - always use specified stream
         structlog.configure(
             processors=[
                 structlog.contextvars.merge_contextvars,
@@ -27,11 +40,11 @@ def configure_logging() -> FilteringBoundLogger:
             wrapper_class=structlog.make_filtering_bound_logger(
                 getattr(logging, settings.log_level.upper())
             ),
-            logger_factory=structlog.WriteLoggerFactory(sys.stdout),
+            logger_factory=structlog.WriteLoggerFactory(log_stream),
             cache_logger_on_first_use=True,
         )
     else:
-        # Console logging for development
+        # Console logging for development with transport-aware coloring
         structlog.configure(
             processors=[
                 structlog.contextvars.merge_contextvars,
@@ -39,31 +52,39 @@ def configure_logging() -> FilteringBoundLogger:
                 structlog.processors.add_log_level,
                 structlog.processors.StackInfoRenderer(),
                 structlog.dev.set_exc_info,
-                structlog.dev.ConsoleRenderer(colors=True),
+                structlog.dev.ConsoleRenderer(colors=use_colors),
             ],
             wrapper_class=structlog.make_filtering_bound_logger(
                 getattr(logging, settings.log_level.upper())
             ),
-            logger_factory=structlog.WriteLoggerFactory(sys.stderr),
+            logger_factory=structlog.WriteLoggerFactory(log_stream),
             cache_logger_on_first_use=True,
         )
 
-    # Configure standard library logging to use structlog
+    # Configure standard library logging with transport-aware stream routing
     logging.basicConfig(
         format="%(message)s",
-        stream=sys.stdout if settings.log_format == "json" else sys.stderr,
+        stream=log_stream,
         level=getattr(logging, settings.log_level.upper()),
     )
 
-    # Adjust log levels for noisy libraries
+    # Transport-specific library log level adjustments
     if settings.transport == "stdio":
-        # Reduce noise in STDIO mode
-        logging.getLogger("uvicorn").setLevel(logging.WARNING)
+        # Aggressively reduce noise in STDIO mode to protect MCP protocol
+        logging.getLogger("uvicorn").setLevel(logging.ERROR)
+        logging.getLogger("uvicorn.access").setLevel(logging.ERROR)
+        logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
         logging.getLogger("httpx").setLevel(logging.WARNING)
         logging.getLogger("httpcore").setLevel(logging.WARNING)
+        logging.getLogger("fastapi").setLevel(logging.WARNING)
+        # Suppress FastMCP internal logging in STDIO mode
+        logging.getLogger("fastmcp").setLevel(logging.WARNING)
+        logging.getLogger("mcp").setLevel(logging.WARNING)
     else:
+        # Normal log levels for HTTP modes
         logging.getLogger("uvicorn.access").setLevel(logging.INFO)
         logging.getLogger("httpx").setLevel(logging.INFO)
+        logging.getLogger("httpcore").setLevel(logging.INFO)
 
     return structlog.get_logger("pubtator_link")  # type: ignore[no-any-return]
 

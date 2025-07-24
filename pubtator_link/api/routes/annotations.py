@@ -101,7 +101,10 @@ async def submit_text_annotation(
             {
                 "summary": "COVID-19 clinical text",
                 "description": "Clinical text about COVID-19 for disease entity extraction",
-                "value": "Patients with COVID-19 and diabetes mellitus require careful monitoring of blood glucose levels.",
+                "value": (
+                    "Patients with COVID-19 and diabetes mellitus require careful "
+                    "monitoring of blood glucose levels."
+                ),
             },
             {
                 "summary": "Drug interaction text",
@@ -111,12 +114,18 @@ async def submit_text_annotation(
             {
                 "summary": "Cancer research abstract",
                 "description": "Research abstract with multiple entity types",
-                "value": "TP53 mutations in breast cancer patients treated with doxorubicin showed resistance to chemotherapy.",
+                "value": (
+                    "TP53 mutations in breast cancer patients treated with doxorubicin "
+                    "showed resistance to chemotherapy."
+                ),
             },
             {
                 "summary": "Alzheimer's disease research",
                 "description": "Neuroscience research text with disease and gene entities",
-                "value": "APOE4 genotype is associated with increased risk of Alzheimer's disease and accelerated cognitive decline.",
+                "value": (
+                    "APOE4 genotype is associated with increased risk of Alzheimer's "
+                    "disease and accelerated cognitive decline."
+                ),
             },
             {
                 "summary": "Pharmacogenomics study",

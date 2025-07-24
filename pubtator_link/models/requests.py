@@ -134,7 +134,8 @@ class SearchFilters(BaseModel):
     """Advanced search filters for PubTator3 API."""
 
     type: Optional[list[PublicationType]] = Field(
-        default=None, description="Filter by publication types (e.g., Review, Research Article)"
+        default=None,
+        description="Filter by publication types (e.g., Review, Research Article)",
     )
     journal: Optional[list[str]] = Field(
         default=None, description="Filter by specific journal names"
@@ -249,7 +250,8 @@ class SearchRequest(BaseModel):
         description="Sort order for results (default: score desc)",
     )
     filters: Optional[SearchFilters] = Field(
-        default=None, description="Advanced search filters (type, journal, author, year)"
+        default=None,
+        description="Advanced search filters (type, journal, author, year)",
     )
     sections: Optional[list[SearchSection]] = Field(
         default=None, description="Limit search to specific document sections"

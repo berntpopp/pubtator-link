@@ -6,8 +6,9 @@ from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
 from pubtator_link.api.client import PubTator3Client
 from pubtator_link.config import settings
@@ -86,9 +87,9 @@ def test_client(app):
 
 
 @pytest.fixture
-async def async_client(app) -> AsyncGenerator[AsyncClient, None]:
+async def async_client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
     """Create async HTTP client for testing."""
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
 
 
