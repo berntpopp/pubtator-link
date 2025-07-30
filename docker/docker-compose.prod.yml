@@ -1,0 +1,51 @@
+# Production docker-compose override
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  pubtator-link:
+    # Production-specific environment variables
+    environment:
+      PUBTATOR_LINK_LOG_LEVEL: INFO
+      PUBTATOR_LINK_LOG_FORMAT: json
+      PUBTATOR_LINK_TRANSPORT: unified
+      GUNICORN_WORKERS: 4
+      GUNICORN_LOG_LEVEL: warning
+    
+    # Remove development volume mounts
+    volumes: []
+    
+    # Use the default production command (Gunicorn)
+    command: ["gunicorn", "-c", "gunicorn_conf.py", "pubtator_link.server_manager:app"]
+    
+    # Production resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+      
+      # Production restart policy
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+    
+    # Enhanced health check for production
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    
+    # Production logging with rotation
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        labels: "service=pubtator-link,environment=production"

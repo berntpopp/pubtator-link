@@ -243,3 +243,8 @@ class UnifiedServerManager:
             await self.client.close()
 
         self.logger.info("Server shutdown initiated")
+
+
+# Global app instance for WSGI compatibility (used by Gunicorn)
+_manager = UnifiedServerManager()
+app = _manager.create_app()
