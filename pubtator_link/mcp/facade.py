@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 from fastmcp import FastMCP
 from mcp.types import ToolAnnotations
@@ -12,15 +12,6 @@ from pubtator_link.mcp.prompts import (
     review_pubtator_annotations_prompt,
     search_biomedical_literature_prompt,
 )
-from pubtator_link.mcp.service_adapters import (
-    fetch_pmc_annotations_impl,
-    fetch_publication_annotations_impl,
-    find_entity_relations_impl,
-    get_text_annotation_results_impl,
-    search_biomedical_entities_impl,
-    search_literature_impl,
-    submit_text_annotation_impl,
-)
 from pubtator_link.mcp.resources import (
     RESEARCH_USE_NOTICE,
     get_bioconcepts_resource,
@@ -29,6 +20,15 @@ from pubtator_link.mcp.resources import (
     get_relation_types_resource,
     get_research_use_resource,
     get_text_processing_resource,
+)
+from pubtator_link.mcp.service_adapters import (
+    fetch_pmc_annotations_impl,
+    fetch_publication_annotations_impl,
+    find_entity_relations_impl,
+    get_text_annotation_results_impl,
+    search_biomedical_entities_impl,
+    search_literature_impl,
+    submit_text_annotation_impl,
 )
 from pubtator_link.mcp.tools import (
     FetchPmcAnnotationsRequest,
@@ -64,7 +64,8 @@ REMOTE_JOB_ANNOTATIONS = ToolAnnotations(
 
 
 def _install_inspection_managers(mcp: FastMCP) -> None:
-    components = mcp.providers[0]._components
+    provider = cast(Any, mcp.providers[0])
+    components = provider._components
     tools = {
         component.name: component
         for key, component in components.items()
@@ -81,9 +82,10 @@ def _install_inspection_managers(mcp: FastMCP) -> None:
         if key.startswith("prompt:")
     }
 
-    mcp._tool_manager = SimpleNamespace(_tools=tools)
-    mcp._resource_manager = SimpleNamespace(_resources=resources)
-    mcp._prompt_manager = SimpleNamespace(_prompts=prompts)
+    inspectable_mcp = cast(Any, mcp)
+    inspectable_mcp._tool_manager = SimpleNamespace(_tools=tools)
+    inspectable_mcp._resource_manager = SimpleNamespace(_resources=resources)
+    inspectable_mcp._prompt_manager = SimpleNamespace(_prompts=prompts)
 
 
 def create_pubtator_mcp() -> FastMCP:

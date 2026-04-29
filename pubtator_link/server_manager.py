@@ -70,7 +70,11 @@ class UnifiedServerManager:
         mcp_http_app = None
         if include_mcp:
             mcp = create_pubtator_mcp()
-            mcp_http_app = mcp.http_app(path="/", json_response=True, stateless_http=True)
+            mcp_http_app = mcp.http_app(
+                path=settings.mcp_path,
+                json_response=True,
+                stateless_http=True,
+            )
             self.mcp = mcp
 
         @asynccontextmanager
@@ -129,7 +133,7 @@ class UnifiedServerManager:
         app.include_router(cache_router)
 
         if mcp_http_app is not None:
-            app.mount(settings.mcp_path, mcp_http_app)
+            app.mount("/", mcp_http_app)
 
         self.app = app
         return app

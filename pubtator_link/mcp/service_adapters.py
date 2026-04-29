@@ -1,9 +1,18 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from pubtator_link.api.client import PubTator3Client
 from pubtator_link.config import text_processing_config
+from pubtator_link.mcp.tools import (
+    FetchPmcAnnotationsRequest,
+    FetchPublicationAnnotationsRequest,
+    FindEntityRelationsRequest,
+    GetTextAnnotationResultsRequest,
+    SearchBiomedicalEntitiesRequest,
+    SearchLiteratureRequest,
+    SubmitTextAnnotationRequest,
+)
 from pubtator_link.models.responses import (
     AnnotationEntity,
     EntityAutocompleteResponse,
@@ -16,15 +25,6 @@ from pubtator_link.models.responses import (
     TextAnnotationResultResponse,
     TextAnnotationSubmitResponse,
 )
-from pubtator_link.mcp.tools import (
-    FetchPmcAnnotationsRequest,
-    FetchPublicationAnnotationsRequest,
-    FindEntityRelationsRequest,
-    GetTextAnnotationResultsRequest,
-    SearchBiomedicalEntitiesRequest,
-    SearchLiteratureRequest,
-    SubmitTextAnnotationRequest,
-)
 from pubtator_link.services.publication_service import PublicationService
 
 
@@ -33,11 +33,12 @@ async def search_biomedical_entities_impl(
     *,
     client: PubTator3Client,
 ) -> dict[str, Any]:
-    raw_results = await client.autocomplete_entity(
+    raw_response = await client.autocomplete_entity(
         query=request.query.strip(),
         concept=request.concept,
         limit=request.limit,
     )
+    raw_results = cast(list[dict[str, Any]], raw_response)
     matches = [
         EntityMatch(
             identifier=item.get("_id", ""),
@@ -48,7 +49,7 @@ async def search_biomedical_entities_impl(
             db_id=item.get("db_id"),
             db=item.get("db"),
             match=item.get("match"),
-        ).model_dump()
+        )
         for item in raw_results
     ]
     return EntityAutocompleteResponse(
@@ -147,12 +148,15 @@ async def find_entity_relations_impl(
     *,
     client: PubTator3Client,
 ) -> dict[str, Any]:
-    result = await client.find_relations(
+    raw_response = await client.find_relations(
         e1=request.entity_id,
         relation_type=request.relation_type,
         e2=request.target_entity_type,
     )
-    api_results = result if isinstance(result, list) else []
+    relation_response = cast(Any, raw_response)
+    api_results = cast(
+        list[dict[str, Any]], relation_response if isinstance(relation_response, list) else []
+    )
     related_entities = [
         RelatedEntity(
             entity_id=item.get("target", ""),

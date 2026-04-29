@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
 import pytest
 
 
@@ -84,7 +86,7 @@ async def test_pmc_adapter_returns_publication_export_shape() -> None:
 
     class Result:
         format = "biocjson"
-        documents = [Document()]
+        documents: ClassVar[list[Document]] = [Document()]
 
     class FakeService:
         async def export_pmc_publications_list(self, pmcids: list[str], format: str) -> Result:

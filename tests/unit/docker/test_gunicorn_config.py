@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 CONFIG = Path("docker/gunicorn_conf.py").read_text()
 
 

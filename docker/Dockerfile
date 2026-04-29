@@ -22,7 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Create virtual environment for better dependency isolation
 RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+ENV VIRTUAL_ENV="/opt/venv" \
+    PATH="/opt/venv/bin:$PATH"
 
 # Copy dependency files first for better layer caching
 WORKDIR /app

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 BASE = Path("docker/docker-compose.yml").read_text()
 PROD = Path("docker/docker-compose.prod.yml").read_text()
 NPM = Path("docker/docker-compose.npm.yml").read_text()
@@ -19,7 +18,7 @@ def test_prod_compose_has_security_controls() -> None:
     assert "no-new-privileges:true" in PROD
     assert "cap_drop:" in PROD
     assert "- ALL" in PROD
-    assert "/tmp/pubtator-link" in PROD
+    assert "/tmp/pubtator-link" in PROD  # noqa: S108
 
 
 def test_prod_compose_does_not_publish_extra_ports() -> None:
