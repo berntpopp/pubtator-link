@@ -35,3 +35,32 @@ def test_tool_metadata_is_research_scoped() -> None:
 
     assert "not for diagnosis" in RESEARCH_USE_NOTICE
     assert "clinical decision support" in RESEARCH_USE_NOTICE
+
+
+def test_public_hosted_tools_have_expected_annotations() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp()
+    tools = mcp._tool_manager._tools
+
+    for name in (
+        "pubtator.search_literature",
+        "pubtator.fetch_publication_annotations",
+        "pubtator.search_biomedical_entities",
+        "pubtator.find_entity_relations",
+        "pubtator.get_server_capabilities",
+    ):
+        tool = tools[name]
+        assert "Use this when" in tool.description
+        assert "not for diagnosis" in tool.description
+        assert tool.annotations.readOnlyHint is True
+        assert tool.annotations.destructiveHint is False
+
+
+def test_open_world_tools_are_marked_open_world() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp()
+    tool = mcp._tool_manager._tools["pubtator.search_literature"]
+
+    assert tool.annotations.openWorldHint is True

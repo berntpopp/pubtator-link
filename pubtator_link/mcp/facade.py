@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from pubtator_link.api.client import PubTator3Client
 from pubtator_link.mcp.prompts import (
@@ -40,6 +41,27 @@ from pubtator_link.mcp.tools import (
 )
 from pubtator_link.services.publication_service import PublicationService
 
+READ_ONLY_OPEN_WORLD = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=True,
+)
+
+READ_ONLY_CLOSED_WORLD = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
+)
+
+REMOTE_JOB_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=False,
+    idempotentHint=False,
+    openWorldHint=True,
+)
+
 
 def _install_inspection_managers(mcp: FastMCP) -> None:
     components = mcp.providers[0]._components
@@ -73,18 +95,30 @@ def create_pubtator_mcp() -> FastMCP:
         ),
     )
 
-    @mcp.tool(name="pubtator.get_server_capabilities", title="Get PubTator-Link Capabilities")
+    @mcp.tool(
+        name="pubtator.get_server_capabilities",
+        title="Get PubTator-Link Capabilities",
+        annotations=READ_ONLY_CLOSED_WORLD,
+    )
     def get_server_capabilities() -> dict[str, Any]:
-        """Use this when a client needs supported tools, transports, formats, and limitations."""
+        """Use this when a client needs supported tools, transports, formats, and limitations. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         return get_capabilities_resource()
 
-    @mcp.tool(name="pubtator.search_literature", title="Search Biomedical Literature")
+    @mcp.tool(
+        name="pubtator.search_literature",
+        title="Search Biomedical Literature",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
     async def search_literature(request: SearchLiteratureRequest) -> dict[str, Any]:
         """Use this when a user needs PubMed literature search through PubTator3. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         async with PubTator3Client() as client:
             return await search_literature_impl(request, client=client)
 
-    @mcp.tool(name="pubtator.fetch_publication_annotations", title="Fetch Publication Annotations")
+    @mcp.tool(
+        name="pubtator.fetch_publication_annotations",
+        title="Fetch Publication Annotations",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
     async def fetch_publication_annotations(
         request: FetchPublicationAnnotationsRequest,
     ) -> dict[str, Any]:
@@ -93,32 +127,52 @@ def create_pubtator_mcp() -> FastMCP:
             service = PublicationService(client=client)
             return await fetch_publication_annotations_impl(request, service=service)
 
-    @mcp.tool(name="pubtator.fetch_pmc_annotations", title="Fetch PMC Annotations")
+    @mcp.tool(
+        name="pubtator.fetch_pmc_annotations",
+        title="Fetch PMC Annotations",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
     async def fetch_pmc_annotations(request: FetchPmcAnnotationsRequest) -> dict[str, Any]:
         """Use this when a user provides PMC IDs and needs PubTator full-text annotations. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         async with PubTator3Client() as client:
             service = PublicationService(client=client)
             return await fetch_pmc_annotations_impl(request, service=service)
 
-    @mcp.tool(name="pubtator.search_biomedical_entities", title="Search Biomedical Entities")
+    @mcp.tool(
+        name="pubtator.search_biomedical_entities",
+        title="Search Biomedical Entities",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
     async def search_biomedical_entities(request: SearchBiomedicalEntitiesRequest) -> dict[str, Any]:
         """Use this when a user needs canonical PubTator biomedical entity IDs. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         async with PubTator3Client() as client:
             return await search_biomedical_entities_impl(request, client=client)
 
-    @mcp.tool(name="pubtator.find_entity_relations", title="Find Entity Relations")
+    @mcp.tool(
+        name="pubtator.find_entity_relations",
+        title="Find Entity Relations",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
     async def find_entity_relations(request: FindEntityRelationsRequest) -> dict[str, Any]:
         """Use this when a user has a PubTator entity ID and needs literature-derived related entities. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         async with PubTator3Client() as client:
             return await find_entity_relations_impl(request, client=client)
 
-    @mcp.tool(name="pubtator.submit_text_annotation", title="Submit Text Annotation")
+    @mcp.tool(
+        name="pubtator.submit_text_annotation",
+        title="Submit Text Annotation",
+        annotations=REMOTE_JOB_ANNOTATIONS,
+    )
     async def submit_text_annotation(request: SubmitTextAnnotationRequest) -> dict[str, Any]:
         """Use this when research text should be submitted for PubTator biomedical named entity recognition. Do not submit identifiable patient data to public demo instances."""
         async with PubTator3Client() as client:
             return await submit_text_annotation_impl(request, client=client)
 
-    @mcp.tool(name="pubtator.get_text_annotation_results", title="Get Text Annotation Results")
+    @mcp.tool(
+        name="pubtator.get_text_annotation_results",
+        title="Get Text Annotation Results",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
     async def get_text_annotation_results(
         request: GetTextAnnotationResultsRequest,
     ) -> dict[str, Any]:
