@@ -174,89 +174,48 @@ curl "http://127.0.0.1:8000/api/annotations/abc123def456"
 
 ## 🔧 MCP Integration
 
-### Configuration for AI Assistants
+PubTator-Link exposes a curated Streamable HTTP MCP endpoint at `/mcp` in unified mode. Hosted MCP tools are research-oriented and must not be used for diagnosis, treatment, triage, patient management, or clinical decision support.
 
-#### Claude Desktop (STDIO Mode)
-
-Add to your Claude Desktop configuration (`claude_desktop_config.json`):
+### Recommended HTTP Setup
 
 ```json
 {
   "mcpServers": {
     "pubtator-link": {
-      "command": "python",
-      "args": ["/absolute/path/to/pubtator-link/mcp_server.py"],
-      "env": {
-        "PYTHONUNBUFFERED": "1",
-        "LOG_LEVEL": "WARNING"
-      }
+      "type": "http",
+      "url": "http://127.0.0.1:8000/mcp"
     }
   }
 }
 ```
 
-#### Web-based AI (HTTP Mode)
-
-For HTTP-based MCP integration:
-
-```json
-{
-  "mcpServers": {
-    "pubtator-link": {
-      "transport": {
-        "type": "http",
-        "url": "http://localhost:8000/mcp"
-      }
-    }
-  }
-}
+```bash
+python server.py --transport unified
+claude mcp add --transport http pubtator-link http://127.0.0.1:8000/mcp
 ```
 
-### Configuration Files
-
-**Find your Claude Desktop config file:**
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-- **Linux**: `~/.config/Claude/claude_desktop_config.json`
-
-**Example configurations are provided:**
-- See `claude_desktop_config_example.json` for complete examples
-- Copy and modify paths to match your installation
+For hosted deployments, configure remote MCP clients with `https://your-domain.example/mcp`. Public deployments should be protected by OAuth or an authenticated reverse proxy.
 
 ### Available MCP Tools
 
-- `export_publication_annotations` - Export annotations for publications by PMIDs
-- `export_pmc_publications` - Export PMC publications by PMC IDs
-- `search_entity_ids` - Find biomedical entity identifiers with autocomplete
-- `search_publications` - Search biomedical literature with pagination and sorting
-- `find_related_entities` - Discover entity relationships and associations
-- `submit_text_annotation` - Submit text for biomedical entity extraction
-- `get_annotation_results` - Retrieve text annotation results
-- `get_cache_statistics` - Monitor cache performance
-- `clear_cache` - Clear cached data
+| Tool | Use When |
+|------|----------|
+| `pubtator.search_literature` | Search PubMed literature through PubTator3 |
+| `pubtator.fetch_publication_annotations` | Fetch annotations for PubMed IDs |
+| `pubtator.fetch_pmc_annotations` | Fetch annotations for PMC full-text articles |
+| `pubtator.search_biomedical_entities` | Find canonical PubTator biomedical entity IDs |
+| `pubtator.find_entity_relations` | Explore literature-derived relations for a PubTator entity |
+| `pubtator.submit_text_annotation` | Submit research text for PubTator biomedical NER |
+| `pubtator.get_text_annotation_results` | Retrieve asynchronous text annotation results |
+| `pubtator.get_server_capabilities` | Discover formats, bioconcepts, relation types, and limitations |
 
-### Transport Modes
+### Local stdio Fallback
 
-#### STDIO Mode (Recommended for Claude Desktop)
 ```bash
-# Direct STDIO mode for maximum performance
-python mcp_server.py
+pubtator-link-mcp
 ```
 
-#### HTTP Mode (For web-based AI)
-```bash
-# Start unified server with MCP HTTP endpoint
-python server.py --transport unified
-# MCP available at http://localhost:8000/mcp
-```
-
-#### Unified Mode (REST + MCP)
-```bash
-# Both REST API and MCP in one server
-python server.py --transport unified
-# REST API: http://localhost:8000/docs
-# MCP: http://localhost:8000/mcp
-```
+Use stdio only for local desktop workflows that cannot connect to HTTP MCP endpoints.
 
 ### 📚 Additional Documentation
 

@@ -1,17 +1,14 @@
 {
   "mcpServers": {
+    "pubtator-link": {
+      "type": "http",
+      "url": "http://127.0.0.1:8000/mcp"
+    },
     "pubtator-link-stdio": {
-      "command": "python",
-      "args": ["/absolute/path/to/pubtator-link/mcp_server.py"],
+      "command": "pubtator-link-mcp",
       "env": {
         "PYTHONUNBUFFERED": "1",
-        "LOG_LEVEL": "WARNING"
-      }
-    },
-    "pubtator-link-http": {
-      "transport": {
-        "type": "http",
-        "url": "http://localhost:8000/mcp"
+        "PUBTATOR_LINK_LOG_LEVEL": "WARNING"
       }
     }
   }
