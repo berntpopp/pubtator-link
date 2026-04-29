@@ -9,7 +9,8 @@ services:
 
     # Environment configuration
     env_file:
-      - ../.env
+      - path: ../.env
+        required: false
 
     environment:
       # Development overrides
@@ -23,7 +24,7 @@ services:
       - "${PUBTATOR_LINK_PORT:-8000}:8000"
 
     # Use uvicorn for development (similar to litvar-link approach)
-    command: ["uvicorn", "pubtator_link.server_manager:app", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["uvicorn", "pubtator_link.server_manager:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
 
     # Health check
     healthcheck:

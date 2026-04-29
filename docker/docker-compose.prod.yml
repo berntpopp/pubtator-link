@@ -14,6 +14,21 @@ services:
     # Remove development volume mounts
     volumes: []
 
+    # ports: []
+    ports: !reset []
+
+    read_only: true
+    tmpfs:
+      - /tmp/pubtator-link:rw,noexec,nosuid,size=64m
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    pids_limit: 256
+    init: true
+
     # Use the default production command (Gunicorn)
     command: ["gunicorn", "-c", "gunicorn_conf.py", "pubtator_link.server_manager:app"]
 
@@ -23,6 +38,7 @@ services:
         limits:
           memory: 1G
           cpus: '1.0'
+          pids: 256
         reservations:
           memory: 512M
           cpus: '0.5'
