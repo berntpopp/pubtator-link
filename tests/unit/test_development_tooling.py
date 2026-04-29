@@ -87,3 +87,21 @@ def test_makefile_exposes_expected_developer_commands() -> None:
         "docker-down:",
     ):
         assert target in makefile
+
+
+def test_pre_commit_config_uses_ruff_and_mypy() -> None:
+    config = Path(".pre-commit-config.yaml").read_text()
+
+    assert "astral-sh/ruff-pre-commit" in config
+    assert "id: ruff" in config
+    assert "id: ruff-format" in config
+    assert "uv run mypy" in config
+
+
+def test_editorconfig_sets_project_defaults() -> None:
+    config = Path(".editorconfig").read_text()
+
+    assert "charset = utf-8" in config
+    assert "indent_style = space" in config
+    assert "indent_size = 4" in config
+    assert "end_of_line = lf" in config

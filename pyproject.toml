@@ -126,10 +126,6 @@ exclude = [
 module = [
     "async_lru.*",
     "structlog.*",
-    "orjson.*",
-    "beautifulsoup4.*",
-    "bs4.*",
-    "lxml.*",
     "mcp.*",
     "fastmcp.*",
     "fastapi.*",
@@ -139,10 +135,6 @@ module = [
     "uvicorn.*",
 ]
 ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "tests.*"
-disallow_untyped_defs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

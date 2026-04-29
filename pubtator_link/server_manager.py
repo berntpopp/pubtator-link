@@ -38,7 +38,7 @@ class UnifiedServerManager:
         self.client: Optional[PubTator3Client] = None
         self.publication_service: Optional[PublicationService] = None
         self.app: Optional[FastAPI] = None
-        self.mcp: Optional[FastMCP] = None  # type: ignore[type-arg]
+        self.mcp: Optional[FastMCP] = None
         self.server: Optional[uvicorn.Server] = None
 
     @asynccontextmanager
@@ -116,7 +116,7 @@ class UnifiedServerManager:
         self.app = app
         return app
 
-    async def create_mcp_server(self, app: FastAPI) -> FastMCP:  # type: ignore[type-arg]
+    async def create_mcp_server(self, app: FastAPI) -> FastMCP:
         """Create FastMCP server from FastAPI app."""
         try:
             # Import MCP configuration classes
