@@ -10,13 +10,13 @@ services:
       PUBTATOR_LINK_TRANSPORT: unified
       GUNICORN_WORKERS: 4
       GUNICORN_LOG_LEVEL: warning
-    
+
     # Remove development volume mounts
     volumes: []
-    
+
     # Use the default production command (Gunicorn)
     command: ["gunicorn", "-c", "gunicorn_conf.py", "pubtator_link.server_manager:app"]
-    
+
     # Production resource limits
     deploy:
       resources:
@@ -26,14 +26,14 @@ services:
         reservations:
           memory: 512M
           cpus: '0.5'
-      
+
       # Production restart policy
       restart_policy:
         condition: on-failure
         delay: 5s
         max_attempts: 3
         window: 120s
-    
+
     # Enhanced health check for production
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -41,7 +41,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-    
+
     # Production logging with rotation
     logging:
       driver: "json-file"

@@ -8,12 +8,12 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
       target: builder
-    
+
     # Override environment for development
     environment:
       PUBTATOR_LINK_LOG_LEVEL: DEBUG
       PYTHONPATH: /home/app/web
-    
+
     # Volume mounts for hot-reloading
     volumes:
       - ../pubtator_link:/home/app/web/pubtator_link:delegated
@@ -21,7 +21,7 @@ services:
       - ../mcp_server.py:/home/app/web/mcp_server.py:ro
       - ../pyproject.toml:/home/app/web/pyproject.toml:ro
       - ../README.md:/home/app/web/README.md:ro
-    
+
     # Development command with auto-reload
     command: >
       sh -c "
@@ -29,9 +29,9 @@ services:
         pip install -e . &&
         uvicorn pubtator_link.server_manager:app --host 0.0.0.0 --port 8000 --reload --reload-dir pubtator_link
       "
-    
+
     # Override user to root for development (to avoid permission issues)
     user: root
-    
+
     # Working directory
     working_dir: /home/app/web

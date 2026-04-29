@@ -2,7 +2,6 @@
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Optional
 
 import uvicorn
 from fastapi import FastAPI
@@ -28,18 +27,18 @@ from .services.publication_service import PublicationService
 class UnifiedServerManager:
     """Manages unified server with multiple transport protocols."""
 
-    def __init__(self, logger: Optional[FilteringBoundLogger] = None):
+    def __init__(self, logger: FilteringBoundLogger | None = None):
         """Initialize unified server manager.
 
         Args:
             logger: Optional logger instance
         """
         self.logger = logger or configure_logging()
-        self.client: Optional[PubTator3Client] = None
-        self.publication_service: Optional[PublicationService] = None
-        self.app: Optional[FastAPI] = None
-        self.mcp: Optional[FastMCP] = None
-        self.server: Optional[uvicorn.Server] = None
+        self.client: PubTator3Client | None = None
+        self.publication_service: PublicationService | None = None
+        self.app: FastAPI | None = None
+        self.mcp: FastMCP | None = None
+        self.server: uvicorn.Server | None = None
 
     @asynccontextmanager
     async def lifespan(self, app: FastAPI) -> AsyncGenerator[None, None]:

@@ -1,7 +1,7 @@
 """Entity autocomplete API routes for PubTator3 data."""
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -134,7 +134,7 @@ async def search_entity_ids(
             },
         },
     ),
-    concept: Optional[str] = Query(
+    concept: str | None = Query(
         default=None,
         description="Filter results by bioconcept type",
         openapi_examples={

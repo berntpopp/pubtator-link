@@ -75,7 +75,7 @@ class TestCacheRoutes:
         data = response.json()
         assert data["success"] is True
         assert isinstance(data["stats"]["total_size"], int)
-        assert isinstance(data["stats"]["hit_rate"], (int, float))
+        assert isinstance(data["stats"]["hit_rate"], int | float)
 
     def test_get_cache_statistics_detailed_structure(self, test_client):
         """Test detailed cache statistics structure."""
@@ -214,7 +214,7 @@ class TestCacheRoutes:
 
         # Check data types
         assert isinstance(stats["total_size"], int)
-        assert isinstance(stats["hit_rate"], (int, float))
+        assert isinstance(stats["hit_rate"], int | float)
         assert isinstance(stats["total_hits"], int)
         assert isinstance(stats["total_misses"], int)
 

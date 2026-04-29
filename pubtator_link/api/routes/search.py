@@ -1,7 +1,7 @@
 """Publication search API routes for PubTator3 data."""
 
 import logging
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 
@@ -154,7 +154,7 @@ async def search_publications(
         },
     ),
     sort: Annotated[
-        Optional[SearchSortOrder],
+        SearchSortOrder | None,
         Query(
             description="Sort order for search results (default: score desc)",
             openapi_examples={
@@ -182,7 +182,7 @@ async def search_publications(
         ),
     ] = None,
     filters: Annotated[
-        Optional[str],
+        str | None,
         Query(
             description="Advanced search filters as JSON string (type, journal, author, year)",
             openapi_examples={
@@ -223,7 +223,7 @@ async def search_publications(
         ),
     ] = None,
     sections: Annotated[
-        Optional[str],
+        str | None,
         Query(
             description="Comma-separated list of document sections to search within",
             openapi_examples={
@@ -346,7 +346,7 @@ async def search_publications(
         except (json.JSONDecodeError, ValueError) as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid filters JSON format: {str(e)}",
+                detail=f"Invalid filters JSON format: {e!s}",
             ) from e
 
     # Parse sections if provided
@@ -359,7 +359,7 @@ async def search_publications(
             valid_sections = [s.value for s in SearchSection]
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid section: {str(e)}. Valid sections: {', '.join(valid_sections)}",
+                detail=f"Invalid section: {e!s}. Valid sections: {', '.join(valid_sections)}",
             ) from e
 
     # Create request object

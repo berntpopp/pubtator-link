@@ -1,13 +1,13 @@
 """Request models for PubTator-Link API."""
 
 import json
-from enum import Enum
-from typing import Any, Literal, Optional
+from enum import StrEnum
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
 
-class SearchSortOrder(str, Enum):
+class SearchSortOrder(StrEnum):
     """Supported sort orders for publication search."""
 
     DATE_DESC = "date desc"
@@ -16,7 +16,7 @@ class SearchSortOrder(str, Enum):
     SCORE_ASC = "score asc"
 
 
-class PublicationType(str, Enum):
+class PublicationType(StrEnum):
     """Publication type filter options based on PubTator3 API."""
 
     # Primary research types
@@ -78,7 +78,7 @@ class PublicationType(str, Enum):
     POSITION_STATEMENT = "Position Statement"
 
 
-class SearchSection(str, Enum):
+class SearchSection(StrEnum):
     """Document sections available for targeted searching in PubTator3."""
 
     # Core sections (most commonly used)
@@ -133,28 +133,25 @@ class SearchSection(str, Enum):
 class SearchFilters(BaseModel):
     """Advanced search filters for PubTator3 API."""
 
-    type: Optional[list[PublicationType]] = Field(
+    type: list[PublicationType] | None = Field(
         default=None,
         description="Filter by publication types (e.g., Review, Research Article)",
     )
-    journal: Optional[list[str]] = Field(
-        default=None, description="Filter by specific journal names"
-    )
-    author: Optional[list[str]] = Field(default=None, description="Filter by author names")
-    year_min: Optional[int] = Field(
+    journal: list[str] | None = Field(default=None, description="Filter by specific journal names")
+    author: list[str] | None = Field(default=None, description="Filter by author names")
+    year_min: int | None = Field(
         default=None, ge=1800, le=2030, description="Minimum publication year"
     )
-    year_max: Optional[int] = Field(
+    year_max: int | None = Field(
         default=None, ge=1800, le=2030, description="Maximum publication year"
     )
 
     @field_validator("year_max")
     @classmethod
-    def validate_year_range(cls, v: Optional[int], info: Any) -> Optional[int]:
+    def validate_year_range(cls, v: int | None, info: Any) -> int | None:
         """Validate year range consistency."""
-        if v is not None and info.data.get("year_min") is not None:
-            if v < info.data["year_min"]:
-                raise ValueError("year_max must be greater than or equal to year_min")
+        if v is not None and info.data.get("year_min") is not None and v < info.data["year_min"]:
+            raise ValueError("year_max must be greater than or equal to year_min")
         return v
 
     def to_json_string(self) -> str:
@@ -229,7 +226,7 @@ class EntityAutocompleteRequest(BaseModel):
     """Request model for entity autocomplete."""
 
     query: str = Field(..., description="Search query for entity", min_length=1, max_length=500)
-    concept: Optional[Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"]] = (
+    concept: Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"] | None = (
         Field(default=None, description="Filter by bioconcept type")
     )
     limit: int = Field(default=10, description="Maximum number of results", ge=1, le=100)
@@ -245,15 +242,15 @@ class SearchRequest(BaseModel):
         max_length=1000,
     )
     page: int = Field(default=1, description="Page number for results", ge=1)
-    sort: Optional[SearchSortOrder] = Field(
+    sort: SearchSortOrder | None = Field(
         default=None,
         description="Sort order for results (default: score desc)",
     )
-    filters: Optional[SearchFilters] = Field(
+    filters: SearchFilters | None = Field(
         default=None,
         description="Advanced search filters (type, journal, author, year)",
     )
-    sections: Optional[list[SearchSection]] = Field(
+    sections: list[SearchSection] | None = Field(
         default=None, description="Limit search to specific document sections"
     )
 
@@ -262,7 +259,7 @@ class RelationsRequest(BaseModel):
     """Request model for finding related entities."""
 
     e1: str = Field(..., description="Primary entity ID (e.g., @CHEMICAL_remdesivir)", min_length=1)
-    type: Optional[
+    type: (
         Literal[
             "treat",
             "cause",
@@ -278,8 +275,9 @@ class RelationsRequest(BaseModel):
             "stimulate",
             "drug_interact",
         ]
-    ] = Field(default=None, description="Relation type filter")
-    e2: Optional[Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"]] = Field(
+        | None
+    ) = Field(default=None, description="Relation type filter")
+    e2: Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"] | None = Field(
         default=None, description="Target entity type filter"
     )
 
@@ -310,6 +308,6 @@ class CacheStatsRequest(BaseModel):
 class CacheClearRequest(BaseModel):
     """Request model for cache clearing."""
 
-    pattern: Optional[str] = Field(
+    pattern: str | None = Field(
         default=None, description="Cache key pattern to clear (clears all if None)"
     )

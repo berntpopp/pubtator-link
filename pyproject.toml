@@ -51,6 +51,7 @@ dev = [
     "pytest-mock>=3.14.0,<4.0.0",
     "pytest-xdist>=3.6.0,<4.0.0",
     "httpx>=0.28.0,<1.0.0",
+    "respx>=0.22.0,<1.0.0",
     "ruff>=0.8.0,<1.0.0",
     "mypy>=1.14.0,<2.0.0",
     "pre-commit>=4.0.0,<5.0.0",
@@ -99,6 +100,7 @@ line-ending = "lf"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*" = ["S101", "T20"]
+"tests/fixtures/test_data.py" = ["RUF012"]
 
 [tool.mypy]
 python_version = "3.11"

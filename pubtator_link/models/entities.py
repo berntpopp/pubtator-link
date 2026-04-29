@@ -1,6 +1,6 @@
 """Entity models for PubTator-Link."""
 
-from typing import Any, Optional, Union
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -12,7 +12,7 @@ class BioConcept(BaseModel):
     name: str = Field(..., description="Primary name")
     type: str = Field(..., description="Bioconcept type")
     synonyms: list[str] = Field(default_factory=list, description="Alternative names")
-    description: Optional[str] = Field(default=None, description="Entity description")
+    description: str | None = Field(default=None, description="Entity description")
     external_ids: dict[str, str] = Field(
         default_factory=dict, description="External database identifiers"
     )
@@ -22,59 +22,59 @@ class Gene(BioConcept):
     """Gene entity model."""
 
     type: str = Field(default="Gene", description="Entity type")
-    symbol: Optional[str] = Field(default=None, description="Gene symbol")
-    full_name: Optional[str] = Field(default=None, description="Full gene name")
-    organism: Optional[str] = Field(default=None, description="Organism")
-    chromosome: Optional[str] = Field(default=None, description="Chromosome location")
-    map_location: Optional[str] = Field(default=None, description="Map location")
+    symbol: str | None = Field(default=None, description="Gene symbol")
+    full_name: str | None = Field(default=None, description="Full gene name")
+    organism: str | None = Field(default=None, description="Organism")
+    chromosome: str | None = Field(default=None, description="Chromosome location")
+    map_location: str | None = Field(default=None, description="Map location")
 
 
 class Disease(BioConcept):
     """Disease entity model."""
 
     type: str = Field(default="Disease", description="Entity type")
-    mesh_id: Optional[str] = Field(default=None, description="MeSH identifier")
-    omim_id: Optional[str] = Field(default=None, description="OMIM identifier")
-    disease_class: Optional[str] = Field(default=None, description="Disease classification")
+    mesh_id: str | None = Field(default=None, description="MeSH identifier")
+    omim_id: str | None = Field(default=None, description="OMIM identifier")
+    disease_class: str | None = Field(default=None, description="Disease classification")
 
 
 class Chemical(BioConcept):
     """Chemical entity model."""
 
     type: str = Field(default="Chemical", description="Entity type")
-    mesh_id: Optional[str] = Field(default=None, description="MeSH identifier")
-    cas_number: Optional[str] = Field(default=None, description="CAS registry number")
-    pubchem_cid: Optional[str] = Field(default=None, description="PubChem CID")
-    molecular_formula: Optional[str] = Field(default=None, description="Molecular formula")
+    mesh_id: str | None = Field(default=None, description="MeSH identifier")
+    cas_number: str | None = Field(default=None, description="CAS registry number")
+    pubchem_cid: str | None = Field(default=None, description="PubChem CID")
+    molecular_formula: str | None = Field(default=None, description="Molecular formula")
 
 
 class Species(BioConcept):
     """Species entity model."""
 
     type: str = Field(default="Species", description="Entity type")
-    ncbi_taxon_id: Optional[str] = Field(default=None, description="NCBI Taxonomy ID")
-    scientific_name: Optional[str] = Field(default=None, description="Scientific name")
-    common_name: Optional[str] = Field(default=None, description="Common name")
+    ncbi_taxon_id: str | None = Field(default=None, description="NCBI Taxonomy ID")
+    scientific_name: str | None = Field(default=None, description="Scientific name")
+    common_name: str | None = Field(default=None, description="Common name")
 
 
 class Variant(BioConcept):
     """Genetic variant entity model."""
 
     type: str = Field(default="Variant", description="Entity type")
-    hgvs_notation: Optional[str] = Field(default=None, description="HGVS notation")
-    dbsnp_id: Optional[str] = Field(default=None, description="dbSNP identifier")
-    variant_type: Optional[str] = Field(default=None, description="Variant type")
-    chromosome: Optional[str] = Field(default=None, description="Chromosome")
-    position: Optional[int] = Field(default=None, description="Genomic position")
+    hgvs_notation: str | None = Field(default=None, description="HGVS notation")
+    dbsnp_id: str | None = Field(default=None, description="dbSNP identifier")
+    variant_type: str | None = Field(default=None, description="Variant type")
+    chromosome: str | None = Field(default=None, description="Chromosome")
+    position: int | None = Field(default=None, description="Genomic position")
 
 
 class CellLine(BioConcept):
     """Cell line entity model."""
 
     type: str = Field(default="CellLine", description="Entity type")
-    cellosaurus_id: Optional[str] = Field(default=None, description="Cellosaurus identifier")
-    source_organism: Optional[str] = Field(default=None, description="Source organism")
-    tissue_origin: Optional[str] = Field(default=None, description="Tissue of origin")
+    cellosaurus_id: str | None = Field(default=None, description="Cellosaurus identifier")
+    source_organism: str | None = Field(default=None, description="Source organism")
+    tissue_origin: str | None = Field(default=None, description="Tissue of origin")
 
 
 class EntityRelation(BaseModel):
@@ -84,9 +84,7 @@ class EntityRelation(BaseModel):
     relation_type: str = Field(..., description="Type of relation")
     entity1: str = Field(..., description="First entity identifier")
     entity2: str = Field(..., description="Second entity identifier")
-    confidence: Optional[float] = Field(
-        default=None, description="Confidence score", ge=0.0, le=1.0
-    )
+    confidence: float | None = Field(default=None, description="Confidence score", ge=0.0, le=1.0)
     evidence_pmids: list[str] = Field(default_factory=list, description="Supporting PubMed IDs")
     evidence_count: int = Field(default=0, description="Number of supporting articles")
 
@@ -136,22 +134,22 @@ class TextAnnotation(BaseModel):
     annotation_id: str = Field(..., description="Annotation identifier")
     location: AnnotationLocation = Field(..., description="Text location")
     entity: BioConcept = Field(..., description="Annotated entity")
-    confidence: Optional[float] = Field(
+    confidence: float | None = Field(
         default=None, description="Annotation confidence", ge=0.0, le=1.0
     )
-    method: Optional[str] = Field(default=None, description="Annotation method")
+    method: str | None = Field(default=None, description="Annotation method")
 
 
 # Type aliases for entity unions
-AnyEntity = Union[Gene, Disease, Chemical, Species, Variant, CellLine]
-EntityType = Union[
+AnyEntity = Gene | Disease | Chemical | Species | Variant | CellLine
+EntityType = (
     type[Gene],
     type[Disease],
     type[Chemical],
     type[Species],
     type[Variant],
     type[CellLine],
-]
+)
 
 
 def create_entity_from_type(entity_type: str, **kwargs: Any) -> AnyEntity:

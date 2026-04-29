@@ -20,7 +20,7 @@ def configure_logging() -> FilteringBoundLogger:
     # Configure color support based on transport and environment
     use_colors = (
         settings.transport != "stdio"
-        and not settings.log_format == "json"
+        and settings.log_format != "json"
         and sys.stdout.isatty() is not False
         and "NO_COLOR" not in os.environ
     )

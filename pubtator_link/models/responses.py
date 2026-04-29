@@ -1,6 +1,6 @@
 """Response models for PubTator-Link API."""
 
-from typing import Any, Optional, Union
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -9,7 +9,7 @@ class BaseResponse(BaseModel):
     """Base response model with common fields."""
 
     success: bool = Field(default=True, description="Request success status")
-    message: Optional[str] = Field(default=None, description="Response message")
+    message: str | None = Field(default=None, description="Response message")
 
 
 class ErrorResponse(BaseResponse):
@@ -17,7 +17,7 @@ class ErrorResponse(BaseResponse):
 
     success: bool = Field(default=False)
     error_code: str = Field(..., description="Error code")
-    error_details: Optional[dict[str, Any]] = Field(
+    error_details: dict[str, Any] | None = Field(
         default=None, description="Additional error details"
     )
 
@@ -27,7 +27,7 @@ class HealthResponse(BaseModel):
 
     status: str = Field(default="healthy", description="Service status")
     version: str = Field(default="1.0.0", description="Service version")
-    uptime: Optional[float] = Field(default=None, description="Uptime in seconds")
+    uptime: float | None = Field(default=None, description="Uptime in seconds")
 
 
 class PublicationAnnotation(BaseModel):
@@ -35,7 +35,7 @@ class PublicationAnnotation(BaseModel):
 
     id: str = Field(..., description="Annotation ID")
     infons: dict[str, Any] = Field(default_factory=dict, description="Annotation metadata")
-    text: Optional[str] = Field(default=None, description="Annotation text")
+    text: str | None = Field(default=None, description="Annotation text")
     annotations: list[dict[str, Any]] = Field(
         default_factory=list, description="List of annotations"
     )
@@ -46,8 +46,8 @@ class PublicationExportResponse(BaseResponse):
     """Response model for publication export."""
 
     format: str = Field(..., description="Export format used")
-    pmids: Optional[list[str]] = Field(default=None, description="Requested PMIDs")
-    pmcids: Optional[list[str]] = Field(default=None, description="Requested PMC IDs")
+    pmids: list[str] | None = Field(default=None, description="Requested PMIDs")
+    pmcids: list[str] | None = Field(default=None, description="Requested PMC IDs")
     full_text: bool = Field(default=False, description="Whether full text was included")
     export_data: dict[str, Any] = Field(..., description="Exported data")
     count: int = Field(..., description="Number of exported items")
@@ -70,13 +70,13 @@ class EntityMatch(BaseModel):
     identifier: str = Field(..., description="Entity identifier")  # _id from API
     name: str = Field(..., description="Entity name")
     type: str = Field(..., description="Entity type")  # biotype from API
-    score: Optional[float] = Field(default=None, description="Match score")
+    score: float | None = Field(default=None, description="Match score")
     synonyms: list[str] = Field(default_factory=list, description="Entity synonyms")
 
     # Additional fields from actual API response
-    db_id: Optional[str] = Field(default=None, description="Database ID")
-    db: Optional[str] = Field(default=None, description="Database name")
-    match: Optional[str] = Field(default=None, description="Match description")
+    db_id: str | None = Field(default=None, description="Database ID")
+    db: str | None = Field(default=None, description="Database name")
+    match: str | None = Field(default=None, description="Match description")
 
     @field_validator("identifier", mode="before")
     @classmethod
@@ -101,7 +101,7 @@ class EntityAutocompleteResponse(BaseResponse):
     query: str = Field(..., description="Original query")
     matches: list[EntityMatch] = Field(default_factory=list, description="Entity matches")
     total_matches: int = Field(..., description="Total number of matches")
-    concept_filter: Optional[str] = Field(default=None, description="Applied concept filter")
+    concept_filter: str | None = Field(default=None, description="Applied concept filter")
 
 
 class SearchResult(BaseModel):
@@ -112,23 +112,23 @@ class SearchResult(BaseModel):
 
     @field_validator("pmid", mode="before")
     @classmethod
-    def convert_pmid_to_string(cls, v: Union[str, int]) -> str:
+    def convert_pmid_to_string(cls, v: str | int) -> str:
         """Convert PMID to string if it's an integer."""
         return str(v)
 
-    abstract: Optional[str] = Field(default=None, description="Article abstract")
+    abstract: str | None = Field(default=None, description="Article abstract")
     authors: list[str] = Field(default_factory=list, description="Authors")
-    journal: Optional[str] = Field(default=None, description="Journal name")
-    pub_date: Optional[str] = Field(default=None, description="Publication date")
+    journal: str | None = Field(default=None, description="Journal name")
+    pub_date: str | None = Field(default=None, description="Publication date")
     annotations: list[dict[str, Any]] = Field(default_factory=list, description="Annotations found")
-    score: Optional[float] = Field(default=None, description="Relevance score")
+    score: float | None = Field(default=None, description="Relevance score")
 
     # Additional fields from actual API response
-    pmcid: Optional[str] = Field(default=None, description="PMC ID if available")
-    doi: Optional[str] = Field(default=None, description="DOI")
-    date: Optional[str] = Field(default=None, description="Publication date ISO format")
-    text_hl: Optional[str] = Field(default=None, description="Highlighted text snippet")
-    citations: Optional[dict[str, str]] = Field(default=None, description="Citation formats")
+    pmcid: str | None = Field(default=None, description="PMC ID if available")
+    doi: str | None = Field(default=None, description="DOI")
+    date: str | None = Field(default=None, description="Publication date ISO format")
+    text_hl: str | None = Field(default=None, description="Highlighted text snippet")
+    citations: dict[str, str] | None = Field(default=None, description="Citation formats")
 
     @field_validator("pub_date", mode="before")
     @classmethod
@@ -148,23 +148,23 @@ class SearchResponse(BaseResponse):
     page: int = Field(..., description="Current page number")
     per_page: int = Field(default=20, description="Results per page")
     total_pages: int = Field(..., description="Total number of pages")
-    sort_order: Optional[str] = Field(default=None, description="Applied sort order")
+    sort_order: str | None = Field(default=None, description="Applied sort order")
 
 
 class RelatedEntity(BaseModel):
     """Related entity information."""
 
     entity_id: str = Field(..., description="Entity identifier")  # target from API
-    entity_name: Optional[str] = Field(default=None, description="Entity name")
-    entity_type: Optional[str] = Field(default=None, description="Entity type")
+    entity_name: str | None = Field(default=None, description="Entity name")
+    entity_type: str | None = Field(default=None, description="Entity type")
     relation_type: str = Field(..., description="Relation type")  # type from API
-    confidence: Optional[float] = Field(default=None, description="Relation confidence")
+    confidence: float | None = Field(default=None, description="Relation confidence")
     pmids: list[str] = Field(default_factory=list, description="Supporting PMIDs")
 
     # Fields from actual API response
-    source: Optional[str] = Field(default=None, description="Source entity")
+    source: str | None = Field(default=None, description="Source entity")
     target: str = Field(..., description="Target entity")
-    publications: Optional[int] = Field(default=None, description="Number of publications")
+    publications: int | None = Field(default=None, description="Number of publications")
 
     @field_validator("entity_id", mode="before")
     @classmethod
@@ -191,8 +191,8 @@ class RelationsResponse(BaseResponse):
         default_factory=list, description="Related entities"
     )
     total_relations: int = Field(..., description="Total number of relations")
-    relation_filter: Optional[str] = Field(default=None, description="Applied relation type filter")
-    entity_filter: Optional[str] = Field(default=None, description="Applied entity type filter")
+    relation_filter: str | None = Field(default=None, description="Applied relation type filter")
+    entity_filter: str | None = Field(default=None, description="Applied entity type filter")
 
 
 class AnnotationEntity(BaseModel):
@@ -203,7 +203,7 @@ class AnnotationEntity(BaseModel):
     text: str = Field(..., description="Entity text")
     entity_id: str = Field(..., description="Entity identifier")
     entity_type: str = Field(..., description="Entity type")
-    confidence: Optional[float] = Field(default=None, description="Annotation confidence")
+    confidence: float | None = Field(default=None, description="Annotation confidence")
 
 
 class TextAnnotationSubmitResponse(BaseResponse):
@@ -212,7 +212,7 @@ class TextAnnotationSubmitResponse(BaseResponse):
     session_id: str = Field(..., description="Session ID for retrieval")
     status: str = Field(default="submitted", description="Processing status")
     bioconcepts: list[str] = Field(..., description="Bioconcept types being processed")
-    estimated_time: Optional[int] = Field(
+    estimated_time: int | None = Field(
         default=None, description="Estimated processing time in seconds"
     )
 
@@ -227,7 +227,7 @@ class TextAnnotationResultResponse(BaseResponse):
     annotations: list[AnnotationEntity] = Field(
         default_factory=list, description="Extracted annotations"
     )
-    processing_time: Optional[float] = Field(default=None, description="Processing time in seconds")
+    processing_time: float | None = Field(default=None, description="Processing time in seconds")
 
 
 class CacheStats(BaseModel):
@@ -245,7 +245,7 @@ class CacheStatsResponse(BaseResponse):
     """Response for cache statistics."""
 
     stats: CacheStats = Field(..., description="Cache statistics")
-    detailed_stats: Optional[dict[str, Any]] = Field(
+    detailed_stats: dict[str, Any] | None = Field(
         default=None, description="Detailed cache information"
     )
 
@@ -254,4 +254,4 @@ class CacheClearResponse(BaseResponse):
     """Response for cache clearing."""
 
     cleared_items: int = Field(..., description="Number of items cleared")
-    pattern: Optional[str] = Field(default=None, description="Pattern used for clearing")
+    pattern: str | None = Field(default=None, description="Pattern used for clearing")

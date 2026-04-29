@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 from structlog.typing import FilteringBoundLogger
@@ -55,8 +55,8 @@ class PubTatorAPIError(Exception):
     def __init__(
         self,
         message: str,
-        status_code: Optional[int] = None,
-        response_data: Optional[dict[str, Any]] = None,
+        status_code: int | None = None,
+        response_data: dict[str, Any] | None = None,
     ):
         """Initialize PubTator API error.
 
@@ -77,7 +77,7 @@ class PubTator3Client:
         self,
         config: APIConfig = api_config,
         text_config: TextProcessingConfig = text_processing_config,
-        logger: Optional[FilteringBoundLogger] = None,
+        logger: FilteringBoundLogger | None = None,
     ):
         """Initialize PubTator3 API client.
 
@@ -129,8 +129,8 @@ class PubTator3Client:
         self,
         method: str,
         url: str,
-        params: Optional[dict[str, Any]] = None,
-        data: Optional[dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
         use_text_client: bool = False,
     ) -> dict[str, Any]:
         """Make rate-limited HTTP request.
@@ -183,9 +183,11 @@ class PubTator3Client:
             content_type = response.headers.get("content-type", "").lower()
             if "application/json" in content_type:
                 return response.json()  # type: ignore[no-any-return]
-            elif "text/plain" in content_type or "text/html" in content_type:
-                return {"content": response.text, "content_type": content_type}
-            elif "application/xml" in content_type:
+            elif (
+                "text/plain" in content_type
+                or "text/html" in content_type
+                or "application/xml" in content_type
+            ):
                 return {"content": response.text, "content_type": content_type}
             else:
                 return {"content": response.content, "content_type": content_type}
@@ -204,7 +206,7 @@ class PubTator3Client:
                 response_data=error_data,
             ) from e
         except httpx.RequestError as e:
-            raise PubTatorAPIError(f"Request failed: {str(e)}") from e
+            raise PubTatorAPIError(f"Request failed: {e!s}") from e
 
     async def export_publications(
         self, pmids: list[str], format: str = "biocjson", full: bool = False
@@ -254,7 +256,7 @@ class PubTator3Client:
         return await self._make_request("GET", url, params=params)
 
     async def autocomplete_entity(
-        self, query: str, concept: Optional[str] = None, limit: int = 10
+        self, query: str, concept: str | None = None, limit: int = 10
     ) -> dict[str, Any]:
         """Find entity ID through autocomplete.
 
@@ -280,9 +282,9 @@ class PubTator3Client:
         self,
         text: str,
         page: int = 1,
-        sort: Optional[str] = None,
-        filters: Optional[str] = None,
-        sections: Optional[str] = None,
+        sort: str | None = None,
+        filters: str | None = None,
+        sections: str | None = None,
     ) -> dict[str, Any]:
         """Search for publications with advanced filtering.
 
@@ -321,7 +323,7 @@ class PubTator3Client:
         return await self._make_request("GET", url, params=params)
 
     async def find_relations(
-        self, e1: str, relation_type: Optional[str] = None, e2: Optional[str] = None
+        self, e1: str, relation_type: str | None = None, e2: str | None = None
     ) -> dict[str, Any]:
         """Find related entities.
 

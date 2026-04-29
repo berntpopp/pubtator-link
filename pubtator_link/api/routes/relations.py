@@ -1,7 +1,7 @@
 """Entity relations API routes for PubTator3 data."""
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -139,7 +139,7 @@ async def find_related_entities(
             },
         ],
     ),
-    type: Optional[str] = Query(
+    type: str | None = Query(
         default=None,
         description="Filter by specific relation type",
         examples=[
@@ -165,7 +165,7 @@ async def find_related_entities(
             },
         ],
     ),
-    e2: Optional[str] = Query(
+    e2: str | None = Query(
         default=None,
         description="Filter by target entity type",
         examples=[

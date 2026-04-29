@@ -27,6 +27,7 @@ def test_dependency_groups_include_dev_tooling() -> None:
     assert "pytest" in dev
     assert "pytest-xdist" in dev
     assert "pre-commit" in dev
+    assert "respx" in dev
 
 
 def test_uv_lock_exists() -> None:
@@ -55,6 +56,22 @@ def test_pytest_has_fast_default_addopts() -> None:
     assert "--strict-markers" in addopts
     assert "--cov=pubtator_link" not in addopts
     assert "-n" not in addopts
+
+
+def test_ruff_enforces_modern_rules_with_narrow_fixture_exception() -> None:
+    ruff = _pyproject()["tool"]["ruff"]["lint"]
+    per_file_ignores = _pyproject()["tool"]["ruff"]["lint"]["per-file-ignores"]
+
+    assert "SIM" in ruff["extend-select"]
+    assert "RUF" in ruff["extend-select"]
+    assert per_file_ignores["tests/fixtures/test_data.py"] == ["RUF012"]
+
+
+def test_server_signal_handler_keeps_shutdown_task_reference() -> None:
+    server = Path("server.py").read_text()
+
+    assert "shutdown_task: asyncio.Task[None] | None = None" in server
+    assert "shutdown_task = asyncio.create_task(server_manager.shutdown())" in server
 
 
 def test_makefile_exposes_expected_developer_commands() -> None:

@@ -1,7 +1,6 @@
 """Cache management API routes for PubTator-Link server."""
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -202,7 +201,7 @@ async def get_cache_statistics(
 @handle_api_errors
 async def clear_cache(
     service: PublicationServiceDep,
-    pattern: Optional[str] = Query(
+    pattern: str | None = Query(
         default=None,
         description="Cache key pattern to clear (clears all if not specified)",
         examples=[

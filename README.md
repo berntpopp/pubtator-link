@@ -65,7 +65,7 @@ CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 # Unified mode (REST API + MCP)
 python server.py --transport unified
 
-# HTTP-only mode (REST API only) 
+# HTTP-only mode (REST API only)
 python server.py --transport http
 
 # STDIO mode (MCP only)
@@ -113,7 +113,7 @@ curl "http://127.0.0.1:8000/api/entities/autocomplete?query=breast%20cancer&conc
 curl "http://127.0.0.1:8000/api/entities/autocomplete?query=BRCA1&concept=Gene"
 ```
 
-### Publication Search  
+### Publication Search
 
 - `GET /api/search` - Search publications by text, entity IDs, or relations with sorting
 
@@ -139,7 +139,7 @@ curl "http://127.0.0.1:8000/api/search?text=relations:ANY|@CHEMICAL_Doxorubicin|
 
 **Supported sort options:**
 - `date desc` - Newest publications first (default for date sorting)
-- `date asc` - Oldest publications first  
+- `date asc` - Oldest publications first
 - `score desc` - Highest relevance first (default for relevance sorting)
 - `score asc` - Lowest relevance first
 
@@ -153,7 +153,7 @@ curl "http://127.0.0.1:8000/api/search?text=relations:ANY|@CHEMICAL_Doxorubicin|
 # Find entities that interact with a chemical
 curl "http://127.0.0.1:8000/api/relations?e1=@CHEMICAL_remdesivir&type=interact"
 
-# Find diseases treated by a chemical  
+# Find diseases treated by a chemical
 curl "http://127.0.0.1:8000/api/relations?e1=@CHEMICAL_Doxorubicin&type=treat&e2=Disease"
 ```
 

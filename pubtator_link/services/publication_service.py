@@ -1,7 +1,7 @@
 """Publication service with caching for PubTator-Link."""
 
 import asyncio
-from typing import Any, Optional
+from typing import Any
 
 from async_lru import alru_cache
 from structlog.typing import FilteringBoundLogger
@@ -27,7 +27,7 @@ from ..models.responses import (
 class PublicationService:
     """Service for publication operations with caching."""
 
-    def __init__(self, client: PubTator3Client, logger: Optional[FilteringBoundLogger] = None):
+    def __init__(self, client: PubTator3Client, logger: FilteringBoundLogger | None = None):
         """Initialize publication service.
 
         Args:
@@ -375,7 +375,7 @@ class PublicationService:
             total_pages=total_pages,
         )
 
-    def _extract_abstract(self, item: dict[str, Any]) -> Optional[str]:
+    def _extract_abstract(self, item: dict[str, Any]) -> str | None:
         """Extract abstract text from different response formats."""
         # Try direct abstract field
         if "abstract" in item:
@@ -422,7 +422,7 @@ class PublicationService:
         """Get supported export formats."""
         return EXPORT_FORMATS
 
-    async def clear_cache(self, pattern: Optional[str] = None) -> int:
+    async def clear_cache(self, pattern: str | None = None) -> int:
         """Clear cache entries.
 
         Args:

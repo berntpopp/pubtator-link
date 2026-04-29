@@ -2,7 +2,8 @@
 
 import functools
 import logging
-from typing import Annotated, Any, Callable
+from collections.abc import Callable
+from typing import Annotated, Any
 
 from fastapi import Depends, HTTPException
 from structlog.typing import FilteringBoundLogger

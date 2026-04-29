@@ -5,7 +5,7 @@ import asyncio
 import json
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
@@ -20,7 +20,7 @@ from .services.publication_service import PublicationService
 # Add root directory to path for mcp_server import
 sys.path.insert(0, str(Path(__file__).parent.parent))
 # Import after path modification to avoid flake8 E402
-import mcp_server  # noqa: E402
+import mcp_server
 
 # Initialize rich console
 console = Console()
@@ -54,7 +54,7 @@ async def test_connection() -> bool:
 
                 console.print(
                     Panel(
-                        f"[bold red]:x: Connection failed: {str(e)}",
+                        f"[bold red]:x: Connection failed: {e!s}",
                         title="Connection Test",
                         border_style="red",
                     )
@@ -63,7 +63,7 @@ async def test_connection() -> bool:
                 return False
 
 
-async def search_entities(query: str, concept: Optional[str] = None, limit: int = 10) -> None:
+async def search_entities(query: str, concept: str | None = None, limit: int = 10) -> None:
     """Search for entity IDs."""
     logger = configure_logging()
 
@@ -104,7 +104,7 @@ async def search_entities(query: str, concept: Optional[str] = None, limit: int 
                         entity_id,
                         name[:60] + "..." if len(name) > 60 else name,
                         entity_type,
-                        (f"{score:.2f}" if isinstance(score, (int, float)) else str(score)),
+                        (f"{score:.2f}" if isinstance(score, int | float) else str(score)),
                     )
 
                 console.print(table)
@@ -116,7 +116,7 @@ async def search_entities(query: str, concept: Optional[str] = None, limit: int 
                 logger.error("Entity search failed", error=str(e))
                 console.print(
                     Panel(
-                        f"[bold red]:x: Entity search failed: {str(e)}",
+                        f"[bold red]:x: Entity search failed: {e!s}",
                         title="Search Error",
                         border_style="red",
                     )
@@ -206,7 +206,7 @@ async def search_publications(query: str, page: int = 1) -> None:
                 logger.error("Publication search failed", error=str(e))
                 console.print(
                     Panel(
-                        f"[bold red]:x: Publication search failed: {str(e)}",
+                        f"[bold red]:x: Publication search failed: {e!s}",
                         title="Search Error",
                         border_style="red",
                     )
@@ -261,7 +261,7 @@ async def export_publications(pmids: str, format: str = "biocjson", full: bool =
                         title = "[Document Content]"
 
                         # Try to extract title from passages if available
-                        if "passages" in doc and doc["passages"]:
+                        if doc.get("passages"):
                             first_passage = doc["passages"][0]
                             if "text" in first_passage:
                                 title = (
@@ -341,7 +341,7 @@ async def export_publications(pmids: str, format: str = "biocjson", full: bool =
                 logger.error("Publication export failed", error=str(e))
                 console.print(
                     Panel(
-                        f"[bold red]:x: Export failed: {str(e)}",
+                        f"[bold red]:x: Export failed: {e!s}",
                         title="Export Error",
                         border_style="red",
                     )

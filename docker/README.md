@@ -203,14 +203,14 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up --build
    ```bash
    # Update system packages
    sudo apt update && sudo apt upgrade -y
-   
+
    # Install Docker and Docker Compose
    sudo apt install -y docker.io docker-compose git
-   
+
    # Start and enable Docker
    sudo systemctl start docker
    sudo systemctl enable docker
-   
+
    # Add user to docker group (logout/login required)
    sudo usermod -aG docker $USER
    ```

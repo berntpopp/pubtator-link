@@ -38,11 +38,14 @@ async def main() -> None:
 
     # Create server manager
     server_manager = UnifiedServerManager(logger=logger)
+    shutdown_task: asyncio.Task[None] | None = None
 
     # Setup signal handlers
     def signal_handler(signum: int, frame: Any) -> None:
+        nonlocal shutdown_task
         logger.info("Received shutdown signal", signal=signum)
-        asyncio.create_task(server_manager.shutdown())
+        if shutdown_task is None or shutdown_task.done():
+            shutdown_task = asyncio.create_task(server_manager.shutdown())
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)

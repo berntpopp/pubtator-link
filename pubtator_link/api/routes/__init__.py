@@ -9,12 +9,12 @@ from .search import router as search_router
 
 # Export all routers for easy import in server manager
 __all__ = [
-    "publications_router",
-    "entities_router",
-    "search_router",
-    "relations_router",
     "annotations_router",
     "cache_router",
+    "entities_router",
+    "publications_router",
+    "relations_router",
+    "search_router",
 ]
 
 # Router registry for dynamic inclusion

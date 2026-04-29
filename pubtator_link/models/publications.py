@@ -1,7 +1,7 @@
 """Publication models for PubTator-Link."""
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -12,33 +12,33 @@ class Author(BaseModel):
     """Author information."""
 
     name: str = Field(..., description="Author name")
-    affiliation: Optional[str] = Field(default=None, description="Author affiliation")
-    orcid: Optional[str] = Field(default=None, description="ORCID identifier")
+    affiliation: str | None = Field(default=None, description="Author affiliation")
+    orcid: str | None = Field(default=None, description="ORCID identifier")
 
 
 class Journal(BaseModel):
     """Journal information."""
 
     title: str = Field(..., description="Journal title")
-    issn: Optional[str] = Field(default=None, description="ISSN")
-    volume: Optional[str] = Field(default=None, description="Volume")
-    issue: Optional[str] = Field(default=None, description="Issue")
-    pages: Optional[str] = Field(default=None, description="Page range")
-    impact_factor: Optional[float] = Field(default=None, description="Impact factor")
+    issn: str | None = Field(default=None, description="ISSN")
+    volume: str | None = Field(default=None, description="Volume")
+    issue: str | None = Field(default=None, description="Issue")
+    pages: str | None = Field(default=None, description="Page range")
+    impact_factor: float | None = Field(default=None, description="Impact factor")
 
 
 class PublicationMetadata(BaseModel):
     """Publication metadata."""
 
     pmid: str = Field(..., description="PubMed ID")
-    pmcid: Optional[str] = Field(default=None, description="PMC ID")
-    doi: Optional[str] = Field(default=None, description="DOI")
+    pmcid: str | None = Field(default=None, description="PMC ID")
+    doi: str | None = Field(default=None, description="DOI")
     title: str = Field(..., description="Article title")
-    abstract: Optional[str] = Field(default=None, description="Abstract text")
+    abstract: str | None = Field(default=None, description="Abstract text")
     authors: list[Author] = Field(default_factory=list, description="Authors")
-    journal: Optional[Journal] = Field(default=None, description="Journal information")
-    publication_date: Optional[datetime] = Field(default=None, description="Publication date")
-    publication_year: Optional[int] = Field(default=None, description="Publication year")
+    journal: Journal | None = Field(default=None, description="Journal information")
+    publication_date: datetime | None = Field(default=None, description="Publication date")
+    publication_year: int | None = Field(default=None, description="Publication year")
     mesh_terms: list[str] = Field(default_factory=list, description="MeSH terms")
     keywords: list[str] = Field(default_factory=list, description="Keywords")
     publication_types: list[str] = Field(default_factory=list, description="Publication types")
@@ -53,7 +53,7 @@ class PublicationMetadata(BaseModel):
 
     @field_validator("pmcid")
     @classmethod
-    def validate_pmcid(cls, v: Optional[str]) -> Optional[str]:
+    def validate_pmcid(cls, v: str | None) -> str | None:
         """Validate PMC ID format."""
         if v is None:
             return v
@@ -99,7 +99,7 @@ class PubTatorDocument(BaseModel):
 
     pmid: str = Field(..., description="PubMed ID")
     title_text: str = Field(..., description="Title text")
-    abstract_text: Optional[str] = Field(default=None, description="Abstract text")
+    abstract_text: str | None = Field(default=None, description="Abstract text")
     annotations: list[str] = Field(default_factory=list, description="Annotation lines")
     relations: list[str] = Field(default_factory=list, description="Relation lines")
 
@@ -118,11 +118,11 @@ class PublicationSearchResult(BaseModel):
 
     pmid: str = Field(..., description="PubMed ID")
     title: str = Field(..., description="Article title")
-    abstract: Optional[str] = Field(default=None, description="Abstract")
+    abstract: str | None = Field(default=None, description="Abstract")
     authors: list[str] = Field(default_factory=list, description="Author names")
-    journal: Optional[str] = Field(default=None, description="Journal name")
-    publication_date: Optional[str] = Field(default=None, description="Publication date")
-    relevance_score: Optional[float] = Field(default=None, description="Search relevance score")
+    journal: str | None = Field(default=None, description="Journal name")
+    publication_date: str | None = Field(default=None, description="Publication date")
+    relevance_score: float | None = Field(default=None, description="Search relevance score")
     matched_entities: list[str] = Field(
         default_factory=list, description="Matched entity identifiers"
     )
@@ -138,7 +138,7 @@ class PublicationBatch(BaseModel):
     batch_id: str = Field(..., description="Batch identifier")
     processing_status: str = Field(default="pending", description="Processing status")
     created_at: datetime = Field(default_factory=datetime.now, description="Batch creation time")
-    completed_at: Optional[datetime] = Field(default=None, description="Batch completion time")
+    completed_at: datetime | None = Field(default=None, description="Batch completion time")
     error_count: int = Field(default=0, description="Number of errors")
     success_count: int = Field(default=0, description="Number of successes")
 
