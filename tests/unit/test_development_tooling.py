@@ -55,3 +55,35 @@ def test_pytest_has_fast_default_addopts() -> None:
     assert "--strict-markers" in addopts
     assert "--cov=pubtator_link" not in addopts
     assert "-n" not in addopts
+
+
+def test_makefile_exposes_expected_developer_commands() -> None:
+    makefile = Path("Makefile").read_text()
+
+    for target in (
+        "help:",
+        "install:",
+        "lock:",
+        "format:",
+        "format-check:",
+        "lint:",
+        "lint-ci:",
+        "lint-fix:",
+        "typecheck:",
+        "typecheck-fast:",
+        "test:",
+        "test-fast:",
+        "test-unit:",
+        "test-integration:",
+        "test-cov:",
+        "check:",
+        "ci-local:",
+        "precommit:",
+        "dev:",
+        "mcp-serve:",
+        "mcp-serve-http:",
+        "docker-build:",
+        "docker-up:",
+        "docker-down:",
+    ):
+        assert target in makefile
