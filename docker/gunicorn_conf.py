@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-import multiprocessing
 import os
 from typing import Any
 
 # Server socket configuration
-bind = f"0.0.0.0:{os.environ.get('PORT', '8000')}"
+bind = f"0.0.0.0:{os.environ.get('PUBTATOR_LINK_PORT', os.environ.get('PORT', '8000'))}"
 backlog = 2048
 
 # Worker processes configuration
-# Use CPU count * 2 + 1 as default, but allow override
-workers = int(os.environ.get("GUNICORN_WORKERS", multiprocessing.cpu_count() * 2 + 1))
+workers = int(os.environ.get("GUNICORN_WORKERS", "2"))
 worker_class = "uvicorn.workers.UvicornWorker"
 worker_connections = 1000
 max_requests = 1000
@@ -39,6 +37,11 @@ proc_name = "pubtator-link"
 limit_request_line = 4094
 limit_request_fields = 100
 limit_request_field_size = 8190
+forwarded_allow_ips = os.environ.get("GUNICORN_FORWARDED_ALLOW_IPS", "*")
+secure_scheme_headers = {
+    "X-FORWARDED-PROTO": "https",
+    "X-FORWARDED-SSL": "on",
+}
 
 # Performance tuning
 preload_app = True
