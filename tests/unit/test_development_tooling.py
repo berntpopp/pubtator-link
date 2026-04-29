@@ -105,3 +105,20 @@ def test_editorconfig_sets_project_defaults() -> None:
     assert "indent_style = space" in config
     assert "indent_size = 4" in config
     assert "end_of_line = lf" in config
+
+
+def test_agents_md_contains_shared_agent_guidance() -> None:
+    agents = Path("AGENTS.md").read_text()
+
+    assert "Shared repository instructions" in agents
+    assert "Do not revert or overwrite changes you did not make" in agents
+    assert "make ci-local" in agents
+    assert "uv" in agents
+    assert "CLAUDE.md" in agents
+
+
+def test_claude_md_is_lean_and_references_agents() -> None:
+    claude = Path("CLAUDE.md").read_text()
+
+    assert "@AGENTS.md" in claude
+    assert len(claude.splitlines()) <= 20
