@@ -74,21 +74,28 @@ target-version = "py311"
 
 [tool.ruff.lint]
 extend-select = [
-    "E",  # pycodestyle errors
-    "W",  # pycodestyle warnings
-    "F",  # pyflakes
-    "I",  # isort
-    "N",  # pep8-naming
-    "UP", # pyupgrade
-    "B",  # flake8-bugbear
-    "C4", # flake8-comprehensions
-    "S",  # flake8-bandit
-    "T20", # flake8-print
+    "E",
+    "W",
+    "F",
+    "I",
+    "N",
+    "UP",
+    "B",
+    "C4",
+    "S",
+    "T20",
+    "SIM",
+    "RUF",
 ]
 ignore = [
-    "S101", # assert used
-    "E501", # line too long (handled by formatter)
+    "S101",
+    "E501",
 ]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*" = ["S101", "T20"]
@@ -111,6 +118,8 @@ exclude = [
     ".*site-packages.*",
     ".*/miniforge3/.*",
     ".*/venv/.*",
+    ".*/.venv/.*",
+    "htmlcov/.*",
 ]
 
 [[tool.mypy.overrides]]
@@ -139,9 +148,6 @@ disallow_untyped_defs = false
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = [
-    "--cov=pubtator_link",
-    "--cov-report=term-missing",
-    "--cov-report=html",
     "--strict-markers",
     "-ra",
 ]

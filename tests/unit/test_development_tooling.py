@@ -31,3 +31,27 @@ def test_dependency_groups_include_dev_tooling() -> None:
 
 def test_uv_lock_exists() -> None:
     assert Path("uv.lock").exists()
+
+
+def test_ruff_targets_python_311_and_core_paths() -> None:
+    data = _pyproject()
+    ruff = data["tool"]["ruff"]
+
+    assert ruff["target-version"] == "py311"
+    assert ruff["line-length"] == 100
+
+
+def test_mypy_targets_python_311() -> None:
+    mypy = _pyproject()["tool"]["mypy"]
+
+    assert mypy["python_version"] == "3.11"
+    assert mypy["strict"] is True
+
+
+def test_pytest_has_fast_default_addopts() -> None:
+    pytest_config = _pyproject()["tool"]["pytest"]["ini_options"]
+    addopts = " ".join(pytest_config["addopts"])
+
+    assert "--strict-markers" in addopts
+    assert "--cov=pubtator_link" not in addopts
+    assert "-n" not in addopts
