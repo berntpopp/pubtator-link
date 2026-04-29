@@ -9,7 +9,9 @@ class SearchLiteratureRequest(BaseModel):
     text: str = Field(min_length=1, max_length=1000)
     page: int = Field(default=1, ge=1, le=1000)
     sort: str | None = Field(default=None, description="Examples: 'score desc', 'date desc'.")
-    filters: str | None = Field(default=None, description="Optional PubTator search filters as JSON.")
+    filters: str | None = Field(
+        default=None, description="Optional PubTator search filters as JSON."
+    )
     sections: str | None = Field(default=None, description="Comma-separated document sections.")
 
 
@@ -31,14 +33,18 @@ class SearchBiomedicalEntitiesRequest(BaseModel):
 
 
 class FindEntityRelationsRequest(BaseModel):
-    entity_id: str = Field(min_length=1, description="PubTator entity ID such as @CHEMICAL_remdesivir.")
+    entity_id: str = Field(
+        min_length=1, description="PubTator entity ID such as @CHEMICAL_remdesivir."
+    )
     relation_type: str | None = None
     target_entity_type: str | None = None
 
 
 class SubmitTextAnnotationRequest(BaseModel):
     text: str = Field(min_length=1, max_length=10000)
-    bioconcepts: str = Field(default="Gene", description="Comma-separated PubTator bioconcepts or 'all'.")
+    bioconcepts: str = Field(
+        default="Gene", description="Comma-separated PubTator bioconcepts or 'all'."
+    )
 
 
 class GetTextAnnotationResultsRequest(BaseModel):

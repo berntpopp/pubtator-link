@@ -145,7 +145,9 @@ def create_pubtator_mcp() -> FastMCP:
         title="Search Biomedical Entities",
         annotations=READ_ONLY_OPEN_WORLD,
     )
-    async def search_biomedical_entities(request: SearchBiomedicalEntitiesRequest) -> dict[str, Any]:
+    async def search_biomedical_entities(
+        request: SearchBiomedicalEntitiesRequest,
+    ) -> dict[str, Any]:
         """Use this when a user needs canonical PubTator biomedical entity IDs. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         async with PubTator3Client() as client:
             return await search_biomedical_entities_impl(request, client=client)
