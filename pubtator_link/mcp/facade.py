@@ -5,10 +5,20 @@ from typing import Any
 
 from fastmcp import FastMCP
 
+from pubtator_link.api.client import PubTator3Client
 from pubtator_link.mcp.prompts import (
     annotate_research_text_prompt,
     review_pubtator_annotations_prompt,
     search_biomedical_literature_prompt,
+)
+from pubtator_link.mcp.service_adapters import (
+    fetch_pmc_annotations_impl,
+    fetch_publication_annotations_impl,
+    find_entity_relations_impl,
+    get_text_annotation_results_impl,
+    search_biomedical_entities_impl,
+    search_literature_impl,
+    submit_text_annotation_impl,
 )
 from pubtator_link.mcp.resources import (
     RESEARCH_USE_NOTICE,
@@ -28,6 +38,7 @@ from pubtator_link.mcp.tools import (
     SearchLiteratureRequest,
     SubmitTextAnnotationRequest,
 )
+from pubtator_link.services.publication_service import PublicationService
 
 
 def _install_inspection_managers(mcp: FastMCP) -> None:
@@ -70,41 +81,50 @@ def create_pubtator_mcp() -> FastMCP:
     @mcp.tool(name="pubtator.search_literature", title="Search Biomedical Literature")
     async def search_literature(request: SearchLiteratureRequest) -> dict[str, Any]:
         """Use this when a user needs PubMed literature search through PubTator3. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        raise NotImplementedError("Task 3 wires this tool to PubTator3 services.")
+        async with PubTator3Client() as client:
+            return await search_literature_impl(request, client=client)
 
     @mcp.tool(name="pubtator.fetch_publication_annotations", title="Fetch Publication Annotations")
     async def fetch_publication_annotations(
         request: FetchPublicationAnnotationsRequest,
     ) -> dict[str, Any]:
         """Use this when a user provides PubMed IDs and needs PubTator annotations. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        raise NotImplementedError("Task 3 wires this tool to PubTator3 services.")
+        async with PubTator3Client() as client:
+            service = PublicationService(client=client)
+            return await fetch_publication_annotations_impl(request, service=service)
 
     @mcp.tool(name="pubtator.fetch_pmc_annotations", title="Fetch PMC Annotations")
     async def fetch_pmc_annotations(request: FetchPmcAnnotationsRequest) -> dict[str, Any]:
         """Use this when a user provides PMC IDs and needs PubTator full-text annotations. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        raise NotImplementedError("Task 3 wires this tool to PubTator3 services.")
+        async with PubTator3Client() as client:
+            service = PublicationService(client=client)
+            return await fetch_pmc_annotations_impl(request, service=service)
 
     @mcp.tool(name="pubtator.search_biomedical_entities", title="Search Biomedical Entities")
     async def search_biomedical_entities(request: SearchBiomedicalEntitiesRequest) -> dict[str, Any]:
         """Use this when a user needs canonical PubTator biomedical entity IDs. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        raise NotImplementedError("Task 3 wires this tool to PubTator3 services.")
+        async with PubTator3Client() as client:
+            return await search_biomedical_entities_impl(request, client=client)
 
     @mcp.tool(name="pubtator.find_entity_relations", title="Find Entity Relations")
     async def find_entity_relations(request: FindEntityRelationsRequest) -> dict[str, Any]:
         """Use this when a user has a PubTator entity ID and needs literature-derived related entities. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        raise NotImplementedError("Task 3 wires this tool to PubTator3 services.")
+        async with PubTator3Client() as client:
+            return await find_entity_relations_impl(request, client=client)
 
     @mcp.tool(name="pubtator.submit_text_annotation", title="Submit Text Annotation")
     async def submit_text_annotation(request: SubmitTextAnnotationRequest) -> dict[str, Any]:
         """Use this when research text should be submitted for PubTator biomedical named entity recognition. Do not submit identifiable patient data to public demo instances."""
-        raise NotImplementedError("Task 3 wires this tool to PubTator3 services.")
+        async with PubTator3Client() as client:
+            return await submit_text_annotation_impl(request, client=client)
 
     @mcp.tool(name="pubtator.get_text_annotation_results", title="Get Text Annotation Results")
     async def get_text_annotation_results(
         request: GetTextAnnotationResultsRequest,
     ) -> dict[str, Any]:
         """Use this when a user has a PubTator text annotation session ID and needs its results."""
-        raise NotImplementedError("Task 3 wires this tool to PubTator3 services.")
+        async with PubTator3Client() as client:
+            return await get_text_annotation_results_impl(request, client=client)
 
     @mcp.resource("pubtator://capabilities")
     def capabilities() -> dict[str, Any]:
