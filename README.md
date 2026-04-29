@@ -318,24 +318,24 @@ pubtator-link/
 
 ## 🧪 Development
 
-### Setup Development Environment
+### Modern Development Workflow
+
+This project uses `uv` and `make` as the primary local development interface.
 
 ```bash
-# Install development dependencies
-pip install -e ".[dev]"
-
-# Run code quality checks
-ruff check .
-ruff format .
-mypy .
-
-# Run tests
-pytest
-pytest --cov=pubtator_link --cov-report=html
-
-# Start development server
-python server.py --transport unified --log-level DEBUG
+make install       # install project and dev dependencies
+make lock          # update uv.lock
+make format        # format with Ruff
+make lint          # lint with Ruff
+make typecheck     # run mypy
+make test          # run tests
+make test-fast     # run tests in parallel
+make ci-local      # run local CI checks
 ```
+
+Dependencies are locked in `uv.lock`; update them with `uv lock` or
+`make lock`. Agentic coding tools should follow `AGENTS.md`; Claude Code also
+loads the lean `CLAUDE.md` entrypoint.
 
 ### Testing
 
@@ -468,4 +468,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Status**: Production Ready | **Version**: 1.0.0 | **Python**: 3.9+
+**Status**: Production Ready | **Version**: 1.0.0 | **Python**: 3.11+

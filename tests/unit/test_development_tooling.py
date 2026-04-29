@@ -122,3 +122,12 @@ def test_claude_md_is_lean_and_references_agents() -> None:
 
     assert "@AGENTS.md" in claude
     assert len(claude.splitlines()) <= 20
+
+
+def test_readme_documents_modern_development_commands() -> None:
+    readme = Path("README.md").read_text()
+
+    assert "make install" in readme
+    assert "make ci-local" in readme
+    assert "uv lock" in readme
+    assert "AGENTS.md" in readme
