@@ -95,6 +95,31 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
+## Nginx Proxy Manager Deployment
+
+1. Copy `docker/.env.npm.example` to `docker/.env.npm` and set your domain.
+2. Ensure the NPM Docker network exists. The default is `npm_default`.
+3. Start PubTator-Link without publishing host ports:
+
+```bash
+docker compose --env-file docker/.env.npm \
+  -f docker/docker-compose.yml \
+  -f docker/docker-compose.prod.yml \
+  -f docker/docker-compose.npm.yml \
+  up -d --build
+```
+
+4. In Nginx Proxy Manager, create a Proxy Host:
+   - Domain Names: your `PUBTATOR_LINK_PUBLIC_DOMAIN`
+   - Scheme: `http`
+   - Forward Hostname / IP: `pubtator_link_server`
+   - Forward Port: `8000`
+   - Enable Websockets Support
+   - Enable Block Common Exploits
+   - Request a Let's Encrypt certificate and force SSL
+
+The MCP endpoint is available at `https://your-domain.example/mcp`.
+
 ### Container Registry
 ```bash
 # Build and push
