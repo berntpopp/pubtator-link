@@ -21,6 +21,7 @@ from .api.routes import (
 from .api.routes.dependencies import cleanup_dependencies
 from .config import settings
 from .logging_config import configure_logging
+from .mcp.facade import create_pubtator_mcp
 from .services.publication_service import PublicationService
 
 
@@ -64,13 +65,28 @@ class UnifiedServerManager:
         await cleanup_dependencies()
         self.logger.info("Server shutdown complete")
 
-    def create_app(self) -> FastAPI:
+    def create_app(self, *, include_mcp: bool = False) -> FastAPI:
         """Create FastAPI application."""
+        mcp_http_app = None
+        if include_mcp:
+            mcp = create_pubtator_mcp()
+            mcp_http_app = mcp.http_app(path="/", json_response=True, stateless_http=True)
+            self.mcp = mcp
+
+        @asynccontextmanager
+        async def combined_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+            async with self.lifespan(app):
+                if mcp_http_app is None:
+                    yield
+                else:
+                    async with mcp_http_app.lifespan(mcp_http_app):
+                        yield
+
         app = FastAPI(
             title="PubTator-Link",
             description="A unified server for the PubTator3 biomedical literature API",
             version="1.0.0",
-            lifespan=self.lifespan,
+            lifespan=combined_lifespan,
             docs_url="/docs" if settings.enable_docs else None,
             redoc_url="/redoc" if settings.enable_docs else None,
         )
@@ -111,6 +127,9 @@ class UnifiedServerManager:
         app.include_router(relations_router)
         app.include_router(annotations_router)
         app.include_router(cache_router)
+
+        if mcp_http_app is not None:
+            app.mount(settings.mcp_path, mcp_http_app)
 
         self.app = app
         return app
@@ -166,15 +185,11 @@ class UnifiedServerManager:
     ) -> None:
         """Start unified server (HTTP + MCP)."""
         # Create FastAPI app
-        app = self.create_app()
+        app = self.create_app(include_mcp=True)
 
-        # Create and mount MCP server
-        self.mcp = await self.create_mcp_server(app)
-        app.mount("/mcp", self.mcp.http_app())
-
-        self.logger.info("MCP HTTP interface mounted at /mcp")
+        self.logger.info("MCP Streamable HTTP facade mounted", path=settings.mcp_path)
         self.logger.info(f"REST API available at http://{host}:{port}")
-        self.logger.info(f"MCP HTTP available at http://{host}:{port}/mcp")
+        self.logger.info(f"MCP HTTP available at http://{host}:{port}{settings.mcp_path}")
         self.logger.info(f"API documentation at http://{host}:{port}/docs")
 
         config = uvicorn.Config(
@@ -246,4 +261,4 @@ class UnifiedServerManager:
 
 # Global app instance for WSGI compatibility (used by Gunicorn)
 _manager = UnifiedServerManager()
-app = _manager.create_app()
+app = _manager.create_app(include_mcp=settings.transport == "unified")

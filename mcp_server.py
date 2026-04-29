@@ -108,8 +108,7 @@ def main() -> None:
             # Import after environment setup
             import asyncio
 
-            from pubtator_link.logging_config import configure_logging
-            from pubtator_link.server_manager import UnifiedServerManager
+            from pubtator_link.mcp.facade import create_pubtator_mcp
 
             # CRITICAL: Patch FastMCP banner display after import
             try:
@@ -130,14 +129,8 @@ def main() -> None:
             # Use sys.stderr.write instead of print to avoid T201 linting error
             sys.stderr.write(f"Import output: {import_output}\n")
 
-        # Configure logging for STDIO mode (stderr only)
-        logger = configure_logging()
-
-        # Create server manager
-        server_manager = UnifiedServerManager(logger=logger)
-
-        # Run STDIO server with stdout protection
-        asyncio.run(server_manager.start_stdio_server())
+        mcp = create_pubtator_mcp()
+        asyncio.run(mcp.run_async(transport="stdio"))
 
     except KeyboardInterrupt:
         # Clean exit on Ctrl+C - no output to stdout
