@@ -1,5 +1,38 @@
 from __future__ import annotations
 
+EXPECTED_PUBLIC_TOOL_NAMES = {
+    "pubtator.get_server_capabilities",
+    "pubtator.search_literature",
+    "pubtator.fetch_publication_annotations",
+    "pubtator.get_publication_passages",
+    "pubtator.estimate_publication_context",
+    "pubtator.fetch_pmc_annotations",
+    "pubtator.search_biomedical_entities",
+    "pubtator.find_entity_relations",
+    "pubtator.submit_text_annotation",
+    "pubtator.get_text_annotation_results",
+    "pubtator.index_review_evidence",
+    "pubtator.inspect_review_index",
+    "pubtator.retrieve_review_context",
+    "pubtator.retrieve_review_context_batch",
+}
+
+EXPECTED_RESOURCE_URIS = {
+    "pubtator://capabilities",
+    "pubtator://bioconcepts",
+    "pubtator://relation-types",
+    "pubtator://formats",
+    "pubtator://text-processing",
+    "pubtator://compliance/research-use",
+}
+
+EXPECTED_PROMPT_NAMES = {
+    "search_biomedical_literature",
+    "annotate_research_text",
+    "review_pubtator_annotations",
+    "review_rerag_workflow",
+}
+
 
 def test_server_instructions_are_tool_search_friendly() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
@@ -60,18 +93,7 @@ def test_curated_facade_registers_pubtator_tools() -> None:
     mcp = create_pubtator_mcp()
     tool_names = set(mcp._tool_manager._tools.keys())
 
-    assert "pubtator.search_literature" in tool_names
-    assert "pubtator.fetch_publication_annotations" in tool_names
-    assert "pubtator.fetch_pmc_annotations" in tool_names
-    assert "pubtator.search_biomedical_entities" in tool_names
-    assert "pubtator.find_entity_relations" in tool_names
-    assert "pubtator.submit_text_annotation" in tool_names
-    assert "pubtator.get_text_annotation_results" in tool_names
-    assert "pubtator.get_publication_passages" in tool_names
-    assert "pubtator.estimate_publication_context" in tool_names
-    assert "pubtator.inspect_review_index" in tool_names
-    assert "pubtator.retrieve_review_context_batch" in tool_names
-    assert "pubtator.get_server_capabilities" in tool_names
+    assert tool_names == EXPECTED_PUBLIC_TOOL_NAMES
     assert "pubtator.clear_api_cache" not in tool_names
 
 
@@ -112,6 +134,25 @@ def test_common_mcp_tools_are_flat_and_unversioned() -> None:
     assert "year_max" in search_schema["properties"]
 
 
+def test_review_context_schema_defaults_are_stable() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp()
+    tools = mcp._tool_manager._tools
+
+    single_schema = tools["pubtator.retrieve_review_context"].parameters["properties"]
+    assert single_schema["max_passages"]["default"] == 8
+    assert single_schema["max_chars"]["default"] == 6000
+    assert single_schema["include_diagnostics"]["default"] is False
+    assert single_schema["table_mode"]["default"] == "preview"
+
+    batch_schema = tools["pubtator.retrieve_review_context_batch"].parameters["properties"]
+    assert batch_schema["response_mode"]["default"] == "compact"
+    assert batch_schema["budget_strategy"]["default"] == "query_fair"
+    assert batch_schema["include_diagnostics"]["default"] is True
+    assert batch_schema["table_mode"]["default"] == "preview"
+
+
 def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
@@ -146,6 +187,15 @@ def test_curated_facade_registers_resources_and_prompts() -> None:
     assert "annotate_research_text" in mcp._prompt_manager._prompts
 
 
+def test_curated_facade_public_resources_and_prompts_are_stable() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp()
+
+    assert set(mcp._resource_manager._resources) == EXPECTED_RESOURCE_URIS
+    assert set(mcp._prompt_manager._prompts) == EXPECTED_PROMPT_NAMES
+
+
 def test_tool_metadata_is_research_scoped() -> None:
     from pubtator_link.mcp.resources import RESEARCH_USE_NOTICE
 
@@ -173,6 +223,25 @@ def test_public_hosted_tools_have_expected_annotations() -> None:
         assert tool.annotations.destructiveHint is False
 
 
+def test_write_capable_mcp_tools_have_expected_annotations() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp()
+    tools = mcp._tool_manager._tools
+
+    annotation_submit = tools["pubtator.submit_text_annotation"].annotations
+    assert annotation_submit.readOnlyHint is False
+    assert annotation_submit.destructiveHint is False
+    assert annotation_submit.idempotentHint is False
+    assert annotation_submit.openWorldHint is True
+
+    review_index = tools["pubtator.index_review_evidence"].annotations
+    assert review_index.readOnlyHint is False
+    assert review_index.destructiveHint is False
+    assert review_index.idempotentHint is True
+    assert review_index.openWorldHint is True
+
+
 def test_open_world_tools_are_marked_open_world() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
@@ -194,7 +263,7 @@ def test_capabilities_resource_tool_names_are_registered() -> None:
         advertised_tools.update(group_tools)
     advertised_tools.update(capabilities["review_rerag"]["tools"])
 
-    assert advertised_tools <= registered_tools
+    assert advertised_tools == registered_tools == EXPECTED_PUBLIC_TOOL_NAMES
 
 
 def test_capabilities_include_context_management_cheatsheet() -> None:
