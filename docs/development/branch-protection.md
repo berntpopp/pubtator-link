@@ -10,10 +10,10 @@ Recommended branch protection for `main`:
 
 Required status checks:
 
-- CI
-- Docker
-- Security CodeQL
-- Security Dependency Review
+- `CI / Format, lint, typecheck, tests, and coverage`
+- `Docker / Docker build and Compose validation`
+- `Security / CodeQL`
+- `Security / Dependency review`
 
 The CI check runs `make ci-local` and `make test-cov`, including the coverage
 baseline enforced in `pyproject.toml`.

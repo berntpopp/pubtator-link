@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   docker:
+    name: Docker build and Compose validation
     runs-on: ubuntu-latest
 
     steps:

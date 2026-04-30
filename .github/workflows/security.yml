@@ -10,13 +10,14 @@ on:
 
 permissions:
   contents: read
-  security-events: write
-  pull-requests: read
 
 jobs:
   codeql:
     name: CodeQL
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
 
     steps:
       - name: Checkout
@@ -34,9 +35,12 @@ jobs:
         uses: github/codeql-action/analyze@v3
 
   dependency-review:
-    name: Dependency Review
+    name: Dependency review
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
 
     steps:
       - name: Checkout

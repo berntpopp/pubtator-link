@@ -4,10 +4,17 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 
 def _pyproject() -> dict[str, object]:
     return tomllib.loads(Path("pyproject.toml").read_text())
+
+
+def _workflow(path: str) -> dict[str, Any]:
+    return yaml.safe_load(Path(path).read_text())
 
 
 def test_python_baseline_is_modern_and_consistent() -> None:
@@ -156,22 +163,43 @@ def test_coverage_threshold_matches_verified_baseline() -> None:
 
 
 def test_github_actions_workflows_exist_and_use_make_targets() -> None:
-    ci = Path(".github/workflows/ci.yml").read_text()
-    docker = Path(".github/workflows/docker.yml").read_text()
-    security = Path(".github/workflows/security.yml").read_text()
+    ci = _workflow(".github/workflows/ci.yml")
+    docker = _workflow(".github/workflows/docker.yml")
+    security = _workflow(".github/workflows/security.yml")
 
-    assert "permissions:" in ci
-    assert "contents: read" in ci
-    assert "uv sync --group dev --frozen" in ci
-    assert "make ci-local" in ci
-    assert "make test-cov" in ci
+    assert ci["permissions"] == {"contents": "read"}
+    quality_job = ci["jobs"]["quality"]
+    assert quality_job["name"] == "Format, lint, typecheck, tests, and coverage"
+    ci_commands = {step.get("run") for step in quality_job["steps"]}
+    assert "uv sync --group dev --frozen" in ci_commands
+    assert "make ci-local" in ci_commands
+    assert "make test-cov" in ci_commands
 
-    assert "make docker-prod-config" in docker
-    assert "make docker-npm-config" in docker
-    assert "docker build -f docker/Dockerfile -t pubtator-link:ci ." in docker
+    assert docker["permissions"] == {"contents": "read"}
+    docker_job = docker["jobs"]["docker"]
+    assert docker_job["name"] == "Docker build and Compose validation"
+    docker_commands = {step.get("run") for step in docker_job["steps"]}
+    assert "make docker-prod-config" in docker_commands
+    assert "make docker-npm-config" in docker_commands
+    assert "docker build -f docker/Dockerfile -t pubtator-link:ci ." in docker_commands
 
-    assert "github/codeql-action/init" in security
-    assert "actions/dependency-review-action" in security
+    assert security["permissions"] == {"contents": "read"}
+    codeql_job = security["jobs"]["codeql"]
+    dependency_review_job = security["jobs"]["dependency-review"]
+    assert codeql_job["name"] == "CodeQL"
+    assert codeql_job["permissions"] == {"contents": "read", "security-events": "write"}
+    assert dependency_review_job["name"] == "Dependency review"
+    assert dependency_review_job["permissions"] == {
+        "contents": "read",
+        "pull-requests": "read",
+    }
+    security_actions = {
+        step.get("uses")
+        for job in security["jobs"].values()
+        for step in job["steps"]
+    }
+    assert "github/codeql-action/init@v3" in security_actions
+    assert "actions/dependency-review-action@v4" in security_actions
 
 
 def test_pull_request_template_contains_quality_checklist() -> None:
@@ -190,4 +218,7 @@ def test_branch_protection_docs_define_required_checks() -> None:
     assert "make ci-local" in docs
     assert "coverage" in docs
     assert "Docker validation" in docs
-    assert "CodeQL" in docs
+    assert "CI / Format, lint, typecheck, tests, and coverage" in docs
+    assert "Docker / Docker build and Compose validation" in docs
+    assert "Security / CodeQL" in docs
+    assert "Security / Dependency review" in docs

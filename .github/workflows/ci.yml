@@ -10,7 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  ci:
+  quality:
+    name: Format, lint, typecheck, tests, and coverage
     runs-on: ubuntu-latest
 
     steps:
