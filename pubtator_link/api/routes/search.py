@@ -5,13 +5,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from ...models.requests import (
-    SearchFilters,
-    SearchRequest,
-    SearchSection,
-    SearchSortOrder,
-)
+from ...models.requests import SearchRequest, SearchSection, SearchSortOrder
 from ...models.responses import SearchResponse, SearchResult
+from ..search_filters import merge_search_filters
 from .dependencies import (
     ClientDep,
     handle_api_errors,
@@ -222,6 +218,26 @@ async def search_publications(
             },
         ),
     ] = None,
+    publication_types: Annotated[
+        list[str] | None,
+        Query(description="Publication type filters merged into filters.type"),
+    ] = None,
+    year_min: Annotated[
+        int | None,
+        Query(
+            description="Minimum publication year merged into filters.year.min",
+            ge=1800,
+            le=2030,
+        ),
+    ] = None,
+    year_max: Annotated[
+        int | None,
+        Query(
+            description="Maximum publication year merged into filters.year.max",
+            ge=1800,
+            le=2030,
+        ),
+    ] = None,
     sections: Annotated[
         str | None,
         Query(
@@ -335,19 +351,22 @@ async def search_publications(
     # Validate page number
     validated_page = validate_page_number(page)
 
-    # Parse filters if provided
-    parsed_filters = None
-    if filters:
-        try:
-            import json
-
-            filter_data = json.loads(filters)
-            parsed_filters = SearchFilters(**filter_data)
-        except (json.JSONDecodeError, ValueError) as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid filters JSON format: {e!s}",
-            ) from e
+    try:
+        merged_filters = merge_search_filters(
+            filters=filters,
+            publication_types=publication_types,
+            year_min=year_min,
+            year_max=year_max,
+        )
+    except ValueError as e:
+        detail = str(e)
+        status_code = (
+            status.HTTP_400_BAD_REQUEST
+            if detail.startswith("Invalid filters JSON")
+            or detail == "filters must be a JSON object"
+            else 422
+        )
+        raise HTTPException(status_code=status_code, detail=detail) from e
 
     # Parse sections if provided
     parsed_sections = None
@@ -367,7 +386,7 @@ async def search_publications(
         text=text.strip(),
         page=validated_page,
         sort=sort,
-        filters=parsed_filters,
+        filters=None,
         sections=parsed_sections,
     )
 
@@ -377,7 +396,7 @@ async def search_publications(
             text=request.text,
             page=request.page,
             sort=request.sort.value if request.sort else None,
-            filters=request.filters.to_json_string() if request.filters else None,
+            filters=merged_filters,
             sections=(",".join([s.value for s in request.sections]) if request.sections else None),
         )
 
@@ -393,16 +412,30 @@ async def search_publications(
                 abstract=item.get("abstract"),
                 authors=item.get("authors", []),
                 journal=item.get("journal"),
-                pub_date=item.get("pub_date"),
+                pub_date=item.get("pub_date")
+                or item.get("meta_date_publication")
+                or item.get("date"),
                 annotations=item.get("annotations", []),
                 score=item.get("score"),
+                pmcid=item.get("pmcid"),
+                doi=item.get("doi"),
+                date=item.get("date"),
+                text_hl=item.get("text_hl"),
+                citations=item.get("citations"),
+                volume=item.get("volume") or item.get("meta_volume"),
+                issue=item.get("issue") or item.get("meta_issue"),
+                pages=item.get("pages") or item.get("meta_pages"),
+                publication_types=item.get("publication_types", []),
             )
             search_results.append(search_result)
 
         # Extract pagination information
-        total_results = result.get("total", 0)
-        per_page = result.get("per_page", 20)
-        total_pages = (total_results + per_page - 1) // per_page  # Ceiling division
+        total_results = result.get("count", result.get("total", 0))
+        per_page = result.get("page_size", result.get("per_page", 20))
+        total_pages = result.get(
+            "total_pages",
+            (total_results + per_page - 1) // per_page if per_page else 0,
+        )
 
         return SearchResponse(
             success=True,

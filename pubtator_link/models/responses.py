@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class BaseResponse(BaseModel):
@@ -107,6 +107,23 @@ class EntityAutocompleteResponse(BaseResponse):
 class SearchResult(BaseModel):
     """Individual search result."""
 
+    @model_validator(mode="before")
+    @classmethod
+    def map_pubtator_metadata(cls, data: Any) -> Any:
+        """Map PubTator3 metadata aliases into public response fields."""
+        if not isinstance(data, dict):
+            return data
+        mapped = dict(data)
+        if mapped.get("pub_date") is None:
+            mapped["pub_date"] = mapped.get("meta_date_publication") or mapped.get("date")
+        if mapped.get("volume") is None and mapped.get("meta_volume") is not None:
+            mapped["volume"] = mapped["meta_volume"]
+        if mapped.get("issue") is None and mapped.get("meta_issue") is not None:
+            mapped["issue"] = mapped["meta_issue"]
+        if mapped.get("pages") is None and mapped.get("meta_pages") is not None:
+            mapped["pages"] = mapped["meta_pages"]
+        return mapped
+
     pmid: str = Field(..., description="PubMed ID")
     title: str = Field(..., description="Article title")
 
@@ -129,6 +146,12 @@ class SearchResult(BaseModel):
     date: str | None = Field(default=None, description="Publication date ISO format")
     text_hl: str | None = Field(default=None, description="Highlighted text snippet")
     citations: dict[str, str] | None = Field(default=None, description="Citation formats")
+    volume: str | None = Field(default=None, description="Journal volume")
+    issue: str | None = Field(default=None, description="Journal issue")
+    pages: str | None = Field(default=None, description="Article pages")
+    publication_types: list[str] = Field(
+        default_factory=list, description="Publication type metadata"
+    )
 
     @field_validator("pub_date", mode="before")
     @classmethod

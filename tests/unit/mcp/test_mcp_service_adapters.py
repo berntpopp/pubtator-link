@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import ClassVar
 
 import pytest
@@ -326,6 +327,128 @@ async def test_search_literature_adapter_maps_flat_sections() -> None:
     assert result["success"] is True
     assert result["query"] == "BRCA1"
     assert result["results"][0]["pmid"] == "29355051"
+
+
+@pytest.mark.asyncio
+async def test_search_literature_adapter_maps_pubtator3_count_and_metadata() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class FakeClient:
+        async def search_publications(
+            self,
+            text: str,
+            page: int,
+            sort: str | None,
+            filters: str | None,
+            sections: str | None,
+        ) -> dict[str, object]:
+            return {
+                "results": [
+                    {
+                        "pmid": 39596913,
+                        "title": "Guideline title",
+                        "journal": "Ann Rheum Dis",
+                        "authors": ["Smith J"],
+                        "date": "2024",
+                        "doi": "10.1000/test",
+                        "pmcid": "PMC123",
+                        "meta_date_publication": "2024 Oct 22",
+                        "meta_volume": "83",
+                        "meta_issue": "11",
+                        "meta_pages": "123-130",
+                        "publication_types": ["Guideline", "Practice Guideline"],
+                        "citations": {"nlm": "Ann Rheum Dis. PMID: 39596913"},
+                        "score": 12.5,
+                    }
+                ],
+                "count": 2776,
+                "total_pages": 278,
+                "page_size": 10,
+            }
+
+    result = await search_literature_impl(client=FakeClient(), text="guideline")
+
+    item = result["results"][0]
+    assert result["total_results"] == 2776
+    assert result["total_pages"] == 278
+    assert result["per_page"] == 10
+    assert item["pmid"] == "39596913"
+    assert item["date"] == "2024"
+    assert item["pub_date"] == "2024 Oct 22"
+    assert item["doi"] == "10.1000/test"
+    assert item["pmcid"] == "PMC123"
+    assert item["volume"] == "83"
+    assert item["issue"] == "11"
+    assert item["pages"] == "123-130"
+    assert item["publication_types"] == ["Guideline", "Practice Guideline"]
+    assert item["citations"]["nlm"].endswith("39596913")
+
+
+@pytest.mark.asyncio
+async def test_search_literature_adapter_merges_flat_filters() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class RecordingClient:
+        filters = None
+
+        async def search_publications(
+            self,
+            text: str,
+            page: int,
+            sort: str | None,
+            filters: str | None,
+            sections: str | None,
+        ) -> dict[str, object]:
+            self.filters = filters
+            return {"results": [], "count": 0, "total_pages": 0, "page_size": 10}
+
+    client = RecordingClient()
+
+    await search_literature_impl(
+        client=client,
+        text="guideline",
+        filters='{"journal":["Ann Rheum Dis"]}',
+        publication_types=["Guideline", "Practice Guideline"],
+        year_min=2020,
+        year_max=2026,
+    )
+
+    assert json.loads(client.filters) == {
+        "journal": ["Ann Rheum Dis"],
+        "type": ["Guideline", "Practice Guideline"],
+        "year": {"min": 2020, "max": 2026},
+    }
+
+
+@pytest.mark.asyncio
+async def test_search_literature_adapter_rejects_filter_conflict() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class RecordingClient:
+        called = False
+
+        async def search_publications(
+            self,
+            text: str,
+            page: int,
+            sort: str | None,
+            filters: str | None,
+            sections: str | None,
+        ) -> dict[str, object]:
+            self.called = True
+            return {"results": [], "count": 0}
+
+    client = RecordingClient()
+
+    with pytest.raises(ValueError, match="type"):
+        await search_literature_impl(
+            client=client,
+            text="guideline",
+            filters='{"type":["Review"]}',
+            publication_types=["Guideline"],
+        )
+
+    assert client.called is False
 
 
 @pytest.mark.asyncio

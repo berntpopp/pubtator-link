@@ -84,6 +84,10 @@ def test_common_mcp_tools_are_flat_and_unversioned() -> None:
 
     batch_schema = tools["pubtator.retrieve_review_context_batch"].parameters
     assert batch_schema["properties"]["response_mode"]["default"] == "compact"
+    search_schema = tools["pubtator.search_literature"].parameters
+    assert "publication_types" in search_schema["properties"]
+    assert "year_min" in search_schema["properties"]
+    assert "year_max" in search_schema["properties"]
 
 
 def test_public_mcp_tools_use_flat_arguments_consistently() -> None:

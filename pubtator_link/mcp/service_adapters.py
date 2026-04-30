@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal, cast
 
 from pubtator_link.api.client import PubTator3Client
+from pubtator_link.api.search_filters import merge_search_filters
 from pubtator_link.config import text_processing_config
 from pubtator_link.models.publication_passages import (
     PublicationContextEstimateRequest,
@@ -148,14 +149,23 @@ async def search_literature_impl(
     page: int = 1,
     sort: str | None = None,
     filters: str | None = None,
+    publication_types: list[str] | None = None,
+    year_min: int | None = None,
+    year_max: int | None = None,
     sections: list[str] | None = None,
 ) -> dict[str, Any]:
     normalized_text = text.strip()
+    merged_filters = merge_search_filters(
+        filters=filters,
+        publication_types=publication_types,
+        year_min=year_min,
+        year_max=year_max,
+    )
     result = await client.search_publications(
         text=normalized_text,
         page=page,
         sort=sort,
-        filters=filters,
+        filters=merged_filters,
         sections=",".join(sections) if sections else None,
     )
     search_results = [
@@ -165,7 +175,7 @@ async def search_literature_impl(
             abstract=item.get("abstract"),
             authors=item.get("authors", []),
             journal=item.get("journal"),
-            pub_date=item.get("pub_date"),
+            pub_date=item.get("pub_date") or item.get("meta_date_publication") or item.get("date"),
             annotations=item.get("annotations", []),
             score=item.get("score"),
             pmcid=item.get("pmcid"),
@@ -173,12 +183,21 @@ async def search_literature_impl(
             date=item.get("date"),
             text_hl=item.get("text_hl"),
             citations=item.get("citations"),
+            volume=item.get("volume") or item.get("meta_volume"),
+            issue=item.get("issue") or item.get("meta_issue"),
+            pages=item.get("pages") or item.get("meta_pages"),
+            publication_types=item.get("publication_types", []),
         )
         for item in result.get("results", [])
     ]
-    total_results = int(result.get("total", 0))
-    per_page = int(result.get("per_page", 20))
-    total_pages = (total_results + per_page - 1) // per_page if per_page else 0
+    total_results = int(result.get("count", result.get("total", 0)))
+    per_page = int(result.get("page_size", result.get("per_page", 20)))
+    total_pages = int(
+        result.get(
+            "total_pages",
+            (total_results + per_page - 1) // per_page if per_page else 0,
+        )
+    )
     return SearchResponse(
         success=True,
         query=normalized_text,

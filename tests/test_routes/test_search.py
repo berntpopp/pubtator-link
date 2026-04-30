@@ -1,5 +1,6 @@
 """Tests for publication search route endpoints."""
 
+import json
 from unittest.mock import patch
 
 import pytest
@@ -303,3 +304,94 @@ class TestSearchRoutes:
         assert response.status_code == 200
         data = response.json()
         assert "relations:ANY" in data["query"]
+
+    @patch.object(PubTator3Client, "search_publications")
+    def test_search_publications_maps_pubtator3_count_and_metadata(self, mock_search, test_client):
+        """Test PubTator3 count metadata and structured result metadata mapping."""
+        mock_search.return_value = {
+            "results": [
+                {
+                    "pmid": 39596913,
+                    "title": "Guideline title",
+                    "journal": "Ann Rheum Dis",
+                    "authors": ["Smith J"],
+                    "date": "2024",
+                    "doi": "10.1000/test",
+                    "pmcid": "PMC123",
+                    "meta_date_publication": "2024 Oct 22",
+                    "meta_volume": "83",
+                    "meta_issue": "11",
+                    "meta_pages": "123-130",
+                    "publication_types": ["Guideline", "Practice Guideline"],
+                    "citations": {"nlm": "Ann Rheum Dis. PMID: 39596913"},
+                    "score": 12.5,
+                }
+            ],
+            "count": 2776,
+            "total_pages": 278,
+            "page_size": 10,
+        }
+
+        response = test_client.get("/api/search/", params={"text": "guideline"})
+
+        assert response.status_code == 200
+        data = response.json()
+        item = data["results"][0]
+        assert data["total_results"] == 2776
+        assert data["total_pages"] == 278
+        assert data["per_page"] == 10
+        assert item["pmid"] == "39596913"
+        assert item["date"] == "2024"
+        assert item["pub_date"] == "2024 Oct 22"
+        assert item["doi"] == "10.1000/test"
+        assert item["pmcid"] == "PMC123"
+        assert item["volume"] == "83"
+        assert item["issue"] == "11"
+        assert item["pages"] == "123-130"
+        assert item["publication_types"] == ["Guideline", "Practice Guideline"]
+        assert item["citations"]["nlm"].endswith("39596913")
+
+    @patch.object(PubTator3Client, "search_publications")
+    def test_search_publications_merges_flat_filters(self, mock_search, test_client):
+        """Test route merges raw JSON filters with flat filter query params."""
+        mock_search.return_value = {"results": [], "count": 0, "total_pages": 0, "page_size": 10}
+
+        response = test_client.get(
+            "/api/search/",
+            params=[
+                ("text", "guideline"),
+                ("filters", '{"journal":["Ann Rheum Dis"]}'),
+                ("publication_types", "Guideline"),
+                ("publication_types", "Practice Guideline"),
+                ("year_min", "2020"),
+                ("year_max", "2026"),
+            ],
+        )
+
+        assert response.status_code == 200
+        call_kwargs = mock_search.call_args.kwargs
+        assert call_kwargs["filters"] == (
+            '{"journal":["Ann Rheum Dis"],"type":["Guideline","Practice Guideline"],'
+            '"year":{"min":2020,"max":2026}}'
+        )
+        assert json.loads(call_kwargs["filters"]) == {
+            "journal": ["Ann Rheum Dis"],
+            "type": ["Guideline", "Practice Guideline"],
+            "year": {"min": 2020, "max": 2026},
+        }
+
+    @patch.object(PubTator3Client, "search_publications")
+    def test_search_publications_rejects_flat_filter_conflict(self, mock_search, test_client):
+        """Test route rejects duplicate raw and flat publication type filters."""
+        response = test_client.get(
+            "/api/search/",
+            params=[
+                ("text", "guideline"),
+                ("filters", '{"type":["Review"]}'),
+                ("publication_types", "Guideline"),
+            ],
+        )
+
+        assert response.status_code == 422
+        assert "type" in response.text
+        mock_search.assert_not_called()

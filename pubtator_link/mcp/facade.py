@@ -136,9 +136,12 @@ def create_pubtator_mcp() -> FastMCP:
         page: int = 1,
         sort: str | None = None,
         filters: str | None = None,
+        publication_types: list[str] | None = None,
+        year_min: int | None = None,
+        year_max: int | None = None,
         sections: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Use this when a user needs PubMed literature search through PubTator3. Use short biomedical queries, optional sort such as 'score desc' or 'date desc', and optional section filters. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user needs PubMed literature search through PubTator3. Use short biomedical queries, optional sort such as 'score desc' or 'date desc', flat publication/year filters, raw filters JSON, and optional section filters. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         async with PubTator3Client() as client:
             return await search_literature_impl(
                 client=client,
@@ -146,6 +149,9 @@ def create_pubtator_mcp() -> FastMCP:
                 page=page,
                 sort=sort,
                 filters=filters,
+                publication_types=publication_types,
+                year_min=year_min,
+                year_max=year_max,
                 sections=sections,
             )
 

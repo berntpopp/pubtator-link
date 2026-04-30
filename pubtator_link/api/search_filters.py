@@ -1,0 +1,46 @@
+"""Helpers for PubTator3 search filter parameters."""
+
+import json
+from typing import Any
+
+
+def merge_search_filters(
+    filters: str | None,
+    publication_types: list[str] | None,
+    year_min: int | None,
+    year_max: int | None,
+) -> str | None:
+    """Merge raw PubTator3 filters JSON with flat public filter arguments."""
+    if year_min is not None and year_max is not None and year_max < year_min:
+        raise ValueError("year_max must be greater than or equal to year_min")
+
+    merged: dict[str, Any] = {}
+    if filters:
+        try:
+            parsed = json.loads(filters)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid filters JSON format: {e}") from e
+        if not isinstance(parsed, dict):
+            raise ValueError("filters must be a JSON object")
+        merged.update(parsed)
+
+    if publication_types:
+        if "type" in merged:
+            raise ValueError(
+                "filters already contains type; use either filters.type or publication_types"
+            )
+        merged["type"] = publication_types
+
+    if year_min is not None or year_max is not None:
+        if "year" in merged:
+            raise ValueError(
+                "filters already contains year; use either filters.year or year_min/year_max"
+            )
+        year_filter: dict[str, int] = {}
+        if year_min is not None:
+            year_filter["min"] = year_min
+        if year_max is not None:
+            year_filter["max"] = year_max
+        merged["year"] = year_filter
+
+    return json.dumps(merged, separators=(",", ":")) if merged else None
