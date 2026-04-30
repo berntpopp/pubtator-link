@@ -27,14 +27,15 @@ class ReviewPreparationQueue:
         self.logger = logger or logging.getLogger(__name__)
         self._queue: asyncio.Queue[tuple[str, str, str, str]] = asyncio.Queue()
         self._queued: set[tuple[str, str]] = set()
+        self._queued_lock = asyncio.Lock()
         self._workers: list[asyncio.Task[None]] = []
 
     async def start(self) -> None:
         """Repair abandoned jobs and start background workers."""
-        await self.repair_startup_jobs()
         if self._workers:
             return
 
+        await self.repair_startup_jobs()
         for index in range(self.config.prep_concurrency):
             self._workers.append(
                 asyncio.create_task(
@@ -82,13 +83,19 @@ class ReviewPreparationQueue:
         source_value: str,
     ) -> bool:
         key = (review_id, source_id)
-        if key in self._queued:
-            return False
+        async with self._queued_lock:
+            if key in self._queued:
+                return False
+            self._queued.add(key)
 
-        await self.repository.enqueue_preparation_job(review_id, source_id, source_kind)
-        self._queued.add(key)
-        await self._queue.put((review_id, source_id, source_kind, source_value))
-        return True
+        try:
+            await self.repository.enqueue_preparation_job(review_id, source_id, source_kind)
+            await self._queue.put((review_id, source_id, source_kind, source_value))
+            return True
+        except Exception:
+            async with self._queued_lock:
+                self._queued.discard(key)
+            raise
 
     async def _worker(self) -> None:
         while True:
@@ -151,5 +158,6 @@ class ReviewPreparationQueue:
                     error=str(exc)[:500],
                 )
             finally:
-                self._queued.discard((review_id, source_id))
+                async with self._queued_lock:
+                    self._queued.discard((review_id, source_id))
                 self._queue.task_done()

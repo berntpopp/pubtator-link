@@ -1,4 +1,6 @@
 import socket
+from types import TracebackType
+from typing import Any
 
 import httpx
 import pytest
@@ -126,3 +128,52 @@ async def test_accepts_small_pdf_body(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert body == pdf_body
     assert content_type == "application/pdf; charset=binary"
+
+
+@pytest.mark.asyncio
+async def test_fetch_disables_httpx_environment_proxy_trust(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _public_dns(monkeypatch)
+    captured_kwargs: dict[str, Any] = {}
+
+    class RecordingClient:
+        def __init__(self, **kwargs: Any) -> None:
+            captured_kwargs.update(kwargs)
+
+        async def __aenter__(self) -> "RecordingClient":
+            return self
+
+        async def __aexit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc: BaseException | None,
+            traceback: TracebackType | None,
+        ) -> None:
+            return None
+
+        def stream(self, _method: str, _url: str) -> Any:
+            class StreamContext:
+                async def __aenter__(self) -> httpx.Response:
+                    return httpx.Response(
+                        200,
+                        headers={"content-type": "application/pdf"},
+                        content=b"%PDF-1.7\nok",
+                    )
+
+                async def __aexit__(
+                    self,
+                    exc_type: type[BaseException] | None,
+                    exc: BaseException | None,
+                    traceback: TracebackType | None,
+                ) -> None:
+                    return None
+
+            return StreamContext()
+
+    monkeypatch.setattr(httpx, "AsyncClient", RecordingClient)
+
+    body, _content_type = await SafeUrlFetcher(_config()).fetch("https://example.test/paper.pdf")
+
+    assert body == b"%PDF-1.7\nok"
+    assert captured_kwargs["trust_env"] is False

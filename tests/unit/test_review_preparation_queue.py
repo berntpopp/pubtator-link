@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 import pytest
@@ -23,6 +24,7 @@ class RecordingRepository:
     def __init__(self) -> None:
         self.enqueued: list[tuple[str, str, str]] = []
         self.repaired_jobs = 0
+        self.repair_calls = 0
 
     async def enqueue_preparation_job(
         self,
@@ -34,7 +36,36 @@ class RecordingRepository:
         return {"review_id": review_id}
 
     async def mark_running_jobs_failed_on_startup(self) -> int:
+        self.repair_calls += 1
         return self.repaired_jobs
+
+
+class SlowRecordingRepository(RecordingRepository):
+    async def enqueue_preparation_job(
+        self,
+        review_id: str,
+        source_id: str,
+        source_kind: str,
+    ) -> dict[str, Any]:
+        await asyncio.sleep(0.01)
+        return await super().enqueue_preparation_job(review_id, source_id, source_kind)
+
+
+class FailingOnceRepository(RecordingRepository):
+    def __init__(self) -> None:
+        super().__init__()
+        self.enqueue_calls = 0
+
+    async def enqueue_preparation_job(
+        self,
+        review_id: str,
+        source_id: str,
+        source_kind: str,
+    ) -> dict[str, Any]:
+        self.enqueue_calls += 1
+        if self.enqueue_calls == 1:
+            raise RuntimeError("temporary repository failure")
+        return await super().enqueue_preparation_job(review_id, source_id, source_kind)
 
 
 class RecordingPreparation:
@@ -68,6 +99,42 @@ async def test_enqueue_pmid_deduplicates_same_review_source_in_memory() -> None:
 
 
 @pytest.mark.asyncio
+async def test_enqueue_pmid_deduplicates_concurrent_same_review_source() -> None:
+    repository = SlowRecordingRepository()
+    queue = ReviewPreparationQueue(
+        config=_config(),
+        repository=repository,
+        preparation=RecordingPreparation(),
+    )
+
+    results = await asyncio.gather(
+        queue.enqueue_pmid("review-1", "40234174"),
+        queue.enqueue_pmid("review-1", "40234174"),
+    )
+
+    assert sorted(results) == [False, True]
+    assert repository.enqueued == [("review-1", "PMID:40234174", "pubtator_full_bioc")]
+
+
+@pytest.mark.asyncio
+async def test_enqueue_allows_retry_after_repository_failure() -> None:
+    repository = FailingOnceRepository()
+    queue = ReviewPreparationQueue(
+        config=_config(),
+        repository=repository,
+        preparation=RecordingPreparation(),
+    )
+
+    with pytest.raises(RuntimeError, match="temporary repository failure"):
+        await queue.enqueue_pmid("review-1", "40234174")
+
+    retried = await queue.enqueue_pmid("review-1", "40234174")
+
+    assert retried is True
+    assert repository.enqueued == [("review-1", "PMID:40234174", "pubtator_full_bioc")]
+
+
+@pytest.mark.asyncio
 async def test_enqueue_curated_url_uses_url_source_id_and_repository_job() -> None:
     repository = RecordingRepository()
     queue = ReviewPreparationQueue(
@@ -97,3 +164,19 @@ async def test_repair_startup_jobs_returns_repository_result() -> None:
     repaired_jobs = await queue.repair_startup_jobs()
 
     assert repaired_jobs == 3
+
+
+@pytest.mark.asyncio
+async def test_start_repairs_startup_jobs_only_before_workers_are_started() -> None:
+    repository = RecordingRepository()
+    queue = ReviewPreparationQueue(
+        config=_config(),
+        repository=repository,
+        preparation=RecordingPreparation(),
+    )
+
+    await queue.start()
+    await queue.start()
+    await queue.stop()
+
+    assert repository.repair_calls == 1

@@ -1,4 +1,8 @@
+import pytest
+from pydantic import ValidationError
+
 from pubtator_link.mcp.facade import create_pubtator_mcp
+from pubtator_link.mcp.tools import IndexReviewEvidenceMcpRequest
 
 
 def test_review_rerag_tools_are_exposed_with_expected_names() -> None:
@@ -42,3 +46,12 @@ def test_review_rerag_workflow_prompt_is_registered() -> None:
     mcp = create_pubtator_mcp()
 
     assert "review_rerag_workflow" in mcp._prompt_manager._prompts
+
+
+def test_index_review_evidence_mcp_request_rejects_unknown_prepare_mode() -> None:
+    with pytest.raises(ValidationError):
+        IndexReviewEvidenceMcpRequest(
+            review_id="fmf-review",
+            pmids=["40234174"],
+            prepare_mode="screened",
+        )

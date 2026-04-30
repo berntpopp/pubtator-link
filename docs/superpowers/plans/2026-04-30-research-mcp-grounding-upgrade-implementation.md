@@ -34,7 +34,7 @@
 - Use `apply_patch` for manual edits.
 - Prefer Makefile targets when practical; focused pytest commands are allowed for TDD loops.
 - The final integrator runs `make ci-local`.
-- If PostgreSQL is not reachable at `postgresql://pubtator_link:pubtator_link@localhost:55432/pubtator_link`, integration tests should skip and report the skip.
+- If PostgreSQL is not reachable at the Compose default `postgresql://pubtator_link:pubtator_link@localhost:5434/pubtator_link`, integration tests should skip and report the skip. A local stack may override `PUBTATOR_LINK_POSTGRES_PORT`, for example to `55432`; use the matching `PUBTATOR_LINK_TEST_DATABASE_URL` when running integration tests against that stack.
 
 ---
 
@@ -542,7 +542,7 @@ In `tests/integration/test_review_schema_postgres.py`, add a test that inserts o
 Run:
 
 ```bash
-PUBTATOR_LINK_TEST_DATABASE_URL=postgresql://pubtator_link:pubtator_link@localhost:55432/pubtator_link uv run pytest tests/integration/test_review_schema_postgres.py -q
+PUBTATOR_LINK_TEST_DATABASE_URL=postgresql://pubtator_link:pubtator_link@localhost:5434/pubtator_link uv run pytest tests/integration/test_review_schema_postgres.py -q
 ```
 
 Expected: PASS when Docker DB is running; SKIP when unavailable.
@@ -858,7 +858,7 @@ Expected: PASS.
 Run:
 
 ```bash
-PUBTATOR_LINK_TEST_DATABASE_URL=postgresql://pubtator_link:pubtator_link@localhost:55432/pubtator_link uv run pytest tests/integration/test_review_schema_postgres.py -q
+PUBTATOR_LINK_TEST_DATABASE_URL=postgresql://pubtator_link:pubtator_link@localhost:5434/pubtator_link uv run pytest tests/integration/test_review_schema_postgres.py -q
 ```
 
 Expected: PASS if Docker DB is reachable; SKIP if not reachable.

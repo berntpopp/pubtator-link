@@ -76,7 +76,11 @@ async def get_review_pool() -> asyncpg.Pool:
     if review_rerag_config.database_url is None:
         raise RuntimeError("PUBTATOR_LINK_DATABASE_URL is required for review re-RAG")
     if _review_pool is None:
-        _review_pool = await asyncpg.create_pool(review_rerag_config.database_url)
+        _review_pool = await asyncpg.create_pool(
+            dsn=review_rerag_config.database_url,
+            min_size=1,
+            max_size=max(1, review_rerag_config.prep_concurrency),
+        )
     return _review_pool
 
 

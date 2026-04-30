@@ -32,6 +32,7 @@ class SafeUrlFetcher:
         async with httpx.AsyncClient(
             follow_redirects=False,
             timeout=httpx.Timeout(self._config.source_timeout_seconds),
+            trust_env=False,
         ) as client:
             for _attempt in range(self._MAX_REDIRECTS + 1):
                 self._validate_url(next_url)

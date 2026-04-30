@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from pubtator_link.models.review_rerag import PrepareMode
+
 
 class SearchLiteratureRequest(BaseModel):
     text: str = Field(min_length=1, max_length=1000)
@@ -82,7 +84,7 @@ class IndexReviewEvidenceMcpRequest(BaseModel):
     review_id: str = Field(..., min_length=1)
     pmids: list[str] = Field(default_factory=list)
     curated_urls: list[str] = Field(default_factory=list)
-    prepare_mode: str = "selected"
+    prepare_mode: PrepareMode = "selected"
 
 
 class InspectReviewIndexMcpRequest(BaseModel):

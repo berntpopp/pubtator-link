@@ -1,0 +1,64 @@
+from types import SimpleNamespace
+from typing import Any
+
+import pytest
+
+from pubtator_link.api.routes import dependencies
+
+
+@pytest.mark.asyncio
+async def test_get_review_pool_uses_explicit_small_pool_sizing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_kwargs: dict[str, Any] = {}
+    pool = object()
+
+    async def create_pool(**kwargs: Any) -> object:
+        captured_kwargs.update(kwargs)
+        return pool
+
+    monkeypatch.setattr(dependencies, "_review_pool", None)
+    monkeypatch.setattr(
+        dependencies,
+        "review_rerag_config",
+        SimpleNamespace(
+            database_url="postgresql://user:pass@localhost:5434/pubtator_link",
+            prep_concurrency=3,
+        ),
+    )
+    monkeypatch.setattr(dependencies.asyncpg, "create_pool", create_pool)
+
+    result = await dependencies.get_review_pool()
+
+    assert result is pool
+    assert captured_kwargs == {
+        "dsn": "postgresql://user:pass@localhost:5434/pubtator_link",
+        "min_size": 1,
+        "max_size": 3,
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_review_pool_keeps_max_size_at_least_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_kwargs: dict[str, Any] = {}
+
+    async def create_pool(**kwargs: Any) -> object:
+        captured_kwargs.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(dependencies, "_review_pool", None)
+    monkeypatch.setattr(
+        dependencies,
+        "review_rerag_config",
+        SimpleNamespace(
+            database_url="postgresql://user:pass@localhost:5434/pubtator_link",
+            prep_concurrency=0,
+        ),
+    )
+    monkeypatch.setattr(dependencies.asyncpg, "create_pool", create_pool)
+
+    await dependencies.get_review_pool()
+
+    assert captured_kwargs["max_size"] == 1
