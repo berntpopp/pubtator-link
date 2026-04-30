@@ -174,4 +174,3 @@ def context_budget(max_chars: int, text_chars: int, dropped_count: int = 0) -> C
 def pack_totals(passages: Sequence[ContextPassage]) -> tuple[int, int]:
     text_chars = sum(len(passage.text) for passage in passages)
     return text_chars, estimate_tokens_from_chars(text_chars)
-

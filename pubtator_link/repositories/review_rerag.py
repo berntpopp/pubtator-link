@@ -12,6 +12,7 @@ from pubtator_link.models.review_rerag import (
     PreparationStatus,
     ReviewIndexTotals,
     ReviewPassageRow,
+    ReviewPassageSample,
     ReviewSourceSummary,
 )
 from pubtator_link.repositories.review_rerag_mappers import (
