@@ -24,8 +24,19 @@ def get_capabilities_resource() -> dict[str, Any]:
             "pubtator.find_entity_relations",
             "pubtator.submit_text_annotation",
             "pubtator.get_text_annotation_results",
+            "pubtator.index_review_evidence",
+            "pubtator.retrieve_review_context",
             "pubtator.get_server_capabilities",
         ],
+        "review_rerag": {
+            "tools": ["pubtator.index_review_evidence", "pubtator.retrieve_review_context"],
+            "scope": "research-use review-scoped evidence preparation and retrieval",
+            "limitations": [
+                "single-tenant trusted POC",
+                "no backend LLM",
+                "no clinical decision support",
+            ],
+        },
         "notice": RESEARCH_USE_NOTICE,
     }
 

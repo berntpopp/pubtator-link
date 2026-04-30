@@ -9,6 +9,8 @@ from pubtator_link.mcp.tools import (
     FetchPublicationAnnotationsRequest,
     FindEntityRelationsRequest,
     GetTextAnnotationResultsRequest,
+    IndexReviewEvidenceMcpRequest,
+    RetrieveReviewContextMcpRequest,
     SearchBiomedicalEntitiesRequest,
     SearchLiteratureRequest,
     SubmitTextAnnotationRequest,
@@ -25,7 +27,13 @@ from pubtator_link.models.responses import (
     TextAnnotationResultResponse,
     TextAnnotationSubmitResponse,
 )
+from pubtator_link.models.review_rerag import (
+    IndexReviewEvidenceRequest,
+    RetrieveReviewContextRequest,
+)
 from pubtator_link.services.publication_service import PublicationService
+from pubtator_link.services.review_context_service import ReviewContextService
+from pubtator_link.services.review_preparation_queue import ReviewPreparationQueue
 
 
 async def search_biomedical_entities_impl(
@@ -253,3 +261,54 @@ async def get_text_annotation_results_impl(
             else None
         ),
     ).model_dump()
+
+
+async def index_review_evidence_impl(
+    request: IndexReviewEvidenceMcpRequest,
+    *,
+    queue: ReviewPreparationQueue,
+) -> dict[str, Any]:
+    api_request = IndexReviewEvidenceRequest(
+        pmids=request.pmids,
+        curated_urls=request.curated_urls,
+        prepare_mode=request.prepare_mode,  # type: ignore[arg-type]
+    )
+    queued = 0
+    already_prepared = 0
+    for pmid in api_request.pmids:
+        if await queue.enqueue_pmid(request.review_id, pmid):
+            queued += 1
+        else:
+            already_prepared += 1
+    for url in api_request.curated_urls:
+        if await queue.enqueue_curated_url(request.review_id, url):
+            queued += 1
+        else:
+            already_prepared += 1
+    status = await queue.repository.preparation_status(request.review_id)
+    return {
+        "success": True,
+        "review_id": request.review_id,
+        "queued": queued,
+        "already_prepared": already_prepared,
+        "preparation_status": status.model_dump(),
+    }
+
+
+async def retrieve_review_context_impl(
+    request: RetrieveReviewContextMcpRequest,
+    *,
+    service: ReviewContextService,
+) -> dict[str, Any]:
+    response = await service.retrieve_context(
+        review_id=request.review_id,
+        request=RetrieveReviewContextRequest(
+            question=request.question,
+            pmids=request.pmids,
+            entity_ids=request.entity_ids,
+            sections=request.sections,
+            max_passages=request.max_passages,
+            max_chars=request.max_chars,
+        ),
+    )
+    return response.model_dump()

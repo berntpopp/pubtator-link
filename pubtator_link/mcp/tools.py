@@ -49,3 +49,24 @@ class SubmitTextAnnotationRequest(BaseModel):
 
 class GetTextAnnotationResultsRequest(BaseModel):
     session_id: str = Field(min_length=8)
+
+
+class IndexReviewEvidenceMcpRequest(BaseModel):
+    """Queue review-scoped evidence preparation. Research use only."""
+
+    review_id: str = Field(..., min_length=1)
+    pmids: list[str] = Field(default_factory=list)
+    curated_urls: list[str] = Field(default_factory=list)
+    prepare_mode: str = "selected"
+
+
+class RetrieveReviewContextMcpRequest(BaseModel):
+    """Retrieve a compact review-scoped context pack. Research use only."""
+
+    review_id: str = Field(..., min_length=1)
+    question: str = Field(..., min_length=1)
+    pmids: list[str] = Field(default_factory=list)
+    entity_ids: list[str] = Field(default_factory=list)
+    sections: list[str] = Field(default_factory=list)
+    max_passages: int = 8
+    max_chars: int = 6000

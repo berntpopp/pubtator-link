@@ -7,6 +7,7 @@ from fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
 from pubtator_link.api.client import PubTator3Client
+from pubtator_link.api.routes.dependencies import get_review_context_service, get_review_queue
 from pubtator_link.mcp.prompts import (
     annotate_research_text_prompt,
     review_pubtator_annotations_prompt,
@@ -26,6 +27,8 @@ from pubtator_link.mcp.service_adapters import (
     fetch_publication_annotations_impl,
     find_entity_relations_impl,
     get_text_annotation_results_impl,
+    index_review_evidence_impl,
+    retrieve_review_context_impl,
     search_biomedical_entities_impl,
     search_literature_impl,
     submit_text_annotation_impl,
@@ -35,6 +38,8 @@ from pubtator_link.mcp.tools import (
     FetchPublicationAnnotationsRequest,
     FindEntityRelationsRequest,
     GetTextAnnotationResultsRequest,
+    IndexReviewEvidenceMcpRequest,
+    RetrieveReviewContextMcpRequest,
     SearchBiomedicalEntitiesRequest,
     SearchLiteratureRequest,
     SubmitTextAnnotationRequest,
@@ -59,6 +64,13 @@ REMOTE_JOB_ANNOTATIONS = ToolAnnotations(
     readOnlyHint=False,
     destructiveHint=False,
     idempotentHint=False,
+    openWorldHint=True,
+)
+
+REVIEW_WRITE_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=False,
+    idempotentHint=True,
     openWorldHint=True,
 )
 
@@ -183,6 +195,26 @@ def create_pubtator_mcp() -> FastMCP:
         """Use this when a user has a PubTator text annotation session ID and needs its results."""
         async with PubTator3Client() as client:
             return await get_text_annotation_results_impl(request, client=client)
+
+    @mcp.tool(
+        name="pubtator.index_review_evidence",
+        title="Index Review Evidence",
+        annotations=REVIEW_WRITE_ANNOTATIONS,
+    )
+    async def index_review_evidence(request: IndexReviewEvidenceMcpRequest) -> dict[str, Any]:
+        """Queue review-scoped evidence preparation. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        queue = await get_review_queue()
+        return await index_review_evidence_impl(request, queue=queue)
+
+    @mcp.tool(
+        name="pubtator.retrieve_review_context",
+        title="Retrieve Review Context",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def retrieve_review_context(request: RetrieveReviewContextMcpRequest) -> dict[str, Any]:
+        """Retrieve a compact context pack from prepared review passages. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_review_context_service()
+        return await retrieve_review_context_impl(request, service=service)
 
     @mcp.resource("pubtator://capabilities")
     def capabilities() -> dict[str, Any]:
