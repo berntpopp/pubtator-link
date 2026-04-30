@@ -248,8 +248,13 @@ async def cleanup_dependencies() -> None:
     global _review_context_service, _review_pool, _review_queue, _review_repository
 
     if _api_client:
-        await _api_client.close()
+        api_client = _api_client
         _api_client = None
+        try:
+            await api_client.close()
+        except RuntimeError as exc:
+            if str(exc) != "Event loop is closed":
+                raise
 
     if _review_queue:
         await _review_queue.stop()

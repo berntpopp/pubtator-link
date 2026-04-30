@@ -62,3 +62,20 @@ async def test_get_review_pool_keeps_spare_connections_when_concurrency_is_zero(
     await dependencies.get_review_pool()
 
     assert captured_kwargs["max_size"] == 2
+
+
+@pytest.mark.asyncio
+async def test_cleanup_dependencies_ignores_stale_closed_loop_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class StaleClient:
+        async def close(self) -> None:
+            raise RuntimeError("Event loop is closed")
+
+    monkeypatch.setattr(dependencies, "_api_client", StaleClient())
+    monkeypatch.setattr(dependencies, "_review_queue", None)
+    monkeypatch.setattr(dependencies, "_review_pool", None)
+
+    await dependencies.cleanup_dependencies()
+
+    assert dependencies._api_client is None
