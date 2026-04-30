@@ -1,11 +1,18 @@
 """Tests for publication export route endpoints."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from pubtator_link.api.client import PubTator3Client
+from pubtator_link.api.routes.dependencies import get_publication_passage_service
+from pubtator_link.models.publication_passages import (
+    PublicationContextEstimate,
+    PublicationContextEstimateResponse,
+    PublicationPassage,
+    PublicationPassageResponse,
+)
 from pubtator_link.server_manager import UnifiedServerManager
 from tests.fixtures.api_responses import MockPubTatorResponses
 
@@ -189,3 +196,66 @@ class TestPublicationRoutes:
             "Invalid PMCID format: invalid_pmc_id. PMCIDs must start with 'PMC' followed by digits."
             in data["detail"]
         )
+
+    def test_publication_passages_endpoint_returns_compact_passages(self):
+        """Test compact passage endpoint avoids raw BioC payloads."""
+        manager = UnifiedServerManager()
+        app = manager.create_app()
+        service = AsyncMock()
+        service.get_passages.return_value = PublicationPassageResponse(
+            pmids=["111"],
+            mode="compact_passages",
+            passages=[
+                PublicationPassage(
+                    passage_id="PMID:111:abstract:0",
+                    pmid="111",
+                    pmcid=None,
+                    section="abstract",
+                    text="Abstract text",
+                    char_count=13,
+                    source="pubtator_abstract",
+                )
+            ],
+            dropped=[],
+            context_estimate=PublicationContextEstimate(
+                estimated_passages=1,
+                estimated_chars=13,
+                sections_by_pmid={"111": ["abstract"]},
+                recommended_mode="compact_passages",
+                warning=None,
+            ),
+        )
+        app.dependency_overrides[get_publication_passage_service] = lambda: service
+
+        with TestClient(app) as client:
+            response = client.post("/api/publications/passages", json={"pmids": ["111"]})
+
+        assert response.status_code == 200
+        assert response.json()["passages"][0]["text"] == "Abstract text"
+        assert "documents" not in response.text
+
+    def test_publication_context_estimate_endpoint_returns_counts(self):
+        """Test compact passage context estimate endpoint."""
+        manager = UnifiedServerManager()
+        app = manager.create_app()
+        service = AsyncMock()
+        service.estimate_context.return_value = PublicationContextEstimateResponse(
+            success=True,
+            pmids=["111"],
+            mode="compact_passages",
+            estimated_passages=1,
+            estimated_chars=13,
+            sections_by_pmid={"111": ["abstract"]},
+            recommended_mode="compact_passages",
+            warning=None,
+        )
+        app.dependency_overrides[get_publication_passage_service] = lambda: service
+
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/publications/context-estimate",
+                json={"pmids": ["111"]},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["estimated_passages"] == 1

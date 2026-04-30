@@ -5,6 +5,7 @@ from .cache import router as cache_router
 from .entities import router as entities_router
 from .publications import router as publications_router
 from .relations import router as relations_router
+from .reviews import router as reviews_router
 from .search import router as search_router
 
 # Export all routers for easy import in server manager
@@ -14,6 +15,7 @@ __all__ = [
     "entities_router",
     "publications_router",
     "relations_router",
+    "reviews_router",
     "search_router",
 ]
 
@@ -23,6 +25,7 @@ ROUTE_MODULES = {
     "entities": entities_router,
     "search": search_router,
     "relations": relations_router,
+    "reviews": reviews_router,
     "annotations": annotations_router,
     "cache": cache_router,
 }

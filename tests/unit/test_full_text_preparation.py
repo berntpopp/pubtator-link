@@ -1,0 +1,200 @@
+from typing import Any
+
+import pytest
+
+from pubtator_link.config import ReviewReragConfig
+from pubtator_link.models.review_rerag import ReviewPassageRow
+from pubtator_link.services.full_text_preparation import (
+    FullTextPreparationService,
+    looks_like_pdf,
+)
+
+
+def _config(*, enable_docling: bool = False) -> ReviewReragConfig:
+    return ReviewReragConfig(
+        database_url=None,
+        prep_concurrency=2,
+        document_timeout_seconds=60,
+        source_timeout_seconds=5,
+        pdf_max_bytes=64,
+        text_max_bytes=64,
+        allow_http_urls=False,
+        enable_docling=enable_docling,
+    )
+
+
+class RecordingRepository:
+    def __init__(self) -> None:
+        self.attempts: list[dict[str, Any]] = []
+        self.passages: list[ReviewPassageRow] = []
+
+    async def record_retrieval_attempt(
+        self,
+        review_id: str,
+        source_id: str,
+        source_kind: str,
+        status: str,
+        **kwargs: Any,
+    ) -> None:
+        self.attempts.append(
+            {
+                "review_id": review_id,
+                "source_id": source_id,
+                "source_kind": source_kind,
+                "status": status,
+                **kwargs,
+            }
+        )
+
+    async def upsert_passages(self, passages: list[ReviewPassageRow]) -> None:
+        self.passages.extend(passages)
+
+
+class RecordingPubTatorClient:
+    def __init__(self, responses: list[dict[str, Any]]) -> None:
+        self.responses = responses
+        self.calls: list[dict[str, Any]] = []
+
+    async def export_publications(
+        self, pmids: list[str], format: str = "biocjson", full: bool = False
+    ) -> dict[str, Any]:
+        self.calls.append({"pmids": pmids, "format": format, "full": full})
+        return self.responses.pop(0)
+
+
+class StaticFetcher:
+    def __init__(self, body: bytes, content_type: str) -> None:
+        self.body = body
+        self.content_type = content_type
+        self.calls: list[dict[str, Any]] = []
+
+    async def fetch(self, url: str, max_bytes: int | None = None) -> tuple[bytes, str]:
+        self.calls.append({"url": url, "max_bytes": max_bytes})
+        return self.body, self.content_type
+
+
+def test_looks_like_pdf_only_accepts_pdf_magic_bytes() -> None:
+    assert looks_like_pdf(b"%PDF-1.7\nbody")
+    assert not looks_like_pdf(b" \n%PDF-1.7\nbody")
+    assert not looks_like_pdf(b"<!doctype html><title>not a pdf</title>")
+    assert not looks_like_pdf(b"")
+
+
+def test_passages_from_bioc_document_builds_deterministic_passage_rows() -> None:
+    service = FullTextPreparationService(
+        config=_config(),
+        repository=RecordingRepository(),
+        pubtator_client=RecordingPubTatorClient([]),
+    )
+    document = {
+        "id": "40234174",
+        "pmid": 40234174,
+        "pmcid": "PMC123",
+        "passages": [
+            {"infons": {"type": "title"}, "text": "Clinical FMF diagnosis."},
+            {
+                "infons": {"section_type": "Methods & Results"},
+                "text": "Colchicine response was measured.",
+            },
+        ],
+    }
+
+    passages = service.passages_from_bioc_document(
+        review_id="review-1",
+        document=document,
+        source_kind="pubtator_full_bioc",
+    )
+
+    assert [passage.passage_id for passage in passages] == [
+        "PMID:40234174:title:0",
+        "PMID:40234174:methods_results:1",
+    ]
+    assert all(passage.review_id == "review-1" for passage in passages)
+    assert all(passage.pmid == "40234174" for passage in passages)
+    assert passages[0].source_id == "PMID:40234174"
+    assert passages[1].section == "Methods & Results"
+
+
+@pytest.mark.asyncio
+async def test_prepare_pmid_falls_back_to_abstract_and_records_passages() -> None:
+    repository = RecordingRepository()
+    pubtator_client = RecordingPubTatorClient(
+        [
+            {"PubTator3": [{"id": "40234174", "pmid": "40234174", "passages": []}]},
+            {
+                "documents": [
+                    {
+                        "id": "40234174",
+                        "pmid": "40234174",
+                        "passages": [
+                            {
+                                "infons": {"type": "abstract"},
+                                "text": "Colchicine should start after diagnosis.",
+                            }
+                        ],
+                    }
+                ]
+            },
+        ]
+    )
+    service = FullTextPreparationService(
+        config=_config(),
+        repository=repository,
+        pubtator_client=pubtator_client,
+    )
+
+    status = await service.prepare_pmid(review_id="review-1", pmid="40234174")
+
+    assert status == "complete"
+    assert pubtator_client.calls == [
+        {"pmids": ["40234174"], "format": "biocjson", "full": True},
+        {"pmids": ["40234174"], "format": "biocjson", "full": False},
+    ]
+    assert [passage.passage_id for passage in repository.passages] == ["PMID:40234174:abstract:0"]
+    assert repository.passages[0].source_kind == "pubtator_abstract"
+    assert repository.attempts == [
+        {
+            "review_id": "review-1",
+            "source_id": "PMID:40234174",
+            "source_kind": "pubtator_abstract",
+            "status": "success",
+            "content_type": "application/json",
+            "reason": None,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_prepare_curated_url_records_blocked_html_as_failed() -> None:
+    repository = RecordingRepository()
+    fetcher = StaticFetcher(
+        body=b"<!doctype html><title>blocked</title>",
+        content_type="text/html",
+    )
+    service = FullTextPreparationService(
+        config=_config(),
+        repository=repository,
+        pubtator_client=RecordingPubTatorClient([]),
+        safe_url_fetcher=fetcher,
+    )
+
+    status = await service.prepare_curated_url(
+        review_id="review-1",
+        url="https://example.test/not-pdf",
+    )
+
+    assert status == "failed"
+    assert fetcher.calls == [{"url": "https://example.test/not-pdf", "max_bytes": 64}]
+    assert repository.passages == []
+    assert repository.attempts == [
+        {
+            "review_id": "review-1",
+            "source_id": "https://example.test/not-pdf",
+            "source_kind": "curated_html",
+            "status": "blocked",
+            "url": "https://example.test/not-pdf",
+            "content_type": "text/html",
+            "content_length": 37,
+            "reason": "Curated URL did not return PDF bytes",
+        }
+    ]

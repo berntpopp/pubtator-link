@@ -25,3 +25,16 @@ def review_pubtator_annotations_prompt() -> str:
         f"{RESEARCH_USE_NOTICE} Review returned PubTator annotations against the supplied "
         "research text. Flag unsupported, ambiguous, or context-mismatched entity suggestions."
     )
+
+
+def review_rerag_workflow_prompt() -> str:
+    return (
+        f"{RESEARCH_USE_NOTICE} For review-scoped retrieval, first call "
+        "pubtator.index_review_evidence with the review_id and candidate PMIDs. Poll or retry "
+        "until preparation_status shows complete/partial records. Then call "
+        "pubtator.retrieve_review_context using short keyword queries such as "
+        "'colchicine dose children' or 'VUS heterozygous phenotype response'. Prefer PMID filters "
+        "when investigating a specific paper, but start without filters for corpus-wide discovery. "
+        "If zero passages are returned, simplify the query, remove extra clinical wording, or fall "
+        "back to pubtator.fetch_publication_annotations with full=true for explicit fetch and parse."
+    )
