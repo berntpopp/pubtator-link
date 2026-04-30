@@ -179,7 +179,9 @@ async def test_create_app_resources_builds_review_resources_with_database(
         "ReviewPreparationQueue",
         lambda config, repository, preparation, logger: queue,
     )
-    monkeypatch.setattr(dependencies, "ReviewContextService", lambda repository: ("context", repository))
+    monkeypatch.setattr(
+        dependencies, "ReviewContextService", lambda repository: ("context", repository)
+    )
 
     resources = await dependencies.create_app_resources(logger=logger)
 

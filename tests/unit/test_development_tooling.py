@@ -194,9 +194,7 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
         "pull-requests": "read",
     }
     security_actions = {
-        step.get("uses")
-        for job in security["jobs"].values()
-        for step in job["steps"]
+        step.get("uses") for job in security["jobs"].values() for step in job["steps"]
     }
     assert "github/codeql-action/init@v3" in security_actions
     assert "actions/dependency-review-action@v4" in security_actions
