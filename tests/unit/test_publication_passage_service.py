@@ -5,6 +5,7 @@ from pubtator_link.models.publication_passages import (
     PublicationContextEstimateRequest,
     PublicationPassageRequest,
 )
+from pubtator_link.models.responses import PublicationExportResponse
 from pubtator_link.services.publication_passage_service import PublicationPassageService
 
 
@@ -69,6 +70,31 @@ class LongPublicationService:
 class RaisingPublicationService:
     async def export_publications_list(self, pmids: list[str], format: str, full: bool):
         raise RuntimeError("upstream unavailable")
+
+
+class ModelDumpPublicationService:
+    async def export_publications_list(
+        self, pmids: list[str], format: str, full: bool
+    ) -> PublicationExportResponse:
+        return PublicationExportResponse(
+            format=format,
+            pmids=pmids,
+            full_text=full,
+            export_data={
+                "documents": [
+                    {
+                        "id": "444",
+                        "passages": [
+                            {
+                                "infons": {"section_type": "ABSTRACT"},
+                                "text": "Model response abstract",
+                            }
+                        ],
+                    }
+                ]
+            },
+            count=1,
+        )
 
 
 @pytest.mark.asyncio
@@ -156,6 +182,17 @@ async def test_get_publication_passages_reports_upstream_errors() -> None:
     assert response.success is False
     assert response.passages == []
     assert [drop.reason for drop in response.dropped] == ["upstream_error"]
+
+
+@pytest.mark.asyncio
+async def test_get_publication_passages_accepts_export_response_models() -> None:
+    service = PublicationPassageService(ModelDumpPublicationService())
+
+    response = await service.get_passages(PublicationPassageRequest(pmids=["444"]))
+
+    assert response.success is True
+    assert [passage.text for passage in response.passages] == ["Model response abstract"]
+    assert response.passages[0].passage_id == "PMID:444:abstract:0"
 
 
 @pytest.mark.asyncio

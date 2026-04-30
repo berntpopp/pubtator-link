@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import Any, Protocol
 
 from pubtator_link.models.publication_passages import (
@@ -22,9 +23,7 @@ from pubtator_link.models.review_rerag import normalize_section, passage_id_for_
 class PublicationServiceLike(Protocol):
     """Small protocol for the injected publication service."""
 
-    async def export_publications_list(
-        self, pmids: list[str], format: str, full: bool
-    ) -> dict[str, Any]: ...
+    async def export_publications_list(self, pmids: list[str], format: str, full: bool) -> Any: ...
 
 
 SECTION_ALIASES = {
@@ -317,17 +316,33 @@ def normalize_publication_section(section: str) -> str:
     return SECTION_ALIASES.get(normalized, normalized)
 
 
-def _extract_documents(export_data: dict[str, Any]) -> list[dict[str, Any]]:
+def _extract_documents(export_data: Any) -> list[dict[str, Any]]:
+    export_mapping = _response_mapping(export_data)
+    if export_mapping is None:
+        return []
+
+    nested_export_data = export_mapping.get("export_data")
     candidates: list[Any] = [
-        export_data.get("documents"),
-        export_data.get("export_data", {}).get("documents")
-        if isinstance(export_data.get("export_data"), dict)
-        else None,
+        export_mapping.get("documents"),
+        nested_export_data.get("documents") if isinstance(nested_export_data, Mapping) else None,
     ]
     for candidate in candidates:
         if isinstance(candidate, list):
             return [document for document in candidate if isinstance(document, dict)]
     return []
+
+
+def _response_mapping(response: Any) -> Mapping[str, Any] | None:
+    if isinstance(response, Mapping):
+        return response
+
+    model_dump = getattr(response, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, Mapping):
+            return dumped
+
+    return None
 
 
 def _section_from_passage(passage: dict[str, Any]) -> str:
