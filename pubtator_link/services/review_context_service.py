@@ -6,7 +6,6 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from pubtator_link.models.review_rerag import (
-    ContextBudget,
     ContextDropReason,
     ContextPack,
     ContextPassage,
@@ -26,7 +25,12 @@ from pubtator_link.models.review_rerag import (
     SourceBudgetSummary,
     SourceCoverage,
     ZeroResultReason,
-    estimate_tokens_from_chars,
+)
+from pubtator_link.services.review_context.packing import (
+    context_budget,
+    context_passage_from_row,
+    pack_passages,
+    pack_totals,
 )
 from pubtator_link.services.review_context.ranking import (
     SOURCE_COVERAGE_SCARCITY_PRIORITY,
@@ -96,14 +100,16 @@ class ReviewContextService:
             limit=80,
         )
         sorted_candidates = sorted(candidates, key=rerank_key)
-        selected, dropped = self._pack_passages(sorted_candidates, request)
+        packed = pack_passages(sorted_candidates, request)
+        selected = packed.selected
+        dropped = packed.dropped
         passages = [
-            self._context_passage_from_row(index=index, row=row, request=request)
+            context_passage_from_row(index=index, row=row, request=request)
             for index, row in enumerate(selected, start=1)
         ]
         citation_map = {passage.citation_key: passage.passage_id for passage in passages}
-        text_chars, estimated_tokens = self._pack_totals(passages)
-        budget = self._context_budget(
+        text_chars, estimated_tokens = pack_totals(passages)
+        budget = context_budget(
             max_chars=request.max_chars,
             text_chars=text_chars,
             dropped_count=len(dropped),
@@ -278,7 +284,7 @@ class ReviewContextService:
                 drop_passage(query_index, passage, "char_budget_exceeded", source_key=source_key)
                 return True
             if request.response_mode != "full":
-                next_budget = self._context_budget(
+                next_budget = context_budget(
                     max_chars=request.max_chars,
                     text_chars=total_chars + passage_len,
                     dropped_count=len(dropped),
@@ -402,7 +408,7 @@ class ReviewContextService:
             )
 
         citation_map = {passage.citation_key: passage.passage_id for passage in merged_passages}
-        text_chars, estimated_tokens = self._pack_totals(merged_passages)
+        text_chars, estimated_tokens = pack_totals(merged_passages)
         budget_text_chars = text_chars
         if request.response_mode == "full":
             budget_text_chars += sum(
@@ -410,7 +416,7 @@ class ReviewContextService:
                 or sum(len(passage.text) for passage in result.context_pack.passages)
                 for result in results
             )
-        budget = self._context_budget(
+        budget = context_budget(
             max_chars=request.max_chars,
             text_chars=budget_text_chars,
             dropped_count=len(dropped),
@@ -480,161 +486,6 @@ class ReviewContextService:
                 ):
                     coverage_by_key[source_key] = source.coverage
         return coverage_by_key
-
-    def _pack_passages(
-        self,
-        candidates: list[ReviewPassageRow],
-        request: RetrieveReviewContextRequest,
-    ) -> tuple[list[ReviewPassageRow], list[ContextDropReason]]:
-        selected: list[ReviewPassageRow] = []
-        dropped: list[ContextDropReason] = []
-        pmid_counts: dict[str, int] = defaultdict(int)
-        total_chars = 0
-        enforce_pmid_diversity = len(request.pmids) != 1
-
-        for row in candidates:
-            if len(selected) >= request.max_passages:
-                break
-            if not self._section_allowed(row, request):
-                continue
-            if (
-                enforce_pmid_diversity
-                and row.pmid is not None
-                and pmid_counts[row.pmid] >= request.max_passages_per_pmid
-            ):
-                continue
-            effective_len = self._effective_passage_len(row, request)
-            if effective_len is None:
-                dropped.append(
-                    ContextDropReason(
-                        reason="passage_over_max_chars_per_passage",
-                        passage_id=row.passage_id,
-                        pmid=row.pmid,
-                        section=row.section,
-                        char_count=len(row.text),
-                    )
-                )
-                continue
-            if total_chars + effective_len > request.max_chars:
-                dropped.append(
-                    ContextDropReason(
-                        reason="char_budget_exceeded",
-                        passage_id=row.passage_id,
-                        pmid=row.pmid,
-                        section=row.section,
-                        char_count=effective_len,
-                    )
-                )
-                continue
-
-            selected.append(row)
-            total_chars += effective_len
-            if row.pmid is not None:
-                pmid_counts[row.pmid] += 1
-
-        return selected, dropped
-
-    def _context_passage_from_row(
-        self,
-        *,
-        index: int,
-        row: ReviewPassageRow,
-        request: RetrieveReviewContextRequest,
-    ) -> ContextPassage:
-        text, start_char, end_char, truncated = self._excerpt_text(
-            row.text,
-            query_tokens=self._query_tokens(request.question),
-            max_chars=request.max_chars_per_passage,
-            allow_truncated=request.allow_truncated_passages,
-        )
-        return ContextPassage(
-            citation_key=f"S{index}",
-            passage_id=row.passage_id,
-            source_id=row.source_id,
-            pmid=row.pmid,
-            pmcid=row.pmcid,
-            section=row.section,
-            text=text,
-            source_kind=row.source_kind,
-            char_count=len(text),
-            truncated=truncated,
-            start_char=start_char,
-            end_char=end_char,
-            boundary="query_window" if truncated else "full_passage",
-        )
-
-    def _effective_passage_len(
-        self, row: ReviewPassageRow, request: RetrieveReviewContextRequest
-    ) -> int | None:
-        if len(row.text) <= request.max_chars_per_passage:
-            return len(row.text)
-        if not request.allow_truncated_passages:
-            return None
-        return request.max_chars_per_passage
-
-    @staticmethod
-    def _is_table_section(section: str) -> bool:
-        return "table" in section.strip().lower()
-
-    @staticmethod
-    def _is_reference_section(section: str) -> bool:
-        lowered = section.strip().lower()
-        return lowered in {"ref", "refs", "reference", "references", "bibliography"} or (
-            "reference" in lowered
-        )
-
-    def _section_allowed(
-        self, row: ReviewPassageRow, request: RetrieveReviewContextRequest
-    ) -> bool:
-        if self._is_reference_section(row.section) and not request.include_references:
-            return False
-        if self._is_table_section(row.section):
-            return request.include_tables or request.table_mode == "full"
-        return True
-
-    @staticmethod
-    def _excerpt_text(
-        text: str,
-        *,
-        query_tokens: Sequence[str],
-        max_chars: int,
-        allow_truncated: bool,
-    ) -> tuple[str, int, int, bool]:
-        if len(text) <= max_chars or not allow_truncated:
-            return text, 0, len(text), False
-
-        lowered = text.lower()
-        match_index = -1
-        for token in query_tokens:
-            match_index = lowered.find(token.lower())
-            if match_index >= 0:
-                break
-        if match_index < 0:
-            match_index = 0
-
-        half_window = max_chars // 2
-        start = max(0, match_index - half_window)
-        end = min(len(text), start + max_chars)
-        start = max(0, end - max_chars)
-        return text[start:end], start, end, True
-
-    @staticmethod
-    def _context_budget(max_chars: int, text_chars: int, dropped_count: int = 0) -> ContextBudget:
-        estimated_json_chars = 1200 + int(text_chars * 0.25)
-        estimated_total_chars = text_chars + estimated_json_chars
-        return ContextBudget(
-            max_chars=max_chars,
-            text_chars=text_chars,
-            estimated_json_chars=estimated_json_chars,
-            estimated_total_chars=estimated_total_chars,
-            estimated_tokens=estimate_tokens_from_chars(estimated_total_chars),
-            dropped_count=dropped_count,
-        )
-
-    @staticmethod
-    def _pack_totals(passages: Sequence[ContextPassage]) -> tuple[int, int]:
-        text_chars = sum(len(passage.text) for passage in passages)
-        return text_chars, estimate_tokens_from_chars(text_chars)
 
     def _query_summary(
         self,
