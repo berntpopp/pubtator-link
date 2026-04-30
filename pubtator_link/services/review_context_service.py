@@ -23,6 +23,8 @@ from pubtator_link.models.review_rerag import (
     ReviewIndexTotals,
     ReviewPassageRow,
     ReviewSourceSummary,
+    SourceBudgetSummary,
+    SourceCoverage,
     ZeroResultReason,
     estimate_tokens_from_chars,
 )
@@ -103,6 +105,14 @@ SOURCE_PRIORITY = {
     "pubtator_abstract": 6,
 }
 
+SOURCE_COVERAGE_SCARCITY_PRIORITY = {
+    "title_only": 0,
+    "abstract_only": 1,
+    "curated_url": 2,
+    "full_text": 3,
+    "unknown": 4,
+}
+
 
 class ReviewContextService:
     """Retrieve, rerank, and pack review-scoped context passages."""
@@ -176,6 +186,8 @@ class ReviewContextService:
         returned_counts: list[int] = []
         dropped_counts: list[int] = []
         query_chars: list[int] = []
+        source_budget_stats: dict[str | None, SourceBudgetSummary] = {}
+        source_budget_order: list[str | None] = []
         total_chars = 0
 
         for query in request.queries:
@@ -206,7 +218,29 @@ class ReviewContextService:
             dropped_counts.append(len(result.context_pack.dropped))
             query_chars.append(0)
 
-        def drop_passage(query_index: int, passage: ContextPassage, reason: str) -> None:
+        def source_key_for_passage(passage: ContextPassage) -> str | None:
+            return passage.pmid
+
+        def ensure_source_budget_summary(
+            source_key: str | None,
+            coverage: SourceCoverage = "unknown",
+        ) -> SourceBudgetSummary:
+            summary = source_budget_stats.get(source_key)
+            if summary is None:
+                summary = SourceBudgetSummary(pmid=source_key, coverage=coverage)
+                source_budget_stats[source_key] = summary
+                source_budget_order.append(source_key)
+            elif summary.coverage == "unknown" and coverage != "unknown":
+                summary.coverage = coverage
+            return summary
+
+        def drop_passage(
+            query_index: int,
+            passage: ContextPassage,
+            reason: str,
+            *,
+            source_key: str | None = None,
+        ) -> None:
             dropped_counts[query_index] += 1
             dropped.append(
                 ContextDropReason(
@@ -217,8 +251,15 @@ class ReviewContextService:
                     char_count=len(passage.text),
                 )
             )
+            if source_key in source_budget_stats:
+                source_budget_stats[source_key].dropped_count += 1
 
-        def add_passage(query_index: int, passage: ContextPassage) -> None:
+        def add_passage(
+            query_index: int,
+            passage: ContextPassage,
+            *,
+            source_key: str | None = None,
+        ) -> None:
             nonlocal total_chars
             seen_passage_ids.add(passage.passage_id)
             merged_passages.append(
@@ -234,6 +275,8 @@ class ReviewContextService:
             total_chars += passage_len
             query_chars[query_index] += passage_len
             returned_counts[query_index] += 1
+            if source_key in source_budget_stats:
+                source_budget_stats[source_key].returned_count += 1
 
         def try_merge_passage(
             query_index: int,
@@ -241,6 +284,7 @@ class ReviewContextService:
             passage: ContextPassage,
             *,
             reserve_limit: int | None,
+            source_key: str | None = None,
         ) -> bool:
             handled_key = (query_index, passage_index)
             if handled_key in handled_passages:
@@ -254,13 +298,18 @@ class ReviewContextService:
                 return False
             handled_passages.add(handled_key)
             if request.deduplicate_passages and passage.passage_id in seen_passage_ids:
-                drop_passage(query_index, passage, "duplicate_passage")
+                drop_passage(query_index, passage, "duplicate_passage", source_key=source_key)
                 return True
             if len(merged_passages) >= request.max_total_passages:
-                drop_passage(query_index, passage, "max_total_passages_exceeded")
+                drop_passage(
+                    query_index,
+                    passage,
+                    "max_total_passages_exceeded",
+                    source_key=source_key,
+                )
                 return True
             if total_chars + passage_len > request.max_chars:
-                drop_passage(query_index, passage, "char_budget_exceeded")
+                drop_passage(query_index, passage, "char_budget_exceeded", source_key=source_key)
                 return True
             if request.response_mode != "full":
                 next_budget = self._context_budget(
@@ -269,28 +318,89 @@ class ReviewContextService:
                     dropped_count=len(dropped),
                 )
                 if next_budget.estimated_total_chars > request.max_response_chars:
-                    drop_passage(query_index, passage, "response_char_budget_exceeded")
+                    drop_passage(
+                        query_index,
+                        passage,
+                        "response_char_budget_exceeded",
+                        source_key=source_key,
+                    )
                     return True
-            add_passage(query_index, passage)
+            add_passage(query_index, passage, source_key=source_key)
             return True
 
         if request.response_mode != "diagnostics":
-            reserve_limit = max(1, request.max_chars // len(request.queries))
-            for query_index, result in enumerate(query_results):
-                for passage_index, passage in enumerate(result.context_pack.passages):
-                    try_merge_passage(
-                        query_index,
-                        passage_index,
-                        passage,
-                        reserve_limit=reserve_limit,
+            if request.budget_strategy == "query_fair":
+                reserve_limit = max(1, request.max_chars // len(request.queries))
+                for query_index, result in enumerate(query_results):
+                    for passage_index, passage in enumerate(result.context_pack.passages):
+                        try_merge_passage(
+                            query_index,
+                            passage_index,
+                            passage,
+                            reserve_limit=reserve_limit,
+                        )
+                for query_index, result in enumerate(query_results):
+                    for passage_index, passage in enumerate(result.context_pack.passages):
+                        try_merge_passage(
+                            query_index,
+                            passage_index,
+                            passage,
+                            reserve_limit=None,
+                        )
+            else:
+                coverage_by_pmid = await self._source_coverage_by_pmid(review_id)
+                first_pass_candidates: list[tuple[int, int, ContextPassage]] = []
+                overflow_candidates: list[tuple[int, int, ContextPassage]] = []
+                source_candidate_counts: dict[str | None, int] = defaultdict(int)
+
+                def coverage_for_passage(passage: ContextPassage) -> SourceCoverage:
+                    if passage.pmid is None:
+                        return "unknown"
+                    return coverage_by_pmid.get(passage.pmid, "unknown")
+
+                for query_index, result in enumerate(query_results):
+                    for passage_index, passage in enumerate(result.context_pack.passages):
+                        source_key = source_key_for_passage(passage)
+                        coverage = coverage_for_passage(passage)
+                        summary = ensure_source_budget_summary(source_key, coverage)
+                        summary.candidate_count += 1
+                        source_candidate_counts[source_key] += 1
+                        candidate = (query_index, passage_index, passage)
+                        if source_candidate_counts[source_key] <= request.min_passages_per_source:
+                            summary.first_pass_eligible = True
+                            first_pass_candidates.append(candidate)
+                        else:
+                            overflow_candidates.append(candidate)
+
+                if request.budget_strategy == "scarcity_first":
+                    first_pass_candidates.sort(
+                        key=lambda candidate: (
+                            SOURCE_COVERAGE_SCARCITY_PRIORITY.get(
+                                coverage_for_passage(candidate[2]),
+                                SOURCE_COVERAGE_SCARCITY_PRIORITY["unknown"],
+                            ),
+                            candidate[0],
+                            candidate[1],
+                        )
                     )
-            for query_index, result in enumerate(query_results):
-                for passage_index, passage in enumerate(result.context_pack.passages):
+
+                for query_index, passage_index, passage in first_pass_candidates:
+                    source_key = source_key_for_passage(passage)
                     try_merge_passage(
                         query_index,
                         passage_index,
                         passage,
                         reserve_limit=None,
+                        source_key=source_key,
+                    )
+                for query_index, passage_index, passage in overflow_candidates:
+                    source_key = source_key_for_passage(passage)
+                    try_merge_passage(
+                        query_index,
+                        passage_index,
+                        passage,
+                        reserve_limit=None,
+                        source_key=source_key,
                     )
 
         for query_index, result in enumerate(query_results):
@@ -322,6 +432,9 @@ class ReviewContextService:
             response_mode=request.response_mode,
             results=results,
             query_summaries=query_summaries,
+            source_budget_summaries=[
+                source_budget_stats[source_key] for source_key in source_budget_order
+            ],
             merged_context_pack=ContextPack(
                 question="\n".join(request.queries),
                 passages=merged_passages,
@@ -357,6 +470,26 @@ class ReviewContextService:
             totals=totals,
             failed_sources=failed_sources,
         )
+
+    async def _source_coverage_by_pmid(self, review_id: str) -> dict[str, SourceCoverage]:
+        sources = await self.repository.list_review_sources(
+            review_id,
+            pmids=None,
+            include_passage_samples=False,
+            sample_per_pmid=0,
+        )
+        coverage_by_pmid: dict[str, SourceCoverage] = {}
+        for source in sources:
+            if source.pmid is None:
+                continue
+            existing = coverage_by_pmid.get(source.pmid)
+            if existing is None or SOURCE_COVERAGE_SCARCITY_PRIORITY.get(
+                source.coverage, SOURCE_COVERAGE_SCARCITY_PRIORITY["unknown"]
+            ) < SOURCE_COVERAGE_SCARCITY_PRIORITY.get(
+                existing, SOURCE_COVERAGE_SCARCITY_PRIORITY["unknown"]
+            ):
+                coverage_by_pmid[source.pmid] = source.coverage
+        return coverage_by_pmid
 
     def _pack_passages(
         self,

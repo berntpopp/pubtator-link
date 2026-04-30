@@ -185,6 +185,42 @@ async def test_retrieve_review_context_batch_adapter_builds_request_from_flat_ar
 
 
 @pytest.mark.asyncio
+async def test_retrieve_review_context_batch_adapter_sets_budget_strategy() -> None:
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        PreparationStatus,
+        RetrieveReviewContextBatchResponse,
+    )
+
+    class RecordingService:
+        request = None
+
+        async def retrieve_context_batch(self, review_id, request):
+            self.request = request
+            return RetrieveReviewContextBatchResponse(
+                review_id=review_id,
+                response_mode=request.response_mode,
+                results=[],
+                merged_context_pack=ContextPack(question="", passages=[], citation_map={}),
+                preparation_status=PreparationStatus(),
+            )
+
+    service = RecordingService()
+
+    await retrieve_review_context_batch_impl(
+        service=service,
+        review_id="rev",
+        queries=["guideline"],
+        budget_strategy="scarcity_first",
+        min_passages_per_source=2,
+    )
+
+    assert service.request.budget_strategy == "scarcity_first"
+    assert service.request.min_passages_per_source == 2
+
+
+@pytest.mark.asyncio
 async def test_retrieve_review_context_adapter_builds_request_from_flat_args() -> None:
     from pubtator_link.mcp.service_adapters import retrieve_review_context_impl
     from pubtator_link.models.review_rerag import (

@@ -14,6 +14,7 @@ AttemptStatus = Literal["success", "not_available", "blocked", "failed"]
 ReviewBatchResponseMode = Literal["compact", "merged_only", "full", "diagnostics"]
 ReviewTableMode = Literal["off", "preview", "full"]
 SourceCoverage = Literal["title_only", "abstract_only", "full_text", "curated_url", "unknown"]
+BudgetStrategy = Literal["query_fair", "source_fair", "scarcity_first"]
 ZeroResultReason = Literal[
     "review_not_indexed",
     "no_candidate_matches",
@@ -224,6 +225,17 @@ class QueryDiagnosticsSummary(BaseModel):
     next_steps: list[str] = Field(default_factory=list)
 
 
+class SourceBudgetSummary(BaseModel):
+    """Per-source accounting for source-aware batch budgeting."""
+
+    pmid: str | None = None
+    coverage: SourceCoverage = "unknown"
+    candidate_count: int = Field(default=0, ge=0)
+    returned_count: int = Field(default=0, ge=0)
+    dropped_count: int = Field(default=0, ge=0)
+    first_pass_eligible: bool = False
+
+
 class RetrieveReviewContextBatchRequest(BaseModel):
     """Request for multiple review-scoped context retrieval queries."""
 
@@ -236,6 +248,8 @@ class RetrieveReviewContextBatchRequest(BaseModel):
     max_chars: int = Field(default=12000, ge=500, le=50000)
     max_response_chars: int = Field(default=24000, ge=2000, le=100000)
     deduplicate_passages: bool = True
+    budget_strategy: BudgetStrategy = "query_fair"
+    min_passages_per_source: int = Field(default=1, ge=1, le=10)
     include_diagnostics: bool = True
     response_mode: ReviewBatchResponseMode = "compact"
     include_tables: bool = False
@@ -255,6 +269,7 @@ class RetrieveReviewContextBatchResponse(BaseModel):
     preparation_status: PreparationStatus
     response_mode: ReviewBatchResponseMode = "compact"
     query_summaries: list[QueryDiagnosticsSummary] = Field(default_factory=list)
+    source_budget_summaries: list[SourceBudgetSummary] = Field(default_factory=list)
     budget: ContextBudget | None = None
 
 

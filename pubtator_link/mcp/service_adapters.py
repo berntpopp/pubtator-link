@@ -23,6 +23,7 @@ from pubtator_link.models.responses import (
     TextAnnotationSubmitResponse,
 )
 from pubtator_link.models.review_rerag import (
+    BudgetStrategy,
     IndexReviewEvidenceRequest,
     InspectReviewIndexRequest,
     PrepareMode,
@@ -455,6 +456,8 @@ async def retrieve_review_context_batch_impl(
     max_chars: int = 12000,
     max_response_chars: int = 24000,
     deduplicate_passages: bool = True,
+    budget_strategy: BudgetStrategy = "query_fair",
+    min_passages_per_source: int = 1,
     include_diagnostics: bool = True,
     include_tables: bool = False,
     include_references: bool = False,
@@ -475,6 +478,8 @@ async def retrieve_review_context_batch_impl(
             max_chars=max_chars,
             max_response_chars=max_response_chars,
             deduplicate_passages=deduplicate_passages,
+            budget_strategy=budget_strategy,
+            min_passages_per_source=min_passages_per_source,
             include_diagnostics=include_diagnostics,
             include_tables=include_tables,
             include_references=include_references,

@@ -44,7 +44,12 @@ from pubtator_link.mcp.service_adapters import (
     submit_text_annotation_impl,
 )
 from pubtator_link.models.publication_passages import PublicationPassageMode
-from pubtator_link.models.review_rerag import PrepareMode, ReviewBatchResponseMode, ReviewTableMode
+from pubtator_link.models.review_rerag import (
+    BudgetStrategy,
+    PrepareMode,
+    ReviewBatchResponseMode,
+    ReviewTableMode,
+)
 from pubtator_link.services.publication_service import PublicationService
 
 READ_ONLY_OPEN_WORLD = ToolAnnotations(
@@ -420,6 +425,8 @@ def create_pubtator_mcp() -> FastMCP:
         max_chars: int = 12000,
         max_response_chars: int = 24000,
         deduplicate_passages: bool = True,
+        budget_strategy: BudgetStrategy | None = "query_fair",
+        min_passages_per_source: int = 1,
         include_diagnostics: bool = True,
         include_tables: bool = False,
         include_references: bool = False,
@@ -427,7 +434,7 @@ def create_pubtator_mcp() -> FastMCP:
         allow_truncated_passages: bool = True,
         max_chars_per_passage: int = 2200,
     ) -> dict[str, Any]:
-        """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode returns merged passages plus per-query summaries, reserves a fair first-pass budget across queries before overflow, and includes next_steps for zero-result queries. Use diagnostics for query refinement and full only when per-query passage text is needed. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode uses query_fair budgeting: merged passages plus per-query summaries, a fair first-pass budget across queries before overflow, and next_steps for zero-result queries. Opt into source_fair or scarcity_first to give each PMID/source first-pass representation before overflow. Use diagnostics for query refinement and full only when per-query passage text is needed. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         service = await get_review_context_service()
         return await retrieve_review_context_batch_impl(
             service=service,
@@ -442,6 +449,8 @@ def create_pubtator_mcp() -> FastMCP:
             max_chars=max_chars,
             max_response_chars=max_response_chars,
             deduplicate_passages=deduplicate_passages,
+            budget_strategy=budget_strategy or "query_fair",
+            min_passages_per_source=min_passages_per_source,
             include_diagnostics=include_diagnostics,
             include_tables=include_tables,
             include_references=include_references,

@@ -25,6 +25,7 @@ class FakeReviewContextRepository:
         self.preparation_status_value = preparation_status or {"complete": 1}
         self.search_calls: list[dict[str, object]] = []
         self.source_summaries: list[ReviewSourceSummary] = []
+        self.source_coverages: dict[str, str] = {}
         self.failed_source_summaries: list[FailedSourceSummary] = []
         self.index_totals = ReviewIndexTotals()
         self.inspect_calls: list[dict[str, object]] = []
@@ -73,7 +74,25 @@ class FakeReviewContextRepository:
                 "sample_per_pmid": sample_per_pmid,
             }
         )
-        return self.source_summaries
+        if self.source_summaries:
+            if pmids:
+                pmid_set = set(pmids)
+                return [summary for summary in self.source_summaries if summary.pmid in pmid_set]
+            return self.source_summaries
+        seen_pmids = list(dict.fromkeys(row.pmid for row in self.passages if row.pmid is not None))
+        if pmids:
+            pmid_set = set(pmids)
+            seen_pmids = [pmid for pmid in seen_pmids if pmid in pmid_set]
+        return [
+            ReviewSourceSummary(
+                source_id=f"source-{pmid}",
+                pmid=pmid,
+                source_kind="pubtator_full_bioc",
+                job_status="complete",
+                coverage=self.source_coverages.get(pmid, "unknown"),
+            )
+            for pmid in seen_pmids
+        ]
 
     async def list_review_failed_sources(self, review_id: str) -> list[FailedSourceSummary]:
         self.inspect_calls.append({"method": "list_review_failed_sources", "review_id": review_id})
@@ -116,6 +135,50 @@ class QueryMappedReviewContextRepository(FakeReviewContextRepository):
             }
         )
         return self.passages_by_query[query]
+
+    async def list_review_sources(
+        self,
+        review_id: str,
+        pmids: Sequence[str] | None = None,
+        *,
+        include_passage_samples: bool = False,
+        sample_per_pmid: int = 2,
+    ) -> list[ReviewSourceSummary]:
+        self.inspect_calls.append(
+            {
+                "method": "list_review_sources",
+                "review_id": review_id,
+                "pmids": pmids,
+                "include_passage_samples": include_passage_samples,
+                "sample_per_pmid": sample_per_pmid,
+            }
+        )
+        if self.source_summaries:
+            if pmids:
+                pmid_set = set(pmids)
+                return [summary for summary in self.source_summaries if summary.pmid in pmid_set]
+            return self.source_summaries
+        seen_pmids = list(
+            dict.fromkeys(
+                row.pmid
+                for passages in self.passages_by_query.values()
+                for row in passages
+                if row.pmid is not None
+            )
+        )
+        if pmids:
+            pmid_set = set(pmids)
+            seen_pmids = [pmid for pmid in seen_pmids if pmid in pmid_set]
+        return [
+            ReviewSourceSummary(
+                source_id=f"source-{pmid}",
+                pmid=pmid,
+                source_kind="pubtator_full_bioc",
+                job_status="complete",
+                coverage=self.source_coverages.get(pmid, "unknown"),
+            )
+            for pmid in seen_pmids
+        ]
 
 
 def _passage(
@@ -667,3 +730,138 @@ async def test_batch_context_pack_includes_stable_citation_map() -> None:
     assert response.merged_context_pack.stable_citation_map == {
         passage.stable_citation_key: passage.passage_id
     }
+
+
+@pytest.mark.asyncio
+async def test_batch_query_fair_preserves_existing_merge_order() -> None:
+    repository = QueryMappedReviewContextRepository(
+        {
+            "query one": [
+                _passage("q1-a", pmid="111", text="a" * 300, lexical_rank=10.0),
+                _passage("q1-b", pmid="112", text="b" * 300, lexical_rank=9.0),
+                _passage("q1-c", pmid="113", text="c" * 300, lexical_rank=8.0),
+            ],
+            "query two": [_passage("q2-a", pmid="221", text="d" * 300, lexical_rank=10.0)],
+            "query three": [_passage("q3-a", pmid="331", text="e" * 300, lexical_rank=10.0)],
+        }
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["query one", "query two", "query three"],
+            budget_strategy="query_fair",
+            max_chars=900,
+            max_response_chars=100000,
+            max_passages_per_query=3,
+            max_total_passages=6,
+        ),
+    )
+
+    assert [passage.passage_id for passage in response.merged_context_pack.passages] == [
+        "q1-a",
+        "q2-a",
+        "q3-a",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_batch_source_fair_includes_later_pmids_before_overflow() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage("p1", pmid="111", text="a" * 100, lexical_rank=10.0),
+            _passage("p2", pmid="111", text="b" * 100, lexical_rank=9.0),
+            _passage("p3", pmid="222", text="c" * 100, lexical_rank=8.0),
+            _passage("p4", pmid="333", text="d" * 100, lexical_rank=7.0),
+        ]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["guideline"],
+            budget_strategy="source_fair",
+            max_chars=600,
+            max_response_chars=100000,
+            max_passages_per_query=4,
+            max_total_passages=3,
+        ),
+    )
+
+    assert [passage.pmid for passage in response.merged_context_pack.passages] == [
+        "111",
+        "222",
+        "333",
+    ]
+    assert response.source_budget_summaries
+    assert response.source_budget_summaries[0].first_pass_eligible is True
+
+
+@pytest.mark.asyncio
+async def test_batch_scarcity_first_prefers_low_coverage_sources() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage("p-full", pmid="333", text="full text evidence", lexical_rank=10.0),
+            _passage("p-abstract", pmid="222", text="abstract evidence", lexical_rank=9.0),
+            _passage("p-title", pmid="111", text="title evidence", lexical_rank=8.0),
+        ]
+    )
+    repository.source_coverages = {
+        "111": "title_only",
+        "222": "abstract_only",
+        "333": "full_text",
+    }
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["guideline"],
+            budget_strategy="scarcity_first",
+            max_chars=10000,
+            max_response_chars=100000,
+            max_passages_per_query=3,
+            max_total_passages=3,
+        ),
+    )
+
+    assert [passage.pmid for passage in response.merged_context_pack.passages] == [
+        "111",
+        "222",
+        "333",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_batch_source_fair_respects_global_budget_precedence() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage("p1", pmid="111", text="a" * 100, lexical_rank=10.0),
+            _passage("p2", pmid="222", text="b" * 100, lexical_rank=9.0),
+            _passage("p3", pmid="333", text="c" * 100, lexical_rank=8.0),
+            _passage("p4", pmid="444", text="d" * 100, lexical_rank=7.0),
+            _passage("p5", pmid="555", text="e" * 100, lexical_rank=6.0),
+        ]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["guideline"],
+            budget_strategy="source_fair",
+            min_passages_per_source=2,
+            max_total_passages=3,
+            max_chars=10000,
+            max_response_chars=100000,
+        ),
+    )
+
+    assert len(response.merged_context_pack.passages) == 3
+    assert response.merged_context_pack.dropped
+    assert any(
+        drop.reason in {"max_total_passages_exceeded", "source_budget_exceeded"}
+        for drop in response.merged_context_pack.dropped
+    )
