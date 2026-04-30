@@ -40,6 +40,17 @@ def test_client():
 class TestAnnotationRoutes:
     """Test text annotation endpoints."""
 
+    @staticmethod
+    def _annotation_result(status: str) -> dict[str, object]:
+        result: dict[str, object] = {
+            "status": status,
+            "original_text": "BRCA1 mutations increase breast cancer risk",
+            "bioconcept": "Gene",
+        }
+        if status == "failed":
+            result["error"] = "upstream processing failed"
+        return result
+
     @patch.object(PubTator3Client, "submit_text_annotation")
     def test_submit_text_annotation_basic(self, mock_submit, test_client):
         """Test basic text annotation submission."""
@@ -86,6 +97,26 @@ class TestAnnotationRoutes:
         data = response.json()
         assert "Invalid bioconcept" in data["detail"]
 
+    def test_submit_text_annotation_rejects_blank_text(self, test_client):
+        """Test text annotation rejects empty text."""
+        response = test_client.post(
+            "/api/annotations/submit",
+            params={"text": "   ", "bioconcepts": "Gene"},
+        )
+
+        assert response.status_code == 422
+        assert response.json()["detail"] == "Text is required and cannot be empty"
+
+    def test_submit_text_annotation_rejects_text_over_limit(self, test_client):
+        """Test text annotation rejects text over the public limit."""
+        response = test_client.post(
+            "/api/annotations/submit",
+            params={"text": "x" * 10001, "bioconcepts": "Gene"},
+        )
+
+        assert response.status_code == 413
+        assert "10,000 characters" in response.json()["detail"]
+
     @patch.object(PubTator3Client, "retrieve_text_annotation")
     def test_get_annotation_results(self, mock_get_results, test_client):
         """Test retrieving annotation results."""
@@ -98,3 +129,52 @@ class TestAnnotationRoutes:
         assert data["success"] is True
         assert data["session_id"] == "0DA64A2FE4D635D5820C"
         assert data["status"] == "completed"
+
+    @pytest.mark.parametrize("status", ["submitted", "processing"])
+    @patch.object(PubTator3Client, "retrieve_text_annotation")
+    def test_get_annotation_results_reports_in_progress_status(
+        self,
+        mock_get_results,
+        test_client,
+        status,
+    ):
+        """Test in-progress annotation statuses return 202 details."""
+        mock_get_results.return_value = self._annotation_result(status)
+
+        response = test_client.get("/api/annotations/results/0DA64A2FE4D635D5820C")
+
+        assert response.status_code == 202
+        detail = response.json()["detail"]
+        assert detail["success"] is True
+        assert detail["status"] == status
+        assert detail["message"] == "Processing in progress. Please try again in a few moments."
+
+    @patch.object(PubTator3Client, "retrieve_text_annotation")
+    def test_get_annotation_results_reports_failed_status(self, mock_get_results, test_client):
+        """Test failed annotation status returns an explicit server error."""
+        mock_get_results.return_value = self._annotation_result("failed")
+
+        response = test_client.get("/api/annotations/results/0DA64A2FE4D635D5820C")
+
+        assert response.status_code == 500
+        assert "upstream processing failed" in response.json()["detail"]
+
+    @patch.object(PubTator3Client, "retrieve_text_annotation")
+    def test_get_annotation_results_reports_expired_status(self, mock_get_results, test_client):
+        """Test expired annotation status returns not found."""
+        mock_get_results.return_value = self._annotation_result("expired")
+
+        response = test_client.get("/api/annotations/results/0DA64A2FE4D635D5820C")
+
+        assert response.status_code == 404
+        assert "has expired" in response.json()["detail"]
+
+    @patch.object(PubTator3Client, "retrieve_text_annotation")
+    def test_get_annotation_results_reports_unknown_status(self, mock_get_results, test_client):
+        """Test unknown annotation status returns an explicit server error."""
+        mock_get_results.return_value = self._annotation_result("queued_elsewhere")
+
+        response = test_client.get("/api/annotations/results/0DA64A2FE4D635D5820C")
+
+        assert response.status_code == 500
+        assert "Unknown processing status: queued_elsewhere" in response.json()["detail"]
