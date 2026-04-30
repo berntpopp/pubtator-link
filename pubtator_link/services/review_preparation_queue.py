@@ -101,6 +101,15 @@ class ReviewPreparationQueue:
         while True:
             review_id, source_id, source_kind, source_value = await self._queue.get()
             try:
+                self.logger.info(
+                    "Review preparation job started",
+                    extra={
+                        "review_id": review_id,
+                        "source_id": source_id,
+                        "source_kind": source_kind,
+                        "timeout_seconds": self.config.document_timeout_seconds,
+                    },
+                )
                 await self.repository.mark_job_running(review_id=review_id, source_id=source_id)
 
                 async def run_preparation(
@@ -140,8 +149,42 @@ class ReviewPreparationQueue:
                     status=result,
                     error=None,
                 )
+                self.logger.info(
+                    "Review preparation job finished",
+                    extra={
+                        "review_id": review_id,
+                        "source_id": source_id,
+                        "source_kind": source_kind,
+                        "status": result,
+                    },
+                )
             except asyncio.CancelledError:
                 raise
+            except TimeoutError:
+                error = (
+                    f"Preparation timed out after {self.config.document_timeout_seconds} seconds"
+                )
+                self.logger.warning(
+                    error,
+                    extra={
+                        "review_id": review_id,
+                        "source_id": source_id,
+                        "source_kind": source_kind,
+                    },
+                )
+                await self.repository.record_retrieval_attempt(
+                    review_id,
+                    source_id,
+                    source_kind,
+                    "failed",
+                    reason=error,
+                )
+                await self.repository.mark_job_finished(
+                    review_id=review_id,
+                    source_id=source_id,
+                    status="failed",
+                    error=error,
+                )
             except Exception as exc:
                 self.logger.exception(
                     "Review preparation job failed",
@@ -155,9 +198,16 @@ class ReviewPreparationQueue:
                     review_id=review_id,
                     source_id=source_id,
                     status="failed",
-                    error=str(exc)[:500],
+                    error=_error_message(exc),
                 )
             finally:
                 async with self._queued_lock:
                     self._queued.discard((review_id, source_id))
                 self._queue.task_done()
+
+
+def _error_message(exc: Exception) -> str:
+    message = str(exc).strip()
+    if message:
+        return message[:500]
+    return type(exc).__name__[:500]

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import TYPE_CHECKING, Any, cast
 
 from structlog.typing import FilteringBoundLogger
@@ -36,6 +37,10 @@ def looks_like_pdf(content: bytes) -> bool:
     return content.startswith(b"%PDF")
 
 
+def _passage_char_count(passages: list[ReviewPassageRow]) -> int:
+    return sum(len(passage.text) for passage in passages)
+
+
 class FullTextPreparationService:
     """Prepare PubTator and curated URL passages for review-scoped retrieval."""
 
@@ -55,6 +60,11 @@ class FullTextPreparationService:
 
     async def prepare_pmid(self, review_id: str, pmid: str) -> JobStatus:
         """Prepare passages for a PMID from full-text PubTator, then abstract fallback."""
+        started = time.monotonic()
+        self.logger.info(
+            "Review PMID preparation fetching full PubTator export",
+            extra={"review_id": review_id, "pmid": pmid, "full": True},
+        )
         full_data = await self.pubtator_client.export_publications(
             [pmid],
             format="biocjson",
@@ -66,8 +76,21 @@ class FullTextPreparationService:
             source_kind="pubtator_full_bioc",
         )
         source_kind = "pubtator_full_bioc"
+        self.logger.info(
+            "Review PMID full PubTator export parsed",
+            extra={
+                "review_id": review_id,
+                "pmid": pmid,
+                "passage_count": len(passages),
+                "char_count": _passage_char_count(passages),
+            },
+        )
 
         if not passages:
+            self.logger.info(
+                "Review PMID preparation falling back to PubTator abstract export",
+                extra={"review_id": review_id, "pmid": pmid, "full": False},
+            )
             abstract_data = await self.pubtator_client.export_publications(
                 [pmid],
                 format="biocjson",
@@ -79,8 +102,27 @@ class FullTextPreparationService:
                 source_kind="pubtator_abstract",
             )
             source_kind = "pubtator_abstract"
+            self.logger.info(
+                "Review PMID abstract PubTator export parsed",
+                extra={
+                    "review_id": review_id,
+                    "pmid": pmid,
+                    "passage_count": len(passages),
+                    "char_count": _passage_char_count(passages),
+                },
+            )
 
         if passages:
+            self.logger.info(
+                "Review PMID preparation upserting passages",
+                extra={
+                    "review_id": review_id,
+                    "pmid": pmid,
+                    "source_kind": source_kind,
+                    "passage_count": len(passages),
+                    "char_count": _passage_char_count(passages),
+                },
+            )
             await self.repository.upsert_passages(passages)
 
         status = "success" if passages else "failed"
@@ -91,6 +133,16 @@ class FullTextPreparationService:
             status,
             content_type="application/json",
             reason=None if passages else "No PubTator passages found",
+        )
+        self.logger.info(
+            "Review PMID preparation recorded retrieval attempt",
+            extra={
+                "review_id": review_id,
+                "pmid": pmid,
+                "source_kind": source_kind,
+                "status": status,
+                "duration_ms": round((time.monotonic() - started) * 1000, 2),
+            },
         )
         return "complete" if passages else "failed"
 

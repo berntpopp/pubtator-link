@@ -79,7 +79,7 @@ async def get_review_pool() -> asyncpg.Pool:
         _review_pool = await asyncpg.create_pool(
             dsn=review_rerag_config.database_url,
             min_size=1,
-            max_size=max(1, review_rerag_config.prep_concurrency),
+            max_size=max(2, review_rerag_config.prep_concurrency * 2 + 2),
         )
     return _review_pool
 

@@ -20,6 +20,19 @@ def _config() -> ReviewReragConfig:
     )
 
 
+def _timeout_config() -> ReviewReragConfig:
+    return ReviewReragConfig(
+        database_url=None,
+        prep_concurrency=1,
+        document_timeout_seconds=1,
+        source_timeout_seconds=5,
+        pdf_max_bytes=64,
+        text_max_bytes=64,
+        allow_http_urls=False,
+        enable_docling=False,
+    )
+
+
 class RecordingRepository:
     def __init__(self) -> None:
         self.enqueued: list[tuple[str, str, str]] = []
@@ -73,6 +86,53 @@ class RecordingPreparation:
         return "complete"
 
     async def prepare_curated_url(self, review_id: str, url: str) -> str:
+        return "complete"
+
+
+class WorkerRepository(RecordingRepository):
+    def __init__(self) -> None:
+        super().__init__()
+        self.running: list[tuple[str, str]] = []
+        self.finished: list[tuple[str, str, str, str | None]] = []
+        self.attempts: list[tuple[str, str, str, str, str | None]] = []
+
+    async def mark_job_running(self, *, review_id: str, source_id: str) -> None:
+        self.running.append((review_id, source_id))
+
+    async def mark_job_finished(
+        self, *, review_id: str, source_id: str, status: str, error: str | None
+    ) -> None:
+        self.finished.append((review_id, source_id, status, error))
+
+    async def with_preparation_lock(
+        self,
+        *,
+        review_id: str,
+        source_id: str,
+        callback: Any,
+    ) -> str:
+        return await callback()
+
+    async def record_retrieval_attempt(
+        self,
+        review_id: str,
+        source_id: str,
+        source_kind: str,
+        status: str,
+        *,
+        reason: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        self.attempts.append((review_id, source_id, source_kind, status, reason))
+
+
+class SlowPreparation:
+    async def prepare_pmid(self, review_id: str, pmid: str) -> str:
+        await asyncio.sleep(2)
+        return "complete"
+
+    async def prepare_curated_url(self, review_id: str, url: str) -> str:
+        await asyncio.sleep(2)
         return "complete"
 
 
@@ -180,3 +240,38 @@ async def test_start_repairs_startup_jobs_only_before_workers_are_started() -> N
     await queue.stop()
 
     assert repository.repair_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_worker_records_actionable_error_on_timeout() -> None:
+    repository = WorkerRepository()
+    queue = ReviewPreparationQueue(
+        config=_timeout_config(),
+        repository=repository,
+        preparation=SlowPreparation(),
+    )
+
+    await queue.start()
+    try:
+        assert await queue.enqueue_pmid("review-1", "40234174") is True
+        await asyncio.wait_for(queue._queue.join(), timeout=2)
+    finally:
+        await queue.stop()
+
+    assert repository.finished == [
+        (
+            "review-1",
+            "PMID:40234174",
+            "failed",
+            "Preparation timed out after 1 seconds",
+        )
+    ]
+    assert repository.attempts == [
+        (
+            "review-1",
+            "PMID:40234174",
+            "pubtator_full_bioc",
+            "failed",
+            "Preparation timed out after 1 seconds",
+        )
+    ]

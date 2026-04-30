@@ -7,7 +7,7 @@ from pubtator_link.api.routes import dependencies
 
 
 @pytest.mark.asyncio
-async def test_get_review_pool_uses_explicit_small_pool_sizing(
+async def test_get_review_pool_leaves_headroom_for_preparation_workers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured_kwargs: dict[str, Any] = {}
@@ -34,12 +34,12 @@ async def test_get_review_pool_uses_explicit_small_pool_sizing(
     assert captured_kwargs == {
         "dsn": "postgresql://user:pass@localhost:5434/pubtator_link",
         "min_size": 1,
-        "max_size": 3,
+        "max_size": 8,
     }
 
 
 @pytest.mark.asyncio
-async def test_get_review_pool_keeps_max_size_at_least_one(
+async def test_get_review_pool_keeps_spare_connections_when_concurrency_is_zero(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured_kwargs: dict[str, Any] = {}
@@ -61,4 +61,4 @@ async def test_get_review_pool_keeps_max_size_at_least_one(
 
     await dependencies.get_review_pool()
 
-    assert captured_kwargs["max_size"] == 1
+    assert captured_kwargs["max_size"] == 2
