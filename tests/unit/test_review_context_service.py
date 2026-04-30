@@ -175,3 +175,28 @@ async def test_max_chars_drops_over_budget_passages_without_truncating() -> None
     ]
     assert response.context_pack.passages[0].text == text_450
     assert response.context_pack.passages[1].text == text_50
+
+
+@pytest.mark.asyncio
+async def test_reference_passages_rank_after_body_sections_when_scores_tie() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage("a-ref", pmid="111", text="reference title", lexical_rank=5.0, section="REF"),
+            _passage(
+                "z-discuss",
+                pmid="111",
+                text="discussion content",
+                lexical_rank=5.0,
+                section="DISCUSS",
+            ),
+        ]
+    )
+    service = ReviewContextService(repository)
+    request = RetrieveReviewContextRequest(question="colchicine response", pmids=["111"])
+
+    response = await service.retrieve_context("review-1", request)
+
+    assert [passage.passage_id for passage in response.context_pack.passages] == [
+        "z-discuss",
+        "a-ref",
+    ]

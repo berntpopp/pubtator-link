@@ -36,16 +36,25 @@ class ReviewContextRepository(Protocol):
 SECTION_PRIORITY = {
     "title": 0,
     "abstract": 1,
+    "abstr": 1,
     "summary": 2,
     "introduction": 3,
+    "intro": 3,
     "background": 4,
     "methods": 5,
+    "method": 5,
     "materials and methods": 5,
     "results": 6,
+    "result": 6,
     "discussion": 7,
+    "discuss": 7,
     "conclusion": 8,
     "conclusions": 8,
-    "body": 9,
+    "concl": 8,
+    "table": 9,
+    "body": 10,
+    "ref": 50,
+    "references": 50,
 }
 
 SOURCE_PRIORITY = {

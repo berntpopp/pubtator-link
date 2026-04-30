@@ -189,7 +189,15 @@ async def test_search_passages_maps_rows_and_uses_none_for_empty_filters() -> No
     sql, args = connection.executed[0]
     assert "websearch_to_tsquery" in sql
     assert "source_kind" in sql
-    assert args == ("review-1", "when start colchicine", None, None, None, 8)
+    assert args == (
+        "review-1",
+        "when start colchicine",
+        None,
+        None,
+        None,
+        8,
+        "when | start | colchicine",
+    )
 
 
 @pytest.mark.asyncio
@@ -226,3 +234,29 @@ async def test_advisory_lock_wraps_preparation_callback() -> None:
     assert len(connection.executed) == 1
     assert "pg_advisory_xact_lock" in connection.executed[0][0]
     callback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_search_passages_uses_relaxed_or_query_for_candidate_recall() -> None:
+    connection = FakeConnection()
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    await repository.search_passages(
+        review_id="review-1",
+        query="Should colchicine start after clinical diagnosis of FMF in children?",
+        entity_ids=[],
+        pmids=[],
+        sections=[],
+        limit=8,
+    )
+
+    sql, args = connection.executed[0]
+    normalized_sql = " ".join(sql.split())
+    assert "strict_query" in sql
+    assert "recall_query" in sql
+    assert "websearch_to_tsquery" in sql
+    assert "to_tsquery('english', $7)" in sql
+    assert "search_vector @@ query.strict_query or search_vector @@ query.recall_query" in (
+        normalized_sql
+    )
+    assert args[-1] == "should | colchicine | start | after | clinical | diagnosis | fmf | children"

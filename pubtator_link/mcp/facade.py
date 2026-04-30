@@ -11,6 +11,7 @@ from pubtator_link.api.routes.dependencies import get_review_context_service, ge
 from pubtator_link.mcp.prompts import (
     annotate_research_text_prompt,
     review_pubtator_annotations_prompt,
+    review_rerag_workflow_prompt,
     search_biomedical_literature_prompt,
 )
 from pubtator_link.mcp.resources import (
@@ -202,7 +203,7 @@ def create_pubtator_mcp() -> FastMCP:
         annotations=REVIEW_WRITE_ANNOTATIONS,
     )
     async def index_review_evidence(request: IndexReviewEvidenceMcpRequest) -> dict[str, Any]:
-        """Queue review-scoped evidence preparation. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Queue review-scoped evidence preparation for a review_id and PMIDs/curated URLs. Call this before retrieve_review_context, then watch preparation_status until jobs are complete, partial, or failed. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         queue = await get_review_queue()
         return await index_review_evidence_impl(request, queue=queue)
 
@@ -212,7 +213,7 @@ def create_pubtator_mcp() -> FastMCP:
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def retrieve_review_context(request: RetrieveReviewContextMcpRequest) -> dict[str, Any]:
-        """Retrieve a compact context pack from prepared review passages. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Retrieve a compact citable context pack from prepared review passages. Best results usually come from a short keyword query; use pmids when focusing on a specific paper. If zero passages are returned, simplify the query or fall back to fetch_publication_annotations with full=true. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         service = await get_review_context_service()
         return await retrieve_review_context_impl(request, service=service)
 
@@ -251,6 +252,10 @@ def create_pubtator_mcp() -> FastMCP:
     @mcp.prompt(name="review_pubtator_annotations", title="Review PubTator Annotations")
     def review_annotations_prompt() -> str:
         return review_pubtator_annotations_prompt()
+
+    @mcp.prompt(name="review_rerag_workflow", title="Review Re-RAG Workflow")
+    def review_rerag_prompt() -> str:
+        return review_rerag_workflow_prompt()
 
     _install_inspection_managers(mcp)
     return mcp

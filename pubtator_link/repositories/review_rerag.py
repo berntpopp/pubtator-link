@@ -294,11 +294,14 @@ class PostgresReviewReragRepository:
         entity_filter = _filter_or_none(entity_ids)
         pmid_filter = _filter_or_none(pmids)
         section_filter = _filter_or_none(sections)
+        recall_query = _recall_tsquery(query)
         async with self._pool.acquire() as connection:
             rows = await connection.fetch(
                 """
                 with query as (
-                    select websearch_to_tsquery('english', $2) as tsquery
+                    select
+                        websearch_to_tsquery('english', $2) as strict_query,
+                        to_tsquery('english', $7) as recall_query
                 )
                 select
                     passage_id,
@@ -317,10 +320,13 @@ class PostgresReviewReragRepository:
                     relation_types,
                     screening_status,
                     source_metadata,
-                    ts_rank_cd(search_vector, query.tsquery) as lexical_rank
+                    (
+                        ts_rank_cd(search_vector, query.strict_query) * 2.0
+                        + ts_rank_cd(search_vector, query.recall_query)
+                    ) as lexical_rank
                 from review_passages, query
                 where review_id = $1
-                  and search_vector @@ query.tsquery
+                  and (search_vector @@ query.strict_query or search_vector @@ query.recall_query)
                   and ($3::text[] is null or entity_ids && $3::text[])
                   and ($4::text[] is null or pmid = any($4::text[]))
                   and ($5::text[] is null or section = any($5::text[]))
@@ -333,6 +339,7 @@ class PostgresReviewReragRepository:
                 pmid_filter,
                 section_filter,
                 limit,
+                recall_query,
             )
         return [_passage_from_row(row) for row in rows]
 
@@ -403,3 +410,16 @@ def _parse_execute_count(result: str) -> int:
     if match is None:
         return 0
     return int(match.group(1))
+
+
+def _recall_tsquery(query: str) -> str:
+    tokens = []
+    seen: set[str] = set()
+    for token in re.findall(r"[a-zA-Z0-9]+", query.lower()):
+        if len(token) < 3 or token in seen:
+            continue
+        seen.add(token)
+        tokens.append(token)
+        if len(tokens) >= 12:
+            break
+    return " | ".join(tokens) or "review"

@@ -30,7 +30,15 @@ def get_capabilities_resource() -> dict[str, Any]:
         ],
         "review_rerag": {
             "tools": ["pubtator.index_review_evidence", "pubtator.retrieve_review_context"],
+            "prompt": "review_rerag_workflow",
             "scope": "research-use review-scoped evidence preparation and retrieval",
+            "workflow": [
+                "index candidate PMIDs or curated URLs for a stable review_id",
+                "wait for preparation_status to show complete or partial records",
+                "retrieve with short keyword-style questions first",
+                "retry with PMID filters for paper-specific evidence",
+                "fall back to fetch_publication_annotations full=true when retrieval returns no passages",
+            ],
             "limitations": [
                 "single-tenant trusted POC",
                 "no backend LLM",
