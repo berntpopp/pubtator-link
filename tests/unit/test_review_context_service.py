@@ -3,8 +3,12 @@ from collections.abc import Sequence
 import pytest
 
 from pubtator_link.models.review_rerag import (
+    ContextPack,
     FailedSourceSummary,
     InspectReviewIndexRequest,
+    PreparationStatus,
+    QueryDiagnosticsSummary,
+    RetrieveReviewContextBatchResponse,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
     ReviewIndexTotals,
@@ -400,19 +404,66 @@ async def test_batch_retrieval_deduplicates_and_preserves_per_query_diagnostics(
         "review-1",
         RetrieveReviewContextBatchRequest(
             queries=["colchicine children", "FMF phenotype"],
+            response_mode="compact",
             max_passages_per_query=3,
             max_total_passages=3,
             max_chars=1000,
         ),
     )
 
-    assert [result.context_pack.question for result in response.results] == [
+    assert response.results == []
+    assert [summary.query for summary in response.query_summaries] == [
         "colchicine children",
         "FMF phenotype",
     ]
-    assert all(result.diagnostics is not None for result in response.results)
+    assert response.query_summaries[0].returned_count == 2
     assert [passage.passage_id for passage in response.merged_context_pack.passages] == [
         "p1",
         "p2",
     ]
     assert response.merged_context_pack.citation_map == {"S1": "p1", "S2": "p2"}
+    assert response.budget is not None
+    assert response.budget.text_chars == len("first passage") + len("second passage")
+
+
+@pytest.mark.asyncio
+async def test_batch_full_mode_preserves_per_query_results() -> None:
+    repository = FakeReviewContextRepository(
+        [_passage("p1", pmid="111", text="MEFV colchicine evidence", lexical_rank=9.0)]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["MEFV"],
+            response_mode="full",
+            max_chars=12000,
+        ),
+    )
+
+    assert response.response_mode == "full"
+    assert response.results[0].context_pack.passages[0].text == "MEFV colchicine evidence"
+
+
+@pytest.mark.asyncio
+async def test_batch_diagnostics_mode_returns_no_passage_text() -> None:
+    repository = FakeReviewContextRepository([], preparation_status={})
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["MEFV colchicine"],
+            response_mode="diagnostics",
+            include_diagnostics=True,
+        ),
+    )
+
+    assert response.response_mode == "diagnostics"
+    assert response.results == []
+    assert response.merged_context_pack.passages == []
+    assert response.query_summaries[0].zero_result_reason in {
+        "review_not_indexed",
+        "no_candidate_matches",
+    }
