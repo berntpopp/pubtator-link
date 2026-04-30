@@ -1,4 +1,4 @@
-.PHONY: help install lock upgrade sync format format-check lint lint-ci lint-fix typecheck typecheck-fast typecheck-stop typecheck-fresh test test-fast test-unit test-integration test-cov test-all check ci-local precommit clean dev mcp-serve mcp-serve-http docker-build docker-up docker-down docker-logs docker-prod-config docker-npm-config
+.PHONY: help install lock upgrade sync format format-check lint lint-ci lint-fix typecheck typecheck-fast typecheck-stop typecheck-fresh test test-fast test-unit test-integration test-cov test-all check ci-local precommit clean dev mcp-serve mcp-serve-http db-init docker-build docker-up docker-down docker-logs docker-prod-config docker-npm-config
 
 DOCKER_COMPOSE := $(shell if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then echo "docker compose"; elif command -v docker-compose >/dev/null 2>&1; then echo "docker-compose"; else echo "docker compose"; fi)
 
@@ -99,6 +99,10 @@ mcp-serve: ## Start local stdio MCP server
 
 mcp-serve-http: ## Start hosted MCP endpoint with REST API
 	uv run python server.py --transport unified --host 127.0.0.1 --port 8000
+
+db-init: ## Apply review re-RAG PostgreSQL schema using PUBTATOR_LINK_DATABASE_URL
+	test -n "$$PUBTATOR_LINK_DATABASE_URL"
+	psql "$$PUBTATOR_LINK_DATABASE_URL" -f pubtator_link/db/review_schema.sql
 
 docker-build: ## Build Docker image
 	$(DOCKER_COMPOSE) -f docker/docker-compose.yml build
