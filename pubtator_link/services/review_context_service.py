@@ -28,6 +28,10 @@ from pubtator_link.models.review_rerag import (
     ZeroResultReason,
     estimate_tokens_from_chars,
 )
+from pubtator_link.services.review_context.ranking import (
+    SOURCE_COVERAGE_SCARCITY_PRIORITY,
+    rerank_key,
+)
 
 
 class ReviewContextRepository(Protocol):
@@ -71,49 +75,6 @@ class ReviewContextRepository(Protocol):
         """Return indexed PMIDs for diagnostics."""
 
 
-SECTION_PRIORITY = {
-    "title": 0,
-    "abstract": 1,
-    "abstr": 1,
-    "summary": 2,
-    "introduction": 3,
-    "intro": 3,
-    "background": 4,
-    "methods": 5,
-    "method": 5,
-    "materials and methods": 5,
-    "results": 6,
-    "result": 6,
-    "discussion": 7,
-    "discuss": 7,
-    "conclusion": 8,
-    "conclusions": 8,
-    "concl": 8,
-    "table": 9,
-    "body": 10,
-    "ref": 50,
-    "references": 50,
-}
-
-SOURCE_PRIORITY = {
-    "pubtator_full_bioc": 0,
-    "pmc_bioc": 1,
-    "europe_pmc_jats": 2,
-    "curated_pdf": 3,
-    "curated_html": 4,
-    "docling_pdf": 5,
-    "pubtator_abstract": 6,
-}
-
-SOURCE_COVERAGE_SCARCITY_PRIORITY = {
-    "title_only": 0,
-    "abstract_only": 1,
-    "curated_url": 2,
-    "full_text": 3,
-    "unknown": 4,
-}
-
-
 class ReviewContextService:
     """Retrieve, rerank, and pack review-scoped context passages."""
 
@@ -134,7 +95,7 @@ class ReviewContextService:
             sections=request.sections,
             limit=80,
         )
-        sorted_candidates = sorted(candidates, key=self._rerank_key)
+        sorted_candidates = sorted(candidates, key=rerank_key)
         selected, dropped = self._pack_passages(sorted_candidates, request)
         passages = [
             self._context_passage_from_row(index=index, row=row, request=request)
@@ -798,13 +759,3 @@ class ReviewContextService:
             if suggestion and suggestion not in deduped:
                 deduped.append(suggestion)
         return deduped[:3]
-
-    @staticmethod
-    def _rerank_key(row: ReviewPassageRow) -> tuple[float, int, int, str, str]:
-        return (
-            -row.lexical_rank,
-            SECTION_PRIORITY.get(row.section.strip().lower(), 100),
-            SOURCE_PRIORITY.get(row.source_kind, 100),
-            row.pmid or "",
-            row.passage_id,
-        )
