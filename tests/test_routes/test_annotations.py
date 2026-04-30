@@ -117,6 +117,34 @@ class TestAnnotationRoutes:
         assert response.status_code == 413
         assert "10,000 characters" in response.json()["detail"]
 
+    @pytest.mark.parametrize(
+        ("exception", "expected_status", "expected_detail"),
+        [
+            (ValueError("bad bioconcept"), 400, "bad bioconcept"),
+            (ConnectionError("offline"), 503, "temporarily unavailable"),
+            (TimeoutError("slow"), 504, "timeout"),
+        ],
+    )
+    @patch.object(PubTator3Client, "submit_text_annotation")
+    def test_submit_text_annotation_handles_upstream_exceptions(
+        self,
+        mock_submit,
+        test_client,
+        exception,
+        expected_status,
+        expected_detail,
+    ):
+        """Test text annotation submission maps upstream exceptions."""
+        mock_submit.side_effect = exception
+
+        response = test_client.post(
+            "/api/annotations/submit",
+            params={"text": "Test text", "bioconcepts": "Gene"},
+        )
+
+        assert response.status_code == expected_status
+        assert expected_detail in response.json()["detail"]
+
     @patch.object(PubTator3Client, "retrieve_text_annotation")
     def test_get_annotation_results(self, mock_get_results, test_client):
         """Test retrieving annotation results."""
@@ -178,3 +206,29 @@ class TestAnnotationRoutes:
 
         assert response.status_code == 500
         assert "Unknown processing status: queued_elsewhere" in response.json()["detail"]
+
+    @pytest.mark.parametrize(
+        ("exception", "expected_status", "expected_detail"),
+        [
+            (ValueError("bad session"), 400, "bad session"),
+            (ConnectionError("offline"), 503, "temporarily unavailable"),
+            (TimeoutError("slow"), 504, "timeout"),
+            (RuntimeError("missing session"), 404, "not found or has expired"),
+        ],
+    )
+    @patch.object(PubTator3Client, "retrieve_text_annotation")
+    def test_get_annotation_results_handles_upstream_exceptions(
+        self,
+        mock_get_results,
+        test_client,
+        exception,
+        expected_status,
+        expected_detail,
+    ):
+        """Test annotation retrieval maps upstream exceptions."""
+        mock_get_results.side_effect = exception
+
+        response = test_client.get("/api/annotations/results/0DA64A2FE4D635D5820C")
+
+        assert response.status_code == expected_status
+        assert expected_detail in response.json()["detail"]
