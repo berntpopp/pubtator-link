@@ -46,17 +46,35 @@ claude mcp add --transport http pubtator-link http://127.0.0.1:8000/mcp
 
 ## Research Grounding Workflow
 
-Claude Code defers tool schemas by default. If PubTator-Link tools are not visible, ask Claude to search for PubTator-Link tools or call `pubtator.get_server_capabilities`.
+Claude Code defers tool schemas by default. If PubTator-Link tools are not visible, ask Claude to search for `PubTator compact passages review RAG PMID` or call `pubtator.get_server_capabilities`.
+
+For Claude Code and other LLM clients, prefer v2 tools. They use flat arguments and are easier to call than compatibility tools that accept `{ "request": { ... } }`.
 
 Recommended review workflow:
 
-1. `pubtator.search_literature` to find candidate PMIDs.
+1. `pubtator.search_literature_v2` to find candidate PMIDs.
 2. `pubtator.index_review_evidence` with a stable `review_id`.
-3. `pubtator.inspect_review_index` to verify PMIDs, sections, counts, and failures.
-4. `pubtator.retrieve_review_context` or `pubtator.retrieve_review_context_batch` for compact citable passages.
-5. `pubtator.get_publication_passages` for explicit PMID section retrieval.
+3. `pubtator.inspect_review_index_v2` to verify PMIDs, sections, source coverage, counts, and failures.
+4. `pubtator.retrieve_review_context_v2` or `pubtator.retrieve_review_context_batch_v2` for compact citable passages.
+5. `pubtator.get_publication_passages_v2` for explicit PMID section retrieval.
 
 Use `pubtator.fetch_publication_annotations` with `full=true` only when raw BioC is intentionally needed. Compact passage tools are safer for routine grounding. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support.
+
+Recommended batch modes:
+
+- `compact`: default; merged passages plus per-query summaries.
+- `diagnostics`: no passage text; use for query refinement and zero-result debugging.
+- `merged_only`: smallest citable passage response.
+- `full`: full per-query responses; can be large.
+
+Useful output paths:
+
+- Search PMIDs: `results[].pmid`
+- Single retrieval passages: `context_pack.passages[]`
+- Batch merged passages: `merged_context_pack.passages[]`
+- Batch query summaries: `query_summaries[]`
+- Citation map: `merged_context_pack.citation_map`
+- Budget estimate: `budget`
 
 ## Claude Desktop HTTP Config
 
@@ -93,6 +111,12 @@ Use stdio only for local desktop workflows that cannot connect to HTTP MCP endpo
 
 | Tool | Use When |
 |------|----------|
+| `pubtator.search_literature_v2` | Flat-argument PubMed/PubTator literature search |
+| `pubtator.get_publication_passages_v2` | Flat-argument compact citable passages for PubMed IDs |
+| `pubtator.search_biomedical_entities_v2` | Flat-argument canonical PubTator biomedical entity lookup |
+| `pubtator.inspect_review_index_v2` | Flat-argument review index/source coverage inspection |
+| `pubtator.retrieve_review_context_v2` | Flat-argument compact context from prepared review passages |
+| `pubtator.retrieve_review_context_batch_v2` | Flat-argument batch review retrieval with compact/default diagnostics |
 | `pubtator.search_literature` | Search PubMed literature through PubTator3 |
 | `pubtator.get_publication_passages` | Fetch compact citable passages for PubMed IDs |
 | `pubtator.estimate_publication_context` | Estimate compact passage count and size before fetching |

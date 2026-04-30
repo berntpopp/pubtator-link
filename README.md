@@ -200,7 +200,18 @@ For hosted deployments, configure remote MCP clients with `https://your-domain.e
 
 | Tool | Use When |
 |------|----------|
+| `pubtator.search_literature_v2` | Flat-argument PubMed/PubTator literature search |
+| `pubtator.get_publication_passages_v2` | Flat-argument compact citable passages for PubMed IDs |
+| `pubtator.search_biomedical_entities_v2` | Flat-argument canonical PubTator biomedical entity lookup |
+| `pubtator.inspect_review_index_v2` | Flat-argument review index/source coverage inspection |
+| `pubtator.retrieve_review_context_v2` | Flat-argument compact citable review context retrieval |
+| `pubtator.retrieve_review_context_batch_v2` | Flat-argument batch review retrieval with compact/default diagnostics |
 | `pubtator.search_literature` | Search PubMed literature through PubTator3 |
+| `pubtator.get_publication_passages` | Fetch compact citable passages for PubMed IDs |
+| `pubtator.estimate_publication_context` | Estimate compact publication context before fetching |
+| `pubtator.inspect_review_index` | Inspect indexed PMIDs, sections, counts, and failures |
+| `pubtator.retrieve_review_context` | Retrieve compact context from prepared review passages |
+| `pubtator.retrieve_review_context_batch` | Try multiple review retrieval queries and merge context |
 | `pubtator.fetch_publication_annotations` | Fetch annotations for PubMed IDs |
 | `pubtator.fetch_pmc_annotations` | Fetch annotations for PMC full-text articles |
 | `pubtator.search_biomedical_entities` | Find canonical PubTator biomedical entity IDs |
@@ -208,6 +219,20 @@ For hosted deployments, configure remote MCP clients with `https://your-domain.e
 | `pubtator.submit_text_annotation` | Submit research text for PubTator biomedical NER |
 | `pubtator.get_text_annotation_results` | Retrieve asynchronous text annotation results |
 | `pubtator.get_server_capabilities` | Discover formats, bioconcepts, relation types, and limitations |
+
+### Context-Safe Review Retrieval
+
+Prefer `pubtator.retrieve_review_context_batch_v2` for LLM clients. It uses
+flat arguments and defaults to `response_mode="compact"`, returning merged
+citable passages plus per-query summaries. Use `response_mode="diagnostics"` to
+refine queries without passage text, `response_mode="merged_only"` for the
+smallest citable response, and `response_mode="full"` only when full per-query
+passage packs are intentionally needed.
+
+Review retrieval excludes tables and references by default and returns budget
+metadata (`budget`, `total_chars`, `estimated_tokens`) so clients can avoid
+context blow-ups without `jq` or shell post-processing. Use raw BioC tools only
+when explicitly inspecting the source export.
 
 ### Local stdio Fallback
 

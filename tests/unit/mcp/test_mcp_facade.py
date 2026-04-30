@@ -135,3 +135,18 @@ def test_capabilities_resource_tool_names_are_registered() -> None:
     advertised_tools.update(capabilities["review_rerag"]["tools"])
 
     assert advertised_tools <= registered_tools
+
+
+def test_capabilities_include_context_management_cheatsheet() -> None:
+    from pubtator_link.mcp.resources import get_capabilities_resource
+
+    capabilities = get_capabilities_resource()
+
+    assert "sample_calls" in capabilities
+    assert "output_cheatsheet" in capabilities
+    assert "budgeting_defaults" in capabilities
+    assert capabilities["budgeting_defaults"]["batch_response_mode"] == "compact"
+    assert "pubtator.retrieve_review_context_batch_v2" in capabilities["sample_calls"]
+    assert capabilities["output_cheatsheet"]["batch_merged_passages"] == (
+        "merged_context_pack.passages[]"
+    )
