@@ -7,7 +7,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 PrepareMode = Literal["selected", "candidate_fast"]
 JobStatus = Literal["queued", "running", "complete", "partial", "failed"]
 AttemptStatus = Literal["success", "not_available", "blocked", "failed"]

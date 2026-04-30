@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 SCHEMA = Path("pubtator_link/db/review_schema.sql").read_text()
 
 

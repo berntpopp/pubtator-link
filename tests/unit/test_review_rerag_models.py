@@ -1,5 +1,5 @@
-from pydantic import ValidationError
 import pytest
+from pydantic import ValidationError
 
 from pubtator_link.models.review_rerag import (
     ContextPack,
