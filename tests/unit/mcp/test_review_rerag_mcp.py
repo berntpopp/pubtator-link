@@ -15,12 +15,19 @@ def test_review_rerag_tools_are_exposed_with_expected_names() -> None:
     assert "pubtator.retrieve_review_context_batch" in tool_names
 
 
-def test_flat_v2_review_tools_are_registered_without_request_wrapper() -> None:
+def test_review_tools_are_registered_with_flat_canonical_schemas() -> None:
     mcp = create_pubtator_mcp()
     tools = mcp._tool_manager._tools
 
-    assert "pubtator.retrieve_review_context_batch_v2" in tools
-    schema = tools["pubtator.retrieve_review_context_batch_v2"].parameters
+    removed_suffix = "_v" + "2"
+    for removed_name in (
+        f"pubtator.inspect_review_index{removed_suffix}",
+        f"pubtator.retrieve_review_context{removed_suffix}",
+        f"pubtator.retrieve_review_context_batch{removed_suffix}",
+    ):
+        assert removed_name not in tools
+
+    schema = tools["pubtator.retrieve_review_context_batch"].parameters
     properties = schema["properties"]
     assert "review_id" in properties
     assert "queries" in properties

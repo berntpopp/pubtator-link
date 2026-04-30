@@ -48,15 +48,15 @@ claude mcp add --transport http pubtator-link http://127.0.0.1:8000/mcp
 
 Claude Code defers tool schemas by default. If PubTator-Link tools are not visible, ask Claude to search for `PubTator compact passages review RAG PMID` or call `pubtator.get_server_capabilities`.
 
-For Claude Code and other LLM clients, prefer v2 tools. They use flat arguments and are easier to call than compatibility tools that accept `{ "request": { ... } }`.
+Canonical MCP tools use flat top-level arguments. Do not wrap inputs in `{ "request": ... }`.
 
 Recommended review workflow:
 
-1. `pubtator.search_literature_v2` to find candidate PMIDs.
+1. `pubtator.search_literature` to find candidate PMIDs.
 2. `pubtator.index_review_evidence` with a stable `review_id`.
-3. `pubtator.inspect_review_index_v2` to verify PMIDs, sections, source coverage, counts, and failures.
-4. `pubtator.retrieve_review_context_v2` or `pubtator.retrieve_review_context_batch_v2` for compact citable passages.
-5. `pubtator.get_publication_passages_v2` for explicit PMID section retrieval.
+3. `pubtator.inspect_review_index` to verify PMIDs, sections, source coverage, counts, and failures.
+4. `pubtator.retrieve_review_context` or `pubtator.retrieve_review_context_batch` for compact citable passages.
+5. `pubtator.get_publication_passages` for explicit PMID section retrieval.
 
 Use `pubtator.fetch_publication_annotations` with `full=true` only when raw BioC is intentionally needed. Compact passage tools are safer for routine grounding. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support.
 
@@ -111,25 +111,19 @@ Use stdio only for local desktop workflows that cannot connect to HTTP MCP endpo
 
 | Tool | Use When |
 |------|----------|
-| `pubtator.search_literature_v2` | Flat-argument PubMed/PubTator literature search |
-| `pubtator.get_publication_passages_v2` | Flat-argument compact citable passages for PubMed IDs |
-| `pubtator.search_biomedical_entities_v2` | Flat-argument canonical PubTator biomedical entity lookup |
-| `pubtator.inspect_review_index_v2` | Flat-argument review index/source coverage inspection |
-| `pubtator.retrieve_review_context_v2` | Flat-argument compact context from prepared review passages |
-| `pubtator.retrieve_review_context_batch_v2` | Flat-argument batch review retrieval with compact/default diagnostics |
-| `pubtator.search_literature` | Search PubMed literature through PubTator3 |
-| `pubtator.get_publication_passages` | Fetch compact citable passages for PubMed IDs |
+| `pubtator.search_literature` | Flat-argument PubMed/PubTator literature search |
+| `pubtator.get_publication_passages` | Flat-argument compact citable passages for PubMed IDs |
 | `pubtator.estimate_publication_context` | Estimate compact passage count and size before fetching |
 | `pubtator.fetch_publication_annotations` | Fetch raw PubTator annotations or BioC for PubMed IDs |
 | `pubtator.fetch_pmc_annotations` | Fetch raw annotations for PMC full-text articles |
-| `pubtator.search_biomedical_entities` | Find canonical PubTator biomedical entity IDs |
+| `pubtator.search_biomedical_entities` | Flat-argument canonical PubTator biomedical entity lookup |
 | `pubtator.find_entity_relations` | Explore literature-derived relations for a PubTator entity |
 | `pubtator.submit_text_annotation` | Submit research text for PubTator biomedical NER |
 | `pubtator.get_text_annotation_results` | Retrieve asynchronous text annotation results |
 | `pubtator.index_review_evidence` | Queue review-scoped evidence preparation |
-| `pubtator.inspect_review_index` | Inspect indexed PMIDs, sections, counts, and failures |
-| `pubtator.retrieve_review_context` | Retrieve compact context from prepared review passages |
-| `pubtator.retrieve_review_context_batch` | Try multiple review retrieval queries and merge context |
+| `pubtator.inspect_review_index` | Flat-argument review index/source coverage inspection |
+| `pubtator.retrieve_review_context` | Flat-argument compact context from prepared review passages |
+| `pubtator.retrieve_review_context_batch` | Flat-argument batch review retrieval with compact/default diagnostics |
 | `pubtator.get_server_capabilities` | Discover formats, bioconcepts, relation types, and limitations |
 
 ## Verification

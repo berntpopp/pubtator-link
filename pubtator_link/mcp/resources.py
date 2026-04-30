@@ -17,24 +17,18 @@ def get_capabilities_resource() -> dict[str, Any]:
         "transport": "streamable_http",
         "endpoint": "/mcp",
         "tools": [
-            "pubtator.search_literature_v2",
             "pubtator.search_literature",
-            "pubtator.get_publication_passages_v2",
             "pubtator.get_publication_passages",
             "pubtator.estimate_publication_context",
             "pubtator.fetch_publication_annotations",
             "pubtator.fetch_pmc_annotations",
-            "pubtator.search_biomedical_entities_v2",
             "pubtator.search_biomedical_entities",
             "pubtator.find_entity_relations",
             "pubtator.submit_text_annotation",
             "pubtator.get_text_annotation_results",
             "pubtator.index_review_evidence",
-            "pubtator.inspect_review_index_v2",
             "pubtator.inspect_review_index",
-            "pubtator.retrieve_review_context_v2",
             "pubtator.retrieve_review_context",
-            "pubtator.retrieve_review_context_batch_v2",
             "pubtator.retrieve_review_context_batch",
             "pubtator.get_server_capabilities",
         ],
@@ -44,11 +38,9 @@ def get_capabilities_resource() -> dict[str, Any]:
         ],
         "tool_groups": {
             "literature_search": [
-                "pubtator.search_literature_v2",
                 "pubtator.search_literature",
             ],
             "publication_grounding": [
-                "pubtator.get_publication_passages_v2",
                 "pubtator.get_publication_passages",
                 "pubtator.estimate_publication_context",
                 "pubtator.fetch_publication_annotations",
@@ -56,15 +48,11 @@ def get_capabilities_resource() -> dict[str, Any]:
             ],
             "review_grounding": [
                 "pubtator.index_review_evidence",
-                "pubtator.inspect_review_index_v2",
                 "pubtator.inspect_review_index",
-                "pubtator.retrieve_review_context_v2",
                 "pubtator.retrieve_review_context",
-                "pubtator.retrieve_review_context_batch_v2",
                 "pubtator.retrieve_review_context_batch",
             ],
             "entities_relations": [
-                "pubtator.search_biomedical_entities_v2",
                 "pubtator.search_biomedical_entities",
                 "pubtator.find_entity_relations",
             ],
@@ -74,21 +62,21 @@ def get_capabilities_resource() -> dict[str, Any]:
             ],
         },
         "large_output_guidance": {
-            "prefer": "pubtator.get_publication_passages_v2",
+            "prefer": "pubtator.get_publication_passages",
             "avoid_by_default": "pubtator.fetch_publication_annotations full=true",
             "reason": "raw full BioC can be multi-megabyte; compact tools return citable passages",
         },
         "sample_calls": {
-            "pubtator.search_literature_v2": {
+            "pubtator.search_literature": {
                 "text": "MEFV colchicine familial Mediterranean fever guideline",
                 "sort": "score desc",
             },
-            "pubtator.get_publication_passages_v2": {
+            "pubtator.get_publication_passages": {
                 "pmids": ["40234174"],
                 "mode": "compact_passages",
                 "max_chars": 12000,
             },
-            "pubtator.retrieve_review_context_batch_v2": {
+            "pubtator.retrieve_review_context_batch": {
                 "review_id": "fmf-colchicine-guidelines",
                 "queries": [
                     "MEFV colchicine",
@@ -99,7 +87,7 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "max_chars": 12000,
                 "max_response_chars": 24000,
             },
-            "pubtator.retrieve_review_context_batch_v2:diagnostics": {
+            "pubtator.retrieve_review_context_batch:diagnostics": {
                 "review_id": "fmf-colchicine-guidelines",
                 "queries": ["MEFV colchicine", "FMF guideline"],
                 "response_mode": "diagnostics",
@@ -123,11 +111,8 @@ def get_capabilities_resource() -> dict[str, Any]:
         "review_rerag": {
             "tools": [
                 "pubtator.index_review_evidence",
-                "pubtator.inspect_review_index_v2",
                 "pubtator.inspect_review_index",
-                "pubtator.retrieve_review_context_v2",
                 "pubtator.retrieve_review_context",
-                "pubtator.retrieve_review_context_batch_v2",
                 "pubtator.retrieve_review_context_batch",
             ],
             "prompt": "review_rerag_workflow",

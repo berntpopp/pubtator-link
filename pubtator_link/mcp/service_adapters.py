@@ -9,14 +9,8 @@ from pubtator_link.mcp.tools import (
     FetchPmcAnnotationsRequest,
     FetchPublicationAnnotationsRequest,
     FindEntityRelationsRequest,
-    GetPublicationPassagesMcpRequest,
     GetTextAnnotationResultsRequest,
     IndexReviewEvidenceMcpRequest,
-    InspectReviewIndexMcpRequest,
-    RetrieveReviewContextBatchMcpRequest,
-    RetrieveReviewContextMcpRequest,
-    SearchBiomedicalEntitiesRequest,
-    SearchLiteratureRequest,
     SubmitTextAnnotationRequest,
 )
 from pubtator_link.models.publication_passages import (
@@ -51,21 +45,24 @@ from pubtator_link.services.review_preparation_queue import ReviewPreparationQue
 
 
 async def search_biomedical_entities_impl(
-    request: SearchBiomedicalEntitiesRequest,
     *,
     client: PubTator3Client,
+    query: str,
+    concept: Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"] | None = None,
+    limit: int = 10,
 ) -> dict[str, Any]:
+    normalized_query = query.strip()
     raw_response = await client.autocomplete_entity(
-        query=request.query.strip(),
-        concept=request.concept,
-        limit=request.limit,
+        query=normalized_query,
+        concept=concept,
+        limit=limit,
     )
     raw_results = cast(list[dict[str, Any]], raw_response)
     matches = [
         EntityMatch(
             identifier=item.get("_id", ""),
             name=item.get("name", ""),
-            type=item.get("biotype", request.concept or "Unknown"),
+            type=item.get("biotype", concept or "Unknown"),
             score=item.get("score"),
             synonyms=item.get("synonyms", []),
             db_id=item.get("db_id"),
@@ -76,24 +73,11 @@ async def search_biomedical_entities_impl(
     ]
     return EntityAutocompleteResponse(
         success=True,
-        query=request.query.strip(),
+        query=normalized_query,
         matches=matches,
         total_matches=len(matches),
-        concept_filter=request.concept,
+        concept_filter=concept,
     ).model_dump()
-
-
-async def search_biomedical_entities_v2_impl(
-    *,
-    client: PubTator3Client,
-    query: str,
-    concept: Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"] | None = None,
-    limit: int = 10,
-) -> dict[str, Any]:
-    return await search_biomedical_entities_impl(
-        SearchBiomedicalEntitiesRequest(query=query, concept=concept, limit=limit),
-        client=client,
-    )
 
 
 async def fetch_publication_annotations_impl(
@@ -112,26 +96,6 @@ async def fetch_publication_annotations_impl(
 
 
 async def get_publication_passages_impl(
-    request: GetPublicationPassagesMcpRequest,
-    *,
-    service: PublicationPassageService,
-) -> dict[str, Any]:
-    response = await service.get_passages(
-        PublicationPassageRequest(
-            pmids=request.pmids,
-            sections=request.sections,
-            mode=request.mode,
-            full=request.full,
-            max_passages_per_pmid=request.max_passages_per_pmid,
-            max_chars=request.max_chars,
-            include_tables=request.include_tables,
-            include_references=request.include_references,
-        )
-    )
-    return response.model_dump()
-
-
-async def get_publication_passages_v2_impl(
     *,
     service: PublicationPassageService,
     pmids: list[str],
@@ -143,8 +107,8 @@ async def get_publication_passages_v2_impl(
     include_tables: bool = True,
     include_references: bool = False,
 ) -> dict[str, Any]:
-    return await get_publication_passages_impl(
-        GetPublicationPassagesMcpRequest(
+    response = await service.get_passages(
+        PublicationPassageRequest(
             pmids=pmids,
             sections=sections or [],
             mode=mode,
@@ -153,9 +117,9 @@ async def get_publication_passages_v2_impl(
             max_chars=max_chars,
             include_tables=include_tables,
             include_references=include_references,
-        ),
-        service=service,
+        )
     )
+    return response.model_dump()
 
 
 async def estimate_publication_context_impl(
@@ -178,16 +142,21 @@ async def estimate_publication_context_impl(
 
 
 async def search_literature_impl(
-    request: SearchLiteratureRequest,
     *,
     client: PubTator3Client,
+    text: str,
+    page: int = 1,
+    sort: str | None = None,
+    filters: str | None = None,
+    sections: list[str] | None = None,
 ) -> dict[str, Any]:
+    normalized_text = text.strip()
     result = await client.search_publications(
-        text=request.text.strip(),
-        page=request.page,
-        sort=request.sort,
-        filters=request.filters,
-        sections=request.sections,
+        text=normalized_text,
+        page=page,
+        sort=sort,
+        filters=filters,
+        sections=",".join(sections) if sections else None,
     )
     search_results = [
         SearchResult(
@@ -212,34 +181,14 @@ async def search_literature_impl(
     total_pages = (total_results + per_page - 1) // per_page if per_page else 0
     return SearchResponse(
         success=True,
-        query=request.text.strip(),
+        query=normalized_text,
         results=search_results,
         total_results=total_results,
-        page=request.page,
+        page=page,
         per_page=per_page,
         total_pages=total_pages,
-        sort_order=request.sort,
+        sort_order=sort,
     ).model_dump()
-
-
-async def search_literature_v2_impl(
-    *,
-    client: PubTator3Client,
-    text: str,
-    page: int = 1,
-    sort: str | None = None,
-    sections: list[str] | None = None,
-) -> dict[str, Any]:
-    return await search_literature_impl(
-        SearchLiteratureRequest(
-            text=text,
-            page=page,
-            sort=sort,
-            filters=None,
-            sections=",".join(sections) if sections else None,
-        ),
-        client=client,
-    )
 
 
 async def fetch_pmc_annotations_impl(
@@ -409,22 +358,6 @@ async def index_review_evidence_impl(
 
 
 async def inspect_review_index_impl(
-    request: InspectReviewIndexMcpRequest,
-    *,
-    service: ReviewContextService,
-) -> dict[str, Any]:
-    response = await service.inspect_review_index(
-        review_id=request.review_id,
-        request=InspectReviewIndexRequest(
-            pmids=request.pmids,
-            include_passage_samples=request.include_passage_samples,
-            sample_per_pmid=request.sample_per_pmid,
-        ),
-    )
-    return response.model_dump()
-
-
-async def inspect_review_index_v2_impl(
     *,
     service: ReviewContextService,
     review_id: str,
@@ -432,43 +365,18 @@ async def inspect_review_index_v2_impl(
     include_passage_samples: bool = False,
     sample_per_pmid: int = 2,
 ) -> dict[str, Any]:
-    return await inspect_review_index_impl(
-        InspectReviewIndexMcpRequest(
-            review_id=review_id,
+    response = await service.inspect_review_index(
+        review_id=review_id,
+        request=InspectReviewIndexRequest(
             pmids=pmids or [],
             include_passage_samples=include_passage_samples,
             sample_per_pmid=sample_per_pmid,
-        ),
-        service=service,
-    )
-
-
-async def retrieve_review_context_impl(
-    request: RetrieveReviewContextMcpRequest,
-    *,
-    service: ReviewContextService,
-) -> dict[str, Any]:
-    response = await service.retrieve_context(
-        review_id=request.review_id,
-        request=RetrieveReviewContextRequest(
-            question=request.question,
-            pmids=request.pmids,
-            entity_ids=request.entity_ids,
-            sections=request.sections,
-            max_passages=request.max_passages,
-            max_chars=request.max_chars,
-            include_diagnostics=request.include_diagnostics,
-            include_tables=request.include_tables,
-            include_references=request.include_references,
-            table_mode=request.table_mode,
-            allow_truncated_passages=request.allow_truncated_passages,
-            max_chars_per_passage=request.max_chars_per_passage,
         ),
     )
     return response.model_dump()
 
 
-async def retrieve_review_context_v2_impl(
+async def retrieve_review_context_impl(
     *,
     service: ReviewContextService,
     review_id: str,
@@ -506,35 +414,6 @@ async def retrieve_review_context_v2_impl(
 
 
 async def retrieve_review_context_batch_impl(
-    request: RetrieveReviewContextBatchMcpRequest,
-    *,
-    service: ReviewContextService,
-) -> dict[str, Any]:
-    response = await service.retrieve_context_batch(
-        review_id=request.review_id,
-        request=RetrieveReviewContextBatchRequest(
-            queries=request.queries,
-            pmids=request.pmids,
-            entity_ids=request.entity_ids,
-            sections=request.sections,
-            response_mode=request.response_mode,
-            max_passages_per_query=request.max_passages_per_query,
-            max_total_passages=request.max_total_passages,
-            max_chars=request.max_chars,
-            max_response_chars=request.max_response_chars,
-            deduplicate_passages=request.deduplicate_passages,
-            include_diagnostics=request.include_diagnostics,
-            include_tables=request.include_tables,
-            include_references=request.include_references,
-            table_mode=request.table_mode,
-            allow_truncated_passages=request.allow_truncated_passages,
-            max_chars_per_passage=request.max_chars_per_passage,
-        ),
-    )
-    return response.model_dump()
-
-
-async def retrieve_review_context_batch_v2_impl(
     *,
     service: ReviewContextService,
     review_id: str,

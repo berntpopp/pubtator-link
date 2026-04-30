@@ -56,24 +56,34 @@ def test_curated_facade_registers_pubtator_tools() -> None:
     assert "pubtator.clear_api_cache" not in tool_names
 
 
-def test_common_flat_v2_tools_are_registered() -> None:
+def test_common_mcp_tools_are_flat_and_unversioned() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
     mcp = create_pubtator_mcp()
-    tool_names = set(mcp._tool_manager._tools)
+    tools = mcp._tool_manager._tools
+    tool_names = set(tools)
+    removed_suffix = "_v" + "2"
 
-    assert "pubtator.search_literature_v2" in tool_names
-    assert "pubtator.search_biomedical_entities_v2" in tool_names
-    assert "pubtator.get_publication_passages_v2" in tool_names
-    assert "pubtator.inspect_review_index_v2" in tool_names
-    assert "pubtator.retrieve_review_context_v2" in tool_names
+    assert not any(name.endswith(removed_suffix) for name in tool_names)
 
-    schema = mcp._tool_manager._tools["pubtator.retrieve_review_context_v2"].parameters
-    assert "review_id" in schema["properties"]
-    assert "question" in schema["properties"]
-    assert "request" not in schema["properties"]
-    search_schema = mcp._tool_manager._tools["pubtator.search_literature_v2"].parameters
-    assert "filters" not in search_schema["properties"]
+    canonical_flat_tools = {
+        "pubtator.search_literature": ("text",),
+        "pubtator.search_biomedical_entities": ("query",),
+        "pubtator.get_publication_passages": ("pmids",),
+        "pubtator.inspect_review_index": ("review_id",),
+        "pubtator.retrieve_review_context": ("review_id", "question"),
+        "pubtator.retrieve_review_context_batch": ("review_id", "queries"),
+    }
+
+    for name, required_properties in canonical_flat_tools.items():
+        assert name in tools
+        properties = tools[name].parameters["properties"]
+        assert "request" not in properties
+        for property_name in required_properties:
+            assert property_name in properties
+
+    batch_schema = tools["pubtator.retrieve_review_context_batch"].parameters
+    assert batch_schema["properties"]["response_mode"]["default"] == "compact"
 
 
 def test_curated_facade_registers_resources_and_prompts() -> None:
@@ -148,10 +158,11 @@ def test_capabilities_include_context_management_cheatsheet() -> None:
     assert "output_cheatsheet" in capabilities
     assert "budgeting_defaults" in capabilities
     assert capabilities["budgeting_defaults"]["batch_response_mode"] == "compact"
-    assert "pubtator.retrieve_review_context_batch_v2" in capabilities["sample_calls"]
-    assert (
-        "pubtator.retrieve_review_context_batch_v2_diagnostics" not in capabilities["sample_calls"]
-    )
+    removed_suffix = "_v" + "2"
+    assert removed_suffix not in repr(capabilities)
+    assert "pubtator.search_literature" in capabilities["tools"]
+    assert "pubtator.retrieve_review_context_batch" in capabilities["sample_calls"]
+    assert capabilities["large_output_guidance"]["prefer"] == "pubtator.get_publication_passages"
     assert capabilities["output_cheatsheet"]["batch_merged_passages"] == (
         "merged_context_pack.passages[]"
     )

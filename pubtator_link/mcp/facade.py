@@ -33,19 +33,13 @@ from pubtator_link.mcp.service_adapters import (
     fetch_publication_annotations_impl,
     find_entity_relations_impl,
     get_publication_passages_impl,
-    get_publication_passages_v2_impl,
     get_text_annotation_results_impl,
     index_review_evidence_impl,
     inspect_review_index_impl,
-    inspect_review_index_v2_impl,
     retrieve_review_context_batch_impl,
-    retrieve_review_context_batch_v2_impl,
     retrieve_review_context_impl,
-    retrieve_review_context_v2_impl,
     search_biomedical_entities_impl,
-    search_biomedical_entities_v2_impl,
     search_literature_impl,
-    search_literature_v2_impl,
     submit_text_annotation_impl,
 )
 from pubtator_link.mcp.tools import (
@@ -53,14 +47,8 @@ from pubtator_link.mcp.tools import (
     FetchPmcAnnotationsRequest,
     FetchPublicationAnnotationsRequest,
     FindEntityRelationsRequest,
-    GetPublicationPassagesMcpRequest,
     GetTextAnnotationResultsRequest,
     IndexReviewEvidenceMcpRequest,
-    InspectReviewIndexMcpRequest,
-    RetrieveReviewContextBatchMcpRequest,
-    RetrieveReviewContextMcpRequest,
-    SearchBiomedicalEntitiesRequest,
-    SearchLiteratureRequest,
     SubmitTextAnnotationRequest,
 )
 from pubtator_link.models.publication_passages import PublicationPassageMode
@@ -151,29 +139,21 @@ def create_pubtator_mcp() -> FastMCP:
         title="Search Biomedical Literature",
         annotations=READ_ONLY_OPEN_WORLD,
     )
-    async def search_literature(request: SearchLiteratureRequest) -> dict[str, Any]:
-        """Use this when a user needs PubMed literature search through PubTator3. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        async with PubTator3Client() as client:
-            return await search_literature_impl(request, client=client)
-
-    @mcp.tool(
-        name="pubtator.search_literature_v2",
-        title="Search Biomedical Literature V2",
-        annotations=READ_ONLY_OPEN_WORLD,
-    )
-    async def search_literature_v2(
+    async def search_literature(
         text: str,
         page: int = 1,
         sort: str | None = None,
+        filters: str | None = None,
         sections: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Use this flat-argument tool for PubMed/PubTator literature search without a request wrapper. Use compatibility search_literature for advanced PubTator filter strings. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user needs PubMed literature search through PubTator3. Use short biomedical queries, optional sort such as 'score desc' or 'date desc', and optional section filters. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         async with PubTator3Client() as client:
-            return await search_literature_v2_impl(
+            return await search_literature_impl(
                 client=client,
                 text=text,
                 page=page,
                 sort=sort,
+                filters=filters,
                 sections=sections,
             )
 
@@ -196,18 +176,6 @@ def create_pubtator_mcp() -> FastMCP:
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_publication_passages(
-        request: GetPublicationPassagesMcpRequest,
-    ) -> dict[str, Any]:
-        """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. Inputs include pmids, sections, mode, full, max_passages_per_pmid, max_chars, include_tables, and include_references; output includes passages, dropped reasons, and context_estimate. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        service = await get_publication_passage_service()
-        return await get_publication_passages_impl(request, service=service)
-
-    @mcp.tool(
-        name="pubtator.get_publication_passages_v2",
-        title="Get Publication Passages V2",
-        annotations=READ_ONLY_OPEN_WORLD,
-    )
-    async def get_publication_passages_v2(
         pmids: list[str],
         sections: list[str] | None = None,
         mode: PublicationPassageMode = "compact_passages",
@@ -217,9 +185,9 @@ def create_pubtator_mcp() -> FastMCP:
         include_tables: bool = True,
         include_references: bool = False,
     ) -> dict[str, Any]:
-        """Use this flat-argument tool to fetch compact citable publication passages from PMIDs without raw BioC. Prefer this over raw annotation export for routine grounding. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. Prefer this over raw annotation export for routine grounding. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         service = await get_publication_passage_service()
-        return await get_publication_passages_v2_impl(
+        return await get_publication_passages_impl(
             service=service,
             pmids=pmids,
             sections=sections,
@@ -260,26 +228,14 @@ def create_pubtator_mcp() -> FastMCP:
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def search_biomedical_entities(
-        request: SearchBiomedicalEntitiesRequest,
-    ) -> dict[str, Any]:
-        """Use this when a user needs canonical PubTator biomedical entity IDs. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        async with PubTator3Client() as client:
-            return await search_biomedical_entities_impl(request, client=client)
-
-    @mcp.tool(
-        name="pubtator.search_biomedical_entities_v2",
-        title="Search Biomedical Entities V2",
-        annotations=READ_ONLY_OPEN_WORLD,
-    )
-    async def search_biomedical_entities_v2(
         query: str,
         concept: Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"]
         | None = None,
         limit: int = 10,
     ) -> dict[str, Any]:
-        """Use this flat-argument tool to resolve canonical PubTator biomedical entity IDs for genes, diseases, chemicals, species, variants, or cell lines. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user needs canonical PubTator biomedical entity IDs for genes, diseases, chemicals, species, variants, or cell lines. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         async with PubTator3Client() as client:
-            return await search_biomedical_entities_v2_impl(
+            return await search_biomedical_entities_impl(
                 client=client,
                 query=query,
                 concept=concept,
@@ -333,25 +289,15 @@ def create_pubtator_mcp() -> FastMCP:
         title="Inspect Review Index",
         annotations=READ_ONLY_OPEN_WORLD,
     )
-    async def inspect_review_index(request: InspectReviewIndexMcpRequest) -> dict[str, Any]:
-        """Use this when a user needs to inspect what PMIDs, sections, passage counts, and failures are indexed for a review_id. Inputs include review_id, optional pmids, include_passage_samples, and sample_per_pmid; output includes preparation_status, sources, totals, and failed_sources. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        service = await get_review_context_service()
-        return await inspect_review_index_impl(request, service=service)
-
-    @mcp.tool(
-        name="pubtator.inspect_review_index_v2",
-        title="Inspect Review Index V2",
-        annotations=READ_ONLY_OPEN_WORLD,
-    )
-    async def inspect_review_index_v2(
+    async def inspect_review_index(
         review_id: str,
         pmids: list[str] | None = None,
         include_passage_samples: bool = False,
         sample_per_pmid: int = 2,
     ) -> dict[str, Any]:
-        """Use this flat-argument tool to inspect indexed PMIDs, source coverage, sections, passage counts, and failures for a review_id. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user needs to inspect indexed PMIDs, sections, passage counts, and failures for a review_id, including source coverage. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         service = await get_review_context_service()
-        return await inspect_review_index_v2_impl(
+        return await inspect_review_index_impl(
             service=service,
             review_id=review_id,
             pmids=pmids,
@@ -364,17 +310,7 @@ def create_pubtator_mcp() -> FastMCP:
         title="Retrieve Review Context",
         annotations=READ_ONLY_OPEN_WORLD,
     )
-    async def retrieve_review_context(request: RetrieveReviewContextMcpRequest) -> dict[str, Any]:
-        """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Best results usually come from a short keyword query; use pmids when focusing on a specific paper. If zero passages are returned, simplify the query or fall back to fetch_publication_annotations with full=true. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        service = await get_review_context_service()
-        return await retrieve_review_context_impl(request, service=service)
-
-    @mcp.tool(
-        name="pubtator.retrieve_review_context_v2",
-        title="Retrieve Review Context V2",
-        annotations=READ_ONLY_OPEN_WORLD,
-    )
-    async def retrieve_review_context_v2(
+    async def retrieve_review_context(
         review_id: str,
         question: str,
         pmids: list[str] | None = None,
@@ -389,9 +325,9 @@ def create_pubtator_mcp() -> FastMCP:
         allow_truncated_passages: bool = True,
         max_chars_per_passage: int = 2200,
     ) -> dict[str, Any]:
-        """Use this flat-argument tool for compact citable review RAG context without a request wrapper. Use short keyword questions, PMID filters for paper-specific evidence, and diagnostics for zero-result debugging. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Use a short keyword query, PMID filters for paper-specific evidence, and diagnostics for zero-result debugging. If zero passages are returned, simplify the query, inspect the review index, or fall back to fetch_publication_annotations. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         service = await get_review_context_service()
-        return await retrieve_review_context_v2_impl(
+        return await retrieve_review_context_impl(
             service=service,
             review_id=review_id,
             question=question,
@@ -414,18 +350,6 @@ def create_pubtator_mcp() -> FastMCP:
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def retrieve_review_context_batch(
-        request: RetrieveReviewContextBatchMcpRequest,
-    ) -> dict[str, Any]:
-        """Use this when a user wants to try multiple short review retrieval query variants in one call and receive merged compact context. Inputs include review_id, queries, shared filters, max_passages_per_query, max_total_passages, max_chars, deduplicate_passages, and include_diagnostics; output includes per-query results and merged_context_pack. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        service = await get_review_context_service()
-        return await retrieve_review_context_batch_impl(request, service=service)
-
-    @mcp.tool(
-        name="pubtator.retrieve_review_context_batch_v2",
-        title="Retrieve Review Context Batch V2",
-        annotations=READ_ONLY_OPEN_WORLD,
-    )
-    async def retrieve_review_context_batch_v2(
         review_id: str,
         queries: list[str],
         pmids: list[str] | None = None,
@@ -444,9 +368,9 @@ def create_pubtator_mcp() -> FastMCP:
         allow_truncated_passages: bool = True,
         max_chars_per_passage: int = 2200,
     ) -> dict[str, Any]:
-        """Use this flat-argument tool for compact batch review RAG retrieval without a request wrapper. Default response_mode compact returns merged passages plus per-query summaries; use diagnostics for query refinement and full only when per-query passage text is needed. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode returns merged passages plus per-query summaries; use diagnostics for query refinement and full only when per-query passage text is needed. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         service = await get_review_context_service()
-        return await retrieve_review_context_batch_v2_impl(
+        return await retrieve_review_context_batch_impl(
             service=service,
             review_id=review_id,
             queries=queries,

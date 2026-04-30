@@ -8,7 +8,6 @@ import pytest
 @pytest.mark.asyncio
 async def test_search_entities_adapter_calls_client() -> None:
     from pubtator_link.mcp.service_adapters import search_biomedical_entities_impl
-    from pubtator_link.mcp.tools import SearchBiomedicalEntitiesRequest
 
     class FakeClient:
         async def autocomplete_entity(
@@ -17,8 +16,9 @@ async def test_search_entities_adapter_calls_client() -> None:
             return [{"_id": "@GENE_672", "name": "BRCA1", "biotype": "Gene", "score": 1.0}]
 
     result = await search_biomedical_entities_impl(
-        SearchBiomedicalEntitiesRequest(query="BRCA1", concept="Gene"),
         client=FakeClient(),
+        query="BRCA1",
+        concept="Gene",
     )
 
     assert result["success"] is True
@@ -48,7 +48,6 @@ async def test_publication_adapter_validates_pmids() -> None:
 @pytest.mark.asyncio
 async def test_publication_passages_adapter_calls_service() -> None:
     from pubtator_link.mcp.service_adapters import get_publication_passages_impl
-    from pubtator_link.mcp.tools import GetPublicationPassagesMcpRequest
     from pubtator_link.models.publication_passages import (
         PublicationContextEstimate,
         PublicationPassageResponse,
@@ -71,8 +70,8 @@ async def test_publication_passages_adapter_calls_service() -> None:
             )
 
     result = await get_publication_passages_impl(
-        GetPublicationPassagesMcpRequest(pmids=["29355051"]),
         service=FakeService(),
+        pmids=["29355051"],
     )
 
     assert result["success"] is True
@@ -83,7 +82,6 @@ async def test_publication_passages_adapter_calls_service() -> None:
 @pytest.mark.asyncio
 async def test_inspect_review_index_adapter_calls_service() -> None:
     from pubtator_link.mcp.service_adapters import inspect_review_index_impl
-    from pubtator_link.mcp.tools import InspectReviewIndexMcpRequest
     from pubtator_link.models.review_rerag import (
         InspectReviewIndexResponse,
         PreparationStatus,
@@ -101,8 +99,8 @@ async def test_inspect_review_index_adapter_calls_service() -> None:
             )
 
     result = await inspect_review_index_impl(
-        InspectReviewIndexMcpRequest(review_id="rev_123"),
         service=FakeService(),
+        review_id="rev_123",
     )
 
     assert result["success"] is True
@@ -112,7 +110,6 @@ async def test_inspect_review_index_adapter_calls_service() -> None:
 @pytest.mark.asyncio
 async def test_retrieve_review_context_batch_adapter_calls_service() -> None:
     from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
-    from pubtator_link.mcp.tools import RetrieveReviewContextBatchMcpRequest
     from pubtator_link.models.review_rerag import (
         ContextPack,
         PreparationStatus,
@@ -133,11 +130,9 @@ async def test_retrieve_review_context_batch_adapter_calls_service() -> None:
             )
 
     result = await retrieve_review_context_batch_impl(
-        RetrieveReviewContextBatchMcpRequest(
-            review_id="rev_123",
-            queries=["colchicine children"],
-        ),
         service=FakeService(),
+        review_id="rev_123",
+        queries=["colchicine children"],
     )
 
     assert result["success"] is True
@@ -146,8 +141,8 @@ async def test_retrieve_review_context_batch_adapter_calls_service() -> None:
 
 
 @pytest.mark.asyncio
-async def test_retrieve_review_context_batch_v2_adapter_builds_request() -> None:
-    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_v2_impl
+async def test_retrieve_review_context_batch_adapter_builds_request_from_flat_args() -> None:
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
     from pubtator_link.models.review_rerag import (
         ContextPack,
         PreparationStatus,
@@ -171,7 +166,7 @@ async def test_retrieve_review_context_batch_v2_adapter_builds_request() -> None
 
     service = RecordingService()
 
-    result = await retrieve_review_context_batch_v2_impl(
+    result = await retrieve_review_context_batch_impl(
         service=service,
         review_id="rev",
         queries=["MEFV", "colchicine"],
@@ -189,8 +184,8 @@ async def test_retrieve_review_context_batch_v2_adapter_builds_request() -> None
 
 
 @pytest.mark.asyncio
-async def test_retrieve_review_context_v2_adapter_builds_request() -> None:
-    from pubtator_link.mcp.service_adapters import retrieve_review_context_v2_impl
+async def test_retrieve_review_context_adapter_builds_request_from_flat_args() -> None:
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_impl
     from pubtator_link.models.review_rerag import (
         ContextPack,
         PreparationStatus,
@@ -216,7 +211,7 @@ async def test_retrieve_review_context_v2_adapter_builds_request() -> None:
 
     service = RecordingService()
 
-    result = await retrieve_review_context_v2_impl(
+    result = await retrieve_review_context_impl(
         service=service,
         review_id="rev",
         question="MEFV colchicine",
@@ -231,8 +226,8 @@ async def test_retrieve_review_context_v2_adapter_builds_request() -> None:
 
 
 @pytest.mark.asyncio
-async def test_inspect_review_index_v2_adapter_builds_request() -> None:
-    from pubtator_link.mcp.service_adapters import inspect_review_index_v2_impl
+async def test_inspect_review_index_adapter_builds_request_from_flat_args() -> None:
+    from pubtator_link.mcp.service_adapters import inspect_review_index_impl
     from pubtator_link.models.review_rerag import (
         InspectReviewIndexResponse,
         PreparationStatus,
@@ -256,7 +251,7 @@ async def test_inspect_review_index_v2_adapter_builds_request() -> None:
 
     service = RecordingService()
 
-    result = await inspect_review_index_v2_impl(
+    result = await inspect_review_index_impl(
         service=service,
         review_id="rev",
         pmids=["40234174"],
@@ -273,7 +268,6 @@ async def test_inspect_review_index_v2_adapter_builds_request() -> None:
 @pytest.mark.asyncio
 async def test_search_literature_adapter_maps_client_results() -> None:
     from pubtator_link.mcp.service_adapters import search_literature_impl
-    from pubtator_link.mcp.tools import SearchLiteratureRequest
 
     class FakeClient:
         async def search_publications(
@@ -291,8 +285,10 @@ async def test_search_literature_adapter_maps_client_results() -> None:
             }
 
     result = await search_literature_impl(
-        SearchLiteratureRequest(text="BRCA1", sort="score desc", sections="title"),
         client=FakeClient(),
+        text="BRCA1",
+        sort="score desc",
+        sections=["title"],
     )
 
     assert result["success"] is True
@@ -301,8 +297,8 @@ async def test_search_literature_adapter_maps_client_results() -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_literature_v2_adapter_maps_flat_sections() -> None:
-    from pubtator_link.mcp.service_adapters import search_literature_v2_impl
+async def test_search_literature_adapter_maps_flat_sections() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
 
     class FakeClient:
         async def search_publications(
@@ -320,7 +316,7 @@ async def test_search_literature_v2_adapter_maps_flat_sections() -> None:
                 "sections": sections,
             }
 
-    result = await search_literature_v2_impl(
+    result = await search_literature_impl(
         client=FakeClient(),
         text=" BRCA1 ",
         sort="score desc",
@@ -333,8 +329,8 @@ async def test_search_literature_v2_adapter_maps_flat_sections() -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_biomedical_entities_v2_adapter_calls_client() -> None:
-    from pubtator_link.mcp.service_adapters import search_biomedical_entities_v2_impl
+async def test_search_biomedical_entities_adapter_accepts_flat_args() -> None:
+    from pubtator_link.mcp.service_adapters import search_biomedical_entities_impl
 
     class FakeClient:
         async def autocomplete_entity(
@@ -342,7 +338,7 @@ async def test_search_biomedical_entities_v2_adapter_calls_client() -> None:
         ) -> list[dict[str, object]]:
             return [{"_id": "@GENE_672", "name": "BRCA1", "biotype": "Gene"}]
 
-    result = await search_biomedical_entities_v2_impl(
+    result = await search_biomedical_entities_impl(
         client=FakeClient(),
         query="BRCA1",
         concept="Gene",
@@ -354,8 +350,8 @@ async def test_search_biomedical_entities_v2_adapter_calls_client() -> None:
 
 
 @pytest.mark.asyncio
-async def test_publication_passages_v2_adapter_builds_request() -> None:
-    from pubtator_link.mcp.service_adapters import get_publication_passages_v2_impl
+async def test_publication_passages_adapter_builds_request_from_flat_args() -> None:
+    from pubtator_link.mcp.service_adapters import get_publication_passages_impl
     from pubtator_link.models.publication_passages import (
         PublicationContextEstimate,
         PublicationPassageResponse,
@@ -382,7 +378,7 @@ async def test_publication_passages_v2_adapter_builds_request() -> None:
 
     service = RecordingService()
 
-    result = await get_publication_passages_v2_impl(
+    result = await get_publication_passages_impl(
         service=service,
         pmids=["29355051"],
         sections=["abstract"],
