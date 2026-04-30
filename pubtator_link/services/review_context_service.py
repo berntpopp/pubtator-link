@@ -351,6 +351,7 @@ class ReviewContextService:
                 coverage_by_pmid = await self._source_coverage_by_pmid(review_id)
                 candidates: list[tuple[int, int, ContextPassage]] = []
                 returned_by_source: dict[str | None, int] = defaultdict(int)
+                quota_deferred_candidates: set[tuple[int, int]] = set()
 
                 def coverage_for_passage(passage: ContextPassage) -> SourceCoverage:
                     if passage.pmid is None:
@@ -378,23 +379,43 @@ class ReviewContextService:
                         )
                     )
 
-                for query_index, passage_index, passage in first_pass_candidates:
-                    source_key = source_key_for_passage(passage)
-                    if returned_by_source[source_key] >= request.min_passages_per_source:
-                        continue
-                    source_budget_stats[source_key].first_pass_eligible = True
-                    before_count = len(merged_passages)
-                    try_merge_passage(
-                        query_index,
-                        passage_index,
-                        passage,
-                        reserve_limit=None,
-                        source_key=source_key,
-                    )
-                    if len(merged_passages) > before_count:
-                        returned_by_source[source_key] += 1
+                for target_returned_count in range(1, request.min_passages_per_source + 1):
+                    for query_index, passage_index, passage in first_pass_candidates:
+                        handled_key = (query_index, passage_index)
+                        if handled_key in handled_passages:
+                            continue
+                        source_key = source_key_for_passage(passage)
+                        if returned_by_source[source_key] >= target_returned_count:
+                            quota_deferred_candidates.add(handled_key)
+                            continue
+                        source_budget_stats[source_key].first_pass_eligible = True
+                        before_count = len(merged_passages)
+                        try_merge_passage(
+                            query_index,
+                            passage_index,
+                            passage,
+                            reserve_limit=None,
+                            source_key=source_key,
+                        )
+                        if len(merged_passages) > before_count:
+                            returned_by_source[source_key] += 1
                 for query_index, passage_index, passage in candidates:
+                    handled_key = (query_index, passage_index)
                     source_key = source_key_for_passage(passage)
+                    if (
+                        handled_key not in handled_passages
+                        and handled_key in quota_deferred_candidates
+                        and returned_by_source[source_key] >= request.min_passages_per_source
+                        and len(merged_passages) >= request.max_total_passages
+                    ):
+                        handled_passages.add(handled_key)
+                        drop_passage(
+                            query_index,
+                            passage,
+                            "source_budget_exceeded",
+                            source_key=source_key,
+                        )
+                        continue
                     try_merge_passage(
                         query_index,
                         passage_index,

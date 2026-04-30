@@ -800,6 +800,38 @@ async def test_batch_source_fair_includes_later_pmids_before_overflow() -> None:
 
 
 @pytest.mark.asyncio
+async def test_batch_source_fair_rounds_sources_before_second_passages() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage("a1", pmid="111", text="a" * 100, lexical_rank=10.0),
+            _passage("a2", pmid="111", text="b" * 100, lexical_rank=9.0),
+            _passage("b1", pmid="222", text="c" * 100, lexical_rank=8.0),
+            _passage("c1", pmid="333", text="d" * 100, lexical_rank=7.0),
+        ]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["guideline"],
+            budget_strategy="source_fair",
+            min_passages_per_source=2,
+            max_chars=10000,
+            max_response_chars=100000,
+            max_passages_per_query=4,
+            max_total_passages=3,
+        ),
+    )
+
+    assert [passage.passage_id for passage in response.merged_context_pack.passages] == [
+        "a1",
+        "b1",
+        "c1",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_batch_source_fair_duplicate_does_not_consume_returned_quota() -> None:
     repository = QueryMappedReviewContextRepository(
         {
@@ -875,10 +907,9 @@ async def test_batch_source_fair_respects_global_budget_precedence() -> None:
     repository = FakeReviewContextRepository(
         [
             _passage("p1", pmid="111", text="a" * 100, lexical_rank=10.0),
-            _passage("p2", pmid="222", text="b" * 100, lexical_rank=9.0),
-            _passage("p3", pmid="333", text="c" * 100, lexical_rank=8.0),
-            _passage("p4", pmid="444", text="d" * 100, lexical_rank=7.0),
-            _passage("p5", pmid="555", text="e" * 100, lexical_rank=6.0),
+            _passage("p2", pmid="111", text="b" * 100, lexical_rank=9.0),
+            _passage("p3", pmid="222", text="c" * 100, lexical_rank=8.0),
+            _passage("p4", pmid="333", text="d" * 100, lexical_rank=7.0),
         ]
     )
     service = ReviewContextService(repository)
@@ -888,7 +919,7 @@ async def test_batch_source_fair_respects_global_budget_precedence() -> None:
         RetrieveReviewContextBatchRequest(
             queries=["guideline"],
             budget_strategy="source_fair",
-            min_passages_per_source=2,
+            min_passages_per_source=1,
             max_total_passages=3,
             max_chars=10000,
             max_response_chars=100000,
@@ -898,6 +929,5 @@ async def test_batch_source_fair_respects_global_budget_precedence() -> None:
     assert len(response.merged_context_pack.passages) == 3
     assert response.merged_context_pack.dropped
     assert any(
-        drop.reason in {"max_total_passages_exceeded", "source_budget_exceeded"}
-        for drop in response.merged_context_pack.dropped
+        drop.reason == "source_budget_exceeded" for drop in response.merged_context_pack.dropped
     )
