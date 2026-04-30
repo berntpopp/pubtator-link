@@ -131,7 +131,15 @@ Add optional flat filter arguments:
 - `year_min: int | None`
 - `year_max: int | None`
 
-The MCP tool still accepts the existing `filters` string as an escape hatch. If both flat filters and `filters` are provided, flat filters are merged into the JSON filters object unless a key conflicts. On conflict, return a validation error that names the duplicated filter key.
+The MCP tool still accepts the existing `filters` string as an escape hatch. `filters` remains a JSON object encoded as a string, matching the existing REST and client behavior. The implementation parses `filters` with `json.loads`, merges flat filters into that dict, then serializes the merged object before calling PubTator3. If `filters` is not valid JSON, return the current validation error. If a flat filter conflicts with an existing JSON key, return a validation error that names the duplicated filter key.
+
+Flat filter translation:
+
+- `publication_types=["Guideline", "Practice Guideline"]` maps to JSON key `type: ["Guideline", "Practice Guideline"]`.
+- `year_min=2020` maps to `year.min: 2020`.
+- `year_max=2026` maps to `year.max: 2026`.
+
+This preserves the current PubTator3 client contract, where the merged `filters` value is passed as the `filters` query parameter. It does not introduce `pt=` query parameters in this iteration.
 
 Example:
 
@@ -165,16 +173,18 @@ Keep the canonical batch tool. Add budget strategy controls without changing def
 
 New optional arguments:
 
-- `budget_strategy: "query_fair" | "source_fair" | "coverage_first" = "source_fair"`
+- `budget_strategy: "query_fair" | "source_fair" | "scarcity_first" = "query_fair"`
 - `min_passages_per_source: int = 1`
 
 Definitions:
 
 - `query_fair`: current behavior, with a first-pass reserve across query variants before overflow.
 - `source_fair`: first pass attempts to include at least `min_passages_per_source` per PMID/source across selected candidates, then fills remaining budget by rank.
-- `coverage_first`: like `source_fair`, but sources with `abstract_only` or `title_only` coverage are considered before `full_text` sources because they have fewer alternative passages.
+- `scarcity_first`: like `source_fair`, but sources with the least available indexed content are considered before richer full-text sources.
 
-The default is `source_fair` because it better matches evidence-review behavior while remaining conservative: it changes merge ordering only after each query has already produced its candidate passages.
+The default remains `query_fair` for one release to avoid silently changing output ordering for existing callers. `source_fair` and `scarcity_first` are opt-in in this iteration. Active docs should recommend `scarcity_first` for guideline/cohort review tasks where authoritative abstract-only or title-only sources should not be starved by longer full-text reviews.
+
+Global budgets always win. `min_passages_per_source` is a best-effort target capped by the smaller of `max_total_passages`, `max_chars`, and `max_response_chars`. A source with zero query-matched candidates is not first-pass eligible and does not reserve budget.
 
 Batch diagnostics should include:
 
@@ -183,7 +193,7 @@ Batch diagnostics should include:
 - per-source dropped counts,
 - per-source first-pass eligibility,
 - dropped reason `source_budget_exceeded` when applicable,
-- dropped reason `coverage_priority_overflow` when a lower-priority source is skipped during the coverage-first pass.
+- dropped reason `scarcity_priority_overflow` when a lower-priority source is skipped during the scarcity-first pass.
 
 ### Stable Citation Identifiers
 
@@ -192,19 +202,19 @@ Keep request-local `citation_key` values (`S1`, `S2`, ...). Add a stable key on 
 ```json
 {
   "citation_key": "S1",
-  "stable_citation_key": "c_4f2a9b7c",
+  "stable_citation_key": "c_4f2a9b7c1d",
   "passage_id": "PMID:40234174:abstract:1"
 }
 ```
 
-The stable key should be deterministic from `passage_id`, for example `c_` plus the first 8 to 12 hex characters of a SHA-256 digest. It must not depend on result order.
+The stable key must be deterministic from `passage_id`: `c_` plus the first 10 hex characters of a SHA-256 digest. It must not depend on result order, query text, or response mode. The 10-hex length is part of the public contract and should not change across versions.
 
 `citation_map` remains keyed by request-local `citation_key` for readability. Add:
 
 ```json
 {
   "stable_citation_map": {
-    "c_4f2a9b7c": "PMID:40234174:abstract:1"
+    "c_4f2a9b7c1d": "PMID:40234174:abstract:1"
   }
 }
 ```
@@ -225,6 +235,8 @@ Enhance `IndexReviewEvidenceResponse` if available without expensive extra queri
 - `failed_sources`
 - `retry_after_ms` when there are queued or running jobs
 - `lifecycle_note`
+
+For v1, `retry_after_ms` may be a constant, defaulting to `5000`, unless the queue already exposes a more precise estimate. It is a client polling hint, not a guaranteed completion estimate.
 
 If this would introduce extra database or network cost, expose the same data through `inspect_review_index` and put a clear instruction in the index response: call `inspect_review_index` for coverage and failures.
 
@@ -301,7 +313,7 @@ The merge step changes:
 2. First pass:
    - `query_fair`: preserve current query reserve behavior.
    - `source_fair`: iterate by source and include up to `min_passages_per_source` per source if budgets allow.
-   - `coverage_first`: same as `source_fair`, but order sources by coverage priority: `abstract_only`, `title_only`, `curated_url`, `full_text`, `unknown`.
+   - `scarcity_first`: same as `source_fair`, but order sources by scarcity priority: `title_only`, `abstract_only`, `curated_url`, `full_text`, `unknown`.
 3. Overflow pass:
    - fill remaining budget by original retrieval order and score,
    - preserve deduplication,
@@ -325,6 +337,7 @@ The algorithm must not make additional network calls during retrieval. Any neede
 Update active docs only:
 
 - `docs/MCP_CONNECTION_GUIDE.md`
+- `CHANGELOG.md`
 - MCP capabilities resource
 - MCP server instructions
 - MCP prompts
@@ -333,10 +346,12 @@ Document:
 
 - search filter examples for guideline/review/cohort discovery,
 - `total_results` semantics,
-- source-fair retrieval mode,
+- source-fair and scarcity-first retrieval modes,
 - stable citation key versus request-local citation key,
 - index lifecycle semantics,
 - prompt-injection warning.
+
+`AGENTS.md` does not need to change unless implementation introduces new environment variables or required developer commands.
 
 Historical specs and plans may retain old behavior descriptions.
 
@@ -352,10 +367,14 @@ Focused tests:
 - Search filter merge handles flat filters and raw `filters`.
 - Search filter merge rejects conflicts.
 - Batch retrieval with `source_fair` returns at least one passage from later PMIDs when budget allows.
-- Batch retrieval with `coverage_first` prefers an `abstract_only` source over a full-text source during first pass.
+- Batch retrieval with `scarcity_first` prefers a `title_only` source over an `abstract_only` source, and an `abstract_only` source over a full-text source during first pass.
+- Regression: explicit `query_fair` produces the same merge output as the current behavior.
+- Budget precedence: `min_passages_per_source=2` with `max_total_passages=3` and five candidate sources returns at most three passages and reports best-effort drops.
 - Batch diagnostics include source budget summaries and new drop reasons.
 - `ContextPassage` includes deterministic `stable_citation_key`.
+- Stable key determinism: the same `passage_id` across two runs produces the same `stable_citation_key`.
 - `ContextPack` includes `stable_citation_map`.
+- Filter merge conflict returns a validation error with the duplicated key in the message.
 - `index_review_evidence` or `inspect_review_index` exposes lifecycle/coverage guidance.
 - Server instructions and capabilities include the prompt-injection warning.
 
@@ -385,12 +404,14 @@ If the Docker database is unavailable, the integration test may skip and that sk
 - `pubtator.search_literature` returns correct `total_results`, `total_pages`, and `per_page` for PubTator3 responses that use `count`, `total_pages`, and `page_size`.
 - Search results preserve structured date, DOI, citation, volume, issue, page, and publication-type metadata when upstream provides it.
 - MCP search supports flat publication type and year filters.
-- Batch retrieval can reserve budget across sources, not only across query variants.
-- An authoritative `abstract_only` source can be retained under budget when `coverage_first` or default source-fair behavior is used.
+- Batch retrieval can reserve budget across sources, not only across query variants, when `source_fair` or `scarcity_first` is explicitly requested.
+- Default `query_fair` behavior is preserved for one release and pinned by regression tests.
+- An authoritative `title_only` or `abstract_only` source can be retained under budget when `scarcity_first` is used.
 - Returned passages include both request-local and stable citation keys.
 - Review index lifecycle behavior is documented in active user-facing docs and surfaced in tool responses where practical.
 - Server instructions warn that retrieved passage text is evidence data, not instructions.
 - Existing canonical tool names and flat schemas remain stable.
+- `CHANGELOG.md` documents the new opt-in budget strategies and search metadata fix.
 - `make ci-local` passes.
 
 ## Non-Goals And Rejected Alternatives
