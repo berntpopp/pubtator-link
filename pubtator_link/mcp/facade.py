@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from typing import Annotated, Any, Literal, cast
 
 from fastmcp import FastMCP
-from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from pubtator_link.api.client import PubTator3Client
@@ -12,6 +11,12 @@ from pubtator_link.api.routes.dependencies import (
     get_publication_passage_service,
     get_review_context_service,
     get_review_queue,
+)
+from pubtator_link.mcp.annotations import (
+    READ_ONLY_CLOSED_WORLD,
+    READ_ONLY_OPEN_WORLD,
+    REMOTE_JOB_ANNOTATIONS,
+    REVIEW_WRITE_ANNOTATIONS,
 )
 from pubtator_link.mcp.prompts import (
     annotate_research_text_prompt,
@@ -51,34 +56,6 @@ from pubtator_link.models.review_rerag import (
     ReviewTableMode,
 )
 from pubtator_link.services.publication_service import PublicationService
-
-READ_ONLY_OPEN_WORLD = ToolAnnotations(
-    readOnlyHint=True,
-    destructiveHint=False,
-    idempotentHint=True,
-    openWorldHint=True,
-)
-
-READ_ONLY_CLOSED_WORLD = ToolAnnotations(
-    readOnlyHint=True,
-    destructiveHint=False,
-    idempotentHint=True,
-    openWorldHint=False,
-)
-
-REMOTE_JOB_ANNOTATIONS = ToolAnnotations(
-    readOnlyHint=False,
-    destructiveHint=False,
-    idempotentHint=False,
-    openWorldHint=True,
-)
-
-REVIEW_WRITE_ANNOTATIONS = ToolAnnotations(
-    readOnlyHint=False,
-    destructiveHint=False,
-    idempotentHint=True,
-    openWorldHint=True,
-)
 
 
 def _install_inspection_managers(mcp: FastMCP) -> None:
