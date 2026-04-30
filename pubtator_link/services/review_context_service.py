@@ -449,9 +449,7 @@ class ReviewContextService:
         diagnostics = result.diagnostics
         top_sections = list(dict.fromkeys(passage.section for passage in passages))[:5]
         top_pmids = [
-            pmid
-            for pmid in dict.fromkeys(passage.pmid for passage in passages)
-            if pmid is not None
+            pmid for pmid in dict.fromkeys(passage.pmid for passage in passages) if pmid is not None
         ][:10]
         candidate_count = diagnostics.candidate_count if diagnostics else len(passages)
         selected_count = diagnostics.selected_count if diagnostics else len(passages)
