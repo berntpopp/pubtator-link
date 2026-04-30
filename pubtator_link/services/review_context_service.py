@@ -1,13 +1,10 @@
 """Service for retrieving review-scoped context passages."""
 
-from collections import defaultdict
 from collections.abc import Sequence
 from typing import Protocol
 
 from pubtator_link.models.review_rerag import (
-    ContextDropReason,
     ContextPack,
-    ContextPassage,
     FailedSourceSummary,
     InspectReviewIndexRequest,
     InspectReviewIndexResponse,
@@ -19,12 +16,11 @@ from pubtator_link.models.review_rerag import (
     ReviewIndexTotals,
     ReviewPassageRow,
     ReviewSourceSummary,
-    SourceBudgetSummary,
     SourceCoverage,
 )
+from pubtator_link.services.review_context.batch_budgeting import merge_batch_context
 from pubtator_link.services.review_context.diagnostics import (
     build_diagnostics,
-    query_summary,
 )
 from pubtator_link.services.review_context.packing import (
     context_budget,
@@ -146,17 +142,6 @@ class ReviewContextService:
         """Retrieve multiple query variants and merge selected passages."""
         results: list[RetrieveReviewContextResponse] = []
         query_results: list[RetrieveReviewContextResponse] = []
-        query_summaries: list[QueryDiagnosticsSummary] = []
-        merged_passages: list[ContextPassage] = []
-        dropped: list[ContextDropReason] = []
-        seen_passage_ids: set[str] = set()
-        handled_passages: set[tuple[int, int]] = set()
-        returned_counts: list[int] = []
-        dropped_counts: list[int] = []
-        query_chars: list[int] = []
-        source_budget_stats: dict[str | None, SourceBudgetSummary] = {}
-        source_budget_order: list[str | None] = []
-        total_chars = 0
 
         for query in request.queries:
             result = await self.retrieve_context(
@@ -181,263 +166,34 @@ class ReviewContextService:
             if request.response_mode == "full":
                 results.append(result)
 
-            dropped.extend(result.context_pack.dropped)
-            returned_counts.append(0)
-            dropped_counts.append(len(result.context_pack.dropped))
-            query_chars.append(0)
-
-        def source_key_for_passage(passage: ContextPassage) -> str | None:
-            return passage.pmid or passage.source_id
-
-        def ensure_source_budget_summary(
-            source_key: str | None,
-            passage: ContextPassage | None = None,
-            coverage: SourceCoverage = "unknown",
-        ) -> SourceBudgetSummary:
-            summary = source_budget_stats.get(source_key)
-            if summary is None:
-                summary = SourceBudgetSummary(
-                    source_id=passage.source_id if passage is not None else source_key,
-                    pmid=passage.pmid if passage is not None else source_key,
-                    coverage=coverage,
-                )
-                source_budget_stats[source_key] = summary
-                source_budget_order.append(source_key)
-            elif summary.coverage == "unknown" and coverage != "unknown":
-                summary.coverage = coverage
-            return summary
-
-        def drop_passage(
-            query_index: int,
-            passage: ContextPassage,
-            reason: str,
-            *,
-            source_key: str | None = None,
-        ) -> None:
-            dropped_counts[query_index] += 1
-            dropped.append(
-                ContextDropReason(
-                    reason=reason,
-                    passage_id=passage.passage_id,
-                    pmid=passage.pmid,
-                    section=passage.section,
-                    char_count=len(passage.text),
-                )
-            )
-            if source_key in source_budget_stats:
-                source_budget_stats[source_key].dropped_count += 1
-
-        def add_passage(
-            query_index: int,
-            passage: ContextPassage,
-            *,
-            source_key: str | None = None,
-        ) -> None:
-            nonlocal total_chars
-            seen_passage_ids.add(passage.passage_id)
-            merged_passages.append(
-                passage.model_copy(
-                    update={
-                        "citation_key": f"S{len(merged_passages) + 1}",
-                        "stable_citation_key": passage.stable_citation_key,
-                        "char_count": len(passage.text),
-                    }
-                )
-            )
-            passage_len = len(passage.text)
-            total_chars += passage_len
-            query_chars[query_index] += passage_len
-            returned_counts[query_index] += 1
-            if source_key in source_budget_stats:
-                source_budget_stats[source_key].returned_count += 1
-
-        def try_merge_passage(
-            query_index: int,
-            passage_index: int,
-            passage: ContextPassage,
-            *,
-            reserve_limit: int | None,
-            source_key: str | None = None,
-        ) -> bool:
-            handled_key = (query_index, passage_index)
-            if handled_key in handled_passages:
-                return True
-            passage_len = len(passage.text)
-            if (
-                reserve_limit is not None
-                and returned_counts[query_index] > 0
-                and query_chars[query_index] + passage_len > reserve_limit
-            ):
-                return False
-            handled_passages.add(handled_key)
-            if request.deduplicate_passages and passage.passage_id in seen_passage_ids:
-                drop_passage(query_index, passage, "duplicate_passage", source_key=source_key)
-                return True
-            if len(merged_passages) >= request.max_total_passages:
-                drop_passage(
-                    query_index,
-                    passage,
-                    "max_total_passages_exceeded",
-                    source_key=source_key,
-                )
-                return True
-            if total_chars + passage_len > request.max_chars:
-                drop_passage(query_index, passage, "char_budget_exceeded", source_key=source_key)
-                return True
-            if request.response_mode != "full":
-                next_budget = context_budget(
-                    max_chars=request.max_chars,
-                    text_chars=total_chars + passage_len,
-                    dropped_count=len(dropped),
-                )
-                if next_budget.estimated_total_chars > request.max_response_chars:
-                    drop_passage(
-                        query_index,
-                        passage,
-                        "response_char_budget_exceeded",
-                        source_key=source_key,
-                    )
-                    return True
-            add_passage(query_index, passage, source_key=source_key)
-            return True
-
-        if request.response_mode != "diagnostics":
-            if request.budget_strategy == "query_fair":
-                reserve_limit = max(1, request.max_chars // len(request.queries))
-                for query_index, result in enumerate(query_results):
-                    for passage_index, passage in enumerate(result.context_pack.passages):
-                        try_merge_passage(
-                            query_index,
-                            passage_index,
-                            passage,
-                            reserve_limit=reserve_limit,
-                        )
-                for query_index, result in enumerate(query_results):
-                    for passage_index, passage in enumerate(result.context_pack.passages):
-                        try_merge_passage(
-                            query_index,
-                            passage_index,
-                            passage,
-                            reserve_limit=None,
-                        )
-            else:
-                coverage_by_source = await self._source_coverage_by_key(review_id)
-                candidates: list[tuple[int, int, ContextPassage]] = []
-                returned_by_source: dict[str | None, int] = defaultdict(int)
-                quota_deferred_candidates: set[tuple[int, int]] = set()
-
-                def coverage_for_passage(passage: ContextPassage) -> SourceCoverage:
-                    source_key = source_key_for_passage(passage)
-                    if source_key is None:
-                        return "unknown"
-                    return coverage_by_source.get(source_key, "unknown")
-
-                for query_index, result in enumerate(query_results):
-                    for passage_index, passage in enumerate(result.context_pack.passages):
-                        source_key = source_key_for_passage(passage)
-                        coverage = coverage_for_passage(passage)
-                        summary = ensure_source_budget_summary(source_key, passage, coverage)
-                        summary.candidate_count += 1
-                        candidates.append((query_index, passage_index, passage))
-
-                first_pass_candidates = list(candidates)
-                if request.budget_strategy == "scarcity_first":
-                    first_pass_candidates.sort(
-                        key=lambda candidate: (
-                            SOURCE_COVERAGE_SCARCITY_PRIORITY.get(
-                                coverage_for_passage(candidate[2]),
-                                SOURCE_COVERAGE_SCARCITY_PRIORITY["unknown"],
-                            ),
-                            candidate[0],
-                            candidate[1],
-                        )
-                    )
-
-                for target_returned_count in range(1, request.min_passages_per_source + 1):
-                    for query_index, passage_index, passage in first_pass_candidates:
-                        handled_key = (query_index, passage_index)
-                        if handled_key in handled_passages:
-                            continue
-                        source_key = source_key_for_passage(passage)
-                        if returned_by_source[source_key] >= target_returned_count:
-                            quota_deferred_candidates.add(handled_key)
-                            continue
-                        source_budget_stats[source_key].first_pass_eligible = True
-                        before_count = len(merged_passages)
-                        try_merge_passage(
-                            query_index,
-                            passage_index,
-                            passage,
-                            reserve_limit=None,
-                            source_key=source_key,
-                        )
-                        if len(merged_passages) > before_count:
-                            returned_by_source[source_key] += 1
-                for query_index, passage_index, passage in candidates:
-                    handled_key = (query_index, passage_index)
-                    source_key = source_key_for_passage(passage)
-                    if (
-                        handled_key not in handled_passages
-                        and handled_key in quota_deferred_candidates
-                        and returned_by_source[source_key] >= request.min_passages_per_source
-                        and len(merged_passages) >= request.max_total_passages
-                    ):
-                        handled_passages.add(handled_key)
-                        drop_passage(
-                            query_index,
-                            passage,
-                            "source_budget_exceeded",
-                            source_key=source_key,
-                        )
-                        continue
-                    try_merge_passage(
-                        query_index,
-                        passage_index,
-                        passage,
-                        reserve_limit=None,
-                        source_key=source_key,
-                    )
-
-        for query_index, result in enumerate(query_results):
-            query_summaries.append(
-                query_summary(
-                    query=request.queries[query_index],
-                    result=result,
-                    returned_count=returned_counts[query_index],
-                    dropped_count=dropped_counts[query_index],
-                )
-            )
-
-        citation_map = {passage.citation_key: passage.passage_id for passage in merged_passages}
-        text_chars, estimated_tokens = pack_totals(merged_passages)
-        budget_text_chars = text_chars
-        if request.response_mode == "full":
-            budget_text_chars += sum(
-                result.context_pack.total_chars
-                or sum(len(passage.text) for passage in result.context_pack.passages)
-                for result in results
-            )
+        coverage_by_source = {}
+        if request.budget_strategy != "query_fair":
+            coverage_by_source = await self._source_coverage_by_key(review_id)
+        merged = merge_batch_context(
+            request=request,
+            query_results=query_results,
+            coverage_by_source=coverage_by_source,
+        )
+        citation_map = {passage.citation_key: passage.passage_id for passage in merged.passages}
         budget = context_budget(
             max_chars=request.max_chars,
-            text_chars=budget_text_chars,
-            dropped_count=len(dropped),
+            text_chars=merged.budget_text_chars,
+            dropped_count=len(merged.dropped),
         )
         return RetrieveReviewContextBatchResponse(
             review_id=review_id,
             response_mode=request.response_mode,
             results=results,
-            query_summaries=query_summaries,
-            source_budget_summaries=[
-                source_budget_stats[source_key] for source_key in source_budget_order
-            ],
+            query_summaries=merged.query_summaries,
+            source_budget_summaries=merged.source_budget_summaries,
             merged_context_pack=ContextPack(
                 question="\n".join(request.queries),
-                passages=merged_passages,
+                passages=merged.passages,
                 citation_map=citation_map,
-                total_chars=text_chars,
-                estimated_tokens=estimated_tokens,
+                total_chars=merged.text_chars,
+                estimated_tokens=merged.estimated_tokens,
                 budget=budget,
-                dropped=dropped,
+                dropped=merged.dropped,
             ),
             preparation_status=await self._preparation_status(review_id),
             budget=budget,
