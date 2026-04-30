@@ -77,6 +77,12 @@ class ReviewReragRepository(Protocol):
     async def review_index_totals(self, review_id: str) -> ReviewIndexTotals:
         """Return aggregate index counts for a review."""
 
+    async def available_sections(self, review_id: str) -> list[str]:
+        """Return distinct indexed sections for retrieval diagnostics."""
+
+    async def indexed_pmids(self, review_id: str) -> list[str]:
+        """Return distinct indexed PMIDs for retrieval diagnostics."""
+
     async def mark_job_running(self, *, review_id: str, source_id: str) -> None:
         """Mark a preparation job as running."""
 
@@ -572,6 +578,32 @@ class PostgresReviewReragRepository:
                 review_id,
             )
         return _review_index_totals_from_row(row)
+
+    async def available_sections(self, review_id: str) -> list[str]:
+        async with self._pool.acquire() as connection:
+            rows = await connection.fetch(
+                """
+                select distinct section
+                from review_passages
+                where review_id = $1 and section is not null
+                order by section
+                """,
+                review_id,
+            )
+        return [str(row["section"]) for row in rows]
+
+    async def indexed_pmids(self, review_id: str) -> list[str]:
+        async with self._pool.acquire() as connection:
+            rows = await connection.fetch(
+                """
+                select distinct pmid
+                from review_passages
+                where review_id = $1 and pmid is not null
+                order by pmid
+                """,
+                review_id,
+            )
+        return [str(row["pmid"]) for row in rows]
 
     async def _preparation_status_on_connection(
         self, connection: Any, review_id: str

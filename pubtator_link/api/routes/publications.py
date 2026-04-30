@@ -5,9 +5,16 @@ import logging
 from fastapi import APIRouter, HTTPException, Query
 
 from ...config import api_config
+from ...models.publication_passages import (
+    PublicationContextEstimateRequest,
+    PublicationContextEstimateResponse,
+    PublicationPassageRequest,
+    PublicationPassageResponse,
+)
 from ...models.requests import PMCExportRequest, PublicationExportRequest
 from ...models.responses import PublicationExportResponse
 from .dependencies import (
+    PublicationPassageServiceDep,
     PublicationServiceDep,
     handle_api_errors,
     validate_pmcids,
@@ -16,6 +23,36 @@ from .dependencies import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/publications", tags=["Publications"])
+
+
+@router.post(
+    "/passages",
+    response_model=PublicationPassageResponse,
+    operation_id="get_publication_passages",
+    summary="Get compact publication passages",
+)
+@handle_api_errors
+async def get_publication_passages(
+    request: PublicationPassageRequest,
+    service: PublicationPassageServiceDep,
+) -> PublicationPassageResponse:
+    """Return compact sectioned publication passages without raw BioC."""
+    return await service.get_passages(request)
+
+
+@router.post(
+    "/context-estimate",
+    response_model=PublicationContextEstimateResponse,
+    operation_id="estimate_publication_context",
+    summary="Estimate compact publication context size",
+)
+@handle_api_errors
+async def estimate_publication_context(
+    request: PublicationContextEstimateRequest,
+    service: PublicationPassageServiceDep,
+) -> PublicationContextEstimateResponse:
+    """Estimate compact passage count and character size before retrieval."""
+    return await service.estimate_context(request)
 
 
 @router.get(

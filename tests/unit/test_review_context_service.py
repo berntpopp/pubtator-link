@@ -5,6 +5,7 @@ import pytest
 from pubtator_link.models.review_rerag import (
     FailedSourceSummary,
     InspectReviewIndexRequest,
+    RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
     ReviewIndexTotals,
     ReviewPassageRow,
@@ -27,6 +28,8 @@ class FakeReviewContextRepository:
         self.failed_source_summaries: list[FailedSourceSummary] = []
         self.index_totals = ReviewIndexTotals()
         self.inspect_calls: list[dict[str, object]] = []
+        self.available_sections_value: list[str] = []
+        self.indexed_pmids_value: list[str] = []
 
     async def search_passages(
         self,
@@ -79,6 +82,12 @@ class FakeReviewContextRepository:
     async def review_index_totals(self, review_id: str) -> ReviewIndexTotals:
         self.inspect_calls.append({"method": "review_index_totals", "review_id": review_id})
         return self.index_totals
+
+    async def available_sections(self, review_id: str) -> list[str]:
+        return self.available_sections_value
+
+    async def indexed_pmids(self, review_id: str) -> list[str]:
+        return self.indexed_pmids_value
 
 
 def _passage(
@@ -313,3 +322,97 @@ async def test_inspect_review_index_returns_sources_totals_and_failures() -> Non
         {"method": "review_index_totals", "review_id": "review-1"},
         {"method": "list_review_failed_sources", "review_id": "review-1"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_zero_result_retrieval_includes_actionable_diagnostics() -> None:
+    repository = FakeReviewContextRepository(
+        [],
+        preparation_status={"complete": 2, "failed": 1},
+    )
+    repository.available_sections_value = ["abstract", "discussion", "table"]
+    repository.indexed_pmids_value = ["111", "222"]
+    repository.failed_source_summaries = [
+        FailedSourceSummary(
+            source_id="333",
+            pmid="333",
+            source_kind="pubtator_full_bioc",
+            job_status="failed",
+            error="not available",
+            attempt_statuses=["not_available"],
+        )
+    ]
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context(
+        "review-1",
+        RetrieveReviewContextRequest(question="Does colchicine reduce attacks in children?"),
+    )
+
+    assert response.context_pack.passages == []
+    assert response.diagnostics is not None
+    assert response.diagnostics.candidate_count == 0
+    assert response.diagnostics.selected_count == 0
+    assert response.diagnostics.indexed_pmids == ["111", "222"]
+    assert response.diagnostics.available_sections == ["abstract", "discussion", "table"]
+    assert response.diagnostics.failed_sources[0].pmid == "333"
+    assert "Try shorter keyword queries" in response.diagnostics.message
+    assert response.diagnostics.suggested_queries
+
+
+@pytest.mark.asyncio
+async def test_nonzero_retrieval_includes_diagnostics_when_requested() -> None:
+    repository = FakeReviewContextRepository(
+        [_passage("p1", pmid="111", text="colchicine response", lexical_rank=9.0)]
+    )
+    repository.available_sections_value = ["abstract"]
+    repository.indexed_pmids_value = ["111"]
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context(
+        "review-1",
+        RetrieveReviewContextRequest(
+            question="colchicine response",
+            include_diagnostics=True,
+        ),
+    )
+
+    assert response.context_pack.passages[0].passage_id == "p1"
+    assert response.diagnostics is not None
+    assert response.diagnostics.candidate_count == 1
+    assert response.diagnostics.selected_count == 1
+
+
+@pytest.mark.asyncio
+async def test_batch_retrieval_deduplicates_and_preserves_per_query_diagnostics() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage("p1", pmid="111", text="first passage", lexical_rank=9.0),
+            _passage("p1", pmid="111", text="first passage duplicate", lexical_rank=8.0),
+            _passage("p2", pmid="222", text="second passage", lexical_rank=7.0),
+        ]
+    )
+    repository.available_sections_value = ["abstract"]
+    repository.indexed_pmids_value = ["111", "222"]
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["colchicine children", "FMF phenotype"],
+            max_passages_per_query=3,
+            max_total_passages=3,
+            max_chars=1000,
+        ),
+    )
+
+    assert [result.context_pack.question for result in response.results] == [
+        "colchicine children",
+        "FMF phenotype",
+    ]
+    assert all(result.diagnostics is not None for result in response.results)
+    assert [passage.passage_id for passage in response.merged_context_pack.passages] == [
+        "p1",
+        "p2",
+    ]
+    assert response.merged_context_pack.citation_map == {"S1": "p1", "S2": "p2"}

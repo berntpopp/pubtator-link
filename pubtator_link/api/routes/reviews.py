@@ -5,6 +5,10 @@ from fastapi import APIRouter
 from ...models.review_rerag import (
     IndexReviewEvidenceRequest,
     IndexReviewEvidenceResponse,
+    InspectReviewIndexRequest,
+    InspectReviewIndexResponse,
+    RetrieveReviewContextBatchRequest,
+    RetrieveReviewContextBatchResponse,
     RetrieveReviewContextRequest,
     RetrieveReviewContextResponse,
 )
@@ -46,6 +50,31 @@ async def index_review_evidence(
     )
 
 
+@router.get(
+    "/{review_id}/index",
+    response_model=InspectReviewIndexResponse,
+    operation_id="inspect_review_index",
+    summary="Inspect review-scoped index contents",
+)
+@handle_api_errors
+async def inspect_review_index(
+    review_id: str,
+    service: ReviewContextServiceDep,
+    pmids: str | None = None,
+    include_passage_samples: bool = False,
+    sample_per_pmid: int = 2,
+) -> InspectReviewIndexResponse:
+    pmid_list = [pmid.strip() for pmid in pmids.split(",") if pmid.strip()] if pmids else []
+    return await service.inspect_review_index(
+        review_id=review_id,
+        request=InspectReviewIndexRequest(
+            pmids=pmid_list,
+            include_passage_samples=include_passage_samples,
+            sample_per_pmid=sample_per_pmid,
+        ),
+    )
+
+
 @router.post(
     "/{review_id}/context",
     response_model=RetrieveReviewContextResponse,
@@ -59,3 +88,18 @@ async def retrieve_review_context(
     service: ReviewContextServiceDep,
 ) -> RetrieveReviewContextResponse:
     return await service.retrieve_context(review_id=review_id, request=request)
+
+
+@router.post(
+    "/{review_id}/context/batch",
+    response_model=RetrieveReviewContextBatchResponse,
+    operation_id="retrieve_review_context_batch",
+    summary="Retrieve compact review-scoped context for multiple query variants",
+)
+@handle_api_errors
+async def retrieve_review_context_batch(
+    review_id: str,
+    request: RetrieveReviewContextBatchRequest,
+    service: ReviewContextServiceDep,
+) -> RetrieveReviewContextBatchResponse:
+    return await service.retrieve_context_batch(review_id=review_id, request=request)

@@ -7,7 +7,11 @@ from fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
 from pubtator_link.api.client import PubTator3Client
-from pubtator_link.api.routes.dependencies import get_review_context_service, get_review_queue
+from pubtator_link.api.routes.dependencies import (
+    get_publication_passage_service,
+    get_review_context_service,
+    get_review_queue,
+)
 from pubtator_link.mcp.prompts import (
     annotate_research_text_prompt,
     review_pubtator_annotations_prompt,
@@ -24,22 +28,30 @@ from pubtator_link.mcp.resources import (
     get_text_processing_resource,
 )
 from pubtator_link.mcp.service_adapters import (
+    estimate_publication_context_impl,
     fetch_pmc_annotations_impl,
     fetch_publication_annotations_impl,
     find_entity_relations_impl,
+    get_publication_passages_impl,
     get_text_annotation_results_impl,
     index_review_evidence_impl,
+    inspect_review_index_impl,
+    retrieve_review_context_batch_impl,
     retrieve_review_context_impl,
     search_biomedical_entities_impl,
     search_literature_impl,
     submit_text_annotation_impl,
 )
 from pubtator_link.mcp.tools import (
+    EstimatePublicationContextMcpRequest,
     FetchPmcAnnotationsRequest,
     FetchPublicationAnnotationsRequest,
     FindEntityRelationsRequest,
+    GetPublicationPassagesMcpRequest,
     GetTextAnnotationResultsRequest,
     IndexReviewEvidenceMcpRequest,
+    InspectReviewIndexMcpRequest,
+    RetrieveReviewContextBatchMcpRequest,
     RetrieveReviewContextMcpRequest,
     SearchBiomedicalEntitiesRequest,
     SearchLiteratureRequest,
@@ -150,6 +162,30 @@ def create_pubtator_mcp() -> FastMCP:
             return await fetch_publication_annotations_impl(request, service=service)
 
     @mcp.tool(
+        name="pubtator.get_publication_passages",
+        title="Get Publication Passages",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def get_publication_passages(
+        request: GetPublicationPassagesMcpRequest,
+    ) -> dict[str, Any]:
+        """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. Inputs include pmids, sections, mode, full, max_passages_per_pmid, max_chars, include_tables, and include_references; output includes passages, dropped reasons, and context_estimate. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_publication_passage_service()
+        return await get_publication_passages_impl(request, service=service)
+
+    @mcp.tool(
+        name="pubtator.estimate_publication_context",
+        title="Estimate Publication Context",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def estimate_publication_context(
+        request: EstimatePublicationContextMcpRequest,
+    ) -> dict[str, Any]:
+        """Use this when a user needs to estimate passage count and context size before fetching publication passages. Inputs mirror get_publication_passages except max_chars; output includes estimated_passages, estimated_chars, sections_by_pmid, recommended_mode, and warning. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_publication_passage_service()
+        return await estimate_publication_context_impl(request, service=service)
+
+    @mcp.tool(
         name="pubtator.fetch_pmc_annotations",
         title="Fetch PMC Annotations",
         annotations=READ_ONLY_OPEN_WORLD,
@@ -215,6 +251,16 @@ def create_pubtator_mcp() -> FastMCP:
         return await index_review_evidence_impl(request, queue=queue)
 
     @mcp.tool(
+        name="pubtator.inspect_review_index",
+        title="Inspect Review Index",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def inspect_review_index(request: InspectReviewIndexMcpRequest) -> dict[str, Any]:
+        """Use this when a user needs to inspect what PMIDs, sections, passage counts, and failures are indexed for a review_id. Inputs include review_id, optional pmids, include_passage_samples, and sample_per_pmid; output includes preparation_status, sources, totals, and failed_sources. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_review_context_service()
+        return await inspect_review_index_impl(request, service=service)
+
+    @mcp.tool(
         name="pubtator.retrieve_review_context",
         title="Retrieve Review Context",
         annotations=READ_ONLY_OPEN_WORLD,
@@ -223,6 +269,18 @@ def create_pubtator_mcp() -> FastMCP:
         """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Best results usually come from a short keyword query; use pmids when focusing on a specific paper. If zero passages are returned, simplify the query or fall back to fetch_publication_annotations with full=true. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         service = await get_review_context_service()
         return await retrieve_review_context_impl(request, service=service)
+
+    @mcp.tool(
+        name="pubtator.retrieve_review_context_batch",
+        title="Retrieve Review Context Batch",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def retrieve_review_context_batch(
+        request: RetrieveReviewContextBatchMcpRequest,
+    ) -> dict[str, Any]:
+        """Use this when a user wants to try multiple short review retrieval query variants in one call and receive merged compact context. Inputs include review_id, queries, shared filters, max_passages_per_query, max_total_passages, max_chars, deduplicate_passages, and include_diagnostics; output includes per-query results and merged_context_pack. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_review_context_service()
+        return await retrieve_review_context_batch_impl(request, service=service)
 
     @mcp.resource("pubtator://capabilities")
     def capabilities() -> dict[str, Any]:

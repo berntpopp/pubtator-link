@@ -14,6 +14,7 @@ from ...config import review_rerag_config
 from ...logging_config import configure_logging
 from ...repositories.review_rerag import PostgresReviewReragRepository
 from ...services.full_text_preparation import FullTextPreparationService
+from ...services.publication_passage_service import PublicationPassageService
 from ...services.publication_service import PublicationService
 from ...services.review_context_service import ReviewContextService
 from ...services.review_preparation_queue import ReviewPreparationQueue
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 # Global instances - initialized once per application lifecycle
 _api_client: PubTator3Client | None = None
 _publication_service: PublicationService | None = None
+_publication_passage_service: PublicationPassageService | None = None
 _logger: FilteringBoundLogger | None = None
 _review_pool: asyncpg.Pool | None = None
 _review_repository: PostgresReviewReragRepository | None = None
@@ -56,6 +58,16 @@ async def get_publication_service() -> PublicationService:
         logger_instance = await get_logger()
         _publication_service = PublicationService(client=client, logger=logger_instance)
     return _publication_service
+
+
+async def get_publication_passage_service() -> PublicationPassageService:
+    """Get compact publication passage service instance."""
+    global _publication_passage_service
+    if _publication_passage_service is None:
+        _publication_passage_service = PublicationPassageService(
+            publication_service=await get_publication_service()
+        )
+    return _publication_passage_service
 
 
 async def get_review_pool() -> asyncpg.Pool:
@@ -110,6 +122,9 @@ async def get_review_context_service() -> ReviewContextService:
 LoggerDep = Annotated[FilteringBoundLogger, Depends(get_logger)]
 ClientDep = Annotated[PubTator3Client, Depends(get_api_client)]
 PublicationServiceDep = Annotated[PublicationService, Depends(get_publication_service)]
+PublicationPassageServiceDep = Annotated[
+    PublicationPassageService, Depends(get_publication_passage_service)
+]
 ReviewQueueDep = Annotated[ReviewPreparationQueue, Depends(get_review_queue)]
 ReviewContextServiceDep = Annotated[ReviewContextService, Depends(get_review_context_service)]
 
@@ -225,7 +240,7 @@ def validate_limit(limit: int, max_limit: int = 100) -> int:
 
 async def cleanup_dependencies() -> None:
     """Cleanup function for graceful shutdown."""
-    global _api_client, _publication_service, _logger
+    global _api_client, _publication_passage_service, _publication_service, _logger
     global _review_context_service, _review_pool, _review_queue, _review_repository
 
     if _api_client:
@@ -242,5 +257,6 @@ async def cleanup_dependencies() -> None:
 
     _review_repository = None
     _review_context_service = None
+    _publication_passage_service = None
     _publication_service = None
     _logger = None

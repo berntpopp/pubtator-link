@@ -48,6 +48,10 @@ def test_curated_facade_registers_pubtator_tools() -> None:
     assert "pubtator.find_entity_relations" in tool_names
     assert "pubtator.submit_text_annotation" in tool_names
     assert "pubtator.get_text_annotation_results" in tool_names
+    assert "pubtator.get_publication_passages" in tool_names
+    assert "pubtator.estimate_publication_context" in tool_names
+    assert "pubtator.inspect_review_index" in tool_names
+    assert "pubtator.retrieve_review_context_batch" in tool_names
     assert "pubtator.get_server_capabilities" in tool_names
     assert "pubtator.clear_api_cache" not in tool_names
 
@@ -98,3 +102,18 @@ def test_open_world_tools_are_marked_open_world() -> None:
     tool = mcp._tool_manager._tools["pubtator.search_literature"]
 
     assert tool.annotations.openWorldHint is True
+
+
+def test_capabilities_resource_tool_names_are_registered() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+    from pubtator_link.mcp.resources import get_capabilities_resource
+
+    mcp = create_pubtator_mcp()
+    registered_tools = set(mcp._tool_manager._tools)
+    capabilities = get_capabilities_resource()
+    advertised_tools = set(capabilities["tools"])
+    for group_tools in capabilities["tool_groups"].values():
+        advertised_tools.update(group_tools)
+    advertised_tools.update(capabilities["review_rerag"]["tools"])
+
+    assert advertised_tools <= registered_tools

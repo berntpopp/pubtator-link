@@ -18,6 +18,8 @@ def get_capabilities_resource() -> dict[str, Any]:
         "endpoint": "/mcp",
         "tools": [
             "pubtator.search_literature",
+            "pubtator.get_publication_passages",
+            "pubtator.estimate_publication_context",
             "pubtator.fetch_publication_annotations",
             "pubtator.fetch_pmc_annotations",
             "pubtator.search_biomedical_entities",
@@ -25,7 +27,9 @@ def get_capabilities_resource() -> dict[str, Any]:
             "pubtator.submit_text_annotation",
             "pubtator.get_text_annotation_results",
             "pubtator.index_review_evidence",
+            "pubtator.inspect_review_index",
             "pubtator.retrieve_review_context",
+            "pubtator.retrieve_review_context_batch",
             "pubtator.get_server_capabilities",
         ],
         "recommended_workflows": [

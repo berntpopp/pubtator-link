@@ -46,6 +46,106 @@ async def test_publication_adapter_validates_pmids() -> None:
 
 
 @pytest.mark.asyncio
+async def test_publication_passages_adapter_calls_service() -> None:
+    from pubtator_link.mcp.service_adapters import get_publication_passages_impl
+    from pubtator_link.mcp.tools import GetPublicationPassagesMcpRequest
+    from pubtator_link.models.publication_passages import (
+        PublicationContextEstimate,
+        PublicationPassageResponse,
+    )
+
+    class FakeService:
+        async def get_passages(self, request):
+            return PublicationPassageResponse(
+                pmids=request.pmids,
+                mode=request.mode,
+                passages=[],
+                dropped=[],
+                context_estimate=PublicationContextEstimate(
+                    estimated_passages=0,
+                    estimated_chars=0,
+                    sections_by_pmid={"29355051": []},
+                    recommended_mode="compact_passages",
+                    warning=None,
+                ),
+            )
+
+    result = await get_publication_passages_impl(
+        GetPublicationPassagesMcpRequest(pmids=["29355051"]),
+        service=FakeService(),
+    )
+
+    assert result["success"] is True
+    assert result["pmids"] == ["29355051"]
+    assert "passages" in result
+
+
+@pytest.mark.asyncio
+async def test_inspect_review_index_adapter_calls_service() -> None:
+    from pubtator_link.mcp.service_adapters import inspect_review_index_impl
+    from pubtator_link.mcp.tools import InspectReviewIndexMcpRequest
+    from pubtator_link.models.review_rerag import (
+        InspectReviewIndexResponse,
+        PreparationStatus,
+        ReviewIndexTotals,
+    )
+
+    class FakeService:
+        async def inspect_review_index(self, review_id, request):
+            return InspectReviewIndexResponse(
+                review_id=review_id,
+                preparation_status=PreparationStatus(complete=1),
+                sources=[],
+                totals=ReviewIndexTotals(),
+                failed_sources=[],
+            )
+
+    result = await inspect_review_index_impl(
+        InspectReviewIndexMcpRequest(review_id="rev_123"),
+        service=FakeService(),
+    )
+
+    assert result["success"] is True
+    assert result["review_id"] == "rev_123"
+
+
+@pytest.mark.asyncio
+async def test_retrieve_review_context_batch_adapter_calls_service() -> None:
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
+    from pubtator_link.mcp.tools import RetrieveReviewContextBatchMcpRequest
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        PreparationStatus,
+        RetrieveReviewContextBatchResponse,
+    )
+
+    class FakeService:
+        async def retrieve_context_batch(self, review_id, request):
+            return RetrieveReviewContextBatchResponse(
+                review_id=review_id,
+                results=[],
+                merged_context_pack=ContextPack(
+                    question="\n".join(request.queries),
+                    passages=[],
+                    citation_map={},
+                ),
+                preparation_status=PreparationStatus(complete=1),
+            )
+
+    result = await retrieve_review_context_batch_impl(
+        RetrieveReviewContextBatchMcpRequest(
+            review_id="rev_123",
+            queries=["colchicine children"],
+        ),
+        service=FakeService(),
+    )
+
+    assert result["success"] is True
+    assert result["review_id"] == "rev_123"
+    assert result["merged_context_pack"]["question"] == "colchicine children"
+
+
+@pytest.mark.asyncio
 async def test_search_literature_adapter_maps_client_results() -> None:
     from pubtator_link.mcp.service_adapters import search_literature_impl
     from pubtator_link.mcp.tools import SearchLiteratureRequest

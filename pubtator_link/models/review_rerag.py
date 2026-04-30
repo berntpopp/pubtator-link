@@ -66,6 +66,7 @@ class RetrieveReviewContextRequest(BaseModel):
     max_passages: int = Field(default=8, ge=1, le=30)
     max_chars: int = Field(default=6000, ge=500, le=30000)
     max_passages_per_pmid: int = Field(default=2, ge=1, le=10)
+    include_diagnostics: bool = False
 
 
 class ContextPassage(BaseModel):
@@ -94,6 +95,47 @@ class RetrieveReviewContextResponse(BaseModel):
     success: bool = True
     review_id: str
     context_pack: ContextPack
+    preparation_status: PreparationStatus
+    diagnostics: "RetrieveReviewDiagnostics | None" = None
+
+
+class RetrieveReviewDiagnostics(BaseModel):
+    """Actionable diagnostics for review context retrieval."""
+
+    query: str
+    query_tokens: list[str]
+    query_mode: Literal["strict", "relaxed", "strict_and_relaxed"] = "strict_and_relaxed"
+    candidate_count: int = Field(default=0, ge=0)
+    selected_count: int = Field(default=0, ge=0)
+    available_sections: list[str] = Field(default_factory=list)
+    indexed_pmids: list[str] = Field(default_factory=list)
+    failed_sources: list["FailedSourceSummary"] = Field(default_factory=list)
+    filter_summary: dict[str, list[str]] = Field(default_factory=dict)
+    suggested_queries: list[str] = Field(default_factory=list)
+    message: str
+
+
+class RetrieveReviewContextBatchRequest(BaseModel):
+    """Request for multiple review-scoped context retrieval queries."""
+
+    queries: list[str] = Field(min_length=1, max_length=10)
+    pmids: list[str] = Field(default_factory=list)
+    entity_ids: list[str] = Field(default_factory=list)
+    sections: list[str] = Field(default_factory=list)
+    max_passages_per_query: int = Field(default=8, ge=1, le=30)
+    max_total_passages: int = Field(default=20, ge=1, le=60)
+    max_chars: int = Field(default=12000, ge=500, le=50000)
+    deduplicate_passages: bool = True
+    include_diagnostics: bool = True
+
+
+class RetrieveReviewContextBatchResponse(BaseModel):
+    """Response for batch review context retrieval."""
+
+    success: bool = True
+    review_id: str
+    results: list[RetrieveReviewContextResponse]
+    merged_context_pack: ContextPack
     preparation_status: PreparationStatus
 
 
