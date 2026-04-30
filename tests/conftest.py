@@ -15,12 +15,25 @@ from pubtator_link.server_manager import UnifiedServerManager
 from pubtator_link.services.publication_service import PublicationService
 
 
+def _reset_async_lru_method_cache(method: object) -> None:
+    """Clear async-lru method cache and test loop metadata.
+
+    async-lru stores the first event loop seen by a decorated method wrapper.
+    pytest-asyncio uses function-scoped loops, so tests must reset this metadata
+    in addition to cache entries to avoid cross-loop warnings.
+    """
+    method.cache_clear()
+    wrapper = method._LRUCacheWrapperInstanceMethod__wrapper
+    wrapper._LRUCacheWrapper__first_loop = None
+    wrapper._LRUCacheWrapper__warned_loop_reset = False
+
+
 @pytest.fixture(autouse=True)
 def clear_publication_service_method_caches() -> None:
     """Prevent async-lru method caches from leaking across test event loops."""
-    PublicationService.export_publications.cache_clear()
-    PublicationService.export_pmc_publications.cache_clear()
-    PublicationService.search_publications.cache_clear()
+    _reset_async_lru_method_cache(PublicationService.export_publications)
+    _reset_async_lru_method_cache(PublicationService.export_pmc_publications)
+    _reset_async_lru_method_cache(PublicationService.search_publications)
 
 
 @pytest.fixture
