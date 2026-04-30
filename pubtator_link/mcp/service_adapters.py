@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from pubtator_link.api.client import PubTator3Client
 from pubtator_link.config import text_processing_config
@@ -22,6 +22,7 @@ from pubtator_link.mcp.tools import (
 from pubtator_link.models.publication_passages import (
     PublicationContextEstimateRequest,
     PublicationPassageRequest,
+    PublicationPassageMode,
 )
 from pubtator_link.models.responses import (
     AnnotationEntity,
@@ -38,6 +39,8 @@ from pubtator_link.models.responses import (
 from pubtator_link.models.review_rerag import (
     IndexReviewEvidenceRequest,
     InspectReviewIndexRequest,
+    ReviewBatchResponseMode,
+    ReviewTableMode,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
 )
@@ -80,6 +83,19 @@ async def search_biomedical_entities_impl(
     ).model_dump()
 
 
+async def search_biomedical_entities_v2_impl(
+    *,
+    client: PubTator3Client,
+    query: str,
+    concept: Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"] | None = None,
+    limit: int = 10,
+) -> dict[str, Any]:
+    return await search_biomedical_entities_impl(
+        SearchBiomedicalEntitiesRequest(query=query, concept=concept, limit=limit),
+        client=client,
+    )
+
+
 async def fetch_publication_annotations_impl(
     request: FetchPublicationAnnotationsRequest,
     *,
@@ -113,6 +129,33 @@ async def get_publication_passages_impl(
         )
     )
     return response.model_dump()
+
+
+async def get_publication_passages_v2_impl(
+    *,
+    service: PublicationPassageService,
+    pmids: list[str],
+    sections: list[str] | None = None,
+    mode: PublicationPassageMode = "compact_passages",
+    full: bool = False,
+    max_passages_per_pmid: int = 6,
+    max_chars: int = 12000,
+    include_tables: bool = True,
+    include_references: bool = False,
+) -> dict[str, Any]:
+    return await get_publication_passages_impl(
+        GetPublicationPassagesMcpRequest(
+            pmids=pmids,
+            sections=sections or [],
+            mode=mode,
+            full=full,
+            max_passages_per_pmid=max_passages_per_pmid,
+            max_chars=max_chars,
+            include_tables=include_tables,
+            include_references=include_references,
+        ),
+        service=service,
+    )
 
 
 async def estimate_publication_context_impl(
@@ -177,6 +220,27 @@ async def search_literature_impl(
         total_pages=total_pages,
         sort_order=request.sort,
     ).model_dump()
+
+
+async def search_literature_v2_impl(
+    *,
+    client: PubTator3Client,
+    text: str,
+    page: int = 1,
+    sort: str | None = None,
+    filters: str | None = None,
+    sections: list[str] | None = None,
+) -> dict[str, Any]:
+    return await search_literature_impl(
+        SearchLiteratureRequest(
+            text=text,
+            page=page,
+            sort=sort,
+            filters=filters,
+            sections=",".join(sections) if sections else None,
+        ),
+        client=client,
+    )
 
 
 async def fetch_pmc_annotations_impl(
@@ -361,6 +425,25 @@ async def inspect_review_index_impl(
     return response.model_dump()
 
 
+async def inspect_review_index_v2_impl(
+    *,
+    service: ReviewContextService,
+    review_id: str,
+    pmids: list[str] | None = None,
+    include_passage_samples: bool = False,
+    sample_per_pmid: int = 2,
+) -> dict[str, Any]:
+    return await inspect_review_index_impl(
+        InspectReviewIndexMcpRequest(
+            review_id=review_id,
+            pmids=pmids or [],
+            include_passage_samples=include_passage_samples,
+            sample_per_pmid=sample_per_pmid,
+        ),
+        service=service,
+    )
+
+
 async def retrieve_review_context_impl(
     request: RetrieveReviewContextMcpRequest,
     *,
@@ -376,6 +459,48 @@ async def retrieve_review_context_impl(
             max_passages=request.max_passages,
             max_chars=request.max_chars,
             include_diagnostics=request.include_diagnostics,
+            include_tables=request.include_tables,
+            include_references=request.include_references,
+            table_mode=request.table_mode,
+            allow_truncated_passages=request.allow_truncated_passages,
+            max_chars_per_passage=request.max_chars_per_passage,
+        ),
+    )
+    return response.model_dump()
+
+
+async def retrieve_review_context_v2_impl(
+    *,
+    service: ReviewContextService,
+    review_id: str,
+    question: str,
+    pmids: list[str] | None = None,
+    entity_ids: list[str] | None = None,
+    sections: list[str] | None = None,
+    max_passages: int = 8,
+    max_chars: int = 6000,
+    include_diagnostics: bool = False,
+    include_tables: bool = False,
+    include_references: bool = False,
+    table_mode: ReviewTableMode = "preview",
+    allow_truncated_passages: bool = True,
+    max_chars_per_passage: int = 2200,
+) -> dict[str, Any]:
+    response = await service.retrieve_context(
+        review_id=review_id,
+        request=RetrieveReviewContextRequest(
+            question=question,
+            pmids=pmids or [],
+            entity_ids=entity_ids or [],
+            sections=sections or [],
+            max_passages=max_passages,
+            max_chars=max_chars,
+            include_diagnostics=include_diagnostics,
+            include_tables=include_tables,
+            include_references=include_references,
+            table_mode=table_mode,
+            allow_truncated_passages=allow_truncated_passages,
+            max_chars_per_passage=max_chars_per_passage,
         ),
     )
     return response.model_dump()
@@ -393,11 +518,63 @@ async def retrieve_review_context_batch_impl(
             pmids=request.pmids,
             entity_ids=request.entity_ids,
             sections=request.sections,
+            response_mode=request.response_mode,
             max_passages_per_query=request.max_passages_per_query,
             max_total_passages=request.max_total_passages,
             max_chars=request.max_chars,
+            max_response_chars=request.max_response_chars,
             deduplicate_passages=request.deduplicate_passages,
             include_diagnostics=request.include_diagnostics,
+            include_tables=request.include_tables,
+            include_references=request.include_references,
+            table_mode=request.table_mode,
+            allow_truncated_passages=request.allow_truncated_passages,
+            max_chars_per_passage=request.max_chars_per_passage,
+        ),
+    )
+    return response.model_dump()
+
+
+async def retrieve_review_context_batch_v2_impl(
+    *,
+    service: ReviewContextService,
+    review_id: str,
+    queries: list[str],
+    pmids: list[str] | None = None,
+    entity_ids: list[str] | None = None,
+    sections: list[str] | None = None,
+    response_mode: ReviewBatchResponseMode = "compact",
+    max_passages_per_query: int = 8,
+    max_total_passages: int = 20,
+    max_chars: int = 12000,
+    max_response_chars: int = 24000,
+    deduplicate_passages: bool = True,
+    include_diagnostics: bool = True,
+    include_tables: bool = False,
+    include_references: bool = False,
+    table_mode: ReviewTableMode = "preview",
+    allow_truncated_passages: bool = True,
+    max_chars_per_passage: int = 2200,
+) -> dict[str, Any]:
+    response = await service.retrieve_context_batch(
+        review_id=review_id,
+        request=RetrieveReviewContextBatchRequest(
+            queries=queries,
+            pmids=pmids or [],
+            entity_ids=entity_ids or [],
+            sections=sections or [],
+            response_mode=response_mode,
+            max_passages_per_query=max_passages_per_query,
+            max_total_passages=max_total_passages,
+            max_chars=max_chars,
+            max_response_chars=max_response_chars,
+            deduplicate_passages=deduplicate_passages,
+            include_diagnostics=include_diagnostics,
+            include_tables=include_tables,
+            include_references=include_references,
+            table_mode=table_mode,
+            allow_truncated_passages=allow_truncated_passages,
+            max_chars_per_passage=max_chars_per_passage,
         ),
     )
     return response.model_dump()

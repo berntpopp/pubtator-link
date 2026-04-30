@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from pubtator_link.models.review_rerag import PrepareMode
+from pubtator_link.models.review_rerag import PrepareMode, ReviewBatchResponseMode, ReviewTableMode
 
 
 class SearchLiteratureRequest(BaseModel):
@@ -104,9 +104,14 @@ class RetrieveReviewContextMcpRequest(BaseModel):
     pmids: list[str] = Field(default_factory=list)
     entity_ids: list[str] = Field(default_factory=list)
     sections: list[str] = Field(default_factory=list)
-    max_passages: int = 8
-    max_chars: int = 6000
+    max_passages: int = Field(default=8, ge=1, le=30)
+    max_chars: int = Field(default=6000, ge=500, le=30000)
     include_diagnostics: bool = False
+    include_tables: bool = False
+    include_references: bool = False
+    table_mode: ReviewTableMode = "preview"
+    allow_truncated_passages: bool = True
+    max_chars_per_passage: int = Field(default=2200, ge=300, le=10000)
 
 
 class RetrieveReviewContextBatchMcpRequest(BaseModel):
@@ -120,5 +125,12 @@ class RetrieveReviewContextBatchMcpRequest(BaseModel):
     max_passages_per_query: int = Field(default=8, ge=1, le=30)
     max_total_passages: int = Field(default=20, ge=1, le=60)
     max_chars: int = Field(default=12000, ge=500, le=50000)
+    max_response_chars: int = Field(default=24000, ge=2000, le=100000)
     deduplicate_passages: bool = True
     include_diagnostics: bool = True
+    response_mode: ReviewBatchResponseMode = "compact"
+    include_tables: bool = False
+    include_references: bool = False
+    table_mode: ReviewTableMode = "preview"
+    allow_truncated_passages: bool = True
+    max_chars_per_passage: int = Field(default=2200, ge=300, le=10000)

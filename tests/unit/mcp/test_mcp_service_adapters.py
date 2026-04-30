@@ -146,6 +146,131 @@ async def test_retrieve_review_context_batch_adapter_calls_service() -> None:
 
 
 @pytest.mark.asyncio
+async def test_retrieve_review_context_batch_v2_adapter_builds_request() -> None:
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_v2_impl
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        PreparationStatus,
+        RetrieveReviewContextBatchResponse,
+    )
+
+    class RecordingService:
+        review_id = None
+        request = None
+
+        async def retrieve_context_batch(self, review_id, request):
+            self.review_id = review_id
+            self.request = request
+            return RetrieveReviewContextBatchResponse(
+                review_id=review_id,
+                response_mode=request.response_mode,
+                results=[],
+                merged_context_pack=ContextPack(question="", passages=[], citation_map={}),
+                preparation_status=PreparationStatus(),
+            )
+
+    service = RecordingService()
+
+    result = await retrieve_review_context_batch_v2_impl(
+        service=service,
+        review_id="rev",
+        queries=["MEFV", "colchicine"],
+        response_mode="diagnostics",
+        max_chars=8000,
+        max_response_chars=12000,
+        include_tables=False,
+    )
+
+    assert service.review_id == "rev"
+    assert service.request.response_mode == "diagnostics"
+    assert service.request.max_response_chars == 12000
+    assert service.request.include_tables is False
+    assert result["response_mode"] == "diagnostics"
+
+
+@pytest.mark.asyncio
+async def test_retrieve_review_context_v2_adapter_builds_request() -> None:
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_v2_impl
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        PreparationStatus,
+        RetrieveReviewContextResponse,
+    )
+
+    class RecordingService:
+        review_id = None
+        request = None
+
+        async def retrieve_context(self, review_id, request):
+            self.review_id = review_id
+            self.request = request
+            return RetrieveReviewContextResponse(
+                review_id=review_id,
+                context_pack=ContextPack(
+                    question=request.question,
+                    passages=[],
+                    citation_map={},
+                ),
+                preparation_status=PreparationStatus(),
+            )
+
+    service = RecordingService()
+
+    result = await retrieve_review_context_v2_impl(
+        service=service,
+        review_id="rev",
+        question="MEFV colchicine",
+        pmids=["40234174"],
+        include_tables=True,
+    )
+
+    assert service.review_id == "rev"
+    assert service.request.pmids == ["40234174"]
+    assert service.request.include_tables is True
+    assert result["context_pack"]["question"] == "MEFV colchicine"
+
+
+@pytest.mark.asyncio
+async def test_inspect_review_index_v2_adapter_builds_request() -> None:
+    from pubtator_link.mcp.service_adapters import inspect_review_index_v2_impl
+    from pubtator_link.models.review_rerag import (
+        InspectReviewIndexResponse,
+        PreparationStatus,
+        ReviewIndexTotals,
+    )
+
+    class RecordingService:
+        review_id = None
+        request = None
+
+        async def inspect_review_index(self, review_id, request):
+            self.review_id = review_id
+            self.request = request
+            return InspectReviewIndexResponse(
+                review_id=review_id,
+                preparation_status=PreparationStatus(complete=1),
+                sources=[],
+                totals=ReviewIndexTotals(),
+                failed_sources=[],
+            )
+
+    service = RecordingService()
+
+    result = await inspect_review_index_v2_impl(
+        service=service,
+        review_id="rev",
+        pmids=["40234174"],
+        include_passage_samples=True,
+        sample_per_pmid=3,
+    )
+
+    assert service.review_id == "rev"
+    assert service.request.pmids == ["40234174"]
+    assert service.request.sample_per_pmid == 3
+    assert result["review_id"] == "rev"
+
+
+@pytest.mark.asyncio
 async def test_search_literature_adapter_maps_client_results() -> None:
     from pubtator_link.mcp.service_adapters import search_literature_impl
     from pubtator_link.mcp.tools import SearchLiteratureRequest
@@ -173,6 +298,100 @@ async def test_search_literature_adapter_maps_client_results() -> None:
     assert result["success"] is True
     assert result["query"] == "BRCA1"
     assert result["results"][0]["pmid"] == "29355051"
+
+
+@pytest.mark.asyncio
+async def test_search_literature_v2_adapter_maps_flat_sections() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_v2_impl
+
+    class FakeClient:
+        async def search_publications(
+            self,
+            text: str,
+            page: int,
+            sort: str | None,
+            filters: str | None,
+            sections: str | None,
+        ) -> dict[str, object]:
+            return {
+                "results": [{"pmid": "29355051", "title": "BRCA1 mutations"}],
+                "total": 1,
+                "per_page": 20,
+                "sections": sections,
+            }
+
+    result = await search_literature_v2_impl(
+        client=FakeClient(),
+        text=" BRCA1 ",
+        sort="score desc",
+        sections=["title", "abstract"],
+    )
+
+    assert result["success"] is True
+    assert result["query"] == "BRCA1"
+    assert result["results"][0]["pmid"] == "29355051"
+
+
+@pytest.mark.asyncio
+async def test_search_biomedical_entities_v2_adapter_calls_client() -> None:
+    from pubtator_link.mcp.service_adapters import search_biomedical_entities_v2_impl
+
+    class FakeClient:
+        async def autocomplete_entity(
+            self, query: str, concept: str | None, limit: int
+        ) -> list[dict[str, object]]:
+            return [{"_id": "@GENE_672", "name": "BRCA1", "biotype": "Gene"}]
+
+    result = await search_biomedical_entities_v2_impl(
+        client=FakeClient(),
+        query="BRCA1",
+        concept="Gene",
+        limit=5,
+    )
+
+    assert result["success"] is True
+    assert result["matches"][0]["identifier"] == "@GENE_672"
+
+
+@pytest.mark.asyncio
+async def test_publication_passages_v2_adapter_builds_request() -> None:
+    from pubtator_link.mcp.service_adapters import get_publication_passages_v2_impl
+    from pubtator_link.models.publication_passages import (
+        PublicationContextEstimate,
+        PublicationPassageResponse,
+    )
+
+    class RecordingService:
+        request = None
+
+        async def get_passages(self, request):
+            self.request = request
+            return PublicationPassageResponse(
+                pmids=request.pmids,
+                mode=request.mode,
+                passages=[],
+                dropped=[],
+                context_estimate=PublicationContextEstimate(
+                    estimated_passages=0,
+                    estimated_chars=0,
+                    sections_by_pmid={"29355051": request.sections},
+                    recommended_mode="compact_passages",
+                    warning=None,
+                ),
+            )
+
+    service = RecordingService()
+
+    result = await get_publication_passages_v2_impl(
+        service=service,
+        pmids=["29355051"],
+        sections=["abstract"],
+        include_references=True,
+    )
+
+    assert service.request.sections == ["abstract"]
+    assert service.request.include_references is True
+    assert result["pmids"] == ["29355051"]
 
 
 @pytest.mark.asyncio

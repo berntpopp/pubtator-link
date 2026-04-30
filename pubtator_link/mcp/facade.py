@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from fastmcp import FastMCP
 from mcp.types import ToolAnnotations
@@ -33,13 +33,19 @@ from pubtator_link.mcp.service_adapters import (
     fetch_publication_annotations_impl,
     find_entity_relations_impl,
     get_publication_passages_impl,
+    get_publication_passages_v2_impl,
     get_text_annotation_results_impl,
     index_review_evidence_impl,
     inspect_review_index_impl,
+    inspect_review_index_v2_impl,
     retrieve_review_context_batch_impl,
+    retrieve_review_context_batch_v2_impl,
     retrieve_review_context_impl,
+    retrieve_review_context_v2_impl,
     search_biomedical_entities_impl,
+    search_biomedical_entities_v2_impl,
     search_literature_impl,
+    search_literature_v2_impl,
     submit_text_annotation_impl,
 )
 from pubtator_link.mcp.tools import (
@@ -57,6 +63,8 @@ from pubtator_link.mcp.tools import (
     SearchLiteratureRequest,
     SubmitTextAnnotationRequest,
 )
+from pubtator_link.models.publication_passages import PublicationPassageMode
+from pubtator_link.models.review_rerag import ReviewBatchResponseMode, ReviewTableMode
 from pubtator_link.services.publication_service import PublicationService
 
 READ_ONLY_OPEN_WORLD = ToolAnnotations(
@@ -149,6 +157,29 @@ def create_pubtator_mcp() -> FastMCP:
             return await search_literature_impl(request, client=client)
 
     @mcp.tool(
+        name="pubtator.search_literature_v2",
+        title="Search Biomedical Literature V2",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def search_literature_v2(
+        text: str,
+        page: int = 1,
+        sort: str | None = None,
+        filters: str | None = None,
+        sections: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Use this flat-argument tool for PubMed/PubTator literature search without a request wrapper. Returns PMIDs, titles, citations, annotations, and ranking metadata when available. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        async with PubTator3Client() as client:
+            return await search_literature_v2_impl(
+                client=client,
+                text=text,
+                page=page,
+                sort=sort,
+                filters=filters,
+                sections=sections,
+            )
+
+    @mcp.tool(
         name="pubtator.fetch_publication_annotations",
         title="Fetch Publication Annotations",
         annotations=READ_ONLY_OPEN_WORLD,
@@ -172,6 +203,35 @@ def create_pubtator_mcp() -> FastMCP:
         """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. Inputs include pmids, sections, mode, full, max_passages_per_pmid, max_chars, include_tables, and include_references; output includes passages, dropped reasons, and context_estimate. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         service = await get_publication_passage_service()
         return await get_publication_passages_impl(request, service=service)
+
+    @mcp.tool(
+        name="pubtator.get_publication_passages_v2",
+        title="Get Publication Passages V2",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def get_publication_passages_v2(
+        pmids: list[str],
+        sections: list[str] | None = None,
+        mode: PublicationPassageMode = "compact_passages",
+        full: bool = False,
+        max_passages_per_pmid: int = 6,
+        max_chars: int = 12000,
+        include_tables: bool = True,
+        include_references: bool = False,
+    ) -> dict[str, Any]:
+        """Use this flat-argument tool to fetch compact citable publication passages from PMIDs without raw BioC. Prefer this over raw annotation export for routine grounding. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_publication_passage_service()
+        return await get_publication_passages_v2_impl(
+            service=service,
+            pmids=pmids,
+            sections=sections,
+            mode=mode,
+            full=full,
+            max_passages_per_pmid=max_passages_per_pmid,
+            max_chars=max_chars,
+            include_tables=include_tables,
+            include_references=include_references,
+        )
 
     @mcp.tool(
         name="pubtator.estimate_publication_context",
@@ -207,6 +267,26 @@ def create_pubtator_mcp() -> FastMCP:
         """Use this when a user needs canonical PubTator biomedical entity IDs. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         async with PubTator3Client() as client:
             return await search_biomedical_entities_impl(request, client=client)
+
+    @mcp.tool(
+        name="pubtator.search_biomedical_entities_v2",
+        title="Search Biomedical Entities V2",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def search_biomedical_entities_v2(
+        query: str,
+        concept: Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"]
+        | None = None,
+        limit: int = 10,
+    ) -> dict[str, Any]:
+        """Use this flat-argument tool to resolve canonical PubTator biomedical entity IDs for genes, diseases, chemicals, species, variants, or cell lines. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        async with PubTator3Client() as client:
+            return await search_biomedical_entities_v2_impl(
+                client=client,
+                query=query,
+                concept=concept,
+                limit=limit,
+            )
 
     @mcp.tool(
         name="pubtator.find_entity_relations",
@@ -261,6 +341,27 @@ def create_pubtator_mcp() -> FastMCP:
         return await inspect_review_index_impl(request, service=service)
 
     @mcp.tool(
+        name="pubtator.inspect_review_index_v2",
+        title="Inspect Review Index V2",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def inspect_review_index_v2(
+        review_id: str,
+        pmids: list[str] | None = None,
+        include_passage_samples: bool = False,
+        sample_per_pmid: int = 2,
+    ) -> dict[str, Any]:
+        """Use this flat-argument tool to inspect indexed PMIDs, source coverage, sections, passage counts, and failures for a review_id. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_review_context_service()
+        return await inspect_review_index_v2_impl(
+            service=service,
+            review_id=review_id,
+            pmids=pmids,
+            include_passage_samples=include_passage_samples,
+            sample_per_pmid=sample_per_pmid,
+        )
+
+    @mcp.tool(
         name="pubtator.retrieve_review_context",
         title="Retrieve Review Context",
         annotations=READ_ONLY_OPEN_WORLD,
@@ -269,6 +370,45 @@ def create_pubtator_mcp() -> FastMCP:
         """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Best results usually come from a short keyword query; use pmids when focusing on a specific paper. If zero passages are returned, simplify the query or fall back to fetch_publication_annotations with full=true. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         service = await get_review_context_service()
         return await retrieve_review_context_impl(request, service=service)
+
+    @mcp.tool(
+        name="pubtator.retrieve_review_context_v2",
+        title="Retrieve Review Context V2",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def retrieve_review_context_v2(
+        review_id: str,
+        question: str,
+        pmids: list[str] | None = None,
+        entity_ids: list[str] | None = None,
+        sections: list[str] | None = None,
+        max_passages: int = 8,
+        max_chars: int = 6000,
+        include_diagnostics: bool = False,
+        include_tables: bool = False,
+        include_references: bool = False,
+        table_mode: ReviewTableMode = "preview",
+        allow_truncated_passages: bool = True,
+        max_chars_per_passage: int = 2200,
+    ) -> dict[str, Any]:
+        """Use this flat-argument tool for compact citable review RAG context without a request wrapper. Use short keyword questions, PMID filters for paper-specific evidence, and diagnostics for zero-result debugging. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_review_context_service()
+        return await retrieve_review_context_v2_impl(
+            service=service,
+            review_id=review_id,
+            question=question,
+            pmids=pmids,
+            entity_ids=entity_ids,
+            sections=sections,
+            max_passages=max_passages,
+            max_chars=max_chars,
+            include_diagnostics=include_diagnostics,
+            include_tables=include_tables,
+            include_references=include_references,
+            table_mode=table_mode,
+            allow_truncated_passages=allow_truncated_passages,
+            max_chars_per_passage=max_chars_per_passage,
+        )
 
     @mcp.tool(
         name="pubtator.retrieve_review_context_batch",
@@ -281,6 +421,53 @@ def create_pubtator_mcp() -> FastMCP:
         """Use this when a user wants to try multiple short review retrieval query variants in one call and receive merged compact context. Inputs include review_id, queries, shared filters, max_passages_per_query, max_total_passages, max_chars, deduplicate_passages, and include_diagnostics; output includes per-query results and merged_context_pack. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         service = await get_review_context_service()
         return await retrieve_review_context_batch_impl(request, service=service)
+
+    @mcp.tool(
+        name="pubtator.retrieve_review_context_batch_v2",
+        title="Retrieve Review Context Batch V2",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def retrieve_review_context_batch_v2(
+        review_id: str,
+        queries: list[str],
+        pmids: list[str] | None = None,
+        entity_ids: list[str] | None = None,
+        sections: list[str] | None = None,
+        response_mode: ReviewBatchResponseMode = "compact",
+        max_passages_per_query: int = 8,
+        max_total_passages: int = 20,
+        max_chars: int = 12000,
+        max_response_chars: int = 24000,
+        deduplicate_passages: bool = True,
+        include_diagnostics: bool = True,
+        include_tables: bool = False,
+        include_references: bool = False,
+        table_mode: ReviewTableMode = "preview",
+        allow_truncated_passages: bool = True,
+        max_chars_per_passage: int = 2200,
+    ) -> dict[str, Any]:
+        """Use this flat-argument tool for compact batch review RAG retrieval without a request wrapper. Default response_mode compact returns merged passages plus per-query summaries; use diagnostics for query refinement and full only when per-query passage text is needed. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_review_context_service()
+        return await retrieve_review_context_batch_v2_impl(
+            service=service,
+            review_id=review_id,
+            queries=queries,
+            pmids=pmids,
+            entity_ids=entity_ids,
+            sections=sections,
+            response_mode=response_mode,
+            max_passages_per_query=max_passages_per_query,
+            max_total_passages=max_total_passages,
+            max_chars=max_chars,
+            max_response_chars=max_response_chars,
+            deduplicate_passages=deduplicate_passages,
+            include_diagnostics=include_diagnostics,
+            include_tables=include_tables,
+            include_references=include_references,
+            table_mode=table_mode,
+            allow_truncated_passages=allow_truncated_passages,
+            max_chars_per_passage=max_chars_per_passage,
+        )
 
     @mcp.resource("pubtator://capabilities")
     def capabilities() -> dict[str, Any]:

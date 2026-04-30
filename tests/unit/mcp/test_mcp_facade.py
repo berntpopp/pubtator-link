@@ -56,6 +56,24 @@ def test_curated_facade_registers_pubtator_tools() -> None:
     assert "pubtator.clear_api_cache" not in tool_names
 
 
+def test_common_flat_v2_tools_are_registered() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp()
+    tool_names = set(mcp._tool_manager._tools)
+
+    assert "pubtator.search_literature_v2" in tool_names
+    assert "pubtator.search_biomedical_entities_v2" in tool_names
+    assert "pubtator.get_publication_passages_v2" in tool_names
+    assert "pubtator.inspect_review_index_v2" in tool_names
+    assert "pubtator.retrieve_review_context_v2" in tool_names
+
+    schema = mcp._tool_manager._tools["pubtator.retrieve_review_context_v2"].parameters
+    assert "review_id" in schema["properties"]
+    assert "question" in schema["properties"]
+    assert "request" not in schema["properties"]
+
+
 def test_curated_facade_registers_resources_and_prompts() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
