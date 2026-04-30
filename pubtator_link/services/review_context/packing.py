@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -13,6 +12,7 @@ from pubtator_link.models.review_rerag import (
     ReviewPassageRow,
     estimate_tokens_from_chars,
 )
+from pubtator_link.services.review_context.diagnostics import query_tokens
 
 
 @dataclass(frozen=True)
@@ -82,7 +82,7 @@ def context_passage_from_row(
 ) -> ContextPassage:
     text, start_char, end_char, truncated = excerpt_text(
         row.text,
-        query_tokens=_query_tokens(request.question),
+        query_tokens=query_tokens(request.question),
         max_chars=request.max_chars_per_passage,
         allow_truncated=request.allow_truncated_passages,
     )
@@ -175,17 +175,3 @@ def pack_totals(passages: Sequence[ContextPassage]) -> tuple[int, int]:
     text_chars = sum(len(passage.text) for passage in passages)
     return text_chars, estimate_tokens_from_chars(text_chars)
 
-
-def _query_tokens(query: str) -> list[str]:
-    tokens: list[str] = []
-    seen: set[str] = set()
-    for token in re.findall(r"[a-zA-Z0-9]+", query.lower()):
-        if len(token) < 3 or token in {"and", "the", "for", "with", "from"}:
-            continue
-        if token in seen:
-            continue
-        seen.add(token)
-        tokens.append(token)
-        if len(tokens) >= 8:
-            break
-    return tokens
