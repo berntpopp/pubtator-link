@@ -5,29 +5,23 @@ from typing import Annotated, Any
 from fastmcp import FastMCP
 from pydantic import Field
 
-from pubtator_link.api.client import PubTator3Client
 from pubtator_link.api.routes.dependencies import (
     get_review_context_service,
     get_review_queue,
 )
-from pubtator_link.mcp.annotations import (
-    READ_ONLY_OPEN_WORLD,
-    REMOTE_JOB_ANNOTATIONS,
-    REVIEW_WRITE_ANNOTATIONS,
-)
+from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD, REVIEW_WRITE_ANNOTATIONS
 from pubtator_link.mcp.compat import install_inspection_managers
 from pubtator_link.mcp.metadata import register_metadata
 from pubtator_link.mcp.resources import RESEARCH_USE_NOTICE
 from pubtator_link.mcp.service_adapters import (
-    get_text_annotation_results_impl,
     index_review_evidence_impl,
     inspect_review_index_impl,
     retrieve_review_context_batch_impl,
     retrieve_review_context_impl,
-    submit_text_annotation_impl,
 )
 from pubtator_link.mcp.tools.literature import register_literature_tools
 from pubtator_link.mcp.tools.publications import register_publication_tools
+from pubtator_link.mcp.tools.text_annotations import register_text_annotation_tools
 from pubtator_link.models.review_rerag import (
     BudgetStrategy,
     PrepareMode,
@@ -55,37 +49,7 @@ def create_pubtator_mcp() -> FastMCP:
     register_metadata(mcp)
     register_literature_tools(mcp)
     register_publication_tools(mcp)
-
-    @mcp.tool(
-        name="pubtator.submit_text_annotation",
-        title="Submit Text Annotation",
-        annotations=REMOTE_JOB_ANNOTATIONS,
-    )
-    async def submit_text_annotation(
-        text: Annotated[str, Field(min_length=1, max_length=10000)],
-        bioconcepts: Annotated[
-            str, Field(description="Comma-separated PubTator bioconcepts or 'all'.")
-        ] = "Gene",
-    ) -> dict[str, Any]:
-        """Use this when research text should be submitted for PubTator biomedical named entity recognition. Do not submit identifiable patient data to public demo instances."""
-        async with PubTator3Client() as client:
-            return await submit_text_annotation_impl(
-                client=client,
-                text=text,
-                bioconcepts=bioconcepts,
-            )
-
-    @mcp.tool(
-        name="pubtator.get_text_annotation_results",
-        title="Get Text Annotation Results",
-        annotations=READ_ONLY_OPEN_WORLD,
-    )
-    async def get_text_annotation_results(
-        session_id: Annotated[str, Field(min_length=8)],
-    ) -> dict[str, Any]:
-        """Use this when a user has a PubTator text annotation session ID and needs its results."""
-        async with PubTator3Client() as client:
-            return await get_text_annotation_results_impl(client=client, session_id=session_id)
+    register_text_annotation_tools(mcp)
 
     @mcp.tool(
         name="pubtator.index_review_evidence",
