@@ -1,6 +1,40 @@
 from __future__ import annotations
 
 
+def test_server_instructions_are_tool_search_friendly() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp()
+    instructions = mcp.instructions or ""
+
+    assert instructions.startswith(
+        "PubTator-Link grounds biomedical literature work: search PubMed/PubTator, "
+        "fetch compact passages or raw BioC, inspect review indexes, retrieve "
+        "review-scoped RAG context, find entity relations, and submit/get text annotations."
+    )
+    assert len(instructions.encode("utf-8")) < 2048
+    assert "pubtator.get_server_capabilities" in instructions
+    assert "search -> index -> inspect -> retrieve" in instructions
+    assert "raw full BioC can be large" in instructions
+    assert "not for diagnosis" in instructions
+
+
+def test_capabilities_resource_advertises_grounding_workflows() -> None:
+    from pubtator_link.mcp.resources import get_capabilities_resource
+
+    capabilities = get_capabilities_resource()
+
+    assert "recommended_workflows" in capabilities
+    assert "tool_groups" in capabilities
+    assert "large_output_guidance" in capabilities
+    assert "review_rerag" in capabilities
+    assert "search -> index -> inspect -> retrieve" in capabilities["recommended_workflows"][0]
+    assert (
+        "pubtator.get_publication_passages" in capabilities["tool_groups"]["publication_grounding"]
+    )
+    assert "pubtator.inspect_review_index" in capabilities["tool_groups"]["review_grounding"]
+
+
 def test_curated_facade_registers_pubtator_tools() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 

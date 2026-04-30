@@ -22,6 +22,13 @@ def test_review_rerag_tool_descriptions_explain_workflow_and_query_style() -> No
     assert "If zero passages are returned" in retrieve_description
     assert "fetch_publication_annotations" in retrieve_description
 
+    for name in (
+        "pubtator.fetch_publication_annotations",
+        "pubtator.retrieve_review_context",
+        "pubtator.index_review_evidence",
+    ):
+        assert tools[name].description.startswith("Use this when")
+
 
 def test_review_rerag_workflow_prompt_is_registered() -> None:
     mcp = create_pubtator_mcp()

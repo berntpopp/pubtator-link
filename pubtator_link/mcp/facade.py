@@ -105,8 +105,15 @@ def create_pubtator_mcp() -> FastMCP:
     mcp = FastMCP(
         name="pubtator-link",
         instructions=(
-            "PubTator-Link exposes PubTator3 biomedical literature, entity, relation, "
-            f"and text annotation capabilities. {RESEARCH_USE_NOTICE}"
+            "PubTator-Link grounds biomedical literature work: search PubMed/PubTator, "
+            "fetch compact passages or raw BioC, inspect review indexes, retrieve "
+            "review-scoped RAG context, find entity relations, and submit/get text annotations. "
+            "If tools are deferred, search for pubtator tools or call "
+            "pubtator.get_server_capabilities. For grounded answers use "
+            "search -> index -> inspect -> retrieve. Prefer compact passage tools before "
+            "raw export because raw full BioC can be large. If retrieval returns zero "
+            "passages, inspect the review index and retry shorter keyword queries or PMID "
+            f"filters. {RESEARCH_USE_NOTICE}"
         ),
     )
 
@@ -137,7 +144,7 @@ def create_pubtator_mcp() -> FastMCP:
     async def fetch_publication_annotations(
         request: FetchPublicationAnnotationsRequest,
     ) -> dict[str, Any]:
-        """Use this when a user provides PubMed IDs and needs PubTator annotations. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user provides PubMed IDs and needs raw PubTator BioC/annotation export; prefer compact passage or review context tools for grounded answers because full BioC can be large. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         async with PubTator3Client() as client:
             service = PublicationService(client=client)
             return await fetch_publication_annotations_impl(request, service=service)
@@ -148,7 +155,7 @@ def create_pubtator_mcp() -> FastMCP:
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def fetch_pmc_annotations(request: FetchPmcAnnotationsRequest) -> dict[str, Any]:
-        """Use this when a user provides PMC IDs and needs PubTator full-text annotations. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user provides PMC IDs and needs raw PubTator full-text BioC/annotation export; prefer compact passage or review context tools for focused grounding because full text can be large. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         async with PubTator3Client() as client:
             service = PublicationService(client=client)
             return await fetch_pmc_annotations_impl(request, service=service)
@@ -203,7 +210,7 @@ def create_pubtator_mcp() -> FastMCP:
         annotations=REVIEW_WRITE_ANNOTATIONS,
     )
     async def index_review_evidence(request: IndexReviewEvidenceMcpRequest) -> dict[str, Any]:
-        """Queue review-scoped evidence preparation for a review_id and PMIDs/curated URLs. Call this before retrieve_review_context, then watch preparation_status until jobs are complete, partial, or failed. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs. Call this before retrieve_review_context, then watch preparation_status until jobs are complete, partial, or failed. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         queue = await get_review_queue()
         return await index_review_evidence_impl(request, queue=queue)
 
@@ -213,7 +220,7 @@ def create_pubtator_mcp() -> FastMCP:
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def retrieve_review_context(request: RetrieveReviewContextMcpRequest) -> dict[str, Any]:
-        """Retrieve a compact citable context pack from prepared review passages. Best results usually come from a short keyword query; use pmids when focusing on a specific paper. If zero passages are returned, simplify the query or fall back to fetch_publication_annotations with full=true. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Best results usually come from a short keyword query; use pmids when focusing on a specific paper. If zero passages are returned, simplify the query or fall back to fetch_publication_annotations with full=true. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         service = await get_review_context_service()
         return await retrieve_review_context_impl(request, service=service)
 
