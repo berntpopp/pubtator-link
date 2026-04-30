@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **POC split:** The fast review-scoped re-RAG POC is specified in `docs/superpowers/specs/2026-04-30-review-scoped-rerag-poc-design.md` and implemented by `docs/superpowers/plans/2026-04-30-review-scoped-rerag-poc-implementation.md`. Keep deferred items from that POC backlog tracked before continuing the broader workflow plan.
+
 **Goal:** Add PubTator-native evidence exploration tools, asynchronous full-text acquisition, review-scoped retrieval, and a standards-aware PostgreSQL-backed review workflow without adding an LLM dependency to the backend.
 
 **Architecture:** The backend remains deterministic: it retrieves PubTator BioC data, resolves available full text through source adapters, normalizes all text into citable review-scoped passages, stores review state, validates structured user/agent decisions, and exposes PRISMA-inspired audit trails. The MCP client or human reviewer performs judgment; the backend prepares and retrieves compact context packs so the LLM does not need raw papers in context.
