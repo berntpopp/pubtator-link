@@ -5,12 +5,18 @@ import logging
 from collections.abc import Callable
 from typing import Annotated, Any
 
+import asyncpg
 from fastapi import Depends, HTTPException
 from structlog.typing import FilteringBoundLogger
 
 from ...api.client import PubTator3Client
+from ...config import review_rerag_config
 from ...logging_config import configure_logging
+from ...repositories.review_rerag import PostgresReviewReragRepository
+from ...services.full_text_preparation import FullTextPreparationService
 from ...services.publication_service import PublicationService
+from ...services.review_context_service import ReviewContextService
+from ...services.review_preparation_queue import ReviewPreparationQueue
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +25,10 @@ logger = logging.getLogger(__name__)
 _api_client: PubTator3Client | None = None
 _publication_service: PublicationService | None = None
 _logger: FilteringBoundLogger | None = None
+_review_pool: asyncpg.Pool | None = None
+_review_repository: PostgresReviewReragRepository | None = None
+_review_queue: ReviewPreparationQueue | None = None
+_review_context_service: ReviewContextService | None = None
 
 
 async def get_logger() -> FilteringBoundLogger:
@@ -48,10 +58,60 @@ async def get_publication_service() -> PublicationService:
     return _publication_service
 
 
+async def get_review_pool() -> asyncpg.Pool:
+    """Get asyncpg pool for review re-RAG storage."""
+    global _review_pool
+    if review_rerag_config.database_url is None:
+        raise RuntimeError("PUBTATOR_LINK_DATABASE_URL is required for review re-RAG")
+    if _review_pool is None:
+        _review_pool = await asyncpg.create_pool(review_rerag_config.database_url)
+    return _review_pool
+
+
+async def get_review_repository() -> PostgresReviewReragRepository:
+    """Get review re-RAG repository."""
+    global _review_repository
+    if _review_repository is None:
+        _review_repository = PostgresReviewReragRepository(await get_review_pool())
+    return _review_repository
+
+
+async def get_review_queue() -> ReviewPreparationQueue:
+    """Get review preparation queue."""
+    global _review_queue
+    if _review_queue is None:
+        repository = await get_review_repository()
+        client = await get_api_client()
+        logger_instance = await get_logger()
+        preparation = FullTextPreparationService(
+            config=review_rerag_config,
+            repository=repository,
+            pubtator_client=client,
+            logger=logger_instance,
+        )
+        _review_queue = ReviewPreparationQueue(
+            config=review_rerag_config,
+            repository=repository,
+            preparation=preparation,
+            logger=logger_instance,
+        )
+    return _review_queue
+
+
+async def get_review_context_service() -> ReviewContextService:
+    """Get review context retrieval service."""
+    global _review_context_service
+    if _review_context_service is None:
+        _review_context_service = ReviewContextService(repository=await get_review_repository())
+    return _review_context_service
+
+
 # Type aliases for dependency injection
 LoggerDep = Annotated[FilteringBoundLogger, Depends(get_logger)]
 ClientDep = Annotated[PubTator3Client, Depends(get_api_client)]
 PublicationServiceDep = Annotated[PublicationService, Depends(get_publication_service)]
+ReviewQueueDep = Annotated[ReviewPreparationQueue, Depends(get_review_queue)]
+ReviewContextServiceDep = Annotated[ReviewContextService, Depends(get_review_context_service)]
 
 
 def handle_api_errors(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -166,10 +226,21 @@ def validate_limit(limit: int, max_limit: int = 100) -> int:
 async def cleanup_dependencies() -> None:
     """Cleanup function for graceful shutdown."""
     global _api_client, _publication_service, _logger
+    global _review_context_service, _review_pool, _review_queue, _review_repository
 
     if _api_client:
         await _api_client.close()
         _api_client = None
 
+    if _review_queue:
+        await _review_queue.stop()
+        _review_queue = None
+
+    if _review_pool:
+        await _review_pool.close()
+        _review_pool = None
+
+    _review_repository = None
+    _review_context_service = None
     _publication_service = None
     _logger = None

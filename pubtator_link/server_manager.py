@@ -16,9 +16,10 @@ from .api.routes import (
     entities_router,
     publications_router,
     relations_router,
+    reviews_router,
     search_router,
 )
-from .api.routes.dependencies import cleanup_dependencies
+from .api.routes.dependencies import cleanup_dependencies, get_review_queue
 from .config import settings
 from .logging_config import configure_logging
 from .mcp.facade import create_pubtator_mcp
@@ -53,12 +54,19 @@ class UnifiedServerManager:
         # Initialize services
         self.publication_service = PublicationService(client=self.client, logger=self.logger)
 
+        if settings.database_url is not None:
+            review_queue = await get_review_queue()
+            await review_queue.start()
+
         self.logger.info("Server started successfully")
 
         yield
 
         # Shutdown
         self.logger.info("Shutting down server")
+        if settings.database_url is not None:
+            review_queue = await get_review_queue()
+            await review_queue.stop()
         if self.client:
             await self.client.close()
         # Cleanup dependencies
@@ -131,6 +139,7 @@ class UnifiedServerManager:
         app.include_router(relations_router)
         app.include_router(annotations_router)
         app.include_router(cache_router)
+        app.include_router(reviews_router)
 
         if mcp_http_app is not None:
             app.mount("/", mcp_http_app)
