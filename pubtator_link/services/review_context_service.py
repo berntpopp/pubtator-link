@@ -126,19 +126,7 @@ class ReviewContextService:
         sorted_candidates = sorted(candidates, key=self._rerank_key)
         selected = self._pack_passages(sorted_candidates, request)
         passages = [
-            ContextPassage(
-                citation_key=f"S{index}",
-                passage_id=row.passage_id,
-                pmid=row.pmid,
-                pmcid=row.pmcid,
-                section=row.section,
-                text=row.text,
-                source_kind=row.source_kind,
-                char_count=len(row.text),
-                start_char=0,
-                end_char=len(row.text),
-                boundary="full_passage",
-            )
+            self._context_passage_from_row(index=index, row=row, request=request)
             for index, row in enumerate(selected, start=1)
         ]
         citation_map = {passage.citation_key: passage.passage_id for passage in passages}
@@ -327,21 +315,109 @@ class ReviewContextService:
         for row in candidates:
             if len(selected) >= request.max_passages:
                 break
+            if not self._section_allowed(row, request):
+                continue
             if (
                 enforce_pmid_diversity
                 and row.pmid is not None
                 and pmid_counts[row.pmid] >= request.max_passages_per_pmid
             ):
                 continue
-            if total_chars + len(row.text) > request.max_chars:
+            effective_len = self._effective_passage_len(row, request)
+            if effective_len is None:
+                continue
+            if total_chars + effective_len > request.max_chars:
                 continue
 
             selected.append(row)
-            total_chars += len(row.text)
+            total_chars += effective_len
             if row.pmid is not None:
                 pmid_counts[row.pmid] += 1
 
         return selected
+
+    def _context_passage_from_row(
+        self,
+        *,
+        index: int,
+        row: ReviewPassageRow,
+        request: RetrieveReviewContextRequest,
+    ) -> ContextPassage:
+        text, start_char, end_char, truncated = self._excerpt_text(
+            row.text,
+            query_tokens=self._query_tokens(request.question),
+            max_chars=request.max_chars_per_passage,
+            allow_truncated=request.allow_truncated_passages,
+        )
+        return ContextPassage(
+            citation_key=f"S{index}",
+            passage_id=row.passage_id,
+            pmid=row.pmid,
+            pmcid=row.pmcid,
+            section=row.section,
+            text=text,
+            source_kind=row.source_kind,
+            char_count=len(text),
+            truncated=truncated,
+            start_char=start_char,
+            end_char=end_char,
+            boundary="query_window" if truncated else "full_passage",
+        )
+
+    def _effective_passage_len(
+        self, row: ReviewPassageRow, request: RetrieveReviewContextRequest
+    ) -> int | None:
+        if len(row.text) <= request.max_chars_per_passage:
+            return len(row.text)
+        if not request.allow_truncated_passages:
+            return None
+        return request.max_chars_per_passage
+
+    @staticmethod
+    def _is_table_section(section: str) -> bool:
+        return "table" in section.strip().lower()
+
+    @staticmethod
+    def _is_reference_section(section: str) -> bool:
+        lowered = section.strip().lower()
+        return lowered in {"ref", "refs", "reference", "references", "bibliography"} or (
+            "reference" in lowered
+        )
+
+    def _section_allowed(
+        self, row: ReviewPassageRow, request: RetrieveReviewContextRequest
+    ) -> bool:
+        if self._is_reference_section(row.section) and not request.include_references:
+            return False
+        if self._is_table_section(row.section):
+            return request.include_tables or request.table_mode == "full"
+        return True
+
+    @staticmethod
+    def _excerpt_text(
+        text: str,
+        *,
+        query_tokens: Sequence[str],
+        max_chars: int,
+        allow_truncated: bool,
+    ) -> tuple[str, int, int, bool]:
+        if len(text) <= max_chars or not allow_truncated:
+            return text, 0, len(text), False
+
+        lowered = text.lower()
+        match_index = -1
+        for token in query_tokens:
+            match_index = lowered.find(token.lower())
+            if match_index >= 0:
+                break
+        if match_index < 0:
+            match_index = 0
+
+        half_window = max_chars // 2
+        start = max(0, match_index - half_window)
+        end = min(len(text), start + max_chars)
+        start = max(0, end - max_chars)
+        return text[start:end], start, end, True
 
     @staticmethod
     def _context_budget(max_chars: int, text_chars: int, dropped_count: int = 0) -> ContextBudget:

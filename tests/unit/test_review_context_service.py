@@ -244,7 +244,9 @@ async def test_reference_passages_rank_after_body_sections_when_scores_tie() -> 
         ]
     )
     service = ReviewContextService(repository)
-    request = RetrieveReviewContextRequest(question="colchicine response", pmids=["111"])
+    request = RetrieveReviewContextRequest(
+        question="colchicine response", pmids=["111"], include_references=True
+    )
 
     response = await service.retrieve_context("review-1", request)
 
@@ -424,6 +426,70 @@ async def test_batch_retrieval_deduplicates_and_preserves_per_query_diagnostics(
     assert response.merged_context_pack.citation_map == {"S1": "p1", "S2": "p2"}
     assert response.budget is not None
     assert response.budget.text_chars == len("first passage") + len("second passage")
+
+
+@pytest.mark.asyncio
+async def test_single_retrieval_excerpts_oversized_passage() -> None:
+    long_text = "intro " + ("background " * 200) + " MEFV colchicine " + ("evidence " * 200)
+    repository = FakeReviewContextRepository(
+        [_passage("p-long", pmid="123", text=long_text, lexical_rank=9.0, section="DISCUSS")]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context(
+        "review-1",
+        RetrieveReviewContextRequest(
+            question="MEFV colchicine",
+            max_chars=1000,
+            max_chars_per_passage=500,
+            allow_truncated_passages=True,
+        ),
+    )
+
+    passage = response.context_pack.passages[0]
+    assert passage.truncated is True
+    assert passage.char_count == len(passage.text)
+    assert passage.start_char is not None
+    assert passage.end_char is not None
+    assert "MEFV colchicine" in passage.text
+    assert len(passage.text) <= 500
+
+
+@pytest.mark.asyncio
+async def test_review_retrieval_excludes_tables_and_references_by_default() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage(
+                "p-table",
+                pmid="123",
+                text="MEFV colchicine table row",
+                lexical_rank=10.0,
+                section="TABLE",
+            ),
+            _passage(
+                "p-ref",
+                pmid="123",
+                text="MEFV colchicine reference title",
+                lexical_rank=9.0,
+                section="REF",
+            ),
+            _passage(
+                "p-abstract",
+                pmid="123",
+                text="MEFV colchicine abstract evidence",
+                lexical_rank=8.0,
+                section="ABSTRACT",
+            ),
+        ]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context(
+        "review-1",
+        RetrieveReviewContextRequest(question="MEFV colchicine"),
+    )
+
+    assert [passage.section for passage in response.context_pack.passages] == ["ABSTRACT"]
 
 
 @pytest.mark.asyncio
