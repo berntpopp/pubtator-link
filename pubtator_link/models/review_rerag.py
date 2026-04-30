@@ -71,6 +71,8 @@ class IndexReviewEvidenceResponse(BaseModel):
     queued: int
     already_prepared: int
     preparation_status: PreparationStatus
+    retry_after_ms: int | None = None
+    lifecycle_note: str | None = None
 
 
 class RetrieveReviewContextRequest(BaseModel):

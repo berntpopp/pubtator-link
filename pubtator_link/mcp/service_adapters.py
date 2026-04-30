@@ -25,6 +25,7 @@ from pubtator_link.models.responses import (
 from pubtator_link.models.review_rerag import (
     BudgetStrategy,
     IndexReviewEvidenceRequest,
+    IndexReviewEvidenceResponse,
     InspectReviewIndexRequest,
     PrepareMode,
     RetrieveReviewContextBatchRequest,
@@ -364,26 +365,41 @@ async def index_review_evidence_impl(
         curated_urls=curated_urls or [],
         prepare_mode=prepare_mode,
     )
-    queued = 0
-    already_prepared = 0
-    for pmid in api_request.pmids:
-        if await queue.enqueue_pmid(review_id, pmid):
-            queued += 1
-        else:
-            already_prepared += 1
-    for url in api_request.curated_urls:
-        if await queue.enqueue_curated_url(review_id, url):
-            queued += 1
-        else:
-            already_prepared += 1
-    status = await queue.repository.preparation_status(review_id)
-    return {
-        "success": True,
-        "review_id": review_id,
-        "queued": queued,
-        "already_prepared": already_prepared,
-        "preparation_status": status.model_dump(),
-    }
+    enqueue_review_sources = getattr(queue, "enqueue_review_sources", None)
+    if enqueue_review_sources is not None:
+        response = cast(
+            IndexReviewEvidenceResponse,
+            await enqueue_review_sources(review_id, api_request),
+        )
+    else:
+        queued = 0
+        already_prepared = 0
+        for pmid in api_request.pmids:
+            if await queue.enqueue_pmid(review_id, pmid):
+                queued += 1
+            else:
+                already_prepared += 1
+        for url in api_request.curated_urls:
+            if await queue.enqueue_curated_url(review_id, url):
+                queued += 1
+            else:
+                already_prepared += 1
+        status = await queue.repository.preparation_status(review_id)
+        response = IndexReviewEvidenceResponse(
+            review_id=review_id,
+            queued=queued,
+            already_prepared=already_prepared,
+            preparation_status=status,
+        )
+    if response.preparation_status.queued or response.preparation_status.running:
+        response.retry_after_ms = 5000
+    response.lifecycle_note = (
+        "Repeated calls with the same review_id and already prepared PMIDs are no-ops "
+        "counted as already_prepared; new PMIDs are enqueued for the same review_id. "
+        "Call pubtator.inspect_review_index for source coverage, failed sources, and "
+        "passage counts before retrieval."
+    )
+    return response.model_dump()
 
 
 async def inspect_review_index_impl(

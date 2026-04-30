@@ -109,6 +109,31 @@ async def test_inspect_review_index_adapter_calls_service() -> None:
 
 
 @pytest.mark.asyncio
+async def test_index_review_evidence_adapter_returns_lifecycle_guidance() -> None:
+    from pubtator_link.mcp.service_adapters import index_review_evidence_impl
+    from pubtator_link.models.review_rerag import IndexReviewEvidenceResponse, PreparationStatus
+
+    class FakeQueue:
+        async def enqueue_review_sources(self, review_id, request):
+            return IndexReviewEvidenceResponse(
+                review_id=review_id,
+                queued=1,
+                already_prepared=2,
+                preparation_status=PreparationStatus(queued=1, complete=2),
+            )
+
+    result = await index_review_evidence_impl(
+        queue=FakeQueue(),
+        review_id="rev",
+        pmids=["40234174"],
+    )
+
+    assert result["retry_after_ms"] == 5000
+    assert "already_prepared" in result["lifecycle_note"]
+    assert "inspect_review_index" in result["lifecycle_note"]
+
+
+@pytest.mark.asyncio
 async def test_retrieve_review_context_batch_adapter_calls_service() -> None:
     from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
     from pubtator_link.models.review_rerag import (
