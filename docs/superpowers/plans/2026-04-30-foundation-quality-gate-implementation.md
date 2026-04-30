@@ -12,7 +12,7 @@
 
 ## File Map
 
-- Modify `tests/conftest.py`: remove the deprecated custom `event_loop` fixture and add cache cleanup for async-lru cached publication service methods.
+- Modify `tests/conftest.py`: remove the deprecated custom `event_loop` fixture and add test-only async-lru cache and loop-state cleanup for cached publication service methods.
 - Modify `tests/unit/test_route_dependencies.py`: add regression tests for app-scoped resource construction, context-bound dependency resolution, cleanup, and stale-loop behavior no longer being swallowed in normal cleanup.
 - Modify `tests/unit/test_development_tooling.py`: add guardrail tests for coverage threshold, GitHub Actions workflows, PR template, and branch protection docs.
 - Modify `pubtator_link/api/routes/dependencies.py`: introduce `AppResources`, app-scoped resource builders/closers, context-aware dependency accessors, and compatibility fallback cleanup.
@@ -61,20 +61,33 @@ from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 ```
 
-- [ ] **Step 2: Add async-lru cache cleanup fixture**
+- [ ] **Step 2: Add async-lru cache and loop-state cleanup fixture**
 
-Add this fixture below the imports in `tests/conftest.py`:
+Add this helper and fixture below the imports in `tests/conftest.py`:
 
 ```python
+def _reset_async_lru_method_cache(method: object) -> None:
+    """Clear async-lru method cache and test loop metadata.
+
+    async-lru stores the first event loop seen by a decorated method wrapper.
+    pytest-asyncio uses function-scoped loops, so tests must reset this metadata
+    in addition to cache entries to avoid cross-loop warnings.
+    """
+    method.cache_clear()
+    wrapper = getattr(method, "_LRUCacheWrapperInstanceMethod__wrapper")
+    setattr(wrapper, "_LRUCacheWrapper__first_loop", None)
+    setattr(wrapper, "_LRUCacheWrapper__warned_loop_reset", False)
+
+
 @pytest.fixture(autouse=True)
 def clear_publication_service_method_caches() -> None:
     """Prevent async-lru method caches from leaking across test event loops."""
-    PublicationService.export_publications.cache_clear()
-    PublicationService.export_pmc_publications.cache_clear()
-    PublicationService.search_publications.cache_clear()
+    _reset_async_lru_method_cache(PublicationService.export_publications)
+    _reset_async_lru_method_cache(PublicationService.export_pmc_publications)
+    _reset_async_lru_method_cache(PublicationService.search_publications)
 ```
 
-This fixture intentionally clears the class-level async-lru wrappers before each test. It avoids loop-bound cached futures being reused by tests that pytest-asyncio runs on separate function-scoped loops.
+This fixture intentionally clears the class-level async-lru wrappers before each test. `cache_clear()` removes cached entries but does not reset async-lru's recorded first loop, so the helper also resets the narrow private loop metadata that causes `AlruCacheLoopResetWarning` under function-scoped pytest loops.
 
 - [ ] **Step 3: Run the focused test suite and confirm warnings are gone**
 
