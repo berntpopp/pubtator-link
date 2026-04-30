@@ -184,16 +184,17 @@ class QueryMappedReviewContextRepository(FakeReviewContextRepository):
 def _passage(
     passage_id: str,
     *,
-    pmid: str,
+    pmid: str | None,
     text: str,
     lexical_rank: float = 0.0,
     section: str = "results",
     source_kind: str = "pubtator_full_bioc",
+    source_id: str | None = None,
 ) -> ReviewPassageRow:
     return ReviewPassageRow(
         passage_id=passage_id,
         review_id="review-1",
-        source_id=f"source-{pmid}",
+        source_id=source_id or f"source-{pmid}",
         source_kind=source_kind,
         section=section,
         text=text,
@@ -828,6 +829,71 @@ async def test_batch_source_fair_rounds_sources_before_second_passages() -> None
         "a1",
         "b1",
         "c1",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_batch_source_fair_uses_source_id_for_non_pmid_sources() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage(
+                "url-a-1",
+                pmid=None,
+                source_id="URL:https://example.test/a.pdf",
+                source_kind="curated_pdf",
+                text="a" * 100,
+                lexical_rank=10.0,
+            ),
+            _passage(
+                "url-a-2",
+                pmid=None,
+                source_id="URL:https://example.test/a.pdf",
+                source_kind="curated_pdf",
+                text="b" * 100,
+                lexical_rank=9.0,
+            ),
+            _passage(
+                "url-b-1",
+                pmid=None,
+                source_id="URL:https://example.test/b.pdf",
+                source_kind="curated_pdf",
+                text="c" * 100,
+                lexical_rank=8.0,
+            ),
+            _passage(
+                "url-c-1",
+                pmid=None,
+                source_id="URL:https://example.test/c.pdf",
+                source_kind="curated_pdf",
+                text="d" * 100,
+                lexical_rank=7.0,
+            ),
+        ]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["guideline"],
+            budget_strategy="source_fair",
+            min_passages_per_source=2,
+            max_chars=10000,
+            max_response_chars=100000,
+            max_passages_per_query=4,
+            max_total_passages=3,
+        ),
+    )
+
+    assert [passage.passage_id for passage in response.merged_context_pack.passages] == [
+        "url-a-1",
+        "url-b-1",
+        "url-c-1",
+    ]
+    assert [passage.source_id for passage in response.merged_context_pack.passages] == [
+        "URL:https://example.test/a.pdf",
+        "URL:https://example.test/b.pdf",
+        "URL:https://example.test/c.pdf",
     ]
 
 

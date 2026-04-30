@@ -219,15 +219,20 @@ class ReviewContextService:
             query_chars.append(0)
 
         def source_key_for_passage(passage: ContextPassage) -> str | None:
-            return passage.pmid
+            return passage.pmid or passage.source_id
 
         def ensure_source_budget_summary(
             source_key: str | None,
+            passage: ContextPassage | None = None,
             coverage: SourceCoverage = "unknown",
         ) -> SourceBudgetSummary:
             summary = source_budget_stats.get(source_key)
             if summary is None:
-                summary = SourceBudgetSummary(pmid=source_key, coverage=coverage)
+                summary = SourceBudgetSummary(
+                    source_id=passage.source_id if passage is not None else source_key,
+                    pmid=passage.pmid if passage is not None else source_key,
+                    coverage=coverage,
+                )
                 source_budget_stats[source_key] = summary
                 source_budget_order.append(source_key)
             elif summary.coverage == "unknown" and coverage != "unknown":
@@ -348,21 +353,22 @@ class ReviewContextService:
                             reserve_limit=None,
                         )
             else:
-                coverage_by_pmid = await self._source_coverage_by_pmid(review_id)
+                coverage_by_source = await self._source_coverage_by_key(review_id)
                 candidates: list[tuple[int, int, ContextPassage]] = []
                 returned_by_source: dict[str | None, int] = defaultdict(int)
                 quota_deferred_candidates: set[tuple[int, int]] = set()
 
                 def coverage_for_passage(passage: ContextPassage) -> SourceCoverage:
-                    if passage.pmid is None:
+                    source_key = source_key_for_passage(passage)
+                    if source_key is None:
                         return "unknown"
-                    return coverage_by_pmid.get(passage.pmid, "unknown")
+                    return coverage_by_source.get(source_key, "unknown")
 
                 for query_index, result in enumerate(query_results):
                     for passage_index, passage in enumerate(result.context_pack.passages):
                         source_key = source_key_for_passage(passage)
                         coverage = coverage_for_passage(passage)
-                        summary = ensure_source_budget_summary(source_key, coverage)
+                        summary = ensure_source_budget_summary(source_key, passage, coverage)
                         summary.candidate_count += 1
                         candidates.append((query_index, passage_index, passage))
 
@@ -492,25 +498,27 @@ class ReviewContextService:
             failed_sources=failed_sources,
         )
 
-    async def _source_coverage_by_pmid(self, review_id: str) -> dict[str, SourceCoverage]:
+    async def _source_coverage_by_key(self, review_id: str) -> dict[str, SourceCoverage]:
         sources = await self.repository.list_review_sources(
             review_id,
             pmids=None,
             include_passage_samples=False,
             sample_per_pmid=0,
         )
-        coverage_by_pmid: dict[str, SourceCoverage] = {}
+        coverage_by_key: dict[str, SourceCoverage] = {}
         for source in sources:
-            if source.pmid is None:
-                continue
-            existing = coverage_by_pmid.get(source.pmid)
-            if existing is None or SOURCE_COVERAGE_SCARCITY_PRIORITY.get(
-                source.coverage, SOURCE_COVERAGE_SCARCITY_PRIORITY["unknown"]
-            ) < SOURCE_COVERAGE_SCARCITY_PRIORITY.get(
-                existing, SOURCE_COVERAGE_SCARCITY_PRIORITY["unknown"]
-            ):
-                coverage_by_pmid[source.pmid] = source.coverage
-        return coverage_by_pmid
+            source_keys = [source.source_id]
+            if source.pmid is not None:
+                source_keys.append(source.pmid)
+            for source_key in source_keys:
+                existing = coverage_by_key.get(source_key)
+                if existing is None or SOURCE_COVERAGE_SCARCITY_PRIORITY.get(
+                    source.coverage, SOURCE_COVERAGE_SCARCITY_PRIORITY["unknown"]
+                ) < SOURCE_COVERAGE_SCARCITY_PRIORITY.get(
+                    existing, SOURCE_COVERAGE_SCARCITY_PRIORITY["unknown"]
+                ):
+                    coverage_by_key[source_key] = source.coverage
+        return coverage_by_key
 
     def _pack_passages(
         self,
@@ -581,6 +589,7 @@ class ReviewContextService:
         return ContextPassage(
             citation_key=f"S{index}",
             passage_id=row.passage_id,
+            source_id=row.source_id,
             pmid=row.pmid,
             pmcid=row.pmcid,
             section=row.section,

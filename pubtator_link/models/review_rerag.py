@@ -141,6 +141,7 @@ class ContextPassage(BaseModel):
     citation_key: str
     stable_citation_key: str | None = None
     passage_id: str
+    source_id: str | None = None
     pmid: str | None = None
     pmcid: str | None = None
     section: str
@@ -230,6 +231,7 @@ class QueryDiagnosticsSummary(BaseModel):
 class SourceBudgetSummary(BaseModel):
     """Per-source accounting for source-aware batch budgeting."""
 
+    source_id: str | None = None
     pmid: str | None = None
     coverage: SourceCoverage = "unknown"
     candidate_count: int = Field(default=0, ge=0)
