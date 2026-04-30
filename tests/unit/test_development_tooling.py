@@ -148,3 +148,46 @@ def test_readme_documents_modern_development_commands() -> None:
     assert "make ci-local" in readme
     assert "uv lock" in readme
     assert "AGENTS.md" in readme
+
+
+def test_coverage_threshold_matches_verified_baseline() -> None:
+    coverage = _pyproject()["tool"]["coverage"]["report"]
+    assert coverage["fail_under"] == 78
+
+
+def test_github_actions_workflows_exist_and_use_make_targets() -> None:
+    ci = Path(".github/workflows/ci.yml").read_text()
+    docker = Path(".github/workflows/docker.yml").read_text()
+    security = Path(".github/workflows/security.yml").read_text()
+
+    assert "permissions:" in ci
+    assert "contents: read" in ci
+    assert "uv sync --group dev --frozen" in ci
+    assert "make ci-local" in ci
+    assert "make test-cov" in ci
+
+    assert "make docker-prod-config" in docker
+    assert "make docker-npm-config" in docker
+    assert "docker build -f docker/Dockerfile -t pubtator-link:ci ." in docker
+
+    assert "github/codeql-action/init" in security
+    assert "actions/dependency-review-action" in security
+
+
+def test_pull_request_template_contains_quality_checklist() -> None:
+    template = Path(".github/pull_request_template.md").read_text()
+
+    assert "make ci-local" in template
+    assert "Public REST/MCP behavior" in template
+    assert "New dependencies" in template
+    assert "research-use" in template
+
+
+def test_branch_protection_docs_define_required_checks() -> None:
+    docs = Path("docs/development/branch-protection.md").read_text()
+
+    assert "Require pull request before merging" in docs
+    assert "make ci-local" in docs
+    assert "coverage" in docs
+    assert "Docker validation" in docs
+    assert "CodeQL" in docs
