@@ -800,6 +800,42 @@ async def test_batch_source_fair_includes_later_pmids_before_overflow() -> None:
 
 
 @pytest.mark.asyncio
+async def test_batch_source_fair_duplicate_does_not_consume_returned_quota() -> None:
+    repository = QueryMappedReviewContextRepository(
+        {
+            "query one": [
+                _passage("p111-keep", pmid="111", text="a" * 50, lexical_rank=10.0),
+                _passage("p333-a", pmid="333", text="b" * 50, lexical_rank=9.0),
+                _passage("p333-b", pmid="333", text="c" * 50, lexical_rank=8.0),
+            ],
+            "query two": [
+                _passage("p111-keep", pmid="111", text="duplicate", lexical_rank=10.0),
+                _passage("p333-c", pmid="333", text="d" * 50, lexical_rank=9.0),
+            ],
+            "query three": [_passage("p111-later", pmid="111", text="e" * 50, lexical_rank=10.0)],
+        }
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["query one", "query two", "query three"],
+            budget_strategy="source_fair",
+            min_passages_per_source=2,
+            max_chars=10000,
+            max_response_chars=100000,
+            max_passages_per_query=3,
+            max_total_passages=4,
+        ),
+    )
+
+    passage_ids = [passage.passage_id for passage in response.merged_context_pack.passages]
+    assert passage_ids == ["p111-keep", "p333-a", "p333-b", "p111-later"]
+    assert "p333-c" not in passage_ids
+
+
+@pytest.mark.asyncio
 async def test_batch_scarcity_first_prefers_low_coverage_sources() -> None:
     repository = FakeReviewContextRepository(
         [

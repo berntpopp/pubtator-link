@@ -349,9 +349,8 @@ class ReviewContextService:
                         )
             else:
                 coverage_by_pmid = await self._source_coverage_by_pmid(review_id)
-                first_pass_candidates: list[tuple[int, int, ContextPassage]] = []
-                overflow_candidates: list[tuple[int, int, ContextPassage]] = []
-                source_candidate_counts: dict[str | None, int] = defaultdict(int)
+                candidates: list[tuple[int, int, ContextPassage]] = []
+                returned_by_source: dict[str | None, int] = defaultdict(int)
 
                 def coverage_for_passage(passage: ContextPassage) -> SourceCoverage:
                     if passage.pmid is None:
@@ -364,14 +363,9 @@ class ReviewContextService:
                         coverage = coverage_for_passage(passage)
                         summary = ensure_source_budget_summary(source_key, coverage)
                         summary.candidate_count += 1
-                        source_candidate_counts[source_key] += 1
-                        candidate = (query_index, passage_index, passage)
-                        if source_candidate_counts[source_key] <= request.min_passages_per_source:
-                            summary.first_pass_eligible = True
-                            first_pass_candidates.append(candidate)
-                        else:
-                            overflow_candidates.append(candidate)
+                        candidates.append((query_index, passage_index, passage))
 
+                first_pass_candidates = list(candidates)
                 if request.budget_strategy == "scarcity_first":
                     first_pass_candidates.sort(
                         key=lambda candidate: (
@@ -386,6 +380,10 @@ class ReviewContextService:
 
                 for query_index, passage_index, passage in first_pass_candidates:
                     source_key = source_key_for_passage(passage)
+                    if returned_by_source[source_key] >= request.min_passages_per_source:
+                        continue
+                    source_budget_stats[source_key].first_pass_eligible = True
+                    before_count = len(merged_passages)
                     try_merge_passage(
                         query_index,
                         passage_index,
@@ -393,7 +391,9 @@ class ReviewContextService:
                         reserve_limit=None,
                         source_key=source_key,
                     )
-                for query_index, passage_index, passage in overflow_candidates:
+                    if len(merged_passages) > before_count:
+                        returned_by_source[source_key] += 1
+                for query_index, passage_index, passage in candidates:
                     source_key = source_key_for_passage(passage)
                     try_merge_passage(
                         query_index,
