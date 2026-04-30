@@ -3,6 +3,9 @@
 import json
 from typing import Any
 
+MIN_SEARCH_YEAR = 1800
+MAX_SEARCH_YEAR = 2030
+
 
 def merge_search_filters(
     filters: str | None,
@@ -11,6 +14,10 @@ def merge_search_filters(
     year_max: int | None,
 ) -> str | None:
     """Merge raw PubTator3 filters JSON with flat public filter arguments."""
+    if year_min is not None and not MIN_SEARCH_YEAR <= year_min <= MAX_SEARCH_YEAR:
+        raise ValueError(f"year_min must be between {MIN_SEARCH_YEAR} and {MAX_SEARCH_YEAR}")
+    if year_max is not None and not MIN_SEARCH_YEAR <= year_max <= MAX_SEARCH_YEAR:
+        raise ValueError(f"year_max must be between {MIN_SEARCH_YEAR} and {MAX_SEARCH_YEAR}")
     if year_min is not None and year_max is not None and year_max < year_min:
         raise ValueError("year_max must be greater than or equal to year_min")
 
