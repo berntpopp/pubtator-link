@@ -454,7 +454,7 @@ class PostgresReviewReragRepository:
                             text,
                             length(text)::int as char_count,
                             row_number() over (
-                                partition by source_id
+                                partition by coalesce(pmid, source_id)
                                 order by section, passage_id
                             ) as sample_rank
                         from review_passages

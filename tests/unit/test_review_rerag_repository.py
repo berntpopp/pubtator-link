@@ -47,6 +47,7 @@ class FakeConnection:
         self.executed: list[tuple[str, tuple[Any, ...]]] = []
         self.fetched_rows: list[dict[str, Any]] = []
         self.fetched_row_batches: list[list[dict[str, Any]]] = []
+        self.same_pmid_sample_rows: list[dict[str, Any]] = []
         self.fetchrow_rows: list[dict[str, Any] | None] = []
         self.executemany_calls: list[tuple[str, list[tuple[Any, ...]]]] = []
 
@@ -67,6 +68,10 @@ class FakeConnection:
         self.executed.append((sql, args))
         if self.fetched_row_batches:
             return self.fetched_row_batches.pop(0)
+        if self.same_pmid_sample_rows and "row_number()" in sql.lower():
+            if "partition by coalesce(pmid, source_id)" in sql.lower():
+                return self.same_pmid_sample_rows[:1]
+            return self.same_pmid_sample_rows
         return self.fetched_rows
 
     async def executemany(self, sql: str, args: list[tuple[Any, ...]]) -> str:
@@ -336,6 +341,65 @@ async def test_list_review_sources_aggregates_jobs_attempts_passages_and_samples
     assert summary_args == ("review-1", ["111"])
     assert "row_number()" in sample_sql.lower()
     assert sample_args == ("review-1", ["111"], ["111"], 1)
+
+
+@pytest.mark.asyncio
+async def test_list_review_sources_caps_samples_per_pmid_across_sources() -> None:
+    connection = FakeConnection()
+    connection.fetched_row_batches = [
+        [
+            {
+                "source_id": "pubtator-111",
+                "pmid": "111",
+                "source_kind": "pubtator_abstract",
+                "job_status": "complete",
+                "error": None,
+                "attempt_statuses": ["success"],
+                "sections": ["abstract"],
+                "passage_count": 1,
+                "char_count": 15,
+            },
+            {
+                "source_id": "pmc-111",
+                "pmid": "111",
+                "source_kind": "pmc_bioc",
+                "job_status": "complete",
+                "error": None,
+                "attempt_statuses": ["success"],
+                "sections": ["results"],
+                "passage_count": 1,
+                "char_count": 14,
+            },
+        ]
+    ]
+    connection.same_pmid_sample_rows = [
+        {
+            "source_id": "pubtator-111",
+            "passage_id": "p1",
+            "section": "abstract",
+            "text": "First passage.",
+            "char_count": 14,
+        },
+        {
+            "source_id": "pmc-111",
+            "passage_id": "p2",
+            "section": "results",
+            "text": "Second passage.",
+            "char_count": 15,
+        },
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    sources = await repository.list_review_sources(
+        "review-1",
+        pmids=["111"],
+        include_passage_samples=True,
+        sample_per_pmid=1,
+    )
+
+    assert sum(len(source.sample_passages) for source in sources) == 1
+    assert sources[0].sample_passages[0].passage_id == "p1"
+    assert sources[1].sample_passages == []
 
 
 @pytest.mark.asyncio
