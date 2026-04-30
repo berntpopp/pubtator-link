@@ -17,6 +17,10 @@ docker-compose up --build
 
 Server available at `http://localhost:8000` with API docs at `/docs`.
 
+The default Compose stack also starts PostgreSQL for the review re-RAG POC. The
+database is initialized from `pubtator_link/db/review_schema.sql` the first time
+the `pubtator_postgres_data` volume is created.
+
 ### Production Deployment
 
 ```bash
@@ -63,6 +67,13 @@ PUBTATOR_LINK_CORS_ORIGINS=["http://localhost:3000","http://localhost:8080"]
 PUBTATOR_LINK_CACHE_SIZE=1000
 PUBTATOR_LINK_CACHE_TTL=3600
 
+# Review re-RAG PostgreSQL settings
+PUBTATOR_LINK_POSTGRES_DB=pubtator_link
+PUBTATOR_LINK_POSTGRES_USER=pubtator_link
+PUBTATOR_LINK_POSTGRES_PASSWORD=pubtator_link
+PUBTATOR_LINK_POSTGRES_PORT=5434
+PUBTATOR_LINK_DATABASE_URL=postgresql://pubtator_link:pubtator_link@localhost:5434/pubtator_link
+
 # Production scaling
 GUNICORN_WORKERS=4
 GUNICORN_LOG_LEVEL=warning
@@ -77,12 +88,20 @@ GUNICORN_LOG_LEVEL=warning
 **Development vs Production:**
 - Development: Simple uvicorn server, debug logging
 - Production: Gunicorn + Uvicorn workers, JSON logging, resource limits
+- PostgreSQL: Compose-managed database for review re-RAG storage; production
+  overlays do not publish the database port to the host
 
 ## 🐳 Deployment Options
 
 ### Local Development
 ```bash
 docker-compose up --build
+```
+
+To apply the schema to an already existing database volume after schema changes:
+
+```bash
+PUBTATOR_LINK_DATABASE_URL=postgresql://pubtator_link:pubtator_link@localhost:5434/pubtator_link make db-init
 ```
 
 ### Hot-Reload Development (optional)
@@ -135,6 +154,7 @@ docker run -d --name pubtator-link -p 8000:8000 --env-file .env your-registry/pu
 - **Health Check**: `curl http://localhost:8000/health`
 - **API Documentation**: `http://localhost:8000/docs`
 - **Container Logs**: `docker-compose logs -f pubtator-link`
+- **Database Logs**: `docker-compose logs -f pubtator-postgres`
 - **MCP Status**: Available at `/mcp` endpoint when using unified transport
 
 ## 🛠️ Development Workflow
@@ -194,6 +214,11 @@ docker-compose up --build
 # In another terminal
 curl http://localhost:8000/health
 curl http://localhost:8000/docs
+
+# Confirm the review schema exists
+docker-compose exec pubtator-postgres \
+  psql -U pubtator_link -d pubtator_link \
+  -c "select tablename from pg_tables where tablename = 'review_passages';"
 ```
 
 ### Test Production Container

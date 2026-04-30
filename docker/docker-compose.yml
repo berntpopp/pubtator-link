@@ -1,4 +1,29 @@
 services:
+  pubtator-postgres:
+    image: postgres:17-alpine
+    container_name: pubtator_link_postgres
+
+    environment:
+      POSTGRES_DB: "${PUBTATOR_LINK_POSTGRES_DB:-pubtator_link}"
+      POSTGRES_USER: "${PUBTATOR_LINK_POSTGRES_USER:-pubtator_link}"
+      POSTGRES_PASSWORD: "${PUBTATOR_LINK_POSTGRES_PASSWORD:-pubtator_link}"
+
+    ports:
+      - "${PUBTATOR_LINK_POSTGRES_PORT:-5434}:5432"
+
+    volumes:
+      - pubtator_postgres_data:/var/lib/postgresql/data
+      - ../pubtator_link/db/review_schema.sql:/docker-entrypoint-initdb.d/010-review-schema.sql:ro
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    restart: unless-stopped
+
   pubtator-link:
     build:
       context: ..
@@ -18,6 +43,11 @@ services:
       PUBTATOR_LINK_HOST: 0.0.0.0
       PUBTATOR_LINK_PORT: 8000
       PUBTATOR_LINK_TRANSPORT: unified
+      PUBTATOR_LINK_DATABASE_URL: "postgresql://${PUBTATOR_LINK_POSTGRES_USER:-pubtator_link}:${PUBTATOR_LINK_POSTGRES_PASSWORD:-pubtator_link}@pubtator-postgres:5432/${PUBTATOR_LINK_POSTGRES_DB:-pubtator_link}"
+
+    depends_on:
+      pubtator-postgres:
+        condition: service_healthy
 
     # Port mapping
     ports:
@@ -51,3 +81,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  pubtator_postgres_data:
