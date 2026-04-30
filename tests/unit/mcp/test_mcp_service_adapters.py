@@ -111,23 +111,30 @@ async def test_inspect_review_index_adapter_calls_service() -> None:
 @pytest.mark.asyncio
 async def test_index_review_evidence_adapter_returns_lifecycle_guidance() -> None:
     from pubtator_link.mcp.service_adapters import index_review_evidence_impl
-    from pubtator_link.models.review_rerag import IndexReviewEvidenceResponse, PreparationStatus
+    from pubtator_link.models.review_rerag import PreparationStatus
+
+    class FakeRepository:
+        async def preparation_status(self, review_id):
+            return PreparationStatus(queued=1, complete=2)
 
     class FakeQueue:
-        async def enqueue_review_sources(self, review_id, request):
-            return IndexReviewEvidenceResponse(
-                review_id=review_id,
-                queued=1,
-                already_prepared=2,
-                preparation_status=PreparationStatus(queued=1, complete=2),
-            )
+        repository = FakeRepository()
+
+        async def enqueue_pmid(self, review_id, pmid):
+            return pmid == "40234174"
+
+        async def enqueue_curated_url(self, review_id, url):
+            return False
 
     result = await index_review_evidence_impl(
         queue=FakeQueue(),
         review_id="rev",
-        pmids=["40234174"],
+        pmids=["40234174", "40234175"],
+        curated_urls=["https://example.org/already-prepared.pdf"],
     )
 
+    assert result["queued"] == 1
+    assert result["already_prepared"] == 2
     assert result["retry_after_ms"] == 5000
     assert "already_prepared" in result["lifecycle_note"]
     assert "inspect_review_index" in result["lifecycle_note"]
