@@ -429,7 +429,7 @@ async def get_annotation_results(
                 message="Processing in progress. Please try again in a few moments.",
             )
             # Set HTTP status code to 202 for "still processing"
-            raise HTTPException(status_code=202, detail=response.dict())
+            raise HTTPException(status_code=202, detail=response.model_dump())
 
         elif status == "completed":
             # Processing completed - parse annotations
