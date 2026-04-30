@@ -1,6 +1,5 @@
 """Test configuration and shared fixtures for PubTator-Link tests."""
 
-import asyncio
 from collections.abc import AsyncGenerator
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
@@ -16,12 +15,12 @@ from pubtator_link.server_manager import UnifiedServerManager
 from pubtator_link.services.publication_service import PublicationService
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+@pytest.fixture(autouse=True)
+def clear_publication_service_method_caches() -> None:
+    """Prevent async-lru method caches from leaking across test event loops."""
+    PublicationService.export_publications.cache_clear()
+    PublicationService.export_pmc_publications.cache_clear()
+    PublicationService.search_publications.cache_clear()
 
 
 @pytest.fixture
