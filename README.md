@@ -245,7 +245,7 @@ Use stdio only for local desktop workflows that cannot connect to HTTP MCP endpo
 ### 📚 Additional Documentation
 
 - **[MCP Connection Guide](docs/MCP_CONNECTION_GUIDE.md)** - Detailed setup instructions for all transport modes
-- **[Configuration Examples](claude_desktop_config_example.json)** - Ready-to-use Claude Desktop configurations
+- **[Configuration Examples](docs/examples/claude_desktop_config_example.json)** - Ready-to-use Claude Desktop configurations
 - **Interactive API Docs** - Available at http://localhost:8000/docs when server is running
 
 ## 🛠️ CLI Usage
@@ -419,10 +419,10 @@ curl http://localhost:8000/api/cache/stats
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Install development dependencies (`pip install -e ".[dev]"`)
+3. Install development dependencies (`make install`)
 4. Make your changes and add tests
-5. Run code quality checks (`ruff check . && mypy .`)
-6. Run tests (`pytest`)
+5. Run code quality checks (`make ci-local`)
+6. Run focused tests as needed (`make test`)
 7. Commit your changes (`git commit -m 'Add amazing feature'`)
 8. Push to the branch (`git push origin feature/amazing-feature`)
 9. Open a Pull Request

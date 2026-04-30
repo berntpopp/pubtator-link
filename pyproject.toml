@@ -161,8 +161,7 @@ omit = [
 
 [tool.coverage.report]
 fail_under = 78
-exclude_lines = [
-    "pragma: no cover",
+exclude_also = [
     "def __repr__",
     "if self.debug:",
     "if settings.DEBUG",

@@ -19,7 +19,7 @@ from .services.publication_service import PublicationService
 
 # Add root directory to path for mcp_server import
 sys.path.insert(0, str(Path(__file__).parent.parent))
-# Import after path modification to avoid flake8 E402
+# Import after path modification to avoid lint E402
 import mcp_server
 
 # Initialize rich console
