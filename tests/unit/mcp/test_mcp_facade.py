@@ -196,6 +196,16 @@ def test_curated_facade_public_resources_and_prompts_are_stable() -> None:
     assert set(mcp._prompt_manager._prompts) == EXPECTED_PROMPT_NAMES
 
 
+def test_inspection_managers_are_installed_by_compat_module() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp()
+
+    assert set(mcp._tool_manager._tools) == EXPECTED_PUBLIC_TOOL_NAMES
+    assert set(mcp._resource_manager._resources) == EXPECTED_RESOURCE_URIS
+    assert set(mcp._prompt_manager._prompts) == EXPECTED_PROMPT_NAMES
+
+
 def test_tool_metadata_is_research_scoped() -> None:
     from pubtator_link.mcp.resources import RESEARCH_USE_NOTICE
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, Literal
 
 from fastmcp import FastMCP
 from pydantic import Field
@@ -18,6 +17,7 @@ from pubtator_link.mcp.annotations import (
     REMOTE_JOB_ANNOTATIONS,
     REVIEW_WRITE_ANNOTATIONS,
 )
+from pubtator_link.mcp.compat import install_inspection_managers
 from pubtator_link.mcp.prompts import (
     annotate_research_text_prompt,
     review_pubtator_annotations_prompt,
@@ -56,31 +56,6 @@ from pubtator_link.models.review_rerag import (
     ReviewTableMode,
 )
 from pubtator_link.services.publication_service import PublicationService
-
-
-def _install_inspection_managers(mcp: FastMCP) -> None:
-    provider = cast(Any, mcp.providers[0])
-    components = provider._components
-    tools = {
-        component.name: component
-        for key, component in components.items()
-        if key.startswith("tool:")
-    }
-    resources = {
-        str(component.uri): component
-        for key, component in components.items()
-        if key.startswith("resource:")
-    }
-    prompts = {
-        component.name: component
-        for key, component in components.items()
-        if key.startswith("prompt:")
-    }
-
-    inspectable_mcp = cast(Any, mcp)
-    inspectable_mcp._tool_manager = SimpleNamespace(_tools=tools)
-    inspectable_mcp._resource_manager = SimpleNamespace(_resources=resources)
-    inspectable_mcp._prompt_manager = SimpleNamespace(_prompts=prompts)
 
 
 def create_pubtator_mcp() -> FastMCP:
@@ -477,5 +452,5 @@ def create_pubtator_mcp() -> FastMCP:
     def review_rerag_prompt() -> str:
         return review_rerag_workflow_prompt()
 
-    _install_inspection_managers(mcp)
+    install_inspection_managers(mcp)
     return mcp
