@@ -3,10 +3,12 @@
 import functools
 import logging
 from collections.abc import Callable
+from contextvars import ContextVar, Token
+from dataclasses import dataclass
 from typing import Annotated, Any
 
 import asyncpg
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from structlog.typing import FilteringBoundLogger
 
 from ...api.client import PubTator3Client
@@ -33,9 +35,128 @@ _review_queue: ReviewPreparationQueue | None = None
 _review_context_service: ReviewContextService | None = None
 
 
+@dataclass
+class AppResources:
+    """Runtime resources owned by one FastAPI application lifespan."""
+
+    logger: FilteringBoundLogger
+    api_client: PubTator3Client
+    publication_service: PublicationService
+    publication_passage_service: PublicationPassageService
+    review_pool: asyncpg.Pool | None = None
+    review_repository: PostgresReviewReragRepository | None = None
+    review_queue: ReviewPreparationQueue | None = None
+    review_context_service: ReviewContextService | None = None
+
+
+_app_resources_context: ContextVar[AppResources | None] = ContextVar(
+    "pubtator_app_resources",
+    default=None,
+)
+
+
+def bind_app_resources(resources: AppResources) -> Token[AppResources | None]:
+    """Bind app resources to the current request context."""
+    return _app_resources_context.set(resources)
+
+
+def reset_app_resources(token: Token[AppResources | None]) -> None:
+    """Reset the current request context resource binding."""
+    _app_resources_context.reset(token)
+
+
+def current_app_resources() -> AppResources | None:
+    """Return resources bound to the current request context, if any."""
+    return _app_resources_context.get()
+
+
+def resources_from_request(request: Request) -> AppResources:
+    """Return app-scoped resources for route dependency resolution."""
+    resources = getattr(request.app.state, "pubtator_resources", None)
+    if not isinstance(resources, AppResources):
+        raise RuntimeError("Application resources are not initialized")
+    return resources
+
+
+def review_pool_kwargs() -> dict[str, Any]:
+    """Return asyncpg pool arguments for review re-RAG storage."""
+    if review_rerag_config.database_url is None:
+        raise RuntimeError("PUBTATOR_LINK_DATABASE_URL is required for review re-RAG")
+    return {
+        "dsn": review_rerag_config.database_url,
+        "min_size": 1,
+        "max_size": max(2, review_rerag_config.prep_concurrency * 2 + 2),
+    }
+
+
+async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
+    """Create resources owned by one FastAPI application lifespan."""
+    api_client: PubTator3Client | None = None
+    review_pool: asyncpg.Pool | None = None
+    review_queue: ReviewPreparationQueue | None = None
+
+    try:
+        api_client = PubTator3Client(logger=logger)
+        publication_service = PublicationService(client=api_client, logger=logger)
+        publication_passage_service = PublicationPassageService(
+            publication_service=publication_service
+        )
+
+        review_repository: PostgresReviewReragRepository | None = None
+        review_context_service: ReviewContextService | None = None
+
+        if review_rerag_config.database_url is not None:
+            review_pool = await asyncpg.create_pool(**review_pool_kwargs())
+            review_repository = PostgresReviewReragRepository(review_pool)
+            preparation = FullTextPreparationService(
+                config=review_rerag_config,
+                repository=review_repository,
+                pubtator_client=api_client,
+                logger=logger,
+            )
+            review_queue = ReviewPreparationQueue(
+                config=review_rerag_config,
+                repository=review_repository,
+                preparation=preparation,
+                logger=logger,
+            )
+            review_context_service = ReviewContextService(repository=review_repository)
+
+        return AppResources(
+            logger=logger,
+            api_client=api_client,
+            publication_service=publication_service,
+            publication_passage_service=publication_passage_service,
+            review_pool=review_pool,
+            review_repository=review_repository,
+            review_queue=review_queue,
+            review_context_service=review_context_service,
+        )
+    except Exception:
+        if review_queue is not None:
+            await review_queue.stop()
+        if review_pool is not None:
+            await review_pool.close()
+        if api_client is not None:
+            await api_client.close()
+        raise
+
+
+async def close_app_resources(resources: AppResources) -> None:
+    """Close resources owned by one FastAPI application lifespan."""
+    if resources.review_queue is not None:
+        await resources.review_queue.stop()
+    if resources.review_pool is not None:
+        await resources.review_pool.close()
+    await resources.api_client.close()
+
+
 async def get_logger() -> FilteringBoundLogger:
     """Get structured logger instance."""
     global _logger
+    resources = current_app_resources()
+    if resources is not None:
+        return resources.logger
     if _logger is None:
         _logger = configure_logging()
     return _logger
@@ -44,6 +165,9 @@ async def get_logger() -> FilteringBoundLogger:
 async def get_api_client() -> PubTator3Client:
     """Get PubTator3 API client instance."""
     global _api_client
+    resources = current_app_resources()
+    if resources is not None:
+        return resources.api_client
     if _api_client is None:
         logger_instance = await get_logger()
         _api_client = PubTator3Client(logger=logger_instance)
@@ -53,6 +177,9 @@ async def get_api_client() -> PubTator3Client:
 async def get_publication_service() -> PublicationService:
     """Get publication service instance."""
     global _publication_service
+    resources = current_app_resources()
+    if resources is not None:
+        return resources.publication_service
     if _publication_service is None:
         client = await get_api_client()
         logger_instance = await get_logger()
@@ -61,8 +188,11 @@ async def get_publication_service() -> PublicationService:
 
 
 async def get_publication_passage_service() -> PublicationPassageService:
-    """Get compact publication passage service instance."""
+    """Get compact publication passage service."""
     global _publication_passage_service
+    resources = current_app_resources()
+    if resources is not None:
+        return resources.publication_passage_service
     if _publication_passage_service is None:
         _publication_passage_service = PublicationPassageService(
             publication_service=await get_publication_service()
@@ -71,22 +201,21 @@ async def get_publication_passage_service() -> PublicationPassageService:
 
 
 async def get_review_pool() -> asyncpg.Pool:
-    """Get asyncpg pool for review re-RAG storage."""
+    """Get fallback asyncpg pool for review re-RAG storage."""
     global _review_pool
-    if review_rerag_config.database_url is None:
-        raise RuntimeError("PUBTATOR_LINK_DATABASE_URL is required for review re-RAG")
     if _review_pool is None:
-        _review_pool = await asyncpg.create_pool(
-            dsn=review_rerag_config.database_url,
-            min_size=1,
-            max_size=max(2, review_rerag_config.prep_concurrency * 2 + 2),
-        )
+        _review_pool = await asyncpg.create_pool(**review_pool_kwargs())
     return _review_pool
 
 
 async def get_review_repository() -> PostgresReviewReragRepository:
     """Get review re-RAG repository."""
     global _review_repository
+    resources = current_app_resources()
+    if resources is not None:
+        if resources.review_repository is None:
+            raise RuntimeError("PUBTATOR_LINK_DATABASE_URL is required for review re-RAG")
+        return resources.review_repository
     if _review_repository is None:
         _review_repository = PostgresReviewReragRepository(await get_review_pool())
     return _review_repository
@@ -95,6 +224,11 @@ async def get_review_repository() -> PostgresReviewReragRepository:
 async def get_review_queue() -> ReviewPreparationQueue:
     """Get review preparation queue."""
     global _review_queue
+    resources = current_app_resources()
+    if resources is not None:
+        if resources.review_queue is None:
+            raise RuntimeError("PUBTATOR_LINK_DATABASE_URL is required for review re-RAG")
+        return resources.review_queue
     if _review_queue is None:
         repository = await get_review_repository()
         client = await get_api_client()
@@ -117,6 +251,11 @@ async def get_review_queue() -> ReviewPreparationQueue:
 async def get_review_context_service() -> ReviewContextService:
     """Get review context retrieval service."""
     global _review_context_service
+    resources = current_app_resources()
+    if resources is not None:
+        if resources.review_context_service is None:
+            raise RuntimeError("PUBTATOR_LINK_DATABASE_URL is required for review re-RAG")
+        return resources.review_context_service
     if _review_context_service is None:
         _review_context_service = ReviewContextService(repository=await get_review_repository())
     return _review_context_service
@@ -250,11 +389,7 @@ async def cleanup_dependencies() -> None:
     if _api_client:
         api_client = _api_client
         _api_client = None
-        try:
-            await api_client.close()
-        except RuntimeError as exc:
-            if str(exc) != "Event loop is closed":
-                raise
+        await api_client.close()
 
     if _review_queue:
         await _review_queue.stop()

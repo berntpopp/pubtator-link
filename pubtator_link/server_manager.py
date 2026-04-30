@@ -1,15 +1,15 @@
 """Unified server manager for PubTator-Link."""
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastmcp import FastMCP
+from starlette.responses import Response
 from structlog.typing import FilteringBoundLogger
 
-from .api.client import PubTator3Client
 from .api.routes import (
     annotations_router,
     cache_router,
@@ -19,11 +19,17 @@ from .api.routes import (
     reviews_router,
     search_router,
 )
-from .api.routes.dependencies import cleanup_dependencies, get_review_queue
+from .api.routes.dependencies import (
+    AppResources,
+    bind_app_resources,
+    close_app_resources,
+    create_app_resources,
+    reset_app_resources,
+    resources_from_request,
+)
 from .config import settings
 from .logging_config import configure_logging
 from .mcp.facade import create_pubtator_mcp
-from .services.publication_service import PublicationService
 
 
 class UnifiedServerManager:
@@ -36,8 +42,7 @@ class UnifiedServerManager:
             logger: Optional logger instance
         """
         self.logger = logger or configure_logging()
-        self.client: PubTator3Client | None = None
-        self.publication_service: PublicationService | None = None
+        self.resources: AppResources | None = None
         self.app: FastAPI | None = None
         self.mcp: FastMCP | None = None
         self.server: uvicorn.Server | None = None
@@ -45,33 +50,26 @@ class UnifiedServerManager:
     @asynccontextmanager
     async def lifespan(self, app: FastAPI) -> AsyncGenerator[None, None]:
         """Manage FastAPI lifespan context."""
-        # Startup
         self.logger.info("Starting PubTator-Link server")
 
-        # Initialize API client
-        self.client = PubTator3Client(logger=self.logger)
+        try:
+            self.resources = await create_app_resources(logger=self.logger)
+            app.state.pubtator_resources = self.resources
 
-        # Initialize services
-        self.publication_service = PublicationService(client=self.client, logger=self.logger)
+            if self.resources.review_queue is not None:
+                await self.resources.review_queue.start()
 
-        if settings.database_url is not None:
-            review_queue = await get_review_queue()
-            await review_queue.start()
+            self.logger.info("Server started successfully")
 
-        self.logger.info("Server started successfully")
-
-        yield
-
-        # Shutdown
-        self.logger.info("Shutting down server")
-        if settings.database_url is not None:
-            review_queue = await get_review_queue()
-            await review_queue.stop()
-        if self.client:
-            await self.client.close()
-        # Cleanup dependencies
-        await cleanup_dependencies()
-        self.logger.info("Server shutdown complete")
+            yield
+        finally:
+            self.logger.info("Shutting down server")
+            if self.resources is not None:
+                await close_app_resources(self.resources)
+                self.resources = None
+            if hasattr(app.state, "pubtator_resources"):
+                delattr(app.state, "pubtator_resources")
+            self.logger.info("Server shutdown complete")
 
     def create_app(self, *, include_mcp: bool = False) -> FastAPI:
         """Create FastAPI application."""
@@ -131,6 +129,21 @@ class UnifiedServerManager:
                 "version": "1.0.0",
                 "transport": settings.transport,
             }
+
+        @app.middleware("http")
+        async def bind_pubtator_resources(
+            request: Request,
+            call_next: Callable[[Request], Awaitable[Response]],
+        ) -> Response:
+            resources = getattr(request.app.state, "pubtator_resources", None)
+            if resources is None:
+                return await call_next(request)
+            resources = resources_from_request(request)
+            token = bind_app_resources(resources)
+            try:
+                return await call_next(request)
+            finally:
+                reset_app_resources(token)
 
         # Include all API route modules
         app.include_router(publications_router)
@@ -259,15 +272,19 @@ class UnifiedServerManager:
 
             # Run MCP server in STDIO mode
             # Note: FastMCP needs direct access to sys.stdout.buffer for STDIO protocol
-            await self.mcp.run_async(transport="stdio")
+            if self.resources is None:
+                await self.mcp.run_async(transport="stdio")
+            else:
+                token = bind_app_resources(self.resources)
+                try:
+                    await self.mcp.run_async(transport="stdio")
+                finally:
+                    reset_app_resources(token)
 
     async def shutdown(self) -> None:
         """Shutdown server."""
         if self.server:
             self.server.should_exit = True
-
-        if self.client:
-            await self.client.close()
 
         self.logger.info("Server shutdown initiated")
 
