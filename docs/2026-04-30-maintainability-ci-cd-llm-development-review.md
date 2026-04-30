@@ -2,29 +2,72 @@
 
 Date: 2026-04-30
 
-Re-review update: 2026-04-30
+Post-merge update: 2026-04-30
 
 ## Executive Summary
 
-PubTator-Link has a solid local engineering foundation: modern Python packaging with `uv`, a clear `Makefile` command surface, Ruff formatting and linting, strict mypy, pytest coverage support, Docker hardening, and shared agent instructions in `AGENTS.md`.
+PubTator-Link now has a strong enforceable foundation for local and remote
+quality gates. The foundation quality gate work has been merged into `main` and
+addressed the highest-priority gaps from the initial review:
 
-The project is not yet production-grade from a CI/CD and long-term maintainability perspective. The main gaps are:
+- GitHub Actions now cover CI, Docker validation, CodeQL, and dependency review.
+- Coverage is enforced with `fail_under = 78`.
+- The test lifecycle warnings were removed by dropping the custom pytest event
+  loop fixture and resetting async-lru loop metadata in tests.
+- FastAPI runtime resources are now app-scoped through lifespan-owned
+  `AppResources`, with fallback globals retained only for non-request paths.
+- PR quality checklist and branch protection guidance now exist.
 
-- No `.github/workflows` CI/CD configuration exists in this checkout.
-- The local test gate is now green: `make ci-local` passed, and `make test-cov` produced 321 passed, 2 skipped, with 78% total coverage.
-- Several high-change modules are large enough to become difficult for LLM coding agents and human reviewers to modify safely.
-- Runtime dependency lifecycle management still relies on module-level global singletons. The stale event-loop symptom is now handled, but the underlying ownership boundary remains a maintainability risk.
+The current bottleneck is no longer the missing foundation gate. The next
+maintainability gains should come from reducing large, high-change modules and
+making MCP/review re-RAG changes smaller, safer, and easier for LLM coding
+agents to execute.
 
-The fastest path forward is to add GitHub Actions as a remote quality gate, ratchet coverage, replace lifecycle globals with app-scoped resources, and split the largest MCP/re-RAG modules behind smaller contracts.
+## Current Verification Baseline
+
+Verified on merged `main`:
+
+```bash
+make format
+make lint
+make typecheck
+make test
+```
+
+Observed results:
+
+- `make format`: 75 files unchanged.
+- `make lint`: all checks passed.
+- `make typecheck`: success, 40 source files.
+- `make test`: 333 passed, 2 skipped.
+
+Additional verification during the foundation-gate work:
+
+- `make ci-local`: 333 passed, 2 skipped.
+- `make test-cov`: 333 passed, 2 skipped, total coverage 78.64%, threshold 78%.
+- `make docker-prod-config`: passed.
+- `make docker-npm-config`: passed.
+- `docker build -f docker/Dockerfile -t pubtator-link:ci .`: passed.
+
+The two skipped tests are PostgreSQL integration tests that require
+`PUBTATOR_LINK_TEST_DATABASE_URL`.
 
 ## Review Strategy
 
-This review used current external engineering guidance as the yardstick:
+This review uses current external engineering guidance as the yardstick:
 
-- Google Engineering Practices: code review should improve code health over time, prioritize technical facts over preference, keep changes small, and include relevant tests.
-- Martin Fowler's Continuous Integration guidance: automate the build, make it self-testing, trigger builds on mainline changes, fix broken builds quickly, and keep feedback fast.
-- Martin Fowler's Test Pyramid: prefer many focused low-level tests, fewer broad integration tests, and use higher-level failures to identify missing lower-level coverage.
-- GitHub Actions security guidance: apply least-privilege permissions, protect secrets, avoid unsafe handling of untrusted input, use code scanning, and pin third-party actions for stronger supply-chain security.
+- Google Engineering Practices: code review should improve code health over
+  time, prioritize technical facts over preference, keep changes small, and
+  include relevant tests.
+- Martin Fowler's Continuous Integration guidance: automate the build, make it
+  self-testing, trigger builds on mainline changes, fix broken builds quickly,
+  and keep feedback fast.
+- Martin Fowler's Test Pyramid: prefer many focused low-level tests, fewer broad
+  integration tests, and use higher-level failures to identify missing
+  lower-level coverage.
+- GitHub Actions security guidance: apply least-privilege permissions, protect
+  secrets, avoid unsafe handling of untrusted input, use code scanning, and
+  eventually pin third-party actions to full-length SHAs.
 
 References:
 
@@ -38,424 +81,305 @@ References:
 
 | Area | Score | Evidence And Rationale |
 | --- | ---: | --- |
-| Local developer workflow | 8/10 | Strong `uv`, `Makefile`, Ruff, mypy, pytest, pre-commit, `.editorconfig`, `.python-version`, `AGENTS.md`, and `CLAUDE.md` setup. |
-| CI/CD automation | 3/10 | `make ci-local` exists, but no `.github/workflows` files were present, so quality gates are not enforced remotely. |
-| Test health | 7/10 | Re-review: `make ci-local` passed and `make test-cov` produced 321 passed, 2 skipped. Remaining issue: pytest-asyncio and async-lru warnings indicate test lifecycle cleanup is still not fully clean. |
-| Coverage depth | 6/10 | Total coverage was 78%. Strong coverage exists in several core models/services, but CLI, server manager, MCP facade, annotations routes, and prompts/resources are weak. |
-| Architecture and modularity | 6/10 | The route/service/repository/MCP layering is good. The main risk is large coordination modules: `review_context_service.py`, `repositories/review_rerag.py`, and `mcp/facade.py`. |
-| LLM coding friendliness | 7/10 | Shared agent guidance and Makefile commands are excellent. Large files, private framework internals, and global singletons make automated edits riskier. |
-| DRY/KISS/SOLID | 6/10 | There is useful separation of services and repositories, but REST/MCP adapter patterns repeat and broad `Any`/`cast` usage weakens explicit contracts. |
-| Production readiness | 6/10 | Docker hardening is strong: non-root user, healthcheck, read-only production overlay, cap drop, tmpfs, and resource limits. Missing release workflow, image scanning, SBOM, dependency review, and deployment promotion. |
-| Security posture | 6/10 | URL safety and Docker controls are good. CI security, CodeQL, dependency review, and image scanning are absent because CI is absent. |
-| Observability and operability | 5/10 | Structured logging and `/health` exist. Metrics, dependency readiness checks, tracing, error budgets, and production dashboards are not present. |
+| Local developer workflow | 9/10 | Strong `uv`, `Makefile`, Ruff, mypy, pytest, pre-commit, `.editorconfig`, `.python-version`, `AGENTS.md`, `CLAUDE.md`, and verified local commands. |
+| CI/CD automation | 8/10 | CI, Docker, and security workflows now exist. Remaining gaps: release workflow, action pinning policy, image scanning, SBOM, and published artifacts. |
+| Test health | 8/10 | `make test` passes with 333 passed, 2 skipped. Pytest event-loop and async-lru lifecycle warnings were removed. PostgreSQL integration tests still need an opt-in CI service if they should be required. |
+| Coverage depth | 7/10 | Coverage is enforced at 78% and currently reports 78.64%. The margin is narrow, and CLI, server manager paths, MCP facade, and some route error paths remain weak. |
+| Architecture and modularity | 7/10 | App resource ownership is much cleaner after `AppResources`. Route/service/repository layering is solid. Main remaining risk is large MCP and review re-RAG modules. |
+| LLM coding friendliness | 8/10 | Agent instructions, plans/specs, Make targets, PR checklist, branch protection docs, and CI guardrails are strong. Large files still increase edit risk. |
+| DRY/KISS/SOLID | 7/10 | App lifecycle is more explicit and less global. Remaining duplication and broad contracts appear mainly in MCP adapters and review re-RAG internals. |
+| Production readiness | 7/10 | Docker hardening, health checks, Compose validation, and image build checks are in place. Missing release promotion, readiness checks, metrics, SBOM, and vulnerability scanning. |
+| Security posture | 7/10 | URL safety, Docker controls, CodeQL, dependency review, and least-privilege workflow permissions are now present. Action SHA pinning and container scanning remain. |
+| Observability and operability | 5/10 | Structured logging and `/health` exist. Metrics, readiness, request IDs, tracing, dashboards, and runbooks are still missing. |
 
-## Key Findings
+## What Improved
 
-### 1. The Test Suite Is Now Green, With Lifecycle Warnings Remaining
+### 1. CI/CD Is Now Enforced Remotely
 
-Command run:
+Added workflows:
 
-```bash
-make test-cov
-```
+- `.github/workflows/ci.yml`
+- `.github/workflows/docker.yml`
+- `.github/workflows/security.yml`
 
-Initial observed result:
-
-- 317 tests collected
-- 314 passed
-- 1 failed
-- 2 skipped
-- Total coverage: 78%
-
-Re-review observed result:
-
-- 323 tests collected
-- 321 passed
-- 2 skipped
-- Total coverage: 78%
-
-Previously failing test:
-
-```text
-tests/test_routes/test_publications.py::TestPublicationRoutes::test_publication_passages_endpoint_returns_compact_passages
-```
-
-Failure mode:
-
-```text
-RuntimeError: Event loop is closed
-```
-
-The failure occurred during `TestClient` shutdown through `UnifiedServerManager.lifespan()` and `cleanup_dependencies()`, where a global `_api_client` was closed after its owning event loop had already closed.
-
-Current implementation status:
-
-- `cleanup_dependencies()` now clears `_api_client` before closing it.
-- It ignores `RuntimeError("Event loop is closed")` during stale client cleanup.
-- A regression test covers this stale closed-loop cleanup path.
+The CI workflow runs `uv sync --group dev --frozen`, `make ci-local`, and
+`make test-cov`. Docker validation renders the production and NPM Compose
+overlays and builds the Docker image. Security runs CodeQL and dependency
+review with narrowed permissions.
 
 Impact:
 
-- CI can now be added without immediately failing on this test.
-- Tests still emit lifecycle warnings, so there is remaining cleanup debt.
-- Module-level singleton dependencies still make ownership less explicit than app-scoped resources.
+- PRs can now receive fast automated feedback.
+- The local `Makefile` gate and remote CI gate are aligned.
+- LLM-produced changes have an external correctness loop.
+
+Remaining work:
+
+- Enable branch protection in GitHub using `docs/development/branch-protection.md`.
+- Decide whether to pin actions to full-length SHAs.
+- Add release/image publishing workflow when deployment is ready.
+
+### 2. Test Lifecycle Is Cleaner
+
+The custom session-scoped pytest `event_loop` fixture was removed. Tests now
+reset async-lru method cache loop metadata for `PublicationService` methods that
+otherwise retain event-loop state across function-scoped pytest loops.
+
+Impact:
+
+- Test output is cleaner.
+- Future pytest-asyncio upgrades are less likely to break the suite.
+- The stale closed-loop cleanup workaround is no longer the main lifecycle
+  strategy.
+
+### 3. Runtime Resource Ownership Is Better
+
+`pubtator_link/api/routes/dependencies.py` now defines app-owned resources
+through `AppResources`. `UnifiedServerManager` creates and closes those
+resources in FastAPI lifespan, binds them during HTTP requests, and avoids
+closing active resources prematurely during server shutdown.
+
+Impact:
+
+- Multiple app instances are easier to reason about.
+- Tests are less likely to leak shared module-level state.
+- Lifespan ownership is clearer for API client, publication services, review
+  pool, review queue, and review context service.
+
+Remaining work:
+
+- Keep fallback globals only for CLI/MCP standalone paths.
+- Add more server-manager coverage for startup failure and transport paths as
+  future changes touch them.
+
+### 4. Repository Guidance Is Stronger
+
+Added:
+
+- `.github/pull_request_template.md`
+- `docs/development/branch-protection.md`
+- Guardrail tests in `tests/unit/test_development_tooling.py`
+
+Impact:
+
+- PR authors and LLM agents get clearer quality expectations.
+- Required checks are documented by their expected GitHub names.
+- Tooling drift is now covered by tests.
+
+## Remaining Key Findings
+
+### 1. Coverage Threshold Has Very Little Headroom
+
+Current coverage is 78.64% with `fail_under = 78`.
+
+Impact:
+
+- A small uncovered change can break CI.
+- This is acceptable as a first gate, but it will feel brittle unless the next
+  few implementation PRs include focused tests.
 
 Priority: P1.
 
-Recommended fix:
+Recommended next move:
 
-- Move shared runtime dependencies into FastAPI app lifespan state instead of module-level globals.
-- Make cleanup idempotent and scoped to the application instance that created the resources.
-- Add regression tests around repeated `TestClient(app)` startup/shutdown and parallel route tests.
-- Remove the custom session-scoped `event_loop` fixture before pytest-asyncio makes this deprecation a hard failure.
+- Add targeted tests that raise coverage to at least 80% before larger refactors.
+- Do not raise `fail_under` until the new level is consistently above the target.
 
-### 2. CI/CD Is Missing
+### 2. MCP Facade Remains Too Large
 
-No `.github/workflows` files were found in the checkout.
-
-The repository already has a good local gate:
-
-```bash
-make ci-local
-```
-
-Current local CI target runs:
-
-- `format-check`
-- `lint-ci`
-- `typecheck-fast`
-- `test-fast`
+`pubtator_link/mcp/facade.py` still centralizes server creation, tool
+registration, annotations, resources, prompts, and compatibility inspection.
 
 Impact:
 
-- PRs can merge without automated validation.
-- Broken tests, formatting drift, or type errors may be discovered late.
-- LLM coding workflows lose a critical external feedback loop.
+- Tool additions create broad merge conflict risk.
+- LLM agents must edit a high-context file for small domain changes.
+- Private FastMCP compatibility logic is still a localized upgrade risk.
 
-Priority: P0.
-
-Recommended workflow set:
-
-- `ci.yml`: run on pull request and push to main.
-- `coverage.yml`: run `make test-cov`, upload coverage artifact, enforce threshold.
-- `docker.yml`: build Docker image and render Compose configs.
-- `security.yml`: CodeQL, dependency review, and image vulnerability scan.
-
-Minimum initial CI job:
-
-```yaml
-name: CI
-
-on:
-  pull_request:
-  push:
-    branches: [main]
-
-permissions:
-  contents: read
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@<pinned-sha>
-      - uses: astral-sh/setup-uv@<pinned-sha>
-      - run: uv sync --group dev --frozen
-      - run: make ci-local
-```
-
-Use pinned full-length SHAs for third-party actions if the project wants the strongest supply-chain posture.
-
-### 3. Runtime Dependency Globals Are A Maintainability Risk
-
-The FastAPI dependency module stores runtime state in module globals:
-
-- `_api_client`
-- `_publication_service`
-- `_publication_passage_service`
-- `_review_pool`
-- `_review_repository`
-- `_review_queue`
-- `_review_context_service`
-
-Impact:
-
-- Tests can leak state between cases.
-- Multiple app instances can share resources accidentally.
-- Cleanup can close resources owned by another lifecycle.
-- Gunicorn/multi-worker behavior is harder to reason about.
-- LLM agents may patch symptoms instead of fixing ownership boundaries.
-
-Priority: P0/P1.
+Priority: P1.
 
 Recommended direction:
 
-- Introduce an application container object, for example `AppResources`.
-- Create resources in FastAPI lifespan startup.
-- Attach them to `app.state`.
-- Resolve route dependencies from request/app state.
-- Keep module-level fallback only if truly needed for CLI/MCP standalone paths, and test it separately.
+- Split tools by domain while preserving public tool names and schemas.
+- Isolate private FastMCP inspection code in one compatibility module.
+- Add tests that lock public MCP tool names, resource URIs, and prompt names.
 
-### 4. MCP Facade Is Too Large And Coupled To Private Internals
+### 3. Review re-RAG Internals Need Smaller Boundaries
 
-`pubtator_link/mcp/facade.py` defines the MCP server, tool annotations, many tool registrations, resource registration, prompt registration, and an inspection compatibility helper. It also relies on private FastMCP internals such as `_components`, `_tool_manager`, `_resource_manager`, and `_prompt_manager`.
-
-Impact:
-
-- FastMCP upgrades can break tests or runtime behavior.
-- Tool additions will keep increasing file size and review complexity.
-- LLM coding agents must edit a broad, high-conflict file for unrelated MCP features.
-
-Priority: P1.
-
-Recommended split:
-
-- `pubtator_link/mcp/server.py`: create top-level `FastMCP`.
-- `pubtator_link/mcp/tools/literature.py`: search/entity/relation tools.
-- `pubtator_link/mcp/tools/publications.py`: publication and passage tools.
-- `pubtator_link/mcp/tools/review_rerag.py`: review indexing/retrieval tools.
-- `pubtator_link/mcp/inspection.py`: isolate private FastMCP compatibility logic.
-- `pubtator_link/mcp/contracts.py`: shared annotations and small typed contracts.
-
-Keep the current public tool names stable while moving implementation.
-
-### 5. Review re-RAG Modules Need Smaller Internal Boundaries
-
-Large modules:
+Large modules remain:
 
 - `pubtator_link/services/review_context_service.py`
 - `pubtator_link/repositories/review_rerag.py`
 - `pubtator_link/services/full_text_preparation.py`
 
-These modules contain multiple concerns: retrieval, reranking, diagnostics, packing, query execution, row mapping, source summarization, and SQL composition.
-
 Impact:
 
-- Harder code review.
-- Harder focused testing.
-- Higher merge conflict risk.
-- More likely LLM edits will modify unrelated behavior.
+- Harder review and higher regression risk.
+- Less direct unit testing around ranking, packing, diagnostics, and row
+  mapping.
+- More difficult for LLM coding agents to make focused edits.
 
 Priority: P1.
 
-Recommended split:
+Recommended direction:
 
-- Extract context packing into pure functions or a `ContextPacker`.
-- Extract reranking and budget strategy into `review_rerag/ranking.py`.
-- Extract diagnostics construction into `review_rerag/diagnostics.py`.
-- Extract repository row mappers into `review_rerag_row_mappers.py`.
-- Keep SQL execution in repository methods, but move repeated SQL fragments into named constants or small query builder helpers only where it reduces duplication.
+- Extract pure context packing functions.
+- Extract reranking and budget strategy.
+- Extract diagnostics construction.
+- Extract repository row mapping helpers.
+- Keep public REST/MCP behavior stable during the split.
 
-### 6. Coverage Is Useful But Should Be Ratcheted
+### 4. Production Operability Is Still Basic
 
-Coverage snapshot from `make test-cov`:
+The app has structured logging and `/health`, but not full production
+operability.
 
-- Total: 78%
-- `pubtator_link/cli.py`: 0%
-- `pubtator_link/api/routes/annotations.py`: 59%
-- `pubtator_link/server_manager.py`: 65%
-- `pubtator_link/mcp/facade.py`: 67%
-- `pubtator_link/services/publication_service.py`: 70%
-- `pubtator_link/services/full_text_preparation.py`: 71%
+Priority: P2.
 
-Priority: P1.
+Recommended direction:
 
-Recommended approach:
+- Add readiness endpoint that checks database connectivity when review re-RAG is
+  enabled.
+- Add request IDs/correlation IDs.
+- Add metrics or OpenTelemetry instrumentation.
+- Add runbook documentation for deploy, rollback, and incident checks.
 
-- First fix the failing test.
-- Set initial coverage threshold at the current verified baseline.
-- Increase gradually:
-  - Phase 1: 78%
-  - Phase 2: 82%
-  - Phase 3: 85%
-  - Phase 4: 90% for core non-CLI modules
-- Add focused tests for lifecycle, MCP registration, annotation route error paths, CLI smoke behavior, and publication service parsing edge cases.
+### 5. Release Security Is Not Complete
 
-### 7. Strong Existing Practices Should Be Preserved
+CI security exists, but release security is still early.
 
-The following are already strong and should remain project standards:
+Priority: P2.
 
-- `uv.lock` as dependency source of truth.
-- `make` as the human and agent command surface.
-- Ruff formatting/linting.
-- Strict mypy.
-- Fast default pytest, with coverage available explicitly.
-- Shared `AGENTS.md` guidance.
-- Lean `CLAUDE.md` that points to `AGENTS.md`.
-- Docker non-root runtime.
-- Production Compose hardening with read-only filesystem, tmpfs, no-new-privileges, and dropped capabilities.
-- URL safety protections for public/full-text retrieval.
+Recommended direction:
 
-## Recommended Fast Path
+- Add Docker image vulnerability scanning.
+- Add SBOM generation.
+- Decide on action pinning policy.
+- Add a release workflow for tagged Docker images.
 
-### Phase 1: Stabilize The Test Gate And Remove Lifecycle Warnings
+## Updated Fast Path
+
+### Phase 1: Turn On Branch Protection
+
+Target time: 15-30 minutes.
+
+Actions:
+
+1. Open GitHub repository settings.
+2. Protect `main`.
+3. Require PRs before merging.
+4. Require status checks from `docs/development/branch-protection.md`.
+5. Require branches to be up to date before merging.
+6. Require stale approval dismissal.
+
+Exit criteria:
+
+- `main` cannot be updated without the new CI/Docker/security gates.
+
+### Phase 2: Raise Coverage Headroom
 
 Target time: 0.5-1 day.
 
 Actions:
 
-1. Remove or replace the custom session-scoped `event_loop` fixture in `tests/conftest.py`.
-2. Eliminate the async-lru event-loop reset warnings by clearing caches explicitly or avoiding cross-loop cached service state in tests.
-3. Run `make ci-local`.
-4. Run `make test-cov`.
-5. Record the passing coverage baseline.
+1. Add focused tests for low-coverage high-value areas:
+   - `server_manager.py` startup/shutdown and transport choices.
+   - MCP facade registration stability.
+   - annotation route error paths.
+   - CLI smoke behavior.
+2. Re-run `make test-cov`.
+3. If coverage is consistently above 80%, consider raising `fail_under` to 80.
 
 Exit criteria:
 
-- `make ci-local` passes.
-- `make test-cov` passes.
-- Test output has no pytest-asyncio deprecation warning.
-- Coverage baseline is documented and enforced.
+- Coverage is at least 80%.
+- New tests cover behavior rather than implementation trivia.
 
-### Phase 2: Add CI/CD Enforcement
+### Phase 3: Split MCP By Domain
 
-Target time: 0.5-1 day.
+Target time: 1-2 days.
 
 Actions:
 
-1. Add `.github/workflows/ci.yml`.
-2. Add `.github/workflows/security.yml`.
-3. Add `.github/workflows/docker.yml`.
-4. Add branch protection requiring CI.
-5. Add dependency review for PRs.
+1. Create a spec and plan under `docs/superpowers/specs/` and
+   `docs/superpowers/plans/`.
+2. Add characterization tests for current MCP tool names, resources, prompts,
+   and schema-relevant metadata.
+3. Split tool registration into domain modules.
+4. Keep `facade.py` as an orchestration layer.
+5. Preserve public tool names.
 
 Exit criteria:
 
-- Every PR runs format, lint, typecheck, tests, and Docker build checks.
-- CI token permissions are least-privilege.
-- Security checks run without requiring secrets on untrusted pull requests.
+- Adding a new MCP tool requires touching a small domain file.
+- Existing MCP tests and characterization tests pass.
 
-### Phase 3: Make The Codebase Easier For LLM Agents To Change
+### Phase 4: Split Review re-RAG Internals
 
 Target time: 2-4 days.
 
 Actions:
 
-1. Add `docs/development/architecture.md`.
-2. Document where to add:
-   - REST routes
-   - service logic
-   - repository queries
-   - MCP tools
-   - tests
-3. Split MCP tool registration by domain.
-4. Move private FastMCP inspection logic behind a single compatibility helper.
-5. Add tests that assert public MCP tool names and schemas remain stable.
-
-Exit criteria:
-
-- Adding a new MCP tool requires touching a small domain file, not the whole facade.
-- Architecture documentation gives LLM agents a clear edit map.
-- Existing MCP tests pass.
-
-### Phase 4: Refactor re-RAG Internals In Small PRs
-
-Target time: 3-7 days.
-
-Actions:
-
-1. Extract pure context packing functions and test them directly.
-2. Extract reranking strategy and budget strategy.
-3. Extract diagnostics construction.
-4. Extract repository row mapping helpers.
-5. Keep behavior stable with regression tests.
+1. Extract context packing into pure functions/classes.
+2. Extract ranking/budget strategy.
+3. Extract diagnostics assembly.
+4. Extract row mappers from repository SQL execution.
+5. Add focused tests for each extracted unit.
 
 Exit criteria:
 
 - Large files shrink.
-- Core retrieval behavior is covered by focused unit tests.
-- No public API or MCP tool behavior changes unless explicitly planned.
+- Regression tests protect current review output shape.
+- REST and MCP behavior remains stable.
 
-### Phase 5: Production Hardening
+### Phase 5: Add Release And Operability Hardening
 
-Target time: 2-5 days.
+Target time: 1-3 days.
 
 Actions:
 
-1. Add readiness endpoint that checks optional database connectivity when review re-RAG is enabled.
-2. Add Prometheus-style metrics or OpenTelemetry instrumentation.
-3. Add structured request IDs/correlation IDs.
-4. Add Docker image vulnerability scanning.
-5. Add SBOM generation.
-6. Define release and rollback process.
+1. Add image scanning.
+2. Add SBOM generation.
+3. Add tagged release workflow.
+4. Add readiness endpoint.
+5. Add request IDs and basic metrics.
+6. Document deployment and rollback.
 
 Exit criteria:
 
+- A release can be built, scanned, and promoted consistently.
 - Operators can distinguish process health from dependency readiness.
-- Releases are reproducible.
-- Image and dependency risk are visible before deployment.
-
-## Suggested GitHub Actions Roadmap
-
-### Required
-
-- CI on PR and push to main.
-- Coverage report and threshold.
-- Docker build verification.
-- Dependency review.
-- CodeQL.
-
-### Recommended
-
-- Scheduled dependency update workflow or Dependabot configuration.
-- Release workflow that builds and publishes tagged Docker images.
-- SBOM generation.
-- Container vulnerability scanning.
-- Workflow permissions restricted at top level and tightened per job where needed.
-
-### Example Job Matrix
-
-Start with Python 3.11 only because `.python-version` is 3.11 and mypy targets 3.11.
-
-Later add:
-
-- Python 3.12 smoke test.
-- Python 3.13 smoke test if all dependencies support it.
-
-Do not expand the matrix until the single-version gate is stable.
-
-## Suggested Pull Request Checklist
-
-Add this to a PR template:
-
-```markdown
-## Quality Checklist
-
-- [ ] Change is focused and small enough to review.
-- [ ] Related tests were added or updated.
-- [ ] `make ci-local` passes locally.
-- [ ] Public REST/MCP behavior changes are documented.
-- [ ] New runtime dependencies are justified.
-- [ ] New network/file/database behavior has safety limits.
-- [ ] For MCP tools: descriptions are research-use scoped and schemas are LLM-friendly.
-- [ ] For database changes: migration/schema tests are included.
-```
 
 ## High-Value Backlog
 
-| Priority | Item | Why It Matters |
-| --- | --- | --- |
-| P0 | Add GitHub Actions CI | Prevents broken merges and supports fast LLM iteration. |
-| P0 | Add branch protection | Makes CI meaningful. |
-| P1 | Remove pytest-asyncio custom event-loop deprecation | Prevents future pytest-asyncio upgrades from breaking tests. |
-| P1 | Move dependency singletons to app-scoped resources | Reduces lifecycle bugs and test leakage. |
-| P1 | Add coverage threshold | Prevents silent coverage regression. |
-| P1 | Split MCP facade by domain | Reduces merge conflicts and LLM edit risk. |
-| P1 | Split re-RAG packing/ranking/diagnostics | Improves testability and modularity. |
-| P1 | Add architecture guide for agents | Gives LLMs clear boundaries. |
-| P2 | Add CodeQL and dependency review | Improves supply-chain and code security posture. |
-| P2 | Add image scanning and SBOM | Improves production release safety. |
-| P2 | Add metrics/readiness/tracing | Improves operability. |
+| Priority | Item | Status | Why It Matters |
+| --- | --- | --- | --- |
+| P0 | Add GitHub Actions CI | Done | Prevents broken merges and supports fast LLM iteration. |
+| P0 | Add branch protection docs | Done | Documents how to make CI meaningful. |
+| P0 | Enable branch protection in GitHub | Next | Converts documentation into enforcement. |
+| P1 | Remove pytest-asyncio event-loop warning | Done | Avoids future pytest-asyncio breakage. |
+| P1 | Move dependencies to app-scoped resources | Done | Reduces lifecycle bugs and test leakage. |
+| P1 | Add coverage threshold | Done | Prevents silent coverage regression. |
+| P1 | Raise coverage above 80% | Next | Gives the threshold headroom. |
+| P1 | Split MCP facade by domain | Next | Reduces merge conflicts and LLM edit risk. |
+| P1 | Split re-RAG packing/ranking/diagnostics | Next | Improves testability and modularity. |
+| P1 | Add architecture guide for agents | Next | Gives LLMs clearer boundaries. |
+| P2 | Add image scanning and SBOM | Later | Improves production release safety. |
+| P2 | Add metrics/readiness/tracing | Later | Improves operability. |
 
 ## Final Assessment
 
-PubTator-Link is on a good trajectory. The local development system is already stronger than many early-stage Python tools, and the repository contains useful tests and agent guidance.
+PubTator-Link has moved from "good local practices but weak enforcement" to a
+much stronger foundation: local gates, remote CI, coverage enforcement, Docker
+validation, security checks, PR guidance, and clearer runtime ownership.
 
-The next quality jump should not be more feature work. It should be:
+The next quality jump should focus on reducing change risk:
 
-1. Make the test suite green.
-2. Enforce the local quality gate in GitHub Actions.
-3. Reduce the size and coupling of high-change modules.
-4. Add lightweight production observability and release security.
+1. Enable branch protection so the new workflows matter.
+2. Add enough tests to move coverage above 80%.
+3. Split the MCP facade by domain.
+4. Split review re-RAG internals into smaller tested units.
+5. Add release and operability hardening when deployment is the priority.
 
-That path will improve speed and quality at the same time because it gives both humans and LLM coding agents faster feedback, clearer boundaries, and less risky files to edit.
+That sequence keeps momentum high: it protects `main`, gives LLM agents faster
+feedback, and makes future feature work smaller and safer.
