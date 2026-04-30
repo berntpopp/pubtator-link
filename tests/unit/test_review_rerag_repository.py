@@ -4,7 +4,14 @@ from uuid import UUID
 
 import pytest
 
-from pubtator_link.models.review_rerag import PreparationStatus, ReviewPassageRow
+from pubtator_link.models.review_rerag import (
+    FailedSourceSummary,
+    PreparationStatus,
+    ReviewIndexTotals,
+    ReviewPassageRow,
+    ReviewPassageSample,
+    ReviewSourceSummary,
+)
 from pubtator_link.repositories.review_rerag import PostgresReviewReragRepository
 
 
@@ -39,6 +46,7 @@ class FakeConnection:
     def __init__(self) -> None:
         self.executed: list[tuple[str, tuple[Any, ...]]] = []
         self.fetched_rows: list[dict[str, Any]] = []
+        self.fetched_row_batches: list[list[dict[str, Any]]] = []
         self.fetchrow_rows: list[dict[str, Any] | None] = []
         self.executemany_calls: list[tuple[str, list[tuple[Any, ...]]]] = []
 
@@ -57,6 +65,8 @@ class FakeConnection:
 
     async def fetch(self, sql: str, *args: Any) -> list[dict[str, Any]]:
         self.executed.append((sql, args))
+        if self.fetched_row_batches:
+            return self.fetched_row_batches.pop(0)
         return self.fetched_rows
 
     async def executemany(self, sql: str, args: list[tuple[Any, ...]]) -> str:
@@ -260,3 +270,133 @@ async def test_search_passages_uses_relaxed_or_query_for_candidate_recall() -> N
         normalized_sql
     )
     assert args[-1] == "should | colchicine | start | after | clinical | diagnosis | fmf | children"
+
+
+@pytest.mark.asyncio
+async def test_list_review_sources_aggregates_jobs_attempts_passages_and_samples() -> None:
+    connection = FakeConnection()
+    connection.fetched_row_batches = [
+        [
+            {
+                "source_id": "111",
+                "pmid": "111",
+                "source_kind": "pubtator_abstract",
+                "job_status": "complete",
+                "error": None,
+                "attempt_statuses": ["success"],
+                "sections": ["abstract"],
+                "passage_count": 2,
+                "char_count": 30,
+            }
+        ],
+        [
+            {
+                "source_id": "111",
+                "passage_id": "p1",
+                "section": "abstract",
+                "text": "Indexed passage.",
+                "char_count": 16,
+            }
+        ],
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    sources = await repository.list_review_sources(
+        "review-1",
+        pmids=["111"],
+        include_passage_samples=True,
+        sample_per_pmid=1,
+    )
+
+    assert sources == [
+        ReviewSourceSummary(
+            source_id="111",
+            pmid="111",
+            source_kind="pubtator_abstract",
+            job_status="complete",
+            attempt_statuses=["success"],
+            sections=["abstract"],
+            passage_count=2,
+            char_count=30,
+            sample_passages=[
+                ReviewPassageSample(
+                    passage_id="p1",
+                    section="abstract",
+                    text="Indexed passage.",
+                    char_count=16,
+                )
+            ],
+        )
+    ]
+    summary_sql, summary_args = connection.executed[0]
+    sample_sql, sample_args = connection.executed[1]
+    assert "review_preparation_jobs" in summary_sql
+    assert "full_text_retrieval_attempts" in summary_sql
+    assert "review_passages" in summary_sql
+    assert summary_args == ("review-1", ["111"])
+    assert "row_number()" in sample_sql.lower()
+    assert sample_args == ("review-1", ["111"], ["111"], 1)
+
+
+@pytest.mark.asyncio
+async def test_list_review_failed_sources_includes_failure_reasons() -> None:
+    connection = FakeConnection()
+    connection.fetched_rows = [
+        {
+            "source_id": "222",
+            "pmid": "222",
+            "source_kind": "pubtator_full_bioc",
+            "job_status": "failed",
+            "error": "not available",
+            "attempt_statuses": ["not_available"],
+        }
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    failed_sources = await repository.list_review_failed_sources("review-1")
+
+    assert failed_sources == [
+        FailedSourceSummary(
+            source_id="222",
+            pmid="222",
+            source_kind="pubtator_full_bioc",
+            job_status="failed",
+            error="not available",
+            attempt_statuses=["not_available"],
+        )
+    ]
+    sql, args = connection.executed[0]
+    assert "review_preparation_jobs" in sql
+    assert "full_text_retrieval_attempts" in sql
+    assert "reason" in sql
+    assert args == ("review-1",)
+
+
+@pytest.mark.asyncio
+async def test_review_index_totals_counts_indexed_and_failed_sources() -> None:
+    connection = FakeConnection()
+    connection.fetchrow_rows = [
+        {
+            "pmid_count": 1,
+            "source_count": 1,
+            "passage_count": 2,
+            "char_count": 30,
+            "failed_source_count": 1,
+        }
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    totals = await repository.review_index_totals("review-1")
+
+    assert totals == ReviewIndexTotals(
+        pmid_count=1,
+        source_count=1,
+        passage_count=2,
+        char_count=30,
+        failed_source_count=1,
+    )
+    sql, args = connection.executed[0]
+    assert "review_preparation_jobs" in sql
+    assert "full_text_retrieval_attempts" in sql
+    assert "review_passages" in sql
+    assert args == ("review-1",)

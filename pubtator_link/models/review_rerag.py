@@ -97,6 +97,70 @@ class RetrieveReviewContextResponse(BaseModel):
     preparation_status: PreparationStatus
 
 
+class ReviewPassageSample(BaseModel):
+    """Small passage excerpt for index inspection."""
+
+    passage_id: str
+    section: str
+    text: str
+    char_count: int
+
+
+class ReviewSourceSummary(BaseModel):
+    """Inspection summary for one indexed review source."""
+
+    source_id: str
+    pmid: str | None = None
+    source_kind: str
+    job_status: str
+    error: str | None = None
+    attempt_statuses: list[str] = Field(default_factory=list)
+    sections: list[str] = Field(default_factory=list)
+    passage_count: int = Field(default=0, ge=0)
+    char_count: int = Field(default=0, ge=0)
+    sample_passages: list[ReviewPassageSample] = Field(default_factory=list)
+
+
+class FailedSourceSummary(BaseModel):
+    """Inspection summary for a failed or unavailable review source."""
+
+    source_id: str
+    pmid: str | None = None
+    source_kind: str
+    job_status: str
+    error: str | None = None
+    attempt_statuses: list[str] = Field(default_factory=list)
+
+
+class ReviewIndexTotals(BaseModel):
+    """Aggregate counts for a review-scoped index."""
+
+    pmid_count: int = Field(default=0, ge=0)
+    source_count: int = Field(default=0, ge=0)
+    passage_count: int = Field(default=0, ge=0)
+    char_count: int = Field(default=0, ge=0)
+    failed_source_count: int = Field(default=0, ge=0)
+
+
+class InspectReviewIndexRequest(BaseModel):
+    """Request to inspect review-scoped index contents."""
+
+    pmids: list[str] = Field(default_factory=list)
+    include_passage_samples: bool = False
+    sample_per_pmid: int = Field(default=2, ge=1, le=5)
+
+
+class InspectReviewIndexResponse(BaseModel):
+    """Response describing indexed sources and failures for a review."""
+
+    success: bool = True
+    review_id: str
+    preparation_status: PreparationStatus
+    sources: list[ReviewSourceSummary]
+    totals: ReviewIndexTotals
+    failed_sources: list[FailedSourceSummary]
+
+
 class ReviewPassageRow(BaseModel):
     """Repository row for a review passage candidate."""
 

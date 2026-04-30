@@ -8,7 +8,14 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any, Protocol
 from uuid import uuid4
 
-from pubtator_link.models.review_rerag import PreparationStatus, ReviewPassageRow
+from pubtator_link.models.review_rerag import (
+    FailedSourceSummary,
+    PreparationStatus,
+    ReviewIndexTotals,
+    ReviewPassageRow,
+    ReviewPassageSample,
+    ReviewSourceSummary,
+)
 
 
 class ReviewReragRepository(Protocol):
@@ -53,6 +60,22 @@ class ReviewReragRepository(Protocol):
         limit: int = 8,
     ) -> list[ReviewPassageRow]:
         """Search prepared passages for a review."""
+
+    async def list_review_sources(
+        self,
+        review_id: str,
+        pmids: Sequence[str] | None = None,
+        *,
+        include_passage_samples: bool = False,
+        sample_per_pmid: int = 2,
+    ) -> list[ReviewSourceSummary]:
+        """List review source summaries, optionally with passage samples."""
+
+    async def list_review_failed_sources(self, review_id: str) -> list[FailedSourceSummary]:
+        """List failed review sources with audit reasons."""
+
+    async def review_index_totals(self, review_id: str) -> ReviewIndexTotals:
+        """Return aggregate index counts for a review."""
 
     async def mark_job_running(self, *, review_id: str, source_id: str) -> None:
         """Mark a preparation job as running."""
@@ -343,6 +366,213 @@ class PostgresReviewReragRepository:
             )
         return [_passage_from_row(row) for row in rows]
 
+    async def list_review_sources(
+        self,
+        review_id: str,
+        pmids: Sequence[str] | None = None,
+        *,
+        include_passage_samples: bool = False,
+        sample_per_pmid: int = 2,
+    ) -> list[ReviewSourceSummary]:
+        pmid_filter = _filter_or_none(pmids)
+        async with self._pool.acquire() as connection:
+            rows = await connection.fetch(
+                """
+                with source_scope as (
+                    select
+                        j.review_id,
+                        j.source_id,
+                        j.source_kind,
+                        j.status as job_status,
+                        j.error,
+                        coalesce(
+                            min(p.pmid) filter (where p.pmid is not null),
+                            case when j.source_id ~ '^[0-9]+$' then j.source_id end
+                        ) as pmid
+                    from review_preparation_jobs j
+                    left join review_passages p
+                        on p.review_id = j.review_id
+                       and p.source_id = j.source_id
+                    where j.review_id = $1
+                    group by j.review_id, j.source_id, j.source_kind, j.status, j.error
+                ),
+                attempt_stats as (
+                    select
+                        review_id,
+                        source_id,
+                        array_agg(distinct status order by status)
+                            filter (where status is not null) as attempt_statuses
+                    from full_text_retrieval_attempts
+                    where review_id = $1
+                    group by review_id, source_id
+                ),
+                passage_stats as (
+                    select
+                        review_id,
+                        source_id,
+                        array_agg(distinct section order by section)
+                            filter (where section is not null) as sections,
+                        count(distinct passage_id)::int as passage_count,
+                        coalesce(sum(length(text)), 0)::int as char_count
+                    from review_passages
+                    where review_id = $1
+                    group by review_id, source_id
+                )
+                select
+                    s.source_id,
+                    s.pmid,
+                    s.source_kind,
+                    s.job_status,
+                    s.error,
+                    coalesce(a.attempt_statuses, '{}') as attempt_statuses,
+                    coalesce(p.sections, '{}') as sections,
+                    coalesce(p.passage_count, 0)::int as passage_count,
+                    coalesce(p.char_count, 0)::int as char_count
+                from source_scope s
+                left join attempt_stats a
+                    on a.review_id = s.review_id
+                   and a.source_id = s.source_id
+                left join passage_stats p
+                    on p.review_id = s.review_id
+                   and p.source_id = s.source_id
+                where $2::text[] is null or s.pmid = any($2::text[])
+                order by s.source_id
+                """,
+                review_id,
+                pmid_filter,
+            )
+            sources = [_source_summary_from_row(row) for row in rows]
+            if include_passage_samples and sources:
+                source_ids = [source.source_id for source in sources]
+                sample_rows = await connection.fetch(
+                    """
+                    with ranked as (
+                        select
+                            source_id,
+                            passage_id,
+                            section,
+                            text,
+                            length(text)::int as char_count,
+                            row_number() over (
+                                partition by source_id
+                                order by section, passage_id
+                            ) as sample_rank
+                        from review_passages
+                        where review_id = $1
+                          and ($2::text[] is null or pmid = any($2::text[]))
+                          and source_id = any($3::text[])
+                    )
+                    select source_id, passage_id, section, text, char_count
+                    from ranked
+                    where sample_rank <= $4
+                    order by source_id, sample_rank
+                    """,
+                    review_id,
+                    pmid_filter,
+                    source_ids,
+                    sample_per_pmid,
+                )
+                samples_by_source: dict[str, list[ReviewPassageSample]] = {}
+                for row in sample_rows:
+                    samples_by_source.setdefault(row["source_id"], []).append(
+                        _passage_sample_from_row(row)
+                    )
+                sources = [
+                    source.model_copy(
+                        update={"sample_passages": samples_by_source.get(source.source_id, [])}
+                    )
+                    for source in sources
+                ]
+        return sources
+
+    async def list_review_failed_sources(self, review_id: str) -> list[FailedSourceSummary]:
+        async with self._pool.acquire() as connection:
+            rows = await connection.fetch(
+                """
+                with source_scope as (
+                    select
+                        j.review_id,
+                        j.source_id,
+                        j.source_kind,
+                        j.status as job_status,
+                        j.error,
+                        coalesce(
+                            min(p.pmid) filter (where p.pmid is not null),
+                            case when j.source_id ~ '^[0-9]+$' then j.source_id end
+                        ) as pmid
+                    from review_preparation_jobs j
+                    left join review_passages p
+                        on p.review_id = j.review_id
+                       and p.source_id = j.source_id
+                    where j.review_id = $1
+                    group by j.review_id, j.source_id, j.source_kind, j.status, j.error
+                )
+                select
+                    s.source_id,
+                    s.pmid,
+                    s.source_kind,
+                    s.job_status,
+                    coalesce(
+                        s.error,
+                        string_agg(distinct a.reason, '; ')
+                            filter (where a.reason is not null)
+                    ) as error,
+                    coalesce(
+                        array_agg(distinct a.status order by a.status)
+                            filter (where a.status is not null),
+                        '{}'
+                    ) as attempt_statuses
+                from source_scope s
+                left join full_text_retrieval_attempts a
+                    on a.review_id = s.review_id
+                   and a.source_id = s.source_id
+                group by s.source_id, s.pmid, s.source_kind, s.job_status, s.error
+                having s.job_status = 'failed'
+                    or bool_or(a.status is not null and a.status <> 'success')
+                order by s.source_id
+                """,
+                review_id,
+            )
+        return [_failed_source_summary_from_row(row) for row in rows]
+
+    async def review_index_totals(self, review_id: str) -> ReviewIndexTotals:
+        async with self._pool.acquire() as connection:
+            row = await connection.fetchrow(
+                """
+                with indexed as (
+                    select
+                        (count(distinct p.pmid) filter (where p.pmid is not null))::int
+                            as pmid_count,
+                        count(distinct p.source_id)::int as source_count,
+                        count(distinct p.passage_id)::int as passage_count,
+                        coalesce(sum(length(p.text)), 0)::int as char_count
+                    from review_passages p
+                    where p.review_id = $1
+                ),
+                failed as (
+                    select count(distinct j.source_id)::int as failed_source_count
+                    from review_preparation_jobs j
+                    left join full_text_retrieval_attempts a
+                        on a.review_id = j.review_id
+                       and a.source_id = j.source_id
+                    where j.review_id = $1
+                      and (
+                        j.status = 'failed'
+                        or (a.status is not null and a.status <> 'success')
+                      )
+                )
+                select
+                    indexed.pmid_count,
+                    indexed.source_count,
+                    indexed.passage_count,
+                    indexed.char_count,
+                    failed.failed_source_count
+                from indexed, failed
+                """,
+                review_id,
+            )
+        return _review_index_totals_from_row(row)
+
     async def _preparation_status_on_connection(
         self, connection: Any, review_id: str
     ) -> PreparationStatus:
@@ -402,6 +632,52 @@ def _passage_from_row(row: Mapping[str, Any]) -> ReviewPassageRow:
         screening_status=row["screening_status"],
         source_metadata=source_metadata,
         lexical_rank=float(row["lexical_rank"] or 0.0),
+    )
+
+
+def _source_summary_from_row(row: Mapping[str, Any]) -> ReviewSourceSummary:
+    return ReviewSourceSummary(
+        source_id=row["source_id"],
+        pmid=row["pmid"],
+        source_kind=row["source_kind"],
+        job_status=row["job_status"],
+        error=row["error"],
+        attempt_statuses=list(row["attempt_statuses"] or []),
+        sections=list(row["sections"] or []),
+        passage_count=int(row["passage_count"] or 0),
+        char_count=int(row["char_count"] or 0),
+    )
+
+
+def _failed_source_summary_from_row(row: Mapping[str, Any]) -> FailedSourceSummary:
+    return FailedSourceSummary(
+        source_id=row["source_id"],
+        pmid=row["pmid"],
+        source_kind=row["source_kind"],
+        job_status=row["job_status"],
+        error=row["error"],
+        attempt_statuses=list(row["attempt_statuses"] or []),
+    )
+
+
+def _passage_sample_from_row(row: Mapping[str, Any]) -> ReviewPassageSample:
+    return ReviewPassageSample(
+        passage_id=row["passage_id"],
+        section=row["section"],
+        text=row["text"],
+        char_count=int(row["char_count"] or 0),
+    )
+
+
+def _review_index_totals_from_row(row: Mapping[str, Any] | None) -> ReviewIndexTotals:
+    if row is None:
+        return ReviewIndexTotals()
+    return ReviewIndexTotals(
+        pmid_count=int(row["pmid_count"] or 0),
+        source_count=int(row["source_count"] or 0),
+        passage_count=int(row["passage_count"] or 0),
+        char_count=int(row["char_count"] or 0),
+        failed_source_count=int(row["failed_source_count"] or 0),
     )
 
 

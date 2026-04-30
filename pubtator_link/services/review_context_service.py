@@ -7,10 +7,15 @@ from typing import Protocol
 from pubtator_link.models.review_rerag import (
     ContextPack,
     ContextPassage,
+    FailedSourceSummary,
+    InspectReviewIndexRequest,
+    InspectReviewIndexResponse,
     PreparationStatus,
     RetrieveReviewContextRequest,
     RetrieveReviewContextResponse,
+    ReviewIndexTotals,
     ReviewPassageRow,
+    ReviewSourceSummary,
 )
 
 
@@ -31,6 +36,22 @@ class ReviewContextRepository(Protocol):
 
     async def preparation_status(self, review_id: str) -> PreparationStatus | dict[str, int]:
         """Return preparation status counts for a review."""
+
+    async def list_review_sources(
+        self,
+        review_id: str,
+        pmids: Sequence[str] | None = None,
+        *,
+        include_passage_samples: bool = False,
+        sample_per_pmid: int = 2,
+    ) -> list[ReviewSourceSummary]:
+        """Return index source summaries for a review."""
+
+    async def list_review_failed_sources(self, review_id: str) -> list[FailedSourceSummary]:
+        """Return failed source summaries for a review."""
+
+    async def review_index_totals(self, review_id: str) -> ReviewIndexTotals:
+        """Return aggregate index totals for a review."""
 
 
 SECTION_PRIORITY = {
@@ -111,6 +132,29 @@ class ReviewContextService:
                 citation_map=citation_map,
             ),
             preparation_status=await self._preparation_status(review_id),
+        )
+
+    async def inspect_review_index(
+        self,
+        review_id: str,
+        request: InspectReviewIndexRequest,
+    ) -> InspectReviewIndexResponse:
+        """Inspect prepared sources, aggregate counts, and failed sources."""
+        preparation_status = await self._preparation_status(review_id)
+        sources = await self.repository.list_review_sources(
+            review_id,
+            request.pmids,
+            include_passage_samples=request.include_passage_samples,
+            sample_per_pmid=request.sample_per_pmid,
+        )
+        totals = await self.repository.review_index_totals(review_id)
+        failed_sources = await self.repository.list_review_failed_sources(review_id)
+        return InspectReviewIndexResponse(
+            review_id=review_id,
+            preparation_status=preparation_status,
+            sources=sources,
+            totals=totals,
+            failed_sources=failed_sources,
         )
 
     def _pack_passages(

@@ -2,7 +2,15 @@ from collections.abc import Sequence
 
 import pytest
 
-from pubtator_link.models.review_rerag import RetrieveReviewContextRequest, ReviewPassageRow
+from pubtator_link.models.review_rerag import (
+    FailedSourceSummary,
+    InspectReviewIndexRequest,
+    RetrieveReviewContextRequest,
+    ReviewIndexTotals,
+    ReviewPassageRow,
+    ReviewPassageSample,
+    ReviewSourceSummary,
+)
 from pubtator_link.services.review_context_service import ReviewContextService
 
 
@@ -15,6 +23,10 @@ class FakeReviewContextRepository:
         self.passages = passages
         self.preparation_status_value = preparation_status or {"complete": 1}
         self.search_calls: list[dict[str, object]] = []
+        self.source_summaries: list[ReviewSourceSummary] = []
+        self.failed_source_summaries: list[FailedSourceSummary] = []
+        self.index_totals = ReviewIndexTotals()
+        self.inspect_calls: list[dict[str, object]] = []
 
     async def search_passages(
         self,
@@ -40,6 +52,33 @@ class FakeReviewContextRepository:
 
     async def preparation_status(self, review_id: str) -> dict[str, int]:
         return self.preparation_status_value
+
+    async def list_review_sources(
+        self,
+        review_id: str,
+        pmids: Sequence[str] | None = None,
+        *,
+        include_passage_samples: bool = False,
+        sample_per_pmid: int = 2,
+    ) -> list[ReviewSourceSummary]:
+        self.inspect_calls.append(
+            {
+                "method": "list_review_sources",
+                "review_id": review_id,
+                "pmids": pmids,
+                "include_passage_samples": include_passage_samples,
+                "sample_per_pmid": sample_per_pmid,
+            }
+        )
+        return self.source_summaries
+
+    async def list_review_failed_sources(self, review_id: str) -> list[FailedSourceSummary]:
+        self.inspect_calls.append({"method": "list_review_failed_sources", "review_id": review_id})
+        return self.failed_source_summaries
+
+    async def review_index_totals(self, review_id: str) -> ReviewIndexTotals:
+        self.inspect_calls.append({"method": "review_index_totals", "review_id": review_id})
+        return self.index_totals
 
 
 def _passage(
@@ -199,4 +238,78 @@ async def test_reference_passages_rank_after_body_sections_when_scores_tie() -> 
     assert [passage.passage_id for passage in response.context_pack.passages] == [
         "z-discuss",
         "a-ref",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_inspect_review_index_returns_sources_totals_and_failures() -> None:
+    repository = FakeReviewContextRepository(
+        [],
+        preparation_status={"complete": 1, "failed": 1},
+    )
+    repository.source_summaries = [
+        ReviewSourceSummary(
+            source_id="111",
+            pmid="111",
+            source_kind="pubtator_abstract",
+            job_status="complete",
+            attempt_statuses=["success"],
+            sections=["abstract"],
+            passage_count=2,
+            char_count=30,
+            sample_passages=[
+                ReviewPassageSample(
+                    passage_id="p1",
+                    section="abstract",
+                    text="Indexed passage.",
+                    char_count=16,
+                )
+            ],
+        )
+    ]
+    repository.failed_source_summaries = [
+        FailedSourceSummary(
+            source_id="222",
+            pmid="222",
+            source_kind="pubtator_full_bioc",
+            job_status="failed",
+            error="not available",
+            attempt_statuses=["not_available"],
+        )
+    ]
+    repository.index_totals = ReviewIndexTotals(
+        pmid_count=1,
+        source_count=1,
+        passage_count=2,
+        char_count=30,
+        failed_source_count=1,
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.inspect_review_index(
+        review_id="review-1",
+        request=InspectReviewIndexRequest(
+            pmids=["111"],
+            include_passage_samples=True,
+            sample_per_pmid=1,
+        ),
+    )
+
+    assert response.success is True
+    assert response.review_id == "review-1"
+    assert response.preparation_status.complete == 1
+    assert response.preparation_status.failed == 1
+    assert response.totals.passage_count == 2
+    assert response.sources[0].sample_passages[0].passage_id == "p1"
+    assert response.failed_sources[0].error == "not available"
+    assert repository.inspect_calls == [
+        {
+            "method": "list_review_sources",
+            "review_id": "review-1",
+            "pmids": ["111"],
+            "include_passage_samples": True,
+            "sample_per_pmid": 1,
+        },
+        {"method": "review_index_totals", "review_id": "review-1"},
+        {"method": "list_review_failed_sources", "review_id": "review-1"},
     ]
