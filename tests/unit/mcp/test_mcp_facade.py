@@ -203,6 +203,25 @@ def test_tool_metadata_is_research_scoped() -> None:
     assert "clinical decision support" in RESEARCH_USE_NOTICE
 
 
+def test_public_resource_helpers_return_configured_values() -> None:
+    from pubtator_link.mcp.resources import (
+        RESEARCH_USE_NOTICE,
+        get_bioconcepts_resource,
+        get_formats_resource,
+        get_relation_types_resource,
+        get_research_use_resource,
+        get_text_processing_resource,
+    )
+
+    assert {"Gene", "Disease", "Chemical"}.issubset(get_bioconcepts_resource()["bioconcepts"])
+    assert get_relation_types_resource()["relation_types"]
+    assert {"biocjson", "pubtator"}.issubset(get_formats_resource()["publication_formats"])
+    assert get_research_use_resource() == {"notice": RESEARCH_USE_NOTICE}
+    assert {"Gene", "Disease", "Chemical"}.issubset(
+        get_text_processing_resource()["supported_bioconcepts"]
+    )
+
+
 def test_public_hosted_tools_have_expected_annotations() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
