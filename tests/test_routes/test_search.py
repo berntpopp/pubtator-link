@@ -395,3 +395,28 @@ class TestSearchRoutes:
         assert response.status_code == 422
         assert "type" in response.text
         mock_search.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "filters",
+        [
+            '{"year":{"min":1700}}',
+            '{"year":{"max":9999}}',
+            '{"year":{"min":2026,"max":2020}}',
+        ],
+    )
+    @patch.object(PubTator3Client, "search_publications")
+    def test_search_publications_rejects_raw_year_filter_validation(
+        self, mock_search, test_client, filters
+    ):
+        """Test route rejects invalid raw year filters before calling PubTator."""
+        response = test_client.get(
+            "/api/search/",
+            params={
+                "text": "guideline",
+                "filters": filters,
+            },
+        )
+
+        assert response.status_code == 422
+        assert "year" in response.text
+        mock_search.assert_not_called()

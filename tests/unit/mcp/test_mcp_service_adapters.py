@@ -511,6 +511,46 @@ async def test_search_literature_adapter_rejects_year_max_above_bounds() -> None
     assert client.called is False
 
 
+@pytest.mark.parametrize(
+    ("filters", "match"),
+    [
+        ('{"year":{"min":1700}}', "year.min"),
+        ('{"year":{"max":9999}}', "year.max"),
+        ('{"year":{"min":2026,"max":2020}}', "year.max"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_search_literature_adapter_rejects_raw_year_filter_validation(
+    filters: str, match: str
+) -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class RecordingClient:
+        called = False
+
+        async def search_publications(
+            self,
+            text: str,
+            page: int,
+            sort: str | None,
+            filters: str | None,
+            sections: str | None,
+        ) -> dict[str, object]:
+            self.called = True
+            return {"results": [], "count": 0}
+
+    client = RecordingClient()
+
+    with pytest.raises(ValueError, match=match):
+        await search_literature_impl(
+            client=client,
+            text="guideline",
+            filters=filters,
+        )
+
+    assert client.called is False
+
+
 @pytest.mark.asyncio
 async def test_search_biomedical_entities_adapter_accepts_flat_args() -> None:
     from pubtator_link.mcp.service_adapters import search_biomedical_entities_impl
