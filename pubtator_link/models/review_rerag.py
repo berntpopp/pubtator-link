@@ -4,9 +4,9 @@ import hashlib
 import math
 import re
 from enum import StrEnum
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 PrepareMode = Literal["selected", "candidate_fast"]
 JobStatus = Literal["queued", "running", "complete", "partial", "failed"]
@@ -95,6 +95,11 @@ def estimate_tokens_from_chars(char_count: int) -> int:
     return max(1, math.ceil(char_count / 3.6))
 
 
+def stable_citation_key_for_passage(passage_id: str) -> str:
+    """Return a deterministic compact citation key for a stable passage ID."""
+    return f"c_{hashlib.sha256(passage_id.encode('utf-8')).hexdigest()[:10]}"
+
+
 class ContextBudget(BaseModel):
     """Approximate context budget accounting for an MCP/REST response."""
 
@@ -131,6 +136,7 @@ class ContextPassage(BaseModel):
     """One citable passage returned in a context pack."""
 
     citation_key: str
+    stable_citation_key: str | None = None
     passage_id: str
     pmid: str | None = None
     pmcid: str | None = None
@@ -144,6 +150,13 @@ class ContextPassage(BaseModel):
     boundary: str | None = None
     score: PassageScore | None = None
 
+    @model_validator(mode="after")
+    def fill_stable_citation_key(self) -> Self:
+        """Populate the stable citation key from the immutable passage ID."""
+        if self.stable_citation_key is None:
+            self.stable_citation_key = stable_citation_key_for_passage(self.passage_id)
+        return self
+
 
 class ContextPack(BaseModel):
     """Fresh per-request retrieval result."""
@@ -151,10 +164,22 @@ class ContextPack(BaseModel):
     question: str
     passages: list[ContextPassage]
     citation_map: dict[str, str]
+    stable_citation_map: dict[str, str] = Field(default_factory=dict)
     total_chars: int = 0
     estimated_tokens: int = 0
     budget: ContextBudget | None = None
     dropped: list[ContextDropReason] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def fill_stable_citation_map(self) -> Self:
+        """Populate stable citation key mappings when callers omit them."""
+        if not self.stable_citation_map:
+            self.stable_citation_map = {
+                passage.stable_citation_key: passage.passage_id
+                for passage in self.passages
+                if passage.stable_citation_key is not None
+            }
+        return self
 
 
 class RetrieveReviewContextResponse(BaseModel):

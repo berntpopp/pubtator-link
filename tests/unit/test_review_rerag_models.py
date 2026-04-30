@@ -120,3 +120,46 @@ def test_batch_summary_has_no_passage_text() -> None:
 
     assert "text" not in summary.model_dump()
     assert summary.zero_result_reason is None
+
+
+def test_context_passage_generates_stable_citation_key() -> None:
+    from pubtator_link.models.review_rerag import ContextPassage
+
+    passage = ContextPassage(
+        citation_key="S1",
+        passage_id="PMID:40234174:abstract:1",
+        pmid="40234174",
+        section="ABSTRACT",
+        text="Evidence text.",
+    )
+
+    assert passage.stable_citation_key.startswith("c_")
+    assert len(passage.stable_citation_key) == 12
+    assert (
+        passage.stable_citation_key
+        == ContextPassage(
+            citation_key="S9",
+            passage_id="PMID:40234174:abstract:1",
+            pmid="40234174",
+            section="ABSTRACT",
+            text="Different response ordering.",
+        ).stable_citation_key
+    )
+
+
+def test_context_pack_generates_stable_citation_map() -> None:
+    from pubtator_link.models.review_rerag import ContextPack, ContextPassage
+
+    passage = ContextPassage(
+        citation_key="S1",
+        passage_id="PMID:40234174:abstract:1",
+        section="ABSTRACT",
+        text="Evidence text.",
+    )
+    pack = ContextPack(
+        question="FMF",
+        passages=[passage],
+        citation_map={"S1": passage.passage_id},
+    )
+
+    assert pack.stable_citation_map == {passage.stable_citation_key: "PMID:40234174:abstract:1"}

@@ -123,7 +123,7 @@ def _passage(
     *,
     pmid: str,
     text: str,
-    lexical_rank: float,
+    lexical_rank: float = 0.0,
     section: str = "results",
     source_kind: str = "pubtator_full_bioc",
 ) -> ReviewPassageRow:
@@ -643,3 +643,27 @@ async def test_batch_diagnostics_mode_returns_no_passage_text() -> None:
         "no_candidate_matches",
     }
     assert response.query_summaries[0].next_steps
+
+
+@pytest.mark.asyncio
+async def test_batch_context_pack_includes_stable_citation_map() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage(
+                "PMID:40234174:abstract:1",
+                pmid="40234174",
+                text="guideline abstract",
+            )
+        ]
+    )
+    service = ReviewContextService(repository)
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(queries=["guideline colchicine"]),
+    )
+    passage = response.merged_context_pack.passages[0]
+
+    assert passage.stable_citation_key.startswith("c_")
+    assert response.merged_context_pack.stable_citation_map == {
+        passage.stable_citation_key: passage.passage_id
+    }

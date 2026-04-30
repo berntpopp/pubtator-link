@@ -225,6 +225,7 @@ class ReviewContextService:
                 passage.model_copy(
                     update={
                         "citation_key": f"S{len(merged_passages) + 1}",
+                        "stable_citation_key": passage.stable_citation_key,
                         "char_count": len(passage.text),
                     }
                 )
