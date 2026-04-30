@@ -8,6 +8,7 @@ from pubtator_link.models.review_rerag import (
     ContextPack,
     InspectReviewIndexResponse,
     PreparationStatus,
+    QueryDiagnosticsSummary,
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextResponse,
     ReviewIndexTotals,
@@ -138,3 +139,45 @@ async def test_retrieve_review_context_batch_returns_merged_context() -> None:
     assert response.status_code == 200
     assert response.json()["review_id"] == "rev_123"
     assert "merged_context_pack" in response.json()
+
+
+@pytest.mark.asyncio
+async def test_retrieve_review_context_batch_accepts_response_mode() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.retrieve_context_batch.return_value = RetrieveReviewContextBatchResponse(
+        review_id="rev_123",
+        response_mode="diagnostics",
+        results=[],
+        query_summaries=[
+            QueryDiagnosticsSummary(
+                query="MEFV",
+                query_tokens=["mefv"],
+                candidate_count=0,
+                selected_count=0,
+                returned_count=0,
+                dropped_count=0,
+                zero_result_reason="no_candidate_matches",
+                suggested_queries=["colchicine"],
+            )
+        ],
+        merged_context_pack=ContextPack(
+            question="MEFV",
+            passages=[],
+            citation_map={},
+        ),
+        preparation_status=PreparationStatus(complete=1),
+    )
+    app.dependency_overrides[get_review_context_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/reviews/rev_123/context/batch",
+            json={"queries": ["MEFV"], "response_mode": "diagnostics"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["response_mode"] == "diagnostics"
+    assert data["results"] == []
+    assert data["query_summaries"][0]["zero_result_reason"] == "no_candidate_matches"
