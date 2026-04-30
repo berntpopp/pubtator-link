@@ -125,7 +125,7 @@ class ReviewContextService:
             limit=80,
         )
         sorted_candidates = sorted(candidates, key=self._rerank_key)
-        selected = self._pack_passages(sorted_candidates, request)
+        selected, dropped = self._pack_passages(sorted_candidates, request)
         passages = [
             self._context_passage_from_row(index=index, row=row, request=request)
             for index, row in enumerate(selected, start=1)
@@ -135,7 +135,7 @@ class ReviewContextService:
         budget = self._context_budget(
             max_chars=request.max_chars,
             text_chars=text_chars,
-            dropped_count=max(0, len(candidates) - len(selected)),
+            dropped_count=len(dropped),
         )
         diagnostics = None
         if not passages or request.include_diagnostics:
@@ -154,6 +154,7 @@ class ReviewContextService:
                 total_chars=text_chars,
                 estimated_tokens=estimated_tokens,
                 budget=budget,
+                dropped=dropped,
             ),
             preparation_status=await self._preparation_status(review_id),
             diagnostics=diagnostics,
@@ -195,7 +196,8 @@ class ReviewContextService:
                 results.append(result)
 
             returned_for_query = 0
-            dropped_for_query = 0
+            dropped_for_query = len(result.context_pack.dropped)
+            dropped.extend(result.context_pack.dropped)
             if request.response_mode != "diagnostics":
                 for passage in result.context_pack.passages:
                     if request.deduplicate_passages and passage.passage_id in seen_passage_ids:
@@ -234,6 +236,24 @@ class ReviewContextService:
                             )
                         )
                         continue
+                    if request.response_mode != "full":
+                        next_budget = self._context_budget(
+                            max_chars=request.max_chars,
+                            text_chars=total_chars + len(passage.text),
+                            dropped_count=len(dropped),
+                        )
+                        if next_budget.estimated_total_chars > request.max_response_chars:
+                            dropped_for_query += 1
+                            dropped.append(
+                                ContextDropReason(
+                                    reason="response_char_budget_exceeded",
+                                    passage_id=passage.passage_id,
+                                    pmid=passage.pmid,
+                                    section=passage.section,
+                                    char_count=len(passage.text),
+                                )
+                            )
+                            continue
                     seen_passage_ids.add(passage.passage_id)
                     merged_passages.append(
                         passage.model_copy(
@@ -257,9 +277,16 @@ class ReviewContextService:
 
         citation_map = {passage.citation_key: passage.passage_id for passage in merged_passages}
         text_chars, estimated_tokens = self._pack_totals(merged_passages)
+        budget_text_chars = text_chars
+        if request.response_mode == "full":
+            budget_text_chars += sum(
+                result.context_pack.total_chars
+                or sum(len(passage.text) for passage in result.context_pack.passages)
+                for result in results
+            )
         budget = self._context_budget(
             max_chars=request.max_chars,
-            text_chars=text_chars,
+            text_chars=budget_text_chars,
             dropped_count=len(dropped),
         )
         return RetrieveReviewContextBatchResponse(
@@ -307,8 +334,9 @@ class ReviewContextService:
         self,
         candidates: list[ReviewPassageRow],
         request: RetrieveReviewContextRequest,
-    ) -> list[ReviewPassageRow]:
+    ) -> tuple[list[ReviewPassageRow], list[ContextDropReason]]:
         selected: list[ReviewPassageRow] = []
+        dropped: list[ContextDropReason] = []
         pmid_counts: dict[str, int] = defaultdict(int)
         total_chars = 0
         enforce_pmid_diversity = len(request.pmids) != 1
@@ -326,8 +354,26 @@ class ReviewContextService:
                 continue
             effective_len = self._effective_passage_len(row, request)
             if effective_len is None:
+                dropped.append(
+                    ContextDropReason(
+                        reason="passage_over_max_chars_per_passage",
+                        passage_id=row.passage_id,
+                        pmid=row.pmid,
+                        section=row.section,
+                        char_count=len(row.text),
+                    )
+                )
                 continue
             if total_chars + effective_len > request.max_chars:
+                dropped.append(
+                    ContextDropReason(
+                        reason="char_budget_exceeded",
+                        passage_id=row.passage_id,
+                        pmid=row.pmid,
+                        section=row.section,
+                        char_count=effective_len,
+                    )
+                )
                 continue
 
             selected.append(row)
@@ -335,7 +381,7 @@ class ReviewContextService:
             if row.pmid is not None:
                 pmid_counts[row.pmid] += 1
 
-        return selected
+        return selected, dropped
 
     def _context_passage_from_row(
         self,

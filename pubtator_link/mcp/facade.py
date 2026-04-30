@@ -165,17 +165,15 @@ def create_pubtator_mcp() -> FastMCP:
         text: str,
         page: int = 1,
         sort: str | None = None,
-        filters: str | None = None,
         sections: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Use this flat-argument tool for PubMed/PubTator literature search without a request wrapper. Returns PMIDs, titles, citations, annotations, and ranking metadata when available. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this flat-argument tool for PubMed/PubTator literature search without a request wrapper. Use compatibility search_literature for advanced PubTator filter strings. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         async with PubTator3Client() as client:
             return await search_literature_v2_impl(
                 client=client,
                 text=text,
                 page=page,
                 sort=sort,
-                filters=filters,
                 sections=sections,
             )
 

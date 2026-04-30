@@ -425,6 +425,32 @@ async def test_batch_retrieval_deduplicates_and_preserves_per_query_diagnostics(
 
 
 @pytest.mark.asyncio
+async def test_batch_compact_mode_enforces_max_response_chars() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage("p1", pmid="111", text="a" * 500, lexical_rank=9.0),
+            _passage("p2", pmid="222", text="b" * 500, lexical_rank=8.0),
+            _passage("p3", pmid="333", text="c" * 500, lexical_rank=7.0),
+        ]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["colchicine"],
+            max_chars=5000,
+            max_response_chars=2000,
+        ),
+    )
+
+    assert [passage.passage_id for passage in response.merged_context_pack.passages] == ["p1"]
+    assert response.budget is not None
+    assert response.budget.estimated_total_chars <= 2000
+    assert response.merged_context_pack.dropped[-1].reason == "response_char_budget_exceeded"
+
+
+@pytest.mark.asyncio
 async def test_single_retrieval_excerpts_oversized_passage() -> None:
     long_text = "intro " + ("background " * 200) + " MEFV colchicine " + ("evidence " * 200)
     repository = FakeReviewContextRepository(
@@ -449,6 +475,27 @@ async def test_single_retrieval_excerpts_oversized_passage() -> None:
     assert passage.end_char is not None
     assert "MEFV colchicine" in passage.text
     assert len(passage.text) <= 500
+
+
+@pytest.mark.asyncio
+async def test_single_retrieval_reports_oversized_drop_when_truncation_disabled() -> None:
+    repository = FakeReviewContextRepository(
+        [_passage("p-long", pmid="123", text="MEFV " + ("x" * 1000), lexical_rank=9.0)]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context(
+        "review-1",
+        RetrieveReviewContextRequest(
+            question="MEFV",
+            max_chars=2000,
+            max_chars_per_passage=500,
+            allow_truncated_passages=False,
+        ),
+    )
+
+    assert response.context_pack.passages == []
+    assert response.context_pack.dropped[0].reason == "passage_over_max_chars_per_passage"
 
 
 @pytest.mark.asyncio
@@ -506,6 +553,8 @@ async def test_batch_full_mode_preserves_per_query_results() -> None:
 
     assert response.response_mode == "full"
     assert response.results[0].context_pack.passages[0].text == "MEFV colchicine evidence"
+    assert response.budget is not None
+    assert response.budget.text_chars >= len("MEFV colchicine evidence") * 2
 
 
 @pytest.mark.asyncio

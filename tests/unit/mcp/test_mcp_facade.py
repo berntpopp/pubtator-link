@@ -72,6 +72,8 @@ def test_common_flat_v2_tools_are_registered() -> None:
     assert "review_id" in schema["properties"]
     assert "question" in schema["properties"]
     assert "request" not in schema["properties"]
+    search_schema = mcp._tool_manager._tools["pubtator.search_literature_v2"].parameters
+    assert "filters" not in search_schema["properties"]
 
 
 def test_curated_facade_registers_resources_and_prompts() -> None:
@@ -147,6 +149,9 @@ def test_capabilities_include_context_management_cheatsheet() -> None:
     assert "budgeting_defaults" in capabilities
     assert capabilities["budgeting_defaults"]["batch_response_mode"] == "compact"
     assert "pubtator.retrieve_review_context_batch_v2" in capabilities["sample_calls"]
+    assert (
+        "pubtator.retrieve_review_context_batch_v2_diagnostics" not in capabilities["sample_calls"]
+    )
     assert capabilities["output_cheatsheet"]["batch_merged_passages"] == (
         "merged_context_pack.passages[]"
     )

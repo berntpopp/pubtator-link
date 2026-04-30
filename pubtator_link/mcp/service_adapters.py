@@ -228,7 +228,6 @@ async def search_literature_v2_impl(
     text: str,
     page: int = 1,
     sort: str | None = None,
-    filters: str | None = None,
     sections: list[str] | None = None,
 ) -> dict[str, Any]:
     return await search_literature_impl(
@@ -236,7 +235,7 @@ async def search_literature_v2_impl(
             text=text,
             page=page,
             sort=sort,
-            filters=filters,
+            filters=None,
             sections=",".join(sections) if sections else None,
         ),
         client=client,

@@ -99,7 +99,7 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "max_chars": 12000,
                 "max_response_chars": 24000,
             },
-            "pubtator.retrieve_review_context_batch_v2_diagnostics": {
+            "pubtator.retrieve_review_context_batch_v2:diagnostics": {
                 "review_id": "fmf-colchicine-guidelines",
                 "queries": ["MEFV colchicine", "FMF guideline"],
                 "response_mode": "diagnostics",
