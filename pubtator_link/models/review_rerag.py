@@ -1,6 +1,7 @@
 """Models for review-scoped evidence preparation and re-RAG retrieval."""
 
 import hashlib
+import math
 import re
 from enum import StrEnum
 from typing import Literal
@@ -10,6 +11,16 @@ from pydantic import BaseModel, Field
 PrepareMode = Literal["selected", "candidate_fast"]
 JobStatus = Literal["queued", "running", "complete", "partial", "failed"]
 AttemptStatus = Literal["success", "not_available", "blocked", "failed"]
+ReviewBatchResponseMode = Literal["compact", "merged_only", "full", "diagnostics"]
+ReviewTableMode = Literal["off", "preview", "full"]
+SourceCoverage = Literal["title_only", "abstract_only", "full_text", "curated_url", "unknown"]
+ZeroResultReason = Literal[
+    "review_not_indexed",
+    "no_candidate_matches",
+    "filters_excluded_all_candidates",
+    "all_candidates_over_budget",
+    "preparation_failed",
+]
 SourceKind = Literal[
     "pubtator_full_bioc",
     "pmc_bioc",
@@ -36,6 +47,11 @@ class PreparationStatus(BaseModel):
     complete: int = Field(default=0, ge=0)
     partial: int = Field(default=0, ge=0)
     failed: int = Field(default=0, ge=0)
+
+    @property
+    def total(self) -> int:
+        """Total preparation jobs across statuses."""
+        return self.queued + self.running + self.complete + self.partial + self.failed
 
 
 class IndexReviewEvidenceRequest(BaseModel):
@@ -67,6 +83,48 @@ class RetrieveReviewContextRequest(BaseModel):
     max_chars: int = Field(default=6000, ge=500, le=30000)
     max_passages_per_pmid: int = Field(default=2, ge=1, le=10)
     include_diagnostics: bool = False
+    include_tables: bool = False
+    include_references: bool = False
+    table_mode: ReviewTableMode = "preview"
+    allow_truncated_passages: bool = True
+    max_chars_per_passage: int = Field(default=2200, ge=300, le=10000)
+
+
+def estimate_tokens_from_chars(char_count: int) -> int:
+    """Return a conservative tokenizer-free estimate for LLM context planning."""
+    return max(1, math.ceil(char_count / 3.6))
+
+
+class ContextBudget(BaseModel):
+    """Approximate context budget accounting for an MCP/REST response."""
+
+    max_chars: int
+    text_chars: int
+    estimated_json_chars: int
+    estimated_total_chars: int
+    estimated_tokens: int
+    truncated: bool = False
+    dropped_count: int = 0
+
+
+class ContextDropReason(BaseModel):
+    """Reason a candidate passage was not included in a compact response."""
+
+    reason: str
+    passage_id: str | None = None
+    pmid: str | None = None
+    section: str | None = None
+    char_count: int | None = None
+
+
+class PassageScore(BaseModel):
+    """Transparent score features for a selected review passage."""
+
+    lexical_rank: float = 0.0
+    section_boost: float = 0.0
+    entity_overlap: int = 0
+    pmid_filter_boost: float = 0.0
+    final_rank: float = 0.0
 
 
 class ContextPassage(BaseModel):
@@ -79,6 +137,12 @@ class ContextPassage(BaseModel):
     section: str
     text: str
     source_kind: str | None = None
+    char_count: int | None = None
+    truncated: bool = False
+    start_char: int | None = None
+    end_char: int | None = None
+    boundary: str | None = None
+    score: PassageScore | None = None
 
 
 class ContextPack(BaseModel):
@@ -87,6 +151,10 @@ class ContextPack(BaseModel):
     question: str
     passages: list[ContextPassage]
     citation_map: dict[str, str]
+    total_chars: int = 0
+    estimated_tokens: int = 0
+    budget: ContextBudget | None = None
+    dropped: list[ContextDropReason] = Field(default_factory=list)
 
 
 class RetrieveReviewContextResponse(BaseModel):
@@ -115,6 +183,21 @@ class RetrieveReviewDiagnostics(BaseModel):
     message: str
 
 
+class QueryDiagnosticsSummary(BaseModel):
+    """Compact per-query diagnostics for batch retrieval."""
+
+    query: str
+    query_tokens: list[str]
+    candidate_count: int = Field(default=0, ge=0)
+    selected_count: int = Field(default=0, ge=0)
+    returned_count: int = Field(default=0, ge=0)
+    dropped_count: int = Field(default=0, ge=0)
+    top_sections: list[str] = Field(default_factory=list)
+    top_pmids: list[str] = Field(default_factory=list)
+    zero_result_reason: ZeroResultReason | None = None
+    suggested_queries: list[str] = Field(default_factory=list)
+
+
 class RetrieveReviewContextBatchRequest(BaseModel):
     """Request for multiple review-scoped context retrieval queries."""
 
@@ -125,8 +208,15 @@ class RetrieveReviewContextBatchRequest(BaseModel):
     max_passages_per_query: int = Field(default=8, ge=1, le=30)
     max_total_passages: int = Field(default=20, ge=1, le=60)
     max_chars: int = Field(default=12000, ge=500, le=50000)
+    max_response_chars: int = Field(default=24000, ge=2000, le=100000)
     deduplicate_passages: bool = True
     include_diagnostics: bool = True
+    response_mode: ReviewBatchResponseMode = "compact"
+    include_tables: bool = False
+    include_references: bool = False
+    table_mode: ReviewTableMode = "preview"
+    allow_truncated_passages: bool = True
+    max_chars_per_passage: int = Field(default=2200, ge=300, le=10000)
 
 
 class RetrieveReviewContextBatchResponse(BaseModel):
@@ -137,6 +227,9 @@ class RetrieveReviewContextBatchResponse(BaseModel):
     results: list[RetrieveReviewContextResponse]
     merged_context_pack: ContextPack
     preparation_status: PreparationStatus
+    response_mode: ReviewBatchResponseMode = "compact"
+    query_summaries: list[QueryDiagnosticsSummary] = Field(default_factory=list)
+    budget: ContextBudget | None = None
 
 
 class ReviewPassageSample(BaseModel):
@@ -160,6 +253,7 @@ class ReviewSourceSummary(BaseModel):
     sections: list[str] = Field(default_factory=list)
     passage_count: int = Field(default=0, ge=0)
     char_count: int = Field(default=0, ge=0)
+    coverage: SourceCoverage = "unknown"
     sample_passages: list[ReviewPassageSample] = Field(default_factory=list)
 
 
