@@ -14,6 +14,7 @@ from pubtator_link.models.review_rerag import (
     InspectReviewIndexRequest,
     InspectReviewIndexResponse,
     PreparationStatus,
+    QueryDiagnosticsSummary,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextRequest,
@@ -22,7 +23,7 @@ from pubtator_link.models.review_rerag import (
     ReviewIndexTotals,
     ReviewPassageRow,
     ReviewSourceSummary,
-    QueryDiagnosticsSummary,
+    ZeroResultReason,
     estimate_tokens_from_chars,
 )
 
@@ -455,7 +456,7 @@ class ReviewContextService:
         selected_count = diagnostics.selected_count if diagnostics else len(passages)
         suggested_queries = diagnostics.suggested_queries if diagnostics else []
         query_tokens = diagnostics.query_tokens if diagnostics else self._query_tokens(query)
-        zero_result_reason = None
+        zero_result_reason: ZeroResultReason | None = None
         if returned_count == 0:
             zero_result_reason = "no_candidate_matches"
             if result.preparation_status.total == 0:

@@ -21,8 +21,8 @@ from pubtator_link.mcp.tools import (
 )
 from pubtator_link.models.publication_passages import (
     PublicationContextEstimateRequest,
-    PublicationPassageRequest,
     PublicationPassageMode,
+    PublicationPassageRequest,
 )
 from pubtator_link.models.responses import (
     AnnotationEntity,
@@ -39,10 +39,10 @@ from pubtator_link.models.responses import (
 from pubtator_link.models.review_rerag import (
     IndexReviewEvidenceRequest,
     InspectReviewIndexRequest,
-    ReviewBatchResponseMode,
-    ReviewTableMode,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
+    ReviewBatchResponseMode,
+    ReviewTableMode,
 )
 from pubtator_link.services.publication_passage_service import PublicationPassageService
 from pubtator_link.services.publication_service import PublicationService
@@ -385,7 +385,7 @@ async def index_review_evidence_impl(
     api_request = IndexReviewEvidenceRequest(
         pmids=request.pmids,
         curated_urls=request.curated_urls,
-        prepare_mode=request.prepare_mode,  # type: ignore[arg-type]
+        prepare_mode=request.prepare_mode,
     )
     queued = 0
     already_prepared = 0

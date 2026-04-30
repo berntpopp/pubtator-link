@@ -3,12 +3,8 @@ from collections.abc import Sequence
 import pytest
 
 from pubtator_link.models.review_rerag import (
-    ContextPack,
     FailedSourceSummary,
     InspectReviewIndexRequest,
-    PreparationStatus,
-    QueryDiagnosticsSummary,
-    RetrieveReviewContextBatchResponse,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
     ReviewIndexTotals,
