@@ -66,6 +66,15 @@ def get_capabilities_resource() -> dict[str, Any]:
             "avoid_by_default": "pubtator.fetch_publication_annotations full=true",
             "reason": "raw full BioC can be multi-megabyte; compact tools return citable passages",
         },
+        "call_shape": {
+            "style": "flat top-level arguments",
+            "example": {
+                "review_id": "fmf-colchicine-guidelines",
+                "queries": ["MEFV colchicine", "EULAR PReS recommendation"],
+                "response_mode": "compact",
+            },
+            "do_not_use": {"request": {"review_id": "..."}},
+        },
         "sample_calls": {
             "pubtator.search_literature": {
                 "text": "MEFV colchicine familial Mediterranean fever guideline",
@@ -98,6 +107,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             "single_context_passages": "context_pack.passages[]",
             "batch_merged_passages": "merged_context_pack.passages[]",
             "batch_query_summaries": "query_summaries[]",
+            "batch_next_steps": "query_summaries[].next_steps",
             "citation_map": "merged_context_pack.citation_map",
             "budget": "budget",
         },
@@ -106,6 +116,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             "batch_max_chars": 12000,
             "batch_max_response_chars": 24000,
             "max_chars_per_passage": 2200,
+            "batch_budgeting": "fair first pass across query variants before overflow",
             "tables": "excluded by default for review retrieval unless explicitly requested",
         },
         "review_rerag": {
@@ -123,6 +134,7 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "wait for preparation_status to show complete or partial records",
                 "retrieve with short keyword-style questions first",
                 "retry with PMID filters for paper-specific evidence",
+                "use query_summaries[].next_steps when a query returns no passages",
                 "fall back to fetch_publication_annotations full=true when retrieval returns no passages",
             ],
             "limitations": [

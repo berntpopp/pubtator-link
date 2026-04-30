@@ -196,6 +196,7 @@ class QueryDiagnosticsSummary(BaseModel):
     top_pmids: list[str] = Field(default_factory=list)
     zero_result_reason: ZeroResultReason | None = None
     suggested_queries: list[str] = Field(default_factory=list)
+    next_steps: list[str] = Field(default_factory=list)
 
 
 class RetrieveReviewContextBatchRequest(BaseModel):

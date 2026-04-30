@@ -167,10 +167,15 @@ class ReviewContextService:
     ) -> RetrieveReviewContextBatchResponse:
         """Retrieve multiple query variants and merge selected passages."""
         results: list[RetrieveReviewContextResponse] = []
+        query_results: list[RetrieveReviewContextResponse] = []
         query_summaries: list[QueryDiagnosticsSummary] = []
         merged_passages: list[ContextPassage] = []
         dropped: list[ContextDropReason] = []
         seen_passage_ids: set[str] = set()
+        handled_passages: set[tuple[int, int]] = set()
+        returned_counts: list[int] = []
+        dropped_counts: list[int] = []
+        query_chars: list[int] = []
         total_chars = 0
 
         for query in request.queries:
@@ -192,86 +197,108 @@ class ReviewContextService:
                     max_chars_per_passage=request.max_chars_per_passage,
                 ),
             )
+            query_results.append(result)
             if request.response_mode == "full":
                 results.append(result)
 
-            returned_for_query = 0
-            dropped_for_query = len(result.context_pack.dropped)
             dropped.extend(result.context_pack.dropped)
-            if request.response_mode != "diagnostics":
-                for passage in result.context_pack.passages:
-                    if request.deduplicate_passages and passage.passage_id in seen_passage_ids:
-                        dropped_for_query += 1
-                        dropped.append(
-                            ContextDropReason(
-                                reason="duplicate_passage",
-                                passage_id=passage.passage_id,
-                                pmid=passage.pmid,
-                                section=passage.section,
-                                char_count=len(passage.text),
-                            )
-                        )
-                        continue
-                    if len(merged_passages) >= request.max_total_passages:
-                        dropped_for_query += 1
-                        dropped.append(
-                            ContextDropReason(
-                                reason="max_total_passages_exceeded",
-                                passage_id=passage.passage_id,
-                                pmid=passage.pmid,
-                                section=passage.section,
-                                char_count=len(passage.text),
-                            )
-                        )
-                        break
-                    if total_chars + len(passage.text) > request.max_chars:
-                        dropped_for_query += 1
-                        dropped.append(
-                            ContextDropReason(
-                                reason="char_budget_exceeded",
-                                passage_id=passage.passage_id,
-                                pmid=passage.pmid,
-                                section=passage.section,
-                                char_count=len(passage.text),
-                            )
-                        )
-                        continue
-                    if request.response_mode != "full":
-                        next_budget = self._context_budget(
-                            max_chars=request.max_chars,
-                            text_chars=total_chars + len(passage.text),
-                            dropped_count=len(dropped),
-                        )
-                        if next_budget.estimated_total_chars > request.max_response_chars:
-                            dropped_for_query += 1
-                            dropped.append(
-                                ContextDropReason(
-                                    reason="response_char_budget_exceeded",
-                                    passage_id=passage.passage_id,
-                                    pmid=passage.pmid,
-                                    section=passage.section,
-                                    char_count=len(passage.text),
-                                )
-                            )
-                            continue
-                    seen_passage_ids.add(passage.passage_id)
-                    merged_passages.append(
-                        passage.model_copy(
-                            update={
-                                "citation_key": f"S{len(merged_passages) + 1}",
-                                "char_count": len(passage.text),
-                            }
-                        )
-                    )
-                    total_chars += len(passage.text)
-                    returned_for_query += 1
+            returned_counts.append(0)
+            dropped_counts.append(len(result.context_pack.dropped))
+            query_chars.append(0)
 
+        def drop_passage(query_index: int, passage: ContextPassage, reason: str) -> None:
+            dropped_counts[query_index] += 1
+            dropped.append(
+                ContextDropReason(
+                    reason=reason,
+                    passage_id=passage.passage_id,
+                    pmid=passage.pmid,
+                    section=passage.section,
+                    char_count=len(passage.text),
+                )
+            )
+
+        def add_passage(query_index: int, passage: ContextPassage) -> None:
+            nonlocal total_chars
+            seen_passage_ids.add(passage.passage_id)
+            merged_passages.append(
+                passage.model_copy(
+                    update={
+                        "citation_key": f"S{len(merged_passages) + 1}",
+                        "char_count": len(passage.text),
+                    }
+                )
+            )
+            passage_len = len(passage.text)
+            total_chars += passage_len
+            query_chars[query_index] += passage_len
+            returned_counts[query_index] += 1
+
+        def try_merge_passage(
+            query_index: int,
+            passage_index: int,
+            passage: ContextPassage,
+            *,
+            reserve_limit: int | None,
+        ) -> bool:
+            handled_key = (query_index, passage_index)
+            if handled_key in handled_passages:
+                return True
+            passage_len = len(passage.text)
+            if (
+                reserve_limit is not None
+                and returned_counts[query_index] > 0
+                and query_chars[query_index] + passage_len > reserve_limit
+            ):
+                return False
+            handled_passages.add(handled_key)
+            if request.deduplicate_passages and passage.passage_id in seen_passage_ids:
+                drop_passage(query_index, passage, "duplicate_passage")
+                return True
+            if len(merged_passages) >= request.max_total_passages:
+                drop_passage(query_index, passage, "max_total_passages_exceeded")
+                return True
+            if total_chars + passage_len > request.max_chars:
+                drop_passage(query_index, passage, "char_budget_exceeded")
+                return True
+            if request.response_mode != "full":
+                next_budget = self._context_budget(
+                    max_chars=request.max_chars,
+                    text_chars=total_chars + passage_len,
+                    dropped_count=len(dropped),
+                )
+                if next_budget.estimated_total_chars > request.max_response_chars:
+                    drop_passage(query_index, passage, "response_char_budget_exceeded")
+                    return True
+            add_passage(query_index, passage)
+            return True
+
+        if request.response_mode != "diagnostics":
+            reserve_limit = max(1, request.max_chars // len(request.queries))
+            for query_index, result in enumerate(query_results):
+                for passage_index, passage in enumerate(result.context_pack.passages):
+                    try_merge_passage(
+                        query_index,
+                        passage_index,
+                        passage,
+                        reserve_limit=reserve_limit,
+                    )
+            for query_index, result in enumerate(query_results):
+                for passage_index, passage in enumerate(result.context_pack.passages):
+                    try_merge_passage(
+                        query_index,
+                        passage_index,
+                        passage,
+                        reserve_limit=None,
+                    )
+
+        for query_index, result in enumerate(query_results):
             query_summaries.append(
                 self._query_summary(
-                    query=query,
+                    query=request.queries[query_index],
                     result=result,
-                    returned_count=returned_for_query,
-                    dropped_count=dropped_for_query,
+                    returned_count=returned_counts[query_index],
+                    dropped_count=dropped_counts[query_index],
                 )
             )
 
@@ -503,14 +530,20 @@ class ReviewContextService:
         suggested_queries = diagnostics.suggested_queries if diagnostics else []
         query_tokens = diagnostics.query_tokens if diagnostics else self._query_tokens(query)
         zero_result_reason: ZeroResultReason | None = None
+        next_steps: list[str] = []
         if returned_count == 0:
             zero_result_reason = "no_candidate_matches"
             if result.preparation_status.total == 0:
                 zero_result_reason = "review_not_indexed"
+                next_steps = ["index_review_evidence", "inspect_review_index"]
             elif result.preparation_status.failed and not candidate_count:
                 zero_result_reason = "preparation_failed"
+                next_steps = ["inspect_review_index", "retry_failed_pmids"]
             elif candidate_count and dropped_count:
                 zero_result_reason = "all_candidates_over_budget"
+                next_steps = ["increase_budget", "lower_max_passages_per_query"]
+            else:
+                next_steps = ["shorten_query", "drop_filters", "inspect_review_index"]
         return QueryDiagnosticsSummary(
             query=query,
             query_tokens=query_tokens,
@@ -522,6 +555,7 @@ class ReviewContextService:
             top_pmids=top_pmids,
             zero_result_reason=zero_result_reason,
             suggested_queries=suggested_queries,
+            next_steps=next_steps,
         )
 
     async def _preparation_status(self, review_id: str) -> PreparationStatus:

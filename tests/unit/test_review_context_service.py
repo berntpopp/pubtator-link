@@ -90,6 +90,34 @@ class FakeReviewContextRepository:
         return self.indexed_pmids_value
 
 
+class QueryMappedReviewContextRepository(FakeReviewContextRepository):
+    def __init__(self, passages_by_query: dict[str, list[ReviewPassageRow]]) -> None:
+        super().__init__([])
+        self.passages_by_query = passages_by_query
+
+    async def search_passages(
+        self,
+        review_id: str,
+        query: str,
+        *,
+        entity_ids: Sequence[str] | None = None,
+        pmids: Sequence[str] | None = None,
+        sections: Sequence[str] | None = None,
+        limit: int = 8,
+    ) -> list[ReviewPassageRow]:
+        self.search_calls.append(
+            {
+                "review_id": review_id,
+                "query": query,
+                "entity_ids": entity_ids,
+                "pmids": pmids,
+                "sections": sections,
+                "limit": limit,
+            }
+        )
+        return self.passages_by_query[query]
+
+
 def _passage(
     passage_id: str,
     *,
@@ -451,6 +479,42 @@ async def test_batch_compact_mode_enforces_max_response_chars() -> None:
 
 
 @pytest.mark.asyncio
+async def test_batch_retrieval_reserves_budget_for_later_queries() -> None:
+    repository = QueryMappedReviewContextRepository(
+        {
+            "query one": [
+                _passage("q1-a", pmid="111", text="a" * 300, lexical_rank=10.0),
+                _passage("q1-b", pmid="112", text="b" * 300, lexical_rank=9.0),
+                _passage("q1-c", pmid="113", text="c" * 300, lexical_rank=8.0),
+            ],
+            "query two": [_passage("q2-a", pmid="221", text="d" * 300, lexical_rank=10.0)],
+            "query three": [_passage("q3-a", pmid="331", text="e" * 300, lexical_rank=10.0)],
+        }
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["query one", "query two", "query three"],
+            max_chars=900,
+            max_response_chars=100000,
+            max_passages_per_query=3,
+            max_total_passages=6,
+        ),
+    )
+
+    assert [passage.passage_id for passage in response.merged_context_pack.passages] == [
+        "q1-a",
+        "q2-a",
+        "q3-a",
+    ]
+    assert [summary.returned_count for summary in response.query_summaries] == [1, 1, 1]
+    assert response.query_summaries[1].zero_result_reason is None
+    assert response.query_summaries[2].zero_result_reason is None
+
+
+@pytest.mark.asyncio
 async def test_single_retrieval_excerpts_oversized_passage() -> None:
     long_text = "intro " + ("background " * 200) + " MEFV colchicine " + ("evidence " * 200)
     repository = FakeReviewContextRepository(
@@ -578,3 +642,4 @@ async def test_batch_diagnostics_mode_returns_no_passage_text() -> None:
         "review_not_indexed",
         "no_candidate_matches",
     }
+    assert response.query_summaries[0].next_steps

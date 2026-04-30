@@ -4,15 +4,6 @@ from typing import Any, Literal, cast
 
 from pubtator_link.api.client import PubTator3Client
 from pubtator_link.config import text_processing_config
-from pubtator_link.mcp.tools import (
-    EstimatePublicationContextMcpRequest,
-    FetchPmcAnnotationsRequest,
-    FetchPublicationAnnotationsRequest,
-    FindEntityRelationsRequest,
-    GetTextAnnotationResultsRequest,
-    IndexReviewEvidenceMcpRequest,
-    SubmitTextAnnotationRequest,
-)
 from pubtator_link.models.publication_passages import (
     PublicationContextEstimateRequest,
     PublicationPassageMode,
@@ -33,6 +24,7 @@ from pubtator_link.models.responses import (
 from pubtator_link.models.review_rerag import (
     IndexReviewEvidenceRequest,
     InspectReviewIndexRequest,
+    PrepareMode,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
     ReviewBatchResponseMode,
@@ -81,14 +73,16 @@ async def search_biomedical_entities_impl(
 
 
 async def fetch_publication_annotations_impl(
-    request: FetchPublicationAnnotationsRequest,
     *,
     service: PublicationService,
+    pmids: list[str],
+    format: Literal["pubtator", "biocxml", "biocjson"] = "biocjson",
+    full: bool = False,
 ) -> dict[str, Any]:
     result = await service.export_publications_list(
-        pmids=request.pmids,
-        format=request.format,
-        full=request.full,
+        pmids=pmids,
+        format=format,
+        full=full,
     )
     if hasattr(result, "model_dump"):
         return result.model_dump()
@@ -123,19 +117,25 @@ async def get_publication_passages_impl(
 
 
 async def estimate_publication_context_impl(
-    request: EstimatePublicationContextMcpRequest,
     *,
     service: PublicationPassageService,
+    pmids: list[str],
+    sections: list[str] | None = None,
+    mode: PublicationPassageMode = "compact_passages",
+    full: bool = False,
+    max_passages_per_pmid: int = 6,
+    include_tables: bool = True,
+    include_references: bool = False,
 ) -> dict[str, Any]:
     response = await service.estimate_context(
         PublicationContextEstimateRequest(
-            pmids=request.pmids,
-            sections=request.sections,
-            mode=request.mode,
-            full=request.full,
-            max_passages_per_pmid=request.max_passages_per_pmid,
-            include_tables=request.include_tables,
-            include_references=request.include_references,
+            pmids=pmids,
+            sections=sections or [],
+            mode=mode,
+            full=full,
+            max_passages_per_pmid=max_passages_per_pmid,
+            include_tables=include_tables,
+            include_references=include_references,
         )
     )
     return response.model_dump()
@@ -192,13 +192,14 @@ async def search_literature_impl(
 
 
 async def fetch_pmc_annotations_impl(
-    request: FetchPmcAnnotationsRequest,
     *,
     service: PublicationService,
+    pmcids: list[str],
+    format: Literal["biocxml", "biocjson"] = "biocjson",
 ) -> dict[str, Any]:
     result = await service.export_pmc_publications_list(
-        pmcids=request.pmcids,
-        format=request.format,
+        pmcids=pmcids,
+        format=format,
     )
     documents = [
         document.model_dump() if hasattr(document, "model_dump") else dict(document)
@@ -206,22 +207,24 @@ async def fetch_pmc_annotations_impl(
     ]
     return PublicationExportResponse(
         format=result.format,
-        pmcids=request.pmcids,
+        pmcids=pmcids,
         full_text=True,
         export_data={"documents": documents},
-        count=len(request.pmcids),
+        count=len(pmcids),
     ).model_dump()
 
 
 async def find_entity_relations_impl(
-    request: FindEntityRelationsRequest,
     *,
     client: PubTator3Client,
+    entity_id: str,
+    relation_type: str | None = None,
+    target_entity_type: str | None = None,
 ) -> dict[str, Any]:
     raw_response = await client.find_relations(
-        e1=request.entity_id,
-        relation_type=request.relation_type,
-        e2=request.target_entity_type,
+        e1=entity_id,
+        relation_type=relation_type,
+        e2=target_entity_type,
     )
     relation_response = cast(Any, raw_response)
     api_results = cast(
@@ -243,27 +246,28 @@ async def find_entity_relations_impl(
     ]
     return RelationsResponse(
         success=True,
-        primary_entity=request.entity_id,
+        primary_entity=entity_id,
         related_entities=related_entities,
         total_relations=len(related_entities),
-        relation_filter=request.relation_type,
-        entity_filter=request.target_entity_type,
+        relation_filter=relation_type,
+        entity_filter=target_entity_type,
     ).model_dump()
 
 
 async def submit_text_annotation_impl(
-    request: SubmitTextAnnotationRequest,
     *,
     client: PubTator3Client,
+    text: str,
+    bioconcepts: str = "Gene",
 ) -> dict[str, Any]:
-    if request.bioconcepts.lower() == "all":
-        bioconcepts = list(text_processing_config.supported_bioconcepts)
+    if bioconcepts.lower() == "all":
+        selected_bioconcepts = list(text_processing_config.supported_bioconcepts)
     else:
-        bioconcepts = [item.strip() for item in request.bioconcepts.split(",") if item.strip()]
+        selected_bioconcepts = [item.strip() for item in bioconcepts.split(",") if item.strip()]
 
     invalid_bioconcepts = [
         bioconcept
-        for bioconcept in bioconcepts
+        for bioconcept in selected_bioconcepts
         if bioconcept not in text_processing_config.supported_bioconcepts
     ]
     if invalid_bioconcepts:
@@ -272,11 +276,13 @@ async def submit_text_annotation_impl(
             f"Supported types: {', '.join(text_processing_config.supported_bioconcepts)}"
         )
 
-    text = request.text.strip()
-    session_id = await client.submit_text_annotation(text=text, bioconcept=bioconcepts[0])
-    if len(text) < 1000:
+    normalized_text = text.strip()
+    session_id = await client.submit_text_annotation(
+        text=normalized_text, bioconcept=selected_bioconcepts[0]
+    )
+    if len(normalized_text) < 1000:
         estimated_time = 15
-    elif len(text) < 5000:
+    elif len(normalized_text) < 5000:
         estimated_time = 45
     else:
         estimated_time = 90
@@ -285,18 +291,18 @@ async def submit_text_annotation_impl(
         success=True,
         session_id=session_id,
         status="submitted",
-        bioconcepts=bioconcepts,
+        bioconcepts=selected_bioconcepts,
         estimated_time=estimated_time,
         message="Text submitted for processing. Use session_id to retrieve results.",
     ).model_dump()
 
 
 async def get_text_annotation_results_impl(
-    request: GetTextAnnotationResultsRequest,
     *,
     client: PubTator3Client,
+    session_id: str,
 ) -> dict[str, Any]:
-    result = await client.retrieve_text_annotation(session_id=request.session_id)
+    result = await client.retrieve_text_annotation(session_id=session_id)
     status = str(result.get("status", "unknown"))
     annotations = [
         AnnotationEntity(
@@ -311,7 +317,7 @@ async def get_text_annotation_results_impl(
     ]
     return TextAnnotationResultResponse(
         success=True,
-        session_id=request.session_id,
+        session_id=session_id,
         status=status,
         original_text=str(result.get("original_text", "")),
         bioconcept=str(result.get("bioconcept", "")),
@@ -326,31 +332,34 @@ async def get_text_annotation_results_impl(
 
 
 async def index_review_evidence_impl(
-    request: IndexReviewEvidenceMcpRequest,
     *,
     queue: ReviewPreparationQueue,
+    review_id: str,
+    pmids: list[str] | None = None,
+    curated_urls: list[str] | None = None,
+    prepare_mode: PrepareMode = "selected",
 ) -> dict[str, Any]:
     api_request = IndexReviewEvidenceRequest(
-        pmids=request.pmids,
-        curated_urls=request.curated_urls,
-        prepare_mode=request.prepare_mode,
+        pmids=pmids or [],
+        curated_urls=curated_urls or [],
+        prepare_mode=prepare_mode,
     )
     queued = 0
     already_prepared = 0
     for pmid in api_request.pmids:
-        if await queue.enqueue_pmid(request.review_id, pmid):
+        if await queue.enqueue_pmid(review_id, pmid):
             queued += 1
         else:
             already_prepared += 1
     for url in api_request.curated_urls:
-        if await queue.enqueue_curated_url(request.review_id, url):
+        if await queue.enqueue_curated_url(review_id, url):
             queued += 1
         else:
             already_prepared += 1
-    status = await queue.repository.preparation_status(request.review_id)
+    status = await queue.repository.preparation_status(review_id)
     return {
         "success": True,
-        "review_id": request.review_id,
+        "review_id": review_id,
         "queued": queued,
         "already_prepared": already_prepared,
         "preparation_status": status.model_dump(),

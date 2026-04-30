@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, Literal, cast
+from typing import Annotated, Any, Literal, cast
 
 from fastmcp import FastMCP
 from mcp.types import ToolAnnotations
+from pydantic import Field
 
 from pubtator_link.api.client import PubTator3Client
 from pubtator_link.api.routes.dependencies import (
@@ -42,17 +43,8 @@ from pubtator_link.mcp.service_adapters import (
     search_literature_impl,
     submit_text_annotation_impl,
 )
-from pubtator_link.mcp.tools import (
-    EstimatePublicationContextMcpRequest,
-    FetchPmcAnnotationsRequest,
-    FetchPublicationAnnotationsRequest,
-    FindEntityRelationsRequest,
-    GetTextAnnotationResultsRequest,
-    IndexReviewEvidenceMcpRequest,
-    SubmitTextAnnotationRequest,
-)
 from pubtator_link.models.publication_passages import PublicationPassageMode
-from pubtator_link.models.review_rerag import ReviewBatchResponseMode, ReviewTableMode
+from pubtator_link.models.review_rerag import PrepareMode, ReviewBatchResponseMode, ReviewTableMode
 from pubtator_link.services.publication_service import PublicationService
 
 READ_ONLY_OPEN_WORLD = ToolAnnotations(
@@ -163,12 +155,19 @@ def create_pubtator_mcp() -> FastMCP:
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def fetch_publication_annotations(
-        request: FetchPublicationAnnotationsRequest,
+        pmids: Annotated[list[str], Field(min_length=1, max_length=50)],
+        format: Literal["pubtator", "biocxml", "biocjson"] = "biocjson",
+        full: bool = False,
     ) -> dict[str, Any]:
         """Use this when a user provides PubMed IDs and needs raw PubTator BioC/annotation export; prefer compact passage or review context tools for grounded answers because full BioC can be large. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         async with PubTator3Client() as client:
             service = PublicationService(client=client)
-            return await fetch_publication_annotations_impl(request, service=service)
+            return await fetch_publication_annotations_impl(
+                service=service,
+                pmids=pmids,
+                format=format,
+                full=full,
+            )
 
     @mcp.tool(
         name="pubtator.get_publication_passages",
@@ -205,22 +204,44 @@ def create_pubtator_mcp() -> FastMCP:
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def estimate_publication_context(
-        request: EstimatePublicationContextMcpRequest,
+        pmids: Annotated[list[str], Field(min_length=1, max_length=25)],
+        sections: list[str] | None = None,
+        mode: PublicationPassageMode = "compact_passages",
+        full: bool = False,
+        max_passages_per_pmid: Annotated[int, Field(ge=1, le=30)] = 6,
+        include_tables: bool = True,
+        include_references: bool = False,
     ) -> dict[str, Any]:
         """Use this when a user needs to estimate passage count and context size before fetching publication passages. Inputs mirror get_publication_passages except max_chars; output includes estimated_passages, estimated_chars, sections_by_pmid, recommended_mode, and warning. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         service = await get_publication_passage_service()
-        return await estimate_publication_context_impl(request, service=service)
+        return await estimate_publication_context_impl(
+            service=service,
+            pmids=pmids,
+            sections=sections,
+            mode=mode,
+            full=full,
+            max_passages_per_pmid=max_passages_per_pmid,
+            include_tables=include_tables,
+            include_references=include_references,
+        )
 
     @mcp.tool(
         name="pubtator.fetch_pmc_annotations",
         title="Fetch PMC Annotations",
         annotations=READ_ONLY_OPEN_WORLD,
     )
-    async def fetch_pmc_annotations(request: FetchPmcAnnotationsRequest) -> dict[str, Any]:
+    async def fetch_pmc_annotations(
+        pmcids: Annotated[list[str], Field(min_length=1, max_length=50)],
+        format: Literal["biocxml", "biocjson"] = "biocjson",
+    ) -> dict[str, Any]:
         """Use this when a user provides PMC IDs and needs raw PubTator full-text BioC/annotation export; prefer compact passage or review context tools for focused grounding because full text can be large. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         async with PubTator3Client() as client:
             service = PublicationService(client=client)
-            return await fetch_pmc_annotations_impl(request, service=service)
+            return await fetch_pmc_annotations_impl(
+                service=service,
+                pmcids=pmcids,
+                format=format,
+            )
 
     @mcp.tool(
         name="pubtator.search_biomedical_entities",
@@ -247,20 +268,41 @@ def create_pubtator_mcp() -> FastMCP:
         title="Find Entity Relations",
         annotations=READ_ONLY_OPEN_WORLD,
     )
-    async def find_entity_relations(request: FindEntityRelationsRequest) -> dict[str, Any]:
-        """Use this when a user has a PubTator entity ID and needs literature-derived related entities. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+    async def find_entity_relations(
+        entity_id: Annotated[
+            str,
+            Field(min_length=1, description="PubTator entity ID such as @CHEMICAL_remdesivir."),
+        ],
+        relation_type: str | None = None,
+        target_entity_type: str | None = None,
+    ) -> dict[str, Any]:
+        """Use this when a user has a PubTator entity ID and needs literature-derived related entities to expand a corpus after search_biomedical_entities. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         async with PubTator3Client() as client:
-            return await find_entity_relations_impl(request, client=client)
+            return await find_entity_relations_impl(
+                client=client,
+                entity_id=entity_id,
+                relation_type=relation_type,
+                target_entity_type=target_entity_type,
+            )
 
     @mcp.tool(
         name="pubtator.submit_text_annotation",
         title="Submit Text Annotation",
         annotations=REMOTE_JOB_ANNOTATIONS,
     )
-    async def submit_text_annotation(request: SubmitTextAnnotationRequest) -> dict[str, Any]:
+    async def submit_text_annotation(
+        text: Annotated[str, Field(min_length=1, max_length=10000)],
+        bioconcepts: Annotated[
+            str, Field(description="Comma-separated PubTator bioconcepts or 'all'.")
+        ] = "Gene",
+    ) -> dict[str, Any]:
         """Use this when research text should be submitted for PubTator biomedical named entity recognition. Do not submit identifiable patient data to public demo instances."""
         async with PubTator3Client() as client:
-            return await submit_text_annotation_impl(request, client=client)
+            return await submit_text_annotation_impl(
+                client=client,
+                text=text,
+                bioconcepts=bioconcepts,
+            )
 
     @mcp.tool(
         name="pubtator.get_text_annotation_results",
@@ -268,21 +310,32 @@ def create_pubtator_mcp() -> FastMCP:
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_text_annotation_results(
-        request: GetTextAnnotationResultsRequest,
+        session_id: Annotated[str, Field(min_length=8)],
     ) -> dict[str, Any]:
         """Use this when a user has a PubTator text annotation session ID and needs its results."""
         async with PubTator3Client() as client:
-            return await get_text_annotation_results_impl(request, client=client)
+            return await get_text_annotation_results_impl(client=client, session_id=session_id)
 
     @mcp.tool(
         name="pubtator.index_review_evidence",
         title="Index Review Evidence",
         annotations=REVIEW_WRITE_ANNOTATIONS,
     )
-    async def index_review_evidence(request: IndexReviewEvidenceMcpRequest) -> dict[str, Any]:
-        """Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs. Call this before retrieve_review_context, then watch preparation_status until jobs are complete, partial, or failed. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+    async def index_review_evidence(
+        review_id: Annotated[str, Field(min_length=1)],
+        pmids: list[str] | None = None,
+        curated_urls: list[str] | None = None,
+        prepare_mode: PrepareMode = "selected",
+    ) -> dict[str, Any]:
+        """Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs. Call this before retrieve_review_context, then inspect until preparation_status shows complete, partial, or failed. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         queue = await get_review_queue()
-        return await index_review_evidence_impl(request, queue=queue)
+        return await index_review_evidence_impl(
+            queue=queue,
+            review_id=review_id,
+            pmids=pmids,
+            curated_urls=curated_urls,
+            prepare_mode=prepare_mode,
+        )
 
     @mcp.tool(
         name="pubtator.inspect_review_index",
@@ -368,7 +421,7 @@ def create_pubtator_mcp() -> FastMCP:
         allow_truncated_passages: bool = True,
         max_chars_per_passage: int = 2200,
     ) -> dict[str, Any]:
-        """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode returns merged passages plus per-query summaries; use diagnostics for query refinement and full only when per-query passage text is needed. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode returns merged passages plus per-query summaries, reserves a fair first-pass budget across queries before overflow, and includes next_steps for zero-result queries. Use diagnostics for query refinement and full only when per-query passage text is needed. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         service = await get_review_context_service()
         return await retrieve_review_context_batch_impl(
             service=service,

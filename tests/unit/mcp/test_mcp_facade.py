@@ -86,6 +86,28 @@ def test_common_mcp_tools_are_flat_and_unversioned() -> None:
     assert batch_schema["properties"]["response_mode"]["default"] == "compact"
 
 
+def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp()
+    tools = mcp._tool_manager._tools
+
+    required_properties = {
+        "pubtator.fetch_publication_annotations": ("pmids",),
+        "pubtator.estimate_publication_context": ("pmids",),
+        "pubtator.fetch_pmc_annotations": ("pmcids",),
+        "pubtator.find_entity_relations": ("entity_id",),
+        "pubtator.submit_text_annotation": ("text",),
+        "pubtator.get_text_annotation_results": ("session_id",),
+        "pubtator.index_review_evidence": ("review_id",),
+    }
+    for name, expected_properties in required_properties.items():
+        properties = tools[name].parameters["properties"]
+        assert "request" not in properties
+        for property_name in expected_properties:
+            assert property_name in properties
+
+
 def test_curated_facade_registers_resources_and_prompts() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 

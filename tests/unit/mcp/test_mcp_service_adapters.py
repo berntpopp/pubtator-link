@@ -28,7 +28,6 @@ async def test_search_entities_adapter_calls_client() -> None:
 @pytest.mark.asyncio
 async def test_publication_adapter_validates_pmids() -> None:
     from pubtator_link.mcp.service_adapters import fetch_publication_annotations_impl
-    from pubtator_link.mcp.tools import FetchPublicationAnnotationsRequest
 
     class FakeService:
         async def export_publications_list(
@@ -37,8 +36,9 @@ async def test_publication_adapter_validates_pmids() -> None:
             return {"pmids": pmids, "format": format, "full_text": full, "count": len(pmids)}
 
     result = await fetch_publication_annotations_impl(
-        FetchPublicationAnnotationsRequest(pmids=["29355051"], format="biocjson"),
         service=FakeService(),
+        pmids=["29355051"],
+        format="biocjson",
     )
 
     assert result["pmids"] == ["29355051"]
@@ -393,7 +393,6 @@ async def test_publication_passages_adapter_builds_request_from_flat_args() -> N
 @pytest.mark.asyncio
 async def test_pmc_adapter_returns_publication_export_shape() -> None:
     from pubtator_link.mcp.service_adapters import fetch_pmc_annotations_impl
-    from pubtator_link.mcp.tools import FetchPmcAnnotationsRequest
 
     class Document:
         def model_dump(self) -> dict[str, object]:
@@ -407,10 +406,7 @@ async def test_pmc_adapter_returns_publication_export_shape() -> None:
         async def export_pmc_publications_list(self, pmcids: list[str], format: str) -> Result:
             return Result()
 
-    result = await fetch_pmc_annotations_impl(
-        FetchPmcAnnotationsRequest(pmcids=["PMC7696669"], format="biocjson"),
-        service=FakeService(),
-    )
+    result = await fetch_pmc_annotations_impl(service=FakeService(), pmcids=["PMC7696669"])
 
     assert result["pmcids"] == ["PMC7696669"]
     assert result["full_text"] is True
@@ -420,7 +416,6 @@ async def test_pmc_adapter_returns_publication_export_shape() -> None:
 @pytest.mark.asyncio
 async def test_relations_adapter_maps_related_entities() -> None:
     from pubtator_link.mcp.service_adapters import find_entity_relations_impl
-    from pubtator_link.mcp.tools import FindEntityRelationsRequest
 
     class FakeClient:
         async def find_relations(
@@ -429,12 +424,10 @@ async def test_relations_adapter_maps_related_entities() -> None:
             return [{"target": "@DISEASE_COVID-19", "type": "treat", "pmids": ["32511357"]}]
 
     result = await find_entity_relations_impl(
-        FindEntityRelationsRequest(
-            entity_id="@CHEMICAL_remdesivir",
-            relation_type="treat",
-            target_entity_type="Disease",
-        ),
         client=FakeClient(),
+        entity_id="@CHEMICAL_remdesivir",
+        relation_type="treat",
+        target_entity_type="Disease",
     )
 
     assert result["success"] is True
@@ -445,15 +438,15 @@ async def test_relations_adapter_maps_related_entities() -> None:
 @pytest.mark.asyncio
 async def test_submit_text_annotation_adapter_returns_session_metadata() -> None:
     from pubtator_link.mcp.service_adapters import submit_text_annotation_impl
-    from pubtator_link.mcp.tools import SubmitTextAnnotationRequest
 
     class FakeClient:
         async def submit_text_annotation(self, text: str, bioconcept: str) -> str:
             return "ABC123DEF456"
 
     result = await submit_text_annotation_impl(
-        SubmitTextAnnotationRequest(text="BRCA1 mutations", bioconcepts="Gene"),
         client=FakeClient(),
+        text="BRCA1 mutations",
+        bioconcepts="Gene",
     )
 
     assert result["success"] is True
@@ -464,7 +457,6 @@ async def test_submit_text_annotation_adapter_returns_session_metadata() -> None
 @pytest.mark.asyncio
 async def test_get_text_annotation_results_adapter_maps_completed_results() -> None:
     from pubtator_link.mcp.service_adapters import get_text_annotation_results_impl
-    from pubtator_link.mcp.tools import GetTextAnnotationResultsRequest
 
     class FakeClient:
         async def retrieve_text_annotation(self, session_id: str) -> dict[str, object]:
@@ -483,10 +475,7 @@ async def test_get_text_annotation_results_adapter_maps_completed_results() -> N
                 ],
             }
 
-    result = await get_text_annotation_results_impl(
-        GetTextAnnotationResultsRequest(session_id="ABC123DEF456"),
-        client=FakeClient(),
-    )
+    result = await get_text_annotation_results_impl(client=FakeClient(), session_id="ABC123DEF456")
 
     assert result["success"] is True
     assert result["status"] == "completed"

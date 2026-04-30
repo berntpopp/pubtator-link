@@ -60,6 +60,8 @@ Recommended review workflow:
 
 Use `pubtator.fetch_publication_annotations` with `full=true` only when raw BioC is intentionally needed. Compact passage tools are safer for routine grounding. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support.
 
+All public MCP tools use flat top-level arguments. The server no longer exposes `_v2` aliases or `{ "request": ... }` wrapper-shaped public tools; if a client still shows them, refresh the client MCP/tool cache and reconnect.
+
 Recommended batch modes:
 
 - `compact`: default; merged passages plus per-query summaries.
@@ -73,8 +75,11 @@ Useful output paths:
 - Single retrieval passages: `context_pack.passages[]`
 - Batch merged passages: `merged_context_pack.passages[]`
 - Batch query summaries: `query_summaries[]`
+- Batch zero-result guidance: `query_summaries[].next_steps`
 - Citation map: `merged_context_pack.citation_map`
 - Budget estimate: `budget`
+
+Batch retrieval reserves a fair first-pass share of the text budget across query variants before spending remaining budget on overflow passages. This avoids early queries starving later queries when `max_chars` is tight.
 
 ## Claude Desktop HTTP Config
 
