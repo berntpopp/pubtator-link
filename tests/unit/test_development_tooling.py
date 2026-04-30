@@ -159,7 +159,7 @@ def test_readme_documents_modern_development_commands() -> None:
 
 def test_coverage_threshold_matches_verified_baseline() -> None:
     coverage = _pyproject()["tool"]["coverage"]["report"]
-    assert coverage["fail_under"] == 78
+    assert coverage["fail_under"] == 80
 
 
 def test_github_actions_workflows_exist_and_use_make_targets() -> None:
