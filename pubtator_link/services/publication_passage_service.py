@@ -83,7 +83,7 @@ class PublicationPassageService:
             export_data=export_data,
             pmids=request.pmids,
             source=source,
-            sections=request.sections,
+            sections=self._effective_sections(request.mode, request.sections),
             include_tables=request.include_tables,
             include_references=request.include_references,
             max_passages_per_pmid=request.max_passages_per_pmid,
@@ -128,7 +128,7 @@ class PublicationPassageService:
             export_data=export_data,
             pmids=request.pmids,
             source=source,
-            sections=request.sections,
+            sections=self._effective_sections(request.mode, request.sections),
             include_tables=request.include_tables,
             include_references=request.include_references,
             max_passages_per_pmid=request.max_passages_per_pmid,
@@ -308,6 +308,12 @@ class PublicationPassageService:
     @staticmethod
     def _source_for_request(full: bool) -> PublicationPassageSource:
         return "pubtator_full_bioc" if full else "pubtator_abstract"
+
+    @staticmethod
+    def _effective_sections(mode: PublicationPassageMode, sections: list[str]) -> list[str]:
+        if mode == "abstracts" and not sections:
+            return ["title", "abstract"]
+        return sections
 
 
 def normalize_publication_section(section: str) -> str:

@@ -403,6 +403,19 @@ async def test_list_review_sources_caps_samples_per_pmid_across_sources() -> Non
 
 
 @pytest.mark.asyncio
+async def test_list_review_sources_derives_pmid_from_prefixed_source_ids() -> None:
+    connection = FakeConnection()
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    await repository.list_review_sources("review-1", pmids=["40234174"])
+
+    sql, args = connection.executed[0]
+    assert "PMID:(.+)$" in sql
+    assert "s.pmid = any($2::text[])" in sql
+    assert args == ("review-1", ["40234174"])
+
+
+@pytest.mark.asyncio
 async def test_list_review_failed_sources_includes_failure_reasons() -> None:
     connection = FakeConnection()
     connection.fetched_rows = [
@@ -434,6 +447,18 @@ async def test_list_review_failed_sources_includes_failure_reasons() -> None:
     assert "full_text_retrieval_attempts" in sql
     assert "reason" in sql
     assert args == ("review-1",)
+
+
+@pytest.mark.asyncio
+async def test_list_review_failed_sources_joins_curated_url_attempts() -> None:
+    connection = FakeConnection()
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    await repository.list_review_failed_sources("review-1")
+
+    sql, _args = connection.executed[0]
+    assert "URL:(.+)$" in sql
+    assert "a.source_id = substring(s.source_id from '^URL:(.+)$')" in sql
 
 
 @pytest.mark.asyncio

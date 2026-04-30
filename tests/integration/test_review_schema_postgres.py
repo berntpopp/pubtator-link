@@ -78,19 +78,37 @@ async def test_review_index_inspection_queries_postgres_schema() -> None:
             status="complete",
             error=None,
         )
-        await repository.enqueue_preparation_job("review-inspect", "222", "pubtator_full_bioc")
+        await repository.enqueue_preparation_job("review-inspect", "PMID:222", "pubtator_full_bioc")
         await repository.mark_job_finished(
             review_id="review-inspect",
-            source_id="222",
+            source_id="PMID:222",
             status="failed",
             error="not available",
         )
         await repository.record_retrieval_attempt(
             "review-inspect",
-            "222",
+            "PMID:222",
             "pubtator_full_bioc",
             "not_available",
             reason="not available",
+        )
+        await repository.enqueue_preparation_job(
+            "review-inspect",
+            "URL:https://example.org/paper.pdf",
+            "curated_pdf",
+        )
+        await repository.mark_job_finished(
+            review_id="review-inspect",
+            source_id="URL:https://example.org/paper.pdf",
+            status="failed",
+            error=None,
+        )
+        await repository.record_retrieval_attempt(
+            "review-inspect",
+            "https://example.org/paper.pdf",
+            "curated_pdf",
+            "blocked",
+            reason="Curated URL did not return PDF bytes",
         )
         await repository.upsert_passages(
             [
@@ -112,6 +130,7 @@ async def test_review_index_inspection_queries_postgres_schema() -> None:
             sample_per_pmid=1,
         )
         failed_sources = await repository.list_review_failed_sources("review-inspect")
+        filtered_sources = await repository.list_review_sources("review-inspect", pmids=["222"])
         totals = await repository.review_index_totals("review-inspect")
     finally:
         await pool.close()
@@ -119,7 +138,13 @@ async def test_review_index_inspection_queries_postgres_schema() -> None:
 
     assert sources[0].source_id == "111"
     assert sources[0].sample_passages[0].passage_id == "p1"
-    assert failed_sources[0].source_id == "222"
-    assert failed_sources[0].error == "not available"
+    failed_by_source = {source.source_id: source for source in failed_sources}
+    assert failed_by_source["PMID:222"].pmid == "222"
+    assert failed_by_source["PMID:222"].error == "not available"
+    assert failed_by_source["URL:https://example.org/paper.pdf"].attempt_statuses == ["blocked"]
+    assert failed_by_source["URL:https://example.org/paper.pdf"].error == (
+        "Curated URL did not return PDF bytes"
+    )
+    assert [source.source_id for source in filtered_sources] == ["PMID:222"]
     assert totals.source_count == 1
-    assert totals.failed_source_count == 1
+    assert totals.failed_source_count == 2

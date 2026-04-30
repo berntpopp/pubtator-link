@@ -196,6 +196,39 @@ async def test_get_publication_passages_accepts_export_response_models() -> None
 
 
 @pytest.mark.asyncio
+async def test_abstracts_mode_returns_only_title_and_abstract_passages() -> None:
+    service = PublicationPassageService(FakePublicationService())
+
+    response = await service.get_passages(
+        PublicationPassageRequest(
+            pmids=["111"],
+            mode="abstracts",
+            max_passages_per_pmid=10,
+        )
+    )
+
+    assert [passage.section for passage in response.passages] == ["title", "abstract"]
+    assert any(drop.reason == "section_filtered" and drop.section == "methods" for drop in response.dropped)
+    assert any(drop.reason == "section_filtered" and drop.section == "table" for drop in response.dropped)
+
+
+@pytest.mark.asyncio
+async def test_abstracts_mode_estimate_counts_only_title_and_abstract() -> None:
+    service = PublicationPassageService(FakePublicationService())
+
+    response = await service.estimate_context(
+        PublicationContextEstimateRequest(
+            pmids=["111"],
+            mode="abstracts",
+            max_passages_per_pmid=10,
+        )
+    )
+
+    assert response.estimated_passages == 2
+    assert response.sections_by_pmid["111"] == ["title", "abstract"]
+
+
+@pytest.mark.asyncio
 async def test_estimate_publication_context_counts_sections_and_warns_large_output() -> None:
     service = PublicationPassageService(FakePublicationService())
 

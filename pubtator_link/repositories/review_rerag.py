@@ -393,7 +393,11 @@ class PostgresReviewReragRepository:
                         j.error,
                         coalesce(
                             min(p.pmid) filter (where p.pmid is not null),
-                            case when j.source_id ~ '^[0-9]+$' then j.source_id end
+                            case
+                                when j.source_id ~ '^[0-9]+$' then j.source_id
+                                when j.source_id ~ '^PMID:(.+)$'
+                                    then substring(j.source_id from '^PMID:(.+)$')
+                            end
                         ) as pmid
                     from review_preparation_jobs j
                     left join review_passages p
@@ -405,7 +409,10 @@ class PostgresReviewReragRepository:
                 attempt_stats as (
                     select
                         review_id,
-                        source_id,
+                        case
+                            when source_id ~ '^https?://' then 'URL:' || source_id
+                            else source_id
+                        end as source_id,
                         array_agg(distinct status order by status)
                             filter (where status is not null) as attempt_statuses
                     from full_text_retrieval_attempts
@@ -504,7 +511,11 @@ class PostgresReviewReragRepository:
                         j.error,
                         coalesce(
                             min(p.pmid) filter (where p.pmid is not null),
-                            case when j.source_id ~ '^[0-9]+$' then j.source_id end
+                            case
+                                when j.source_id ~ '^[0-9]+$' then j.source_id
+                                when j.source_id ~ '^PMID:(.+)$'
+                                    then substring(j.source_id from '^PMID:(.+)$')
+                            end
                         ) as pmid
                     from review_preparation_jobs j
                     left join review_passages p
@@ -531,7 +542,10 @@ class PostgresReviewReragRepository:
                 from source_scope s
                 left join full_text_retrieval_attempts a
                     on a.review_id = s.review_id
-                   and a.source_id = s.source_id
+                   and (
+                        a.source_id = s.source_id
+                        or a.source_id = substring(s.source_id from '^URL:(.+)$')
+                   )
                 group by s.source_id, s.pmid, s.source_kind, s.job_status, s.error
                 having s.job_status = 'failed'
                     or bool_or(a.status is not null and a.status <> 'success')
