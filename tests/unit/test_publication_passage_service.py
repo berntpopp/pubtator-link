@@ -208,8 +208,12 @@ async def test_abstracts_mode_returns_only_title_and_abstract_passages() -> None
     )
 
     assert [passage.section for passage in response.passages] == ["title", "abstract"]
-    assert any(drop.reason == "section_filtered" and drop.section == "methods" for drop in response.dropped)
-    assert any(drop.reason == "section_filtered" and drop.section == "table" for drop in response.dropped)
+    assert any(
+        drop.reason == "section_filtered" and drop.section == "methods" for drop in response.dropped
+    )
+    assert any(
+        drop.reason == "section_filtered" and drop.section == "table" for drop in response.dropped
+    )
 
 
 @pytest.mark.asyncio
