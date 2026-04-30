@@ -23,17 +23,15 @@ from pubtator_link.mcp.service_adapters import (
     estimate_publication_context_impl,
     fetch_pmc_annotations_impl,
     fetch_publication_annotations_impl,
-    find_entity_relations_impl,
     get_publication_passages_impl,
     get_text_annotation_results_impl,
     index_review_evidence_impl,
     inspect_review_index_impl,
     retrieve_review_context_batch_impl,
     retrieve_review_context_impl,
-    search_biomedical_entities_impl,
-    search_literature_impl,
     submit_text_annotation_impl,
 )
+from pubtator_link.mcp.tools.literature import register_literature_tools
 from pubtator_link.models.publication_passages import PublicationPassageMode
 from pubtator_link.models.review_rerag import (
     BudgetStrategy,
@@ -61,35 +59,7 @@ def create_pubtator_mcp() -> FastMCP:
         ),
     )
     register_metadata(mcp)
-
-    @mcp.tool(
-        name="pubtator.search_literature",
-        title="Search Biomedical Literature",
-        annotations=READ_ONLY_OPEN_WORLD,
-    )
-    async def search_literature(
-        text: str,
-        page: int = 1,
-        sort: str | None = None,
-        filters: str | None = None,
-        publication_types: list[str] | None = None,
-        year_min: int | None = None,
-        year_max: int | None = None,
-        sections: list[str] | None = None,
-    ) -> dict[str, Any]:
-        """Use this when a user needs PubMed literature search through PubTator3. Use short biomedical queries, optional sort such as 'score desc' or 'date desc', flat publication/year filters, raw filters JSON, and optional section filters. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        async with PubTator3Client() as client:
-            return await search_literature_impl(
-                client=client,
-                text=text,
-                page=page,
-                sort=sort,
-                filters=filters,
-                publication_types=publication_types,
-                year_min=year_min,
-                year_max=year_max,
-                sections=sections,
-            )
+    register_literature_tools(mcp)
 
     @mcp.tool(
         name="pubtator.fetch_publication_annotations",
@@ -183,48 +153,6 @@ def create_pubtator_mcp() -> FastMCP:
                 service=service,
                 pmcids=pmcids,
                 format=format,
-            )
-
-    @mcp.tool(
-        name="pubtator.search_biomedical_entities",
-        title="Search Biomedical Entities",
-        annotations=READ_ONLY_OPEN_WORLD,
-    )
-    async def search_biomedical_entities(
-        query: str,
-        concept: Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"]
-        | None = None,
-        limit: int = 10,
-    ) -> dict[str, Any]:
-        """Use this when a user needs canonical PubTator biomedical entity IDs for genes, diseases, chemicals, species, variants, or cell lines. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        async with PubTator3Client() as client:
-            return await search_biomedical_entities_impl(
-                client=client,
-                query=query,
-                concept=concept,
-                limit=limit,
-            )
-
-    @mcp.tool(
-        name="pubtator.find_entity_relations",
-        title="Find Entity Relations",
-        annotations=READ_ONLY_OPEN_WORLD,
-    )
-    async def find_entity_relations(
-        entity_id: Annotated[
-            str,
-            Field(min_length=1, description="PubTator entity ID such as @CHEMICAL_remdesivir."),
-        ],
-        relation_type: str | None = None,
-        target_entity_type: str | None = None,
-    ) -> dict[str, Any]:
-        """Use this when a user has a PubTator entity ID and needs literature-derived related entities to expand a corpus after search_biomedical_entities. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        async with PubTator3Client() as client:
-            return await find_entity_relations_impl(
-                client=client,
-                entity_id=entity_id,
-                relation_type=relation_type,
-                target_entity_type=target_entity_type,
             )
 
     @mcp.tool(
