@@ -1,4 +1,5 @@
 from typing import Any
+from unittest.mock import AsyncMock
 from uuid import UUID
 
 import pytest
@@ -189,3 +190,39 @@ async def test_search_passages_maps_rows_and_uses_none_for_empty_filters() -> No
     assert "websearch_to_tsquery" in sql
     assert "source_kind" in sql
     assert args == ("review-1", "when start colchicine", None, None, None, 8)
+
+
+@pytest.mark.asyncio
+async def test_job_status_methods_execute_expected_sql() -> None:
+    connection = FakeConnection()
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    await repository.mark_job_running(review_id="review-1", source_id="PMID:40234174")
+    await repository.mark_job_finished(
+        review_id="review-1",
+        source_id="PMID:40234174",
+        status="complete",
+        error=None,
+    )
+
+    assert len(connection.executed) == 2
+    assert "set status = 'running'" in connection.executed[0][0].lower()
+    assert "set status = $3" in connection.executed[1][0].lower()
+
+
+@pytest.mark.asyncio
+async def test_advisory_lock_wraps_preparation_callback() -> None:
+    connection = FakeConnection()
+    repository = PostgresReviewReragRepository(FakePool(connection))
+    callback = AsyncMock(return_value="complete")
+
+    result = await repository.with_preparation_lock(
+        review_id="review-1",
+        source_id="PMID:40234174",
+        callback=callback,
+    )
+
+    assert result == "complete"
+    assert len(connection.executed) == 1
+    assert "pg_advisory_xact_lock" in connection.executed[0][0]
+    callback.assert_awaited_once()

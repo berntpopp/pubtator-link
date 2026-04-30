@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any, Protocol
 from uuid import uuid4
 
@@ -53,6 +53,23 @@ class ReviewReragRepository(Protocol):
         limit: int = 8,
     ) -> list[ReviewPassageRow]:
         """Search prepared passages for a review."""
+
+    async def mark_job_running(self, *, review_id: str, source_id: str) -> None:
+        """Mark a preparation job as running."""
+
+    async def mark_job_finished(
+        self, *, review_id: str, source_id: str, status: str, error: str | None
+    ) -> None:
+        """Mark a preparation job as finished."""
+
+    async def with_preparation_lock(
+        self,
+        *,
+        review_id: str,
+        source_id: str,
+        callback: Callable[[], Awaitable[str]],
+    ) -> str:
+        """Run a callback inside a transaction-scoped preparation advisory lock."""
 
 
 class PostgresReviewReragRepository:
@@ -148,6 +165,52 @@ class PostgresReviewReragRepository:
     async def preparation_status(self, review_id: str) -> PreparationStatus:
         async with self._pool.acquire() as connection:
             return await self._preparation_status_on_connection(connection, review_id)
+
+    async def mark_job_running(self, *, review_id: str, source_id: str) -> None:
+        async with self._pool.acquire() as connection:
+            await connection.execute(
+                """
+                update review_preparation_jobs
+                set status = 'running',
+                    started_at = now(),
+                    error = null
+                where review_id = $1 and source_id = $2
+                """,
+                review_id,
+                source_id,
+            )
+
+    async def mark_job_finished(
+        self, *, review_id: str, source_id: str, status: str, error: str | None
+    ) -> None:
+        async with self._pool.acquire() as connection:
+            await connection.execute(
+                """
+                update review_preparation_jobs
+                set status = $3,
+                    finished_at = now(),
+                    error = $4
+                where review_id = $1 and source_id = $2
+                """,
+                review_id,
+                source_id,
+                status,
+                error,
+            )
+
+    async def with_preparation_lock(
+        self,
+        *,
+        review_id: str,
+        source_id: str,
+        callback: Callable[[], Awaitable[str]],
+    ) -> str:
+        async with self._pool.acquire() as connection, connection.transaction():
+            await connection.execute(
+                "select pg_advisory_xact_lock(hashtextextended($1, 0))",
+                f"{review_id}:{source_id}",
+            )
+            return await callback()
 
     async def upsert_passages(self, passages: Sequence[ReviewPassageRow]) -> None:
         if not passages:

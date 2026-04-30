@@ -94,17 +94,24 @@ class ReviewPreparationQueue:
         while True:
             review_id, source_id, source_kind, source_value = await self._queue.get()
             try:
-                if source_kind == "pubtator_full_bioc":
-                    await asyncio.wait_for(
-                        self.preparation.prepare_pmid(review_id, source_value),
-                        timeout=self.config.document_timeout_seconds,
-                    )
-                elif source_kind == "curated_pdf":
-                    await asyncio.wait_for(
-                        self.preparation.prepare_curated_url(review_id, source_value),
-                        timeout=self.config.document_timeout_seconds,
-                    )
-                else:
+                await self.repository.mark_job_running(review_id=review_id, source_id=source_id)
+
+                async def run_preparation(
+                    review_id: str = review_id,
+                    source_id: str = source_id,
+                    source_kind: str = source_kind,
+                    source_value: str = source_value,
+                ) -> str:
+                    if source_kind == "pubtator_full_bioc":
+                        return await asyncio.wait_for(
+                            self.preparation.prepare_pmid(review_id, source_value),
+                            timeout=self.config.document_timeout_seconds,
+                        )
+                    if source_kind == "curated_pdf":
+                        return await asyncio.wait_for(
+                            self.preparation.prepare_curated_url(review_id, source_value),
+                            timeout=self.config.document_timeout_seconds,
+                        )
                     self.logger.warning(
                         "Unknown review preparation source kind",
                         extra={
@@ -113,9 +120,22 @@ class ReviewPreparationQueue:
                             "source_kind": source_kind,
                         },
                     )
+                    return "failed"
+
+                result = await self.repository.with_preparation_lock(
+                    review_id=review_id,
+                    source_id=source_id,
+                    callback=run_preparation,
+                )
+                await self.repository.mark_job_finished(
+                    review_id=review_id,
+                    source_id=source_id,
+                    status=result,
+                    error=None,
+                )
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception as exc:
                 self.logger.exception(
                     "Review preparation job failed",
                     extra={
@@ -123,6 +143,12 @@ class ReviewPreparationQueue:
                         "source_id": source_id,
                         "source_kind": source_kind,
                     },
+                )
+                await self.repository.mark_job_finished(
+                    review_id=review_id,
+                    source_id=source_id,
+                    status="failed",
+                    error=str(exc)[:500],
                 )
             finally:
                 self._queued.discard((review_id, source_id))
