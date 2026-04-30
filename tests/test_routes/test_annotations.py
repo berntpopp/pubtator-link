@@ -118,6 +118,32 @@ class TestAnnotationRoutes:
         assert "10,000 characters" in response.json()["detail"]
 
     @pytest.mark.parametrize(
+        ("text", "expected_estimated_time"),
+        [
+            ("x" * 1000, 45),
+            ("x" * 5000, 90),
+        ],
+    )
+    @patch.object(PubTator3Client, "submit_text_annotation")
+    def test_submit_text_annotation_estimated_time_boundaries(
+        self,
+        mock_submit,
+        test_client,
+        text,
+        expected_estimated_time,
+    ):
+        """Test text annotation estimated time for medium and large text."""
+        mock_submit.return_value = MOCK_TEXT_ANNOTATION_SUBMIT_RESPONSE
+
+        response = test_client.post(
+            "/api/annotations/submit",
+            params={"text": text, "bioconcepts": "Gene"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["estimated_time"] == expected_estimated_time
+
+    @pytest.mark.parametrize(
         ("exception", "expected_status", "expected_detail"),
         [
             (ValueError("bad bioconcept"), 400, "bad bioconcept"),
@@ -157,6 +183,13 @@ class TestAnnotationRoutes:
         assert data["success"] is True
         assert data["session_id"] == "0DA64A2FE4D635D5820C"
         assert data["status"] == "completed"
+
+    def test_get_annotation_results_rejects_short_session_id(self, test_client):
+        """Test annotation results rejects invalid short session IDs before client calls."""
+        response = test_client.get("/api/annotations/results/short")
+
+        assert response.status_code == 422
+        assert response.json()["detail"] == "Invalid session ID format"
 
     @pytest.mark.parametrize("status", ["submitted", "processing"])
     @patch.object(PubTator3Client, "retrieve_text_annotation")
