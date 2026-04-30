@@ -64,6 +64,30 @@ class ServerSettings(BaseSettings):
         default=True, description="Enable cache management endpoints"
     )
 
+    # Review-scoped re-RAG POC
+    database_url: str | None = Field(default=None, description="PostgreSQL database URL")
+    review_prep_concurrency: int = Field(
+        default=2, ge=1, le=8, description="Concurrent review evidence preparation jobs"
+    )
+    review_prep_document_timeout_seconds: int = Field(
+        default=60, ge=5, le=600, description="Per-document preparation timeout"
+    )
+    review_prep_source_timeout_seconds: int = Field(
+        default=20, ge=2, le=120, description="Per-source retrieval timeout"
+    )
+    review_prep_pdf_max_bytes: int = Field(
+        default=50 * 1024 * 1024, ge=1024, description="Maximum downloaded PDF bytes"
+    )
+    review_prep_text_max_bytes: int = Field(
+        default=10 * 1024 * 1024,
+        ge=1024,
+        description="Maximum downloaded text/XML/HTML bytes",
+    )
+    allow_http_urls: bool = Field(
+        default=False, description="Allow http URLs for local curated URL development"
+    )
+    enable_docling: bool = Field(default=False, description="Enable Docling PDF fallback")
+
     @field_validator("mcp_path")
     @classmethod
     def validate_mcp_path(cls, v: str) -> str:
@@ -164,6 +188,33 @@ class CacheConfig:
     )
 
 
+@dataclass(frozen=True)
+class ReviewReragConfig:
+    """Review-scoped re-RAG POC configuration."""
+
+    database_url: str | None
+    prep_concurrency: int
+    document_timeout_seconds: int
+    source_timeout_seconds: int
+    pdf_max_bytes: int
+    text_max_bytes: int
+    allow_http_urls: bool
+    enable_docling: bool
+
+    @classmethod
+    def from_settings(cls, server_settings: ServerSettings) -> "ReviewReragConfig":
+        return cls(
+            database_url=server_settings.database_url,
+            prep_concurrency=server_settings.review_prep_concurrency,
+            document_timeout_seconds=server_settings.review_prep_document_timeout_seconds,
+            source_timeout_seconds=server_settings.review_prep_source_timeout_seconds,
+            pdf_max_bytes=server_settings.review_prep_pdf_max_bytes,
+            text_max_bytes=server_settings.review_prep_text_max_bytes,
+            allow_http_urls=server_settings.allow_http_urls,
+            enable_docling=server_settings.enable_docling,
+        )
+
+
 # Global settings instance
 settings = ServerSettings()
 
@@ -183,3 +234,5 @@ cache_config = CacheConfig(
     size=settings.cache_size,
     ttl=settings.cache_ttl,
 )
+
+review_rerag_config = ReviewReragConfig.from_settings(settings)
