@@ -323,6 +323,7 @@ async def test_list_review_sources_aggregates_jobs_attempts_passages_and_samples
             sections=["abstract"],
             passage_count=2,
             char_count=30,
+            coverage="abstract_only",
             sample_passages=[
                 ReviewPassageSample(
                     passage_id="p1",
@@ -341,6 +342,31 @@ async def test_list_review_sources_aggregates_jobs_attempts_passages_and_samples
     assert summary_args == ("review-1", ["111"])
     assert "row_number()" in sample_sql.lower()
     assert sample_args == ("review-1", ["111"], ["111"], 1)
+
+
+@pytest.mark.asyncio
+async def test_list_review_sources_infers_full_text_coverage_from_sections() -> None:
+    connection = FakeConnection()
+    connection.fetched_row_batches = [
+        [
+            {
+                "source_id": "111",
+                "pmid": "111",
+                "source_kind": "pmc_bioc",
+                "job_status": "complete",
+                "error": None,
+                "attempt_statuses": ["success"],
+                "sections": ["abstract", "results"],
+                "passage_count": 2,
+                "char_count": 300,
+            }
+        ]
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    sources = await repository.list_review_sources("review-1")
+
+    assert sources[0].coverage == "full_text"
 
 
 @pytest.mark.asyncio

@@ -15,6 +15,7 @@ from pubtator_link.models.review_rerag import (
     ReviewPassageRow,
     ReviewPassageSample,
     ReviewSourceSummary,
+    SourceCoverage,
 )
 
 
@@ -682,17 +683,45 @@ def _passage_from_row(row: Mapping[str, Any]) -> ReviewPassageRow:
 
 
 def _source_summary_from_row(row: Mapping[str, Any]) -> ReviewSourceSummary:
+    attempt_statuses = list(row["attempt_statuses"] or [])
+    sections = list(row["sections"] or [])
     return ReviewSourceSummary(
         source_id=row["source_id"],
         pmid=row["pmid"],
         source_kind=row["source_kind"],
         job_status=row["job_status"],
         error=row["error"],
-        attempt_statuses=list(row["attempt_statuses"] or []),
-        sections=list(row["sections"] or []),
+        attempt_statuses=attempt_statuses,
+        sections=sections,
         passage_count=int(row["passage_count"] or 0),
         char_count=int(row["char_count"] or 0),
+        coverage=_infer_source_coverage(
+            source_kind=row["source_kind"],
+            sections=sections,
+            attempt_statuses=attempt_statuses,
+        ),
     )
+
+
+def _infer_source_coverage(
+    *,
+    source_kind: str,
+    sections: Sequence[str],
+    attempt_statuses: Sequence[str],
+) -> SourceCoverage:
+    if source_kind in {"curated_pdf", "curated_html", "docling_pdf"}:
+        return "curated_url"
+    lowered_sections = {section.strip().lower() for section in sections}
+    lowered_attempts = " ".join(attempt_statuses).lower()
+    if any(section not in {"title", "abstract"} for section in lowered_sections):
+        return "full_text"
+    if "full_text" in lowered_attempts and "success" in lowered_attempts:
+        return "full_text"
+    if "abstract" in lowered_sections:
+        return "abstract_only"
+    if "title" in lowered_sections:
+        return "title_only"
+    return "unknown"
 
 
 def _failed_source_summary_from_row(row: Mapping[str, Any]) -> FailedSourceSummary:
