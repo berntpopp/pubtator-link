@@ -17,37 +17,29 @@ Updated: 2026-05-01
 - [x] Optional Europe PMC fallback.
 - [x] Public `candidate_fast` prepare mode removal.
 
-## Remaining Roadmap
+## Completed Roadmap
 
 The scientific-auditability and source-resilience implementation completed the
 highest-risk reliability and traceability gaps: preflight source coverage,
 structured resolver attempts, retry/backoff, bounded batch/preflight
-concurrency, passage addressability, and the audit bundle foundation.
+concurrency, passage addressability, and the audit bundle foundation. The
+remaining roadmap implementation added typed MCP output schemas, review index
+inventory and TTL cleanup, user-supplied GRADE-style evidence certainty storage,
+optional Europe PMC fallback, and public removal of the no-op `candidate_fast`
+prepare mode.
 
-The next recommended implementation sequence is:
+Residual future opportunities:
 
-1. Typed MCP output schemas for high-use tools plus review index inventory and
-   TTL cleanup.
-2. GRADE-style evidence certainty storage.
-3. Optional Europe PMC fallback plus public `candidate_fast` cleanup.
-
-Typed schemas should come first because they improve client reliability without
-changing the scientific evidence workflow. Review index inventory and TTL cleanup
-belong in the same first phase because hosted deployments need predictable
-storage visibility before adding more persisted review metadata. The
-`candidate_fast` recommendation is public removal for now, not implementation,
-because the current index endpoint accepts explicit PMIDs and curated URLs and
-does not have the search-candidate context needed for real fast screening.
-
-Open follow-up items:
-
-1. Add typed MCP output schemas for high-use tools.
-2. Add review index inventory and TTL cleanup.
-3. Add GRADE-style evidence certainty storage.
-4. Add optional Europe PMC fallback behind explicit configuration and rate
-   limits.
-5. Remove public `candidate_fast` prepare mode unless a later design adds a real
-   search-candidate screening workflow.
+1. Design a real search-candidate screening workflow if fast candidate indexing
+   is still needed. It should be a separate endpoint with explicit search
+   candidate inputs, measurable selection semantics, and latency targets.
+2. Add richer audit export formats such as Markdown and RIS/BibTeX if downstream
+   review tooling needs them.
+3. Add deterministic claim-support records if clients need stored
+   claim-to-passage mappings beyond the current certainty records and audit
+   bundle.
+4. Add `expand_review_passage` only if exact passage and neighboring-passage
+   lookups are not enough for users.
 
 ## Executive Summary
 
@@ -58,10 +50,10 @@ workflow combines compact passage packing, stable citation keys, source coverage
 labels, resolver attempts, retry diagnostics, bounded concurrency, and
 review-scoped audit bundles.
 
-The next improvement should not be another broad tool-surface rewrite. The
-highest leverage remaining work is to make high-use MCP responses more
-machine-verifiable through typed output schemas, then add review index lifecycle
-operations for hosted deployments.
+The remaining work should not be another broad tool-surface rewrite. Higher
+leverage follow-ups are targeted workflow additions driven by observed use:
+candidate screening, richer audit export formats, claim-support records, or
+larger passage expansion.
 
 ## Current Strengths
 
@@ -633,7 +625,7 @@ GRADE/PRISMA-aligned metadata must not imply the backend has performed expert
 appraisal. Mitigation: store and export judgments; do not compute clinical
 recommendations.
 
-## Prioritized Roadmap
+## Implemented Roadmap
 
 1. Coverage preflight, resolver attempts, and coverage reasons.
 2. Retry/backoff and transient failure transparency.
