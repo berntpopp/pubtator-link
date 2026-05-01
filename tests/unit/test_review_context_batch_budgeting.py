@@ -109,3 +109,21 @@ def test_merge_batch_context_scarcity_first_prioritizes_scarcer_coverage() -> No
 
     assert [passage.passage_id for passage in merged.passages] == ["abstract"]
     assert any(drop.reason == "max_total_passages_exceeded" for drop in merged.dropped)
+
+
+def test_merge_batch_context_drops_when_response_budget_would_be_exceeded() -> None:
+    request = RetrieveReviewContextBatchRequest(
+        queries=["q1"],
+        max_total_passages=5,
+        max_chars=1000,
+        max_response_chars=2000,
+    )
+
+    merged = merge_batch_context(
+        request=request,
+        query_results=[_result("q1", [_passage("p1", "x" * 1000)])],
+        coverage_by_source={},
+    )
+
+    assert merged.passages == []
+    assert merged.dropped[0].reason == "response_char_budget_exceeded"
