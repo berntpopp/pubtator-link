@@ -82,3 +82,30 @@ def test_merge_batch_context_source_fair_represents_sources_before_overflow() ->
     assert merged.source_budget_summaries[0].first_pass_eligible is True
     assert merged.source_budget_summaries[1].candidate_count == 1
     assert merged.source_budget_summaries[1].returned_count == 1
+
+
+def test_merge_batch_context_scarcity_first_prioritizes_scarcer_coverage() -> None:
+    request = RetrieveReviewContextBatchRequest(
+        queries=["q1"],
+        budget_strategy="scarcity_first",
+        max_total_passages=1,
+        max_chars=1000,
+        min_passages_per_source=1,
+    )
+
+    merged = merge_batch_context(
+        request=request,
+        query_results=[
+            _result(
+                "q1",
+                [
+                    _passage("full", "full text", pmid="1"),
+                    _passage("abstract", "abstract text", pmid="2"),
+                ],
+            )
+        ],
+        coverage_by_source={"1": "full_text", "2": "abstract_only"},
+    )
+
+    assert [passage.passage_id for passage in merged.passages] == ["abstract"]
+    assert any(drop.reason == "max_total_passages_exceeded" for drop in merged.dropped)
