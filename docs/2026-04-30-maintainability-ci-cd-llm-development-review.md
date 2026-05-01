@@ -7,9 +7,9 @@ Latest update: 2026-05-01
 ## Executive Summary
 
 PubTator-Link now has a strong enforceable foundation for local and remote
-quality gates. The foundation quality gate and coverage-headroom work have been
-merged into `main` and addressed the highest-priority gaps from the initial
-review:
+quality gates. The foundation quality gate, coverage-headroom work, MCP facade
+domain split, and review re-RAG modularization have been merged into `main` and
+addressed the highest-priority gaps from the initial review:
 
 - GitHub Actions now cover CI, Docker validation, CodeQL, and dependency review.
 - Coverage is enforced with `fail_under = 80`.
@@ -17,15 +17,19 @@ review:
   loop fixture and resetting async-lru loop metadata in tests.
 - FastAPI runtime resources are now app-scoped through lifespan-owned
   `AppResources`, with fallback globals retained only for non-request paths.
+- MCP registration has been split into focused metadata and tool-domain modules,
+  with `facade.py` reduced to orchestration.
+- Review re-RAG internals now have separate mapper, ranking, packing,
+  diagnostics, and batch-budgeting modules with focused tests.
 - PR quality checklist and branch protection guidance now exist.
 - Root configuration clutter was reduced by removing stale Flake8 config and
   moving the Claude Desktop example into `docs/examples/`.
 
-The current bottleneck is no longer missing automation or coverage headroom.
-The next maintainability gains should come from turning the documented GitHub
-settings into enforced branch protection, then reducing large, high-change
-modules so MCP/review re-RAG changes become smaller, safer, and easier for LLM
-coding agents to execute.
+The current bottleneck is no longer missing automation, coverage headroom, or
+the largest MCP/review module boundaries. The next maintainability gains should
+come from turning the documented GitHub settings into enforced branch
+protection, adding CLI smoke coverage for more margin, and hardening release and
+operability workflows.
 
 ## Current Verification Baseline
 
@@ -42,18 +46,18 @@ make test-cov
 
 Observed results:
 
-- `make format`: 76 files unchanged.
-- `make lint`: all checks passed.
-- `make typecheck`: success, 40 source files.
-- `make test`: 357 passed, 2 skipped.
-- `make ci-local`: 357 passed, 2 skipped.
-- `make test-cov`: 357 passed, 2 skipped, total coverage 80.03%, threshold 80%.
+- `make ci-local`: 370 passed, 2 skipped.
+- `make test-cov`: 370 passed, 2 skipped, total coverage 80.78%, threshold 80%.
 
 Additional verification during the foundation-gate work remains relevant:
 
 - `make docker-prod-config`: passed.
 - `make docker-npm-config`: passed.
 - `docker build -f docker/Dockerfile -t pubtator-link:ci .`: passed.
+- Dev Docker stack rebuilt and restarted with `make docker-down`,
+  `make docker-build`, and `make docker-up`.
+- Docker dev app health check reached healthy on `localhost:8011`; Postgres was
+  healthy on host port `55432`.
 
 The two skipped tests are PostgreSQL integration tests that require
 `PUBTATOR_LINK_TEST_DATABASE_URL`.
@@ -89,11 +93,11 @@ References:
 | --- | ---: | --- |
 | Local developer workflow | 9/10 | Strong `uv`, `Makefile`, Ruff, mypy, pytest, pre-commit, `.editorconfig`, `.python-version`, `AGENTS.md`, `CLAUDE.md`, and verified local commands. Stale `.flake8` was removed. |
 | CI/CD automation | 8/10 | CI, Docker, and security workflows now exist. Remaining gaps: release workflow, action pinning policy, image scanning, SBOM, and published artifacts. |
-| Test health | 8/10 | `make test` passes with 357 passed, 2 skipped. Pytest event-loop and async-lru lifecycle warnings were removed. PostgreSQL integration tests still need an opt-in CI service if they should be required. |
-| Coverage depth | 8/10 | Coverage is enforced at 80% and currently reports 80.03%. Annotation routes, server manager branches, MCP resources, and MCP facade characterization improved. The margin is still narrow, and CLI remains intentionally counted but uncovered. |
-| Architecture and modularity | 7/10 | App resource ownership is much cleaner after `AppResources`. Route/service/repository layering is solid. Main remaining risk is large MCP and review re-RAG modules. |
-| LLM coding friendliness | 8/10 | Agent instructions, plans/specs, Make targets, PR checklist, branch protection docs, and CI guardrails are strong. Large files still increase edit risk. |
-| DRY/KISS/SOLID | 7/10 | App lifecycle is more explicit and less global. Remaining duplication and broad contracts appear mainly in MCP adapters and review re-RAG internals. |
+| Test health | 8/10 | `make ci-local` passes with 370 passed, 2 skipped. Pytest event-loop and async-lru lifecycle warnings were removed. PostgreSQL integration tests still need an opt-in CI service if they should be required. |
+| Coverage depth | 8/10 | Coverage is enforced at 80% and currently reports 80.78%. Annotation routes, server manager branches, MCP resources, MCP facade characterization, and review helper tests improved. The margin is better but still narrow, and CLI remains intentionally counted but uncovered. |
+| Architecture and modularity | 8/10 | App resource ownership is much cleaner after `AppResources`. MCP registration is domain-split, and review re-RAG helpers now have smaller focused modules. `full_text_preparation.py` and CLI remain larger future candidates. |
+| LLM coding friendliness | 9/10 | Agent instructions, plans/specs, Make targets, PR checklist, branch protection docs, CI guardrails, and smaller MCP/review modules now give agents clearer edit boundaries. |
+| DRY/KISS/SOLID | 8/10 | App lifecycle is more explicit and less global. MCP and review re-RAG responsibilities are better separated into focused modules with tests. |
 | Production readiness | 7/10 | Docker hardening, health checks, Compose validation, and image build checks are in place. Missing release promotion, readiness checks, metrics, SBOM, and vulnerability scanning. |
 | Security posture | 7/10 | URL safety, Docker controls, CodeQL, dependency review, and least-privilege workflow permissions are now present. Action SHA pinning and container scanning remain. |
 | Observability and operability | 5/10 | Structured logging and `/health` exist. Metrics, readiness, request IDs, tracing, dashboards, and runbooks are still missing. |
@@ -200,6 +204,46 @@ Impact:
 - Root-discovered files such as `.editorconfig`, `.pre-commit-config.yaml`, and
   `.python-version` remain in place where tools expect them.
 
+### 7. MCP Registration Is Domain-Split
+
+`pubtator_link/mcp/facade.py` is now orchestration-only. Registration logic was
+split into:
+
+- `pubtator_link/mcp/annotations.py`
+- `pubtator_link/mcp/compat.py`
+- `pubtator_link/mcp/metadata.py`
+- `pubtator_link/mcp/tools/literature.py`
+- `pubtator_link/mcp/tools/publications.py`
+- `pubtator_link/mcp/tools/text_annotations.py`
+- `pubtator_link/mcp/tools/review.py`
+
+Impact:
+
+- Public MCP behavior remains characterized by tests.
+- New MCP tools can be added in smaller domain files.
+- Private FastMCP inspection compatibility is isolated in one adapter.
+
+### 8. Review re-RAG Internals Are Modularized
+
+Review re-RAG internals were split while preserving REST, MCP, and model
+behavior:
+
+- `pubtator_link/repositories/review_rerag_mappers.py`
+- `pubtator_link/services/review_context/ranking.py`
+- `pubtator_link/services/review_context/packing.py`
+- `pubtator_link/services/review_context/diagnostics.py`
+- `pubtator_link/services/review_context/batch_budgeting.py`
+
+Focused tests now cover mapper conversion, ranking order, packing edge cases,
+diagnostic summaries, and batch merge deduplication.
+
+Impact:
+
+- `ReviewContextService` is closer to a public orchestration facade.
+- Repository SQL execution is separated from row mapping.
+- Ranking, packing, diagnostics, and batch budget behavior can be tested and
+  changed independently.
+
 ## Remaining Key Findings
 
 ### 1. Branch Protection Is Documented But Not Yet Enforced
@@ -226,7 +270,7 @@ Recommended next move:
 
 ### 2. Coverage Is Better But Still Has Thin Margin
 
-Current coverage is 80.03% with `fail_under = 80`.
+Current coverage is 80.78% with `fail_under = 80`.
 
 Impact:
 
@@ -245,51 +289,30 @@ Recommended next move:
   `fail_under` again immediately.
 - Consider the next ratchet only after total coverage is consistently above 82%.
 
-### 3. MCP Facade Remains Too Large
-
-`pubtator_link/mcp/facade.py` still centralizes server creation, tool
-registration, annotations, resources, prompts, and compatibility inspection.
-
-Impact:
-
-- Tool additions create broad merge conflict risk.
-- LLM agents must edit a high-context file for small domain changes.
-- Private FastMCP compatibility logic is still a localized upgrade risk.
-
-Priority: P1.
-
-Recommended direction:
-
-- Split tools by domain while preserving public tool names and schemas.
-- Isolate private FastMCP inspection code in one compatibility module.
-- Add tests that lock public MCP tool names, resource URIs, and prompt names.
-
-### 4. Review re-RAG Internals Need Smaller Boundaries
+### 3. Remaining Large Modules Are Now More Targeted
 
 Large modules remain:
 
-- `pubtator_link/services/review_context_service.py`
-- `pubtator_link/repositories/review_rerag.py`
 - `pubtator_link/services/full_text_preparation.py`
+- `pubtator_link/cli.py`
 
 Impact:
 
-- Harder review and higher regression risk.
-- Less direct unit testing around ranking, packing, diagnostics, and row
-  mapping.
-- More difficult for LLM coding agents to make focused edits.
+- Remaining large-file risk is narrower than before.
+- Full-text preparation still mixes parsing, fallback behavior, and passage
+  construction.
+- CLI remains counted in coverage but has little direct smoke coverage.
 
 Priority: P1.
 
 Recommended direction:
 
-- Extract pure context packing functions.
-- Extract reranking and budget strategy.
-- Extract diagnostics construction.
-- Extract repository row mapping helpers.
-- Keep public REST/MCP behavior stable during the split.
+- Add CLI smoke tests before further coverage ratchets.
+- Split full-text preparation only when making functional changes there.
+- Add broader batch-budgeting tests for `source_fair`, `scarcity_first`, and
+  response-budget edge cases.
 
-### 5. Production Operability Is Still Basic
+### 4. Production Operability Is Still Basic
 
 The app has structured logging and `/health`, but not full production
 operability.
@@ -304,7 +327,7 @@ Recommended direction:
 - Add metrics or OpenTelemetry instrumentation.
 - Add runbook documentation for deploy, rollback, and incident checks.
 
-### 6. Release Security Is Not Complete
+### 5. Release Security Is Not Complete
 
 CI security exists, but release security is still early.
 
@@ -336,28 +359,7 @@ Exit criteria:
 
 - `main` cannot be updated without the new CI/Docker/security gates.
 
-### Phase 2: Split MCP By Domain
-
-Target time: 1-2 days.
-
-Actions:
-
-1. Create a spec and plan under `docs/superpowers/specs/` and
-   `docs/superpowers/plans/`.
-2. Add or reuse characterization tests for current MCP tool names, resources,
-   prompts, and schema-relevant metadata.
-3. Split tool registration into domain modules.
-4. Move private FastMCP inspection compatibility into one small module.
-5. Keep `facade.py` as an orchestration layer.
-6. Preserve public tool names.
-
-Exit criteria:
-
-- Adding a new MCP tool requires touching a small domain file.
-- Existing MCP tests and characterization tests pass.
-- Public MCP tool/resource/prompt names are unchanged.
-
-### Phase 3: Add CLI Smoke Coverage
+### Phase 2: Add CLI Smoke Coverage
 
 Target time: 0.5 day.
 
@@ -373,25 +375,23 @@ Exit criteria:
 - CLI remains included in coverage.
 - Total coverage has practical margin above 80%.
 
-### Phase 4: Split Review re-RAG Internals
+### Phase 3: Broaden Review Batch Budgeting Tests
 
-Target time: 2-4 days.
+Target time: 0.5-1 day.
 
 Actions:
 
-1. Extract context packing into pure functions/classes.
-2. Extract ranking/budget strategy.
-3. Extract diagnostics assembly.
-4. Extract row mappers from repository SQL execution.
-5. Add focused tests for each extracted unit.
+1. Add tests for `source_fair` first-pass source representation.
+2. Add tests for `scarcity_first` ordering by source coverage.
+3. Add tests for `response_char_budget_exceeded`.
+4. Add tests for diagnostics-only response mode.
 
 Exit criteria:
 
-- Large files shrink.
-- Regression tests protect current review output shape.
-- REST and MCP behavior remains stable.
+- Batch-budgeting behavior is locked beyond duplicate-passages.
+- Future retrieval tuning can proceed with lower regression risk.
 
-### Phase 5: Add Release And Operability Hardening
+### Phase 4: Add Release And Operability Hardening
 
 Target time: 1-3 days.
 
@@ -420,9 +420,10 @@ Exit criteria:
 | P1 | Move dependencies to app-scoped resources | Done | Reduces lifecycle bugs and test leakage. |
 | P1 | Add coverage threshold | Done | Prevents silent coverage regression. |
 | P1 | Raise coverage threshold to 80% | Done | Gives the threshold a stronger baseline. |
-| P1 | Split MCP facade by domain | Next | Reduces merge conflicts and LLM edit risk. |
+| P1 | Split MCP facade by domain | Done | Reduces merge conflicts and LLM edit risk. |
 | P1 | Add CLI smoke coverage | Next | Keeps coverage honest while improving threshold margin. |
-| P1 | Split re-RAG packing/ranking/diagnostics | Next | Improves testability and modularity. |
+| P1 | Split re-RAG packing/ranking/diagnostics | Done | Improves testability and modularity. |
+| P1 | Broaden batch-budgeting tests | Next | Locks source-fair, scarcity-first, and response-budget behavior. |
 | P1 | Add architecture guide for agents | Next | Gives LLMs clearer boundaries. |
 | P2 | Add image scanning and SBOM | Later | Improves production release safety. |
 | P2 | Add metrics/readiness/tracing | Later | Improves operability. |
@@ -432,15 +433,16 @@ Exit criteria:
 PubTator-Link has moved from "good local practices but weak enforcement" to a
 much stronger foundation: local gates, remote CI, 80% coverage enforcement,
 Docker validation, security checks, PR guidance, cleaner root configuration,
-and clearer runtime ownership.
+clearer runtime ownership, domain-split MCP registration, and modular review
+re-RAG internals.
 
 The next quality jump should focus on reducing change risk:
 
 1. Enable branch protection so the new workflows matter.
-2. Split the MCP facade by domain.
-3. Add CLI smoke coverage to create real margin above the 80% gate.
-4. Split review re-RAG internals into smaller tested units.
-5. Add release and operability hardening when deployment is the priority.
+2. Add CLI smoke coverage to create real margin above the 80% gate.
+3. Broaden review batch-budgeting tests for source-fair and scarcity-first
+   behavior.
+4. Add release and operability hardening when deployment is the priority.
 
 That sequence keeps momentum high: it protects `main`, gives LLM agents faster
 feedback, and makes future feature work smaller and safer.
