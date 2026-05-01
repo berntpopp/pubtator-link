@@ -127,3 +127,22 @@ def test_merge_batch_context_drops_when_response_budget_would_be_exceeded() -> N
 
     assert merged.passages == []
     assert merged.dropped[0].reason == "response_char_budget_exceeded"
+
+
+def test_merge_batch_context_diagnostics_mode_skips_merged_passages() -> None:
+    request = RetrieveReviewContextBatchRequest(
+        queries=["q1"],
+        response_mode="diagnostics",
+        max_total_passages=5,
+        max_chars=1000,
+    )
+
+    merged = merge_batch_context(
+        request=request,
+        query_results=[_result("q1", [_passage("p1", "one")])],
+        coverage_by_source={},
+    )
+
+    assert merged.passages == []
+    assert merged.query_summaries[0].query == "q1"
+    assert merged.query_summaries[0].returned_count == 0
