@@ -29,6 +29,7 @@ CoverageReason = Literal[
     "unknown",
 ]
 BudgetStrategy = Literal["query_fair", "source_fair", "scarcity_first"]
+EvidenceCertaintyLabel = Literal["high", "moderate", "low", "very_low", "not_rated"]
 ZeroResultReason = Literal[
     "review_not_indexed",
     "no_candidate_matches",
@@ -423,6 +424,7 @@ class ReviewAuditBundle(BaseModel):
     resolver_attempts: list[ResolverAttemptSummary]
     search_runs: list[ReviewSearchRun] = Field(default_factory=list)
     retrieval_runs: list[ReviewRetrievalRun] = Field(default_factory=list)
+    evidence_certainty: list["EvidenceCertaintyRecord"] = Field(default_factory=list)
     passage_ids: list[str]
     stable_citation_keys: dict[str, str]
 
@@ -468,6 +470,56 @@ class DeleteReviewIndexResponse(BaseModel):
 class CleanupExpiredReviewIndexesResponse(BaseModel):
     success: bool = True
     deleted_review_ids: list[str] = Field(default_factory=list)
+
+
+class UpsertEvidenceCertaintyRequest(BaseModel):
+    """User/client-supplied GRADE-style certainty judgment."""
+
+    outcome: str = Field(min_length=1)
+    question: str | None = None
+    study_design: str | None = None
+    risk_of_bias_notes: str | None = None
+    inconsistency_notes: str | None = None
+    indirectness_notes: str | None = None
+    imprecision_notes: str | None = None
+    publication_bias_notes: str | None = None
+    overall_certainty: EvidenceCertaintyLabel = "not_rated"
+    certainty_rationale: str | None = None
+    passage_ids: list[str] = Field(default_factory=list)
+    created_by: str | None = None
+    validate_passages: bool = False
+
+
+class EvidenceCertaintyRecord(BaseModel):
+    """Stored user/client-supplied certainty judgment."""
+
+    certainty_id: str
+    review_id: str
+    outcome: str
+    question: str | None = None
+    study_design: str | None = None
+    risk_of_bias_notes: str | None = None
+    inconsistency_notes: str | None = None
+    indirectness_notes: str | None = None
+    imprecision_notes: str | None = None
+    publication_bias_notes: str | None = None
+    overall_certainty: EvidenceCertaintyLabel = "not_rated"
+    certainty_rationale: str | None = None
+    passage_ids: list[str] = Field(default_factory=list)
+    unresolved_passage_ids: list[str] = Field(default_factory=list)
+    created_by: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class EvidenceCertaintyResponse(BaseModel):
+    success: bool = True
+    record: EvidenceCertaintyRecord
+
+
+class ListEvidenceCertaintyResponse(BaseModel):
+    success: bool = True
+    records: list[EvidenceCertaintyRecord] = Field(default_factory=list)
 
 
 class ReviewSourceSummary(BaseModel):

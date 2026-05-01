@@ -100,3 +100,26 @@ create table if not exists review_audit_events (
 
 create index if not exists review_audit_events_review_id_idx
     on review_audit_events(review_id, created_at);
+
+create table if not exists review_evidence_certainty (
+    certainty_id uuid primary key,
+    review_id text not null references reviews(review_id),
+    outcome text not null,
+    question text,
+    study_design text,
+    risk_of_bias_notes text,
+    inconsistency_notes text,
+    indirectness_notes text,
+    imprecision_notes text,
+    publication_bias_notes text,
+    overall_certainty text not null,
+    certainty_rationale text,
+    passage_ids text[] not null default '{}',
+    unresolved_passage_ids text[] not null default '{}',
+    created_by text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+create index if not exists review_evidence_certainty_review_id_idx
+    on review_evidence_certainty(review_id, updated_at);

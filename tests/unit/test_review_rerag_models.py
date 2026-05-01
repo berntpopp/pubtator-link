@@ -6,6 +6,7 @@ from pubtator_link.models.review_rerag import (
     ContextPack,
     ContextPassage,
     EvidenceTier,
+    EvidenceCertaintyRecord,
     IndexReviewEvidenceRequest,
     ListReviewIndexesResponse,
     McpReviewAuditBundleResponse,
@@ -18,6 +19,7 @@ from pubtator_link.models.review_rerag import (
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
     SourceCoverageHint,
+    UpsertEvidenceCertaintyRequest,
     coverage_to_evidence_tier,
     normalize_section,
     passage_id_for_pmid,
@@ -240,6 +242,45 @@ def test_list_review_indexes_response_wraps_inventory_items() -> None:
 
     assert response.success is True
     assert response.indexes == []
+
+
+def test_evidence_certainty_request_stores_grade_domains_without_computing() -> None:
+    request = UpsertEvidenceCertaintyRequest(
+        outcome="FMF attack recurrence",
+        question="Does colchicine reduce attacks in FMF?",
+        study_design="randomized trial",
+        risk_of_bias_notes="Allocation concealment unclear in one study.",
+        inconsistency_notes="Effects point in same direction.",
+        indirectness_notes="Population matches review question.",
+        imprecision_notes="Confidence interval crosses small benefit threshold.",
+        publication_bias_notes="Small-study effects not assessed.",
+        overall_certainty="moderate",
+        certainty_rationale="Downgraded once for imprecision.",
+        passage_ids=["PMID:123:abstract:0"],
+        created_by="client:test",
+    )
+
+    assert request.overall_certainty == "moderate"
+    assert request.passage_ids == ["PMID:123:abstract:0"]
+
+
+def test_evidence_certainty_rejects_empty_outcome() -> None:
+    with pytest.raises(ValidationError):
+        UpsertEvidenceCertaintyRequest(outcome="", overall_certainty="not_rated")
+
+
+def test_evidence_certainty_record_has_stable_identifier() -> None:
+    record = EvidenceCertaintyRecord(
+        certainty_id="00000000-0000-0000-0000-000000000001",
+        review_id="review-1",
+        outcome="Mortality",
+        overall_certainty="low",
+        created_at="2026-05-01T00:00:00Z",
+        updated_at="2026-05-01T00:00:00Z",
+    )
+
+    assert record.review_id == "review-1"
+    assert record.overall_certainty == "low"
 
 
 def test_evidence_tier_derives_from_actual_coverage() -> None:

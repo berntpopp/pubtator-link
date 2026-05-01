@@ -47,3 +47,11 @@ def test_schema_defines_review_audit_events_table() -> None:
 def test_schema_tracks_review_inventory_timestamps() -> None:
     assert "updated_at timestamptz not null default now()" in SCHEMA
     assert "reviews_updated_at_idx" in SCHEMA
+
+
+def test_schema_defines_review_evidence_certainty_table() -> None:
+    assert "create table if not exists review_evidence_certainty" in SCHEMA
+    assert "certainty_id uuid primary key" in SCHEMA
+    assert "overall_certainty text not null" in SCHEMA
+    assert "passage_ids text[] not null default '{}'" in SCHEMA
+    assert "review_evidence_certainty_review_id_idx" in SCHEMA
