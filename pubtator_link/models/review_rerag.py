@@ -427,6 +427,13 @@ class ReviewAuditBundle(BaseModel):
     stable_citation_keys: dict[str, str]
 
 
+class McpReviewAuditBundleResponse(BaseModel):
+    """MCP wrapper preserving the existing audit bundle tool JSON shape."""
+
+    success: bool = True
+    audit_bundle: ReviewAuditBundle
+
+
 class ReviewSourceSummary(BaseModel):
     """Inspection summary for one indexed review source."""
 

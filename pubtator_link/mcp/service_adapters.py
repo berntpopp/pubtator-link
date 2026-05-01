@@ -26,6 +26,7 @@ from pubtator_link.models.review_rerag import (
     BudgetStrategy,
     IndexReviewEvidenceRequest,
     InspectReviewIndexRequest,
+    McpReviewAuditBundleResponse,
     PrepareMode,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
@@ -469,7 +470,7 @@ async def export_review_audit_bundle_impl(
     review_id: str,
 ) -> dict[str, Any]:
     bundle = await service.export_bundle(review_id)
-    return {"success": True, "audit_bundle": bundle.model_dump(mode="json")}
+    return McpReviewAuditBundleResponse(audit_bundle=bundle).model_dump(mode="json")
 
 
 async def retrieve_review_context_impl(

@@ -7,9 +7,12 @@ from pubtator_link.models.review_rerag import (
     ContextPassage,
     EvidenceTier,
     IndexReviewEvidenceRequest,
+    McpReviewAuditBundleResponse,
     PreparationStatus,
     QueryDiagnosticsSummary,
     ResolverAttemptSummary,
+    ReviewAuditBundle,
+    ReviewIndexTotals,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
     SourceCoverageHint,
@@ -192,6 +195,27 @@ def test_resolver_attempt_summary_captures_retry_metadata() -> None:
     assert attempt.attempt_count == 3
     assert attempt.last_status_code == 503
     assert attempt.terminal_reason == "retry_exhausted"
+
+
+def test_mcp_review_audit_bundle_response_preserves_existing_wrapper_shape() -> None:
+    bundle = ReviewAuditBundle(
+        review_id="review-1",
+        generated_at="2026-05-01T00:00:00Z",
+        preparation_status=PreparationStatus(complete=1),
+        totals=ReviewIndexTotals(pmid_count=1, source_count=1, passage_count=0),
+        sources=[],
+        failed_sources=[],
+        coverage_distribution={"full_text": 1},
+        resolver_attempts=[],
+        passage_ids=[],
+        stable_citation_keys={},
+    )
+
+    dumped = McpReviewAuditBundleResponse(audit_bundle=bundle).model_dump(mode="json")
+
+    assert set(dumped) == {"success", "audit_bundle"}
+    assert dumped["success"] is True
+    assert dumped["audit_bundle"]["review_id"] == "review-1"
 
 
 def test_evidence_tier_derives_from_actual_coverage() -> None:

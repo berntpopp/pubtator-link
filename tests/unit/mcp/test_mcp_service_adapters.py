@@ -221,6 +221,7 @@ async def test_export_review_audit_bundle_adapter_returns_bundle() -> None:
         review_id="rev_123",
     )
 
+    assert set(result) == {"success", "audit_bundle"}
     assert result["success"] is True
     assert result["audit_bundle"]["review_id"] == "rev_123"
 
@@ -252,6 +253,7 @@ async def test_index_review_evidence_adapter_returns_lifecycle_guidance() -> Non
 
     assert result["queued"] == 1
     assert result["already_prepared"] == 2
+    assert set(result) >= {"success", "review_id", "preparation_status"}
     assert result["retry_after_ms"] == 5000
     assert "already_prepared" in result["lifecycle_note"]
     assert "inspect_review_index" in result["lifecycle_note"]
@@ -287,6 +289,7 @@ async def test_retrieve_review_context_batch_adapter_calls_service() -> None:
 
     assert result["success"] is True
     assert result["review_id"] == "rev_123"
+    assert set(result) >= {"success", "review_id", "merged_context_pack"}
     assert result["merged_context_pack"]["question"] == "colchicine children"
 
 
