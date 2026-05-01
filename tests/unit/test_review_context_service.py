@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Sequence
 
 import pytest
@@ -179,6 +180,37 @@ class QueryMappedReviewContextRepository(FakeReviewContextRepository):
             )
             for pmid in seen_pmids
         ]
+
+
+class BlockingQueryRepository(QueryMappedReviewContextRepository):
+    def __init__(self, passages_by_query: dict[str, list[ReviewPassageRow]]) -> None:
+        super().__init__(passages_by_query)
+        self.started_queries: list[str] = []
+        self.three_started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def search_passages(
+        self,
+        review_id: str,
+        query: str,
+        *,
+        entity_ids: Sequence[str] | None = None,
+        pmids: Sequence[str] | None = None,
+        sections: Sequence[str] | None = None,
+        limit: int = 8,
+    ) -> list[ReviewPassageRow]:
+        self.started_queries.append(query)
+        if len(self.started_queries) >= 3:
+            self.three_started.set()
+        await self.release.wait()
+        return await super().search_passages(
+            review_id,
+            query,
+            entity_ids=entity_ids,
+            pmids=pmids,
+            sections=sections,
+            limit=limit,
+        )
 
 
 def _passage(
@@ -514,6 +546,40 @@ async def test_batch_retrieval_deduplicates_and_preserves_per_query_diagnostics(
     assert response.merged_context_pack.citation_map == {"S1": "p1", "S2": "p2"}
     assert response.budget is not None
     assert response.budget.text_chars == len("first passage") + len("second passage")
+
+
+@pytest.mark.asyncio
+async def test_batch_retrieval_runs_queries_with_bounded_concurrency_and_preserves_order() -> None:
+    repository = BlockingQueryRepository(
+        {
+            "q1": [_passage("p1", pmid="111", text="one", lexical_rank=9.0)],
+            "q2": [_passage("p2", pmid="222", text="two", lexical_rank=9.0)],
+            "q3": [_passage("p3", pmid="333", text="three", lexical_rank=9.0)],
+        }
+    )
+    service = ReviewContextService(repository, retrieval_concurrency=3)
+
+    task = asyncio.create_task(
+        service.retrieve_context_batch(
+            "review-1",
+            RetrieveReviewContextBatchRequest(
+                queries=["q1", "q2", "q3"],
+                max_passages_per_query=1,
+                max_total_passages=3,
+            ),
+        )
+    )
+    await asyncio.wait_for(repository.three_started.wait(), timeout=0.5)
+    repository.release.set()
+    response = await task
+
+    assert repository.started_queries == ["q1", "q2", "q3"]
+    assert [summary.query for summary in response.query_summaries] == ["q1", "q2", "q3"]
+    assert [passage.passage_id for passage in response.merged_context_pack.passages] == [
+        "p1",
+        "p2",
+        "p3",
+    ]
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from pubtator_link.services.source_preflight import SourcePreflightService
@@ -61,3 +63,31 @@ async def test_preflight_isolates_upstream_timeout_as_failed_attempt() -> None:
     assert len(hints[0].resolver_attempts) == 1
     assert hints[0].resolver_attempts[0].source_kind == "pmc_id_converter"
     assert hints[0].resolver_attempts[0].status == "failed"
+
+
+@pytest.mark.asyncio
+async def test_preflight_limits_concurrent_pmid_probes() -> None:
+    in_flight = 0
+    max_in_flight = 0
+
+    async def id_converter(_pmid: str) -> dict[str, str]:
+        nonlocal in_flight, max_in_flight
+        in_flight += 1
+        max_in_flight = max(max_in_flight, in_flight)
+        await asyncio.sleep(0)
+        in_flight -= 1
+        return {}
+
+    async def abstract_available(_pmid: str) -> bool:
+        return True
+
+    service = SourcePreflightService(
+        id_converter=id_converter,
+        pubtator_abstract_available=abstract_available,
+        preflight_concurrency=2,
+    )
+
+    hints = await service.preflight_pmids(["1", "2", "3", "4"])
+
+    assert [hint.pmid for hint in hints] == ["1", "2", "3", "4"]
+    assert max_in_flight == 2

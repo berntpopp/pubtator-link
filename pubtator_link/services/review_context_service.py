@@ -1,5 +1,6 @@
 """Service for retrieving review-scoped context passages."""
 
+import asyncio
 from collections.abc import Sequence
 from typing import Protocol
 
@@ -78,8 +79,14 @@ class ReviewContextRepository(Protocol):
 class ReviewContextService:
     """Retrieve, rerank, and pack review-scoped context passages."""
 
-    def __init__(self, repository: ReviewContextRepository) -> None:
+    def __init__(
+        self,
+        repository: ReviewContextRepository,
+        *,
+        retrieval_concurrency: int = 4,
+    ) -> None:
         self.repository = repository
+        self.retrieval_concurrency = retrieval_concurrency
 
     async def retrieve_context(
         self,
@@ -143,25 +150,37 @@ class ReviewContextService:
         results: list[RetrieveReviewContextResponse] = []
         query_results: list[RetrieveReviewContextResponse] = []
 
-        for query in request.queries:
-            result = await self.retrieve_context(
-                review_id,
-                RetrieveReviewContextRequest(
-                    question=query,
-                    pmids=request.pmids,
-                    entity_ids=request.entity_ids,
-                    sections=request.sections,
-                    max_passages=request.max_passages_per_query,
-                    max_chars=request.max_chars,
-                    include_diagnostics=request.include_diagnostics
-                    or request.response_mode == "diagnostics",
-                    include_tables=request.include_tables,
-                    include_references=request.include_references,
-                    table_mode=request.table_mode,
-                    allow_truncated_passages=request.allow_truncated_passages,
-                    max_chars_per_passage=request.max_chars_per_passage,
-                ),
-            )
+        semaphore = asyncio.Semaphore(self.retrieval_concurrency)
+
+        async def retrieve_one(
+            query_index: int,
+            query: str,
+        ) -> tuple[int, RetrieveReviewContextResponse]:
+            async with semaphore:
+                result = await self.retrieve_context(
+                    review_id,
+                    RetrieveReviewContextRequest(
+                        question=query,
+                        pmids=request.pmids,
+                        entity_ids=request.entity_ids,
+                        sections=request.sections,
+                        max_passages=request.max_passages_per_query,
+                        max_chars=request.max_chars,
+                        include_diagnostics=request.include_diagnostics
+                        or request.response_mode == "diagnostics",
+                        include_tables=request.include_tables,
+                        include_references=request.include_references,
+                        table_mode=request.table_mode,
+                        allow_truncated_passages=request.allow_truncated_passages,
+                        max_chars_per_passage=request.max_chars_per_passage,
+                    ),
+                )
+                return query_index, result
+
+        indexed_results = await asyncio.gather(
+            *(retrieve_one(index, query) for index, query in enumerate(request.queries))
+        )
+        for _query_index, result in sorted(indexed_results, key=lambda item: item[0]):
             query_results.append(result)
             if request.response_mode == "full":
                 results.append(result)

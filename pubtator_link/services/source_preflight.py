@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
@@ -20,15 +21,22 @@ class SourcePreflightService:
         id_converter: IdConverter | None = None,
         pmc_bioc_available: PmcProbe | None = None,
         pubtator_abstract_available: AbstractProbe | None = None,
+        preflight_concurrency: int = 3,
     ) -> None:
         self._id_converter = id_converter or self._no_id_conversion
         self._pmc_bioc_available = pmc_bioc_available or self._no_pmc_bioc
         self._pubtator_abstract_available = (
             pubtator_abstract_available or self._no_pubtator_abstract
         )
+        self.preflight_concurrency = preflight_concurrency
 
     @classmethod
-    def from_pubtator_client(cls, client: PubTator3Client) -> SourcePreflightService:
+    def from_pubtator_client(
+        cls,
+        client: PubTator3Client,
+        *,
+        preflight_concurrency: int = 3,
+    ) -> SourcePreflightService:
         async def abstract_available(pmid: str) -> bool:
             response = await client.export_publications([pmid], format="biocjson", full=False)
             documents = response.get("documents", [])
@@ -42,14 +50,20 @@ class SourcePreflightService:
         return cls(
             pmc_bioc_available=pmc_available,
             pubtator_abstract_available=abstract_available,
+            preflight_concurrency=preflight_concurrency,
         )
 
     async def preflight_pmids(self, pmids: list[str]) -> list[SourceCoverageHint]:
         indexed_pmids = list(dict.fromkeys(pmids))
-        results: list[tuple[int, SourceCoverageHint]] = []
-        for index, pmid in enumerate(indexed_pmids):
-            hint = await self._preflight_one_pmid(pmid)
-            results.append((index, hint))
+        semaphore = asyncio.Semaphore(self.preflight_concurrency)
+
+        async def preflight_one(index: int, pmid: str) -> tuple[int, SourceCoverageHint]:
+            async with semaphore:
+                return index, await self._preflight_one_pmid(pmid)
+
+        results = await asyncio.gather(
+            *(preflight_one(index, pmid) for index, pmid in enumerate(indexed_pmids))
+        )
         return [hint for _, hint in sorted(results, key=lambda item: item[0])]
 
     async def _preflight_one_pmid(self, pmid: str) -> SourceCoverageHint:

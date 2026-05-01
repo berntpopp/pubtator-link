@@ -104,7 +104,10 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
         publication_passage_service = PublicationPassageService(
             publication_service=publication_service
         )
-        source_preflight_service = SourcePreflightService.from_pubtator_client(api_client)
+        source_preflight_service = SourcePreflightService.from_pubtator_client(
+            api_client,
+            preflight_concurrency=review_rerag_config.preflight_concurrency,
+        )
 
         review_repository: PostgresReviewReragRepository | None = None
         review_context_service: ReviewContextService | None = None
@@ -124,7 +127,10 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
                 preparation=preparation,
                 logger=logger,
             )
-            review_context_service = ReviewContextService(repository=review_repository)
+            review_context_service = ReviewContextService(
+                repository=review_repository,
+                retrieval_concurrency=review_rerag_config.retrieval_concurrency,
+            )
 
         return AppResources(
             logger=logger,
@@ -262,7 +268,10 @@ async def get_review_context_service() -> ReviewContextService:
             raise RuntimeError("PUBTATOR_LINK_DATABASE_URL is required for review re-RAG")
         return resources.review_context_service
     if _review_context_service is None:
-        _review_context_service = ReviewContextService(repository=await get_review_repository())
+        _review_context_service = ReviewContextService(
+            repository=await get_review_repository(),
+            retrieval_concurrency=review_rerag_config.retrieval_concurrency,
+        )
     return _review_context_service
 
 
@@ -273,12 +282,14 @@ async def get_source_preflight_service() -> SourcePreflightService:
     if resources is not None:
         if resources.source_preflight_service is None:
             resources.source_preflight_service = SourcePreflightService.from_pubtator_client(
-                resources.api_client
+                resources.api_client,
+                preflight_concurrency=review_rerag_config.preflight_concurrency,
             )
         return resources.source_preflight_service
     if _source_preflight_service is None:
         _source_preflight_service = SourcePreflightService.from_pubtator_client(
-            await get_api_client()
+            await get_api_client(),
+            preflight_concurrency=review_rerag_config.preflight_concurrency,
         )
     return _source_preflight_service
 
