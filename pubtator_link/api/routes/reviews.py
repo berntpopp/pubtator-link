@@ -1,12 +1,15 @@
 """Review-scoped evidence preparation and context retrieval routes."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Query
 
 from ...models.review_rerag import (
     IndexReviewEvidenceRequest,
     IndexReviewEvidenceResponse,
     InspectReviewIndexRequest,
     InspectReviewIndexResponse,
+    CleanupExpiredReviewIndexesResponse,
+    DeleteReviewIndexResponse,
+    ListReviewIndexesResponse,
     PreflightReviewSourcesRequest,
     PreflightReviewSourcesResponse,
     RetrieveReviewContextBatchRequest,
@@ -14,6 +17,7 @@ from ...models.review_rerag import (
     RetrieveReviewContextRequest,
     RetrieveReviewContextResponse,
     ReviewAuditBundle,
+    ReviewIndexSummaryResponse,
     ReviewNeighboringPassagesRequest,
     ReviewPassageLookupRequest,
     ReviewPassageLookupResponse,
@@ -21,12 +25,75 @@ from ...models.review_rerag import (
 from .dependencies import (
     ReviewAuditServiceDep,
     ReviewContextServiceDep,
+    ReviewIndexLifecycleServiceDep,
     ReviewQueueDep,
     SourcePreflightServiceDep,
     handle_api_errors,
 )
 
 router = APIRouter(prefix="/api/reviews", tags=["Reviews"])
+
+
+@router.get(
+    "",
+    response_model=ListReviewIndexesResponse,
+    operation_id="list_review_indexes",
+    summary="List persisted review indexes",
+)
+@handle_api_errors
+async def list_review_indexes(
+    service: ReviewIndexLifecycleServiceDep,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> ListReviewIndexesResponse:
+    return await service.list_indexes(limit=limit, offset=offset)
+
+
+@router.get(
+    "/{review_id}/summary",
+    response_model=ReviewIndexSummaryResponse,
+    operation_id="get_review_index_summary",
+    summary="Get one review index inventory summary",
+)
+@handle_api_errors
+async def get_review_index_summary(
+    review_id: str,
+    service: ReviewIndexLifecycleServiceDep,
+) -> ReviewIndexSummaryResponse:
+    return await service.get_summary(review_id)
+
+
+@router.delete(
+    "/{review_id}",
+    response_model=DeleteReviewIndexResponse,
+    operation_id="delete_review_index",
+    summary="Delete one review index when enabled for private deployments",
+)
+@handle_api_errors
+async def delete_review_index(
+    review_id: str,
+    service: ReviewIndexLifecycleServiceDep,
+) -> DeleteReviewIndexResponse:
+    try:
+        return await service.delete_index(review_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
+@router.post(
+    "/cleanup-expired",
+    response_model=CleanupExpiredReviewIndexesResponse,
+    operation_id="cleanup_expired_review_indexes",
+    summary="Cleanup expired review indexes when enabled for private deployments",
+)
+@handle_api_errors
+async def cleanup_expired_review_indexes(
+    service: ReviewIndexLifecycleServiceDep,
+) -> CleanupExpiredReviewIndexesResponse:
+    try:
+        return await service.cleanup_expired()
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 
 @router.post(

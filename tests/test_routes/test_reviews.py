@@ -6,17 +6,21 @@ from httpx import ASGITransport, AsyncClient
 from pubtator_link.api.routes.dependencies import (
     get_review_audit_service,
     get_review_context_service,
+    get_review_index_lifecycle_service,
     get_review_queue,
     get_source_preflight_service,
 )
 from pubtator_link.models.review_rerag import (
     ContextPack,
     InspectReviewIndexResponse,
+    ListReviewIndexesResponse,
     PreparationStatus,
     QueryDiagnosticsSummary,
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextResponse,
     ReviewAuditBundle,
+    ReviewIndexInventoryItem,
+    ReviewIndexSummaryResponse,
     ReviewIndexTotals,
     ReviewPassageLookupResponse,
     ReviewSourceSummary,
@@ -49,6 +53,69 @@ async def test_preflight_review_sources_returns_coverage_hints() -> None:
     assert data["coverage_hints"][0]["pmid"] == "40234174"
     assert data["coverage_hints"][0]["coverage_reason"] == "no_pmcid"
     service.preflight_pmids.assert_awaited_once_with(["40234174"])
+
+
+@pytest.mark.asyncio
+async def test_list_review_indexes_route_returns_inventory() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.list_indexes.return_value = ListReviewIndexesResponse(
+        indexes=[
+            ReviewIndexInventoryItem(
+                review_id="review-1",
+                created_at="2026-05-01T00:00:00Z",
+                updated_at="2026-05-01T01:00:00Z",
+                preparation_status=PreparationStatus(complete=1),
+                passage_count=2,
+            )
+        ]
+    )
+    app.dependency_overrides[get_review_index_lifecycle_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/reviews", params={"limit": "10", "offset": "5"})
+
+    assert response.status_code == 200
+    assert response.json()["indexes"][0]["review_id"] == "review-1"
+    service.list_indexes.assert_awaited_once_with(limit=10, offset=5)
+
+
+@pytest.mark.asyncio
+async def test_get_review_index_summary_route_returns_inventory_item() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.get_summary.return_value = ReviewIndexSummaryResponse(
+        index=ReviewIndexInventoryItem(
+            review_id="review-1",
+            created_at="2026-05-01T00:00:00Z",
+            updated_at="2026-05-01T01:00:00Z",
+            preparation_status=PreparationStatus(complete=1),
+        )
+    )
+    app.dependency_overrides[get_review_index_lifecycle_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/reviews/review-1/summary")
+
+    assert response.status_code == 200
+    assert response.json()["index"]["review_id"] == "review-1"
+    service.get_summary.assert_awaited_once_with("review-1")
+
+
+@pytest.mark.asyncio
+async def test_review_index_destructive_routes_are_disabled_by_default() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.delete_index.side_effect = PermissionError("Review index deletion is disabled")
+    service.cleanup_expired.side_effect = PermissionError("Review index cleanup endpoint is disabled")
+    app.dependency_overrides[get_review_index_lifecycle_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        delete_response = await client.delete("/api/reviews/review-1")
+        cleanup_response = await client.post("/api/reviews/cleanup-expired")
+
+    assert delete_response.status_code == 403
+    assert cleanup_response.status_code == 403
 
 
 @pytest.mark.asyncio

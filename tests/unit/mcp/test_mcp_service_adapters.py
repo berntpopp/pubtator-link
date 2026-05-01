@@ -373,6 +373,34 @@ async def test_retrieve_review_context_batch_adapter_sets_budget_strategy() -> N
 
 
 @pytest.mark.asyncio
+async def test_list_review_indexes_adapter_calls_lifecycle_service() -> None:
+    from pubtator_link.mcp.service_adapters import list_review_indexes_impl
+    from pubtator_link.models.review_rerag import ListReviewIndexesResponse
+
+    class FakeService:
+        async def list_indexes(self, *, limit: int, offset: int) -> ListReviewIndexesResponse:
+            return ListReviewIndexesResponse(indexes=[])
+
+    result = await list_review_indexes_impl(service=FakeService(), limit=10, offset=5)
+
+    assert result == {"success": True, "indexes": []}
+
+
+@pytest.mark.asyncio
+async def test_get_review_index_summary_adapter_calls_lifecycle_service() -> None:
+    from pubtator_link.mcp.service_adapters import get_review_index_summary_impl
+    from pubtator_link.models.review_rerag import ReviewIndexSummaryResponse
+
+    class FakeService:
+        async def get_summary(self, review_id: str) -> ReviewIndexSummaryResponse:
+            return ReviewIndexSummaryResponse(index=None)
+
+    result = await get_review_index_summary_impl(service=FakeService(), review_id="review-1")
+
+    assert result == {"success": True, "index": None}
+
+
+@pytest.mark.asyncio
 async def test_retrieve_review_context_adapter_builds_request_from_flat_args() -> None:
     from pubtator_link.mcp.service_adapters import retrieve_review_context_impl
     from pubtator_link.models.review_rerag import (

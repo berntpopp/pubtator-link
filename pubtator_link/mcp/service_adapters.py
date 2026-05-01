@@ -37,6 +37,7 @@ from pubtator_link.services.publication_passage_service import PublicationPassag
 from pubtator_link.services.publication_service import PublicationService
 from pubtator_link.services.review_audit import ReviewAuditService
 from pubtator_link.services.review_context_service import ReviewContextService
+from pubtator_link.services.review_index_lifecycle import ReviewIndexLifecycleService
 from pubtator_link.services.review_preparation_queue import ReviewPreparationQueue
 from pubtator_link.services.source_preflight import SourcePreflightService
 
@@ -557,3 +558,22 @@ async def retrieve_review_context_batch_impl(
         ),
     )
     return response.model_dump()
+
+
+async def list_review_indexes_impl(
+    *,
+    service: ReviewIndexLifecycleService,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict[str, Any]:
+    response = await service.list_indexes(limit=limit, offset=offset)
+    return response.model_dump(mode="json")
+
+
+async def get_review_index_summary_impl(
+    *,
+    service: ReviewIndexLifecycleService,
+    review_id: str,
+) -> dict[str, Any]:
+    response = await service.get_summary(review_id)
+    return response.model_dump(mode="json")

@@ -8,6 +8,7 @@ from pydantic import Field
 from pubtator_link.api.routes.dependencies import (
     get_review_audit_service,
     get_review_context_service,
+    get_review_index_lifecycle_service,
     get_review_queue,
     get_source_preflight_service,
 )
@@ -16,8 +17,10 @@ from pubtator_link.mcp.service_adapters import (
     export_review_audit_bundle_impl,
     get_neighboring_review_passages_impl,
     get_review_passages_by_id_impl,
+    get_review_index_summary_impl,
     index_review_evidence_impl,
     inspect_review_index_impl,
+    list_review_indexes_impl,
     preflight_review_sources_impl,
     retrieve_review_context_batch_impl,
     retrieve_review_context_impl,
@@ -26,10 +29,12 @@ from pubtator_link.models.review_rerag import (
     BudgetStrategy,
     IndexReviewEvidenceResponse,
     InspectReviewIndexResponse,
+    ListReviewIndexesResponse,
     McpReviewAuditBundleResponse,
     PrepareMode,
     PreflightReviewSourcesResponse,
     ReviewBatchResponseMode,
+    ReviewIndexSummaryResponse,
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextResponse,
     ReviewPassageLookupResponse,
@@ -38,6 +43,31 @@ from pubtator_link.models.review_rerag import (
 
 
 def register_review_tools(mcp: FastMCP) -> None:
+    @mcp.tool(
+        name="pubtator.list_review_indexes",
+        title="List Review Indexes",
+        output_schema=ListReviewIndexesResponse.model_json_schema(),
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def list_review_indexes(
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """Use this to list persisted review indexes with preparation status, source counts, passage counts, and approximate storage size. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_review_index_lifecycle_service()
+        return await list_review_indexes_impl(service=service, limit=limit, offset=offset)
+
+    @mcp.tool(
+        name="pubtator.get_review_index_summary",
+        title="Get Review Index Summary",
+        output_schema=ReviewIndexSummaryResponse.model_json_schema(),
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def get_review_index_summary(review_id: str) -> dict[str, Any]:
+        """Use this to inspect one persisted review index summary without loading passage samples. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_review_index_lifecycle_service()
+        return await get_review_index_summary_impl(service=service, review_id=review_id)
+
     @mcp.tool(
         name="pubtator.preflight_review_sources",
         title="Preflight Review Sources",
