@@ -13,9 +13,7 @@ class RetryPolicy:
     max_attempts: int = 3
     base_delay_ms: int = 500
     max_delay_ms: int = 10_000
-    retry_status_codes: set[int] = field(
-        default_factory=lambda: {408, 429, 500, 502, 503, 504}
-    )
+    retry_status_codes: set[int] = field(default_factory=lambda: {408, 429, 500, 502, 503, 504})
     respect_retry_after: bool = True
 
 
@@ -41,7 +39,7 @@ def retry_after_ms(response: httpx.Response) -> int | None:
 
 def full_jitter_delay_ms(policy: RetryPolicy, attempt_index: int) -> int:
     cap = min(policy.max_delay_ms, policy.base_delay_ms * (2 ** max(0, attempt_index - 1)))
-    return random.randint(0, cap)
+    return random.randint(0, cap)  # noqa: S311 - retry jitter is not security-sensitive
 
 
 async def call_with_retries(

@@ -6,16 +6,16 @@ from fastmcp import FastMCP
 from pydantic import Field
 
 from pubtator_link.api.routes.dependencies import (
+    get_review_audit_service,
     get_review_context_service,
     get_review_queue,
-    get_review_audit_service,
     get_source_preflight_service,
 )
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD, REVIEW_WRITE_ANNOTATIONS
 from pubtator_link.mcp.service_adapters import (
+    export_review_audit_bundle_impl,
     get_neighboring_review_passages_impl,
     get_review_passages_by_id_impl,
-    export_review_audit_bundle_impl,
     index_review_evidence_impl,
     inspect_review_index_impl,
     preflight_review_sources_impl,

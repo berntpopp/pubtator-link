@@ -219,9 +219,7 @@ class ReviewContextService:
                 "retrieval_run",
                 {
                     "queries": request.queries,
-                    "passage_ids": [
-                        passage.passage_id for passage in merged.passages
-                    ],
+                    "passage_ids": [passage.passage_id for passage in merged.passages],
                 },
             )
         citation_map = {passage.citation_key: passage.passage_id for passage in merged.passages}

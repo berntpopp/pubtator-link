@@ -34,8 +34,8 @@ from pubtator_link.models.review_rerag import (
 )
 from pubtator_link.services.publication_passage_service import PublicationPassageService
 from pubtator_link.services.publication_service import PublicationService
-from pubtator_link.services.review_context_service import ReviewContextService
 from pubtator_link.services.review_audit import ReviewAuditService
+from pubtator_link.services.review_context_service import ReviewContextService
 from pubtator_link.services.review_preparation_queue import ReviewPreparationQueue
 from pubtator_link.services.source_preflight import SourcePreflightService
 

@@ -27,7 +27,7 @@ class ReviewAuditRepository(Protocol):
     async def list_review_sources(
         self,
         review_id: str,
-        pmids=None,
+        pmids: list[str] | None = None,
         *,
         include_passage_samples: bool = False,
         sample_per_pmid: int = 0,
@@ -64,11 +64,11 @@ class ReviewAuditService:
         events = await self.repository.list_review_audit_events(review_id)
         search_runs, retrieval_runs = self._runs_from_events(events)
         coverage_distribution = Counter(source.coverage for source in sources)
-        resolver_attempts = [
-            attempt
-            for source in [*sources, *failed_sources]
-            for attempt in source.resolver_attempts
-        ]
+        resolver_attempts = []
+        for source in sources:
+            resolver_attempts.extend(source.resolver_attempts)
+        for failed_source in failed_sources:
+            resolver_attempts.extend(failed_source.resolver_attempts)
         return ReviewAuditBundle(
             review_id=review_id,
             generated_at=datetime.now(UTC).isoformat(),
@@ -76,7 +76,7 @@ class ReviewAuditService:
             totals=totals,
             sources=sources,
             failed_sources=failed_sources,
-            coverage_distribution=dict(coverage_distribution),
+            coverage_distribution={str(key): value for key, value in coverage_distribution.items()},
             resolver_attempts=resolver_attempts,
             search_runs=search_runs,
             retrieval_runs=retrieval_runs,

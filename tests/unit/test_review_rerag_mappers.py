@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 
 from pubtator_link.repositories.review_rerag_mappers import (
-    _source_summary_from_row,
     _infer_source_coverage,
     _parse_execute_count,
     _passage_from_row,
     _preparation_status_from_row,
     _recall_tsquery,
+    _source_summary_from_row,
 )
 
 

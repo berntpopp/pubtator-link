@@ -88,8 +88,8 @@ class FullTextPreparationService:
                 "pmid": pmid,
                 "passage_count": len(passages),
                 "char_count": _passage_char_count(passages),
-                },
-            )
+            },
+        )
 
         if passages:
             await self.repository.upsert_passages(passages)

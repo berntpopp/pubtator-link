@@ -74,8 +74,9 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
     assert "tool_groups" in capabilities
     assert "large_output_guidance" in capabilities
     assert "review_rerag" in capabilities
-    assert "search -> preflight -> index -> inspect -> retrieve" in (
-        capabilities["recommended_workflows"][0]
+    assert (
+        "search -> preflight -> index -> inspect -> retrieve"
+        in (capabilities["recommended_workflows"][0])
     )
     assert (
         "pubtator.get_publication_passages" in capabilities["tool_groups"]["publication_grounding"]

@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 
 from pubtator_link.config import ReviewReragConfig
-from pubtator_link.models.review_rerag import SourceCoverageHint, ReviewPassageRow
+from pubtator_link.models.review_rerag import ReviewPassageRow, SourceCoverageHint
 from pubtator_link.services.full_text_preparation import (
     FullTextPreparationService,
     looks_like_pdf,

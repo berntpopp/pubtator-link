@@ -4,9 +4,9 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from pubtator_link.api.routes.dependencies import (
+    get_review_audit_service,
     get_review_context_service,
     get_review_queue,
-    get_review_audit_service,
     get_source_preflight_service,
 )
 from pubtator_link.models.review_rerag import (
@@ -16,8 +16,8 @@ from pubtator_link.models.review_rerag import (
     QueryDiagnosticsSummary,
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextResponse,
-    ReviewIndexTotals,
     ReviewAuditBundle,
+    ReviewIndexTotals,
     ReviewPassageLookupResponse,
     ReviewSourceSummary,
     SourceCoverageHint,

@@ -18,9 +18,9 @@ from ...repositories.review_rerag import PostgresReviewReragRepository
 from ...services.full_text_preparation import FullTextPreparationService
 from ...services.publication_passage_service import PublicationPassageService
 from ...services.publication_service import PublicationService
+from ...services.review_audit import ReviewAuditService
 from ...services.review_context_service import ReviewContextService
 from ...services.review_preparation_queue import ReviewPreparationQueue
-from ...services.review_audit import ReviewAuditService
 from ...services.source_preflight import SourcePreflightService
 
 logger = logging.getLogger(__name__)
@@ -100,6 +100,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
     api_client: PubTator3Client | None = None
     review_pool: asyncpg.Pool | None = None
     review_queue: ReviewPreparationQueue | None = None
+    review_audit_service: ReviewAuditService | None = None
 
     try:
         api_client = PubTator3Client(logger=logger)
@@ -109,7 +110,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
         )
         source_preflight_service = SourcePreflightService.from_pubtator_client(
             api_client,
-            preflight_concurrency=review_rerag_config.preflight_concurrency,
+            preflight_concurrency=getattr(review_rerag_config, "preflight_concurrency", 3),
         )
 
         review_repository: PostgresReviewReragRepository | None = None
@@ -130,10 +131,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
                 preparation=preparation,
                 logger=logger,
             )
-            review_context_service = ReviewContextService(
-                repository=review_repository,
-                retrieval_concurrency=review_rerag_config.retrieval_concurrency,
-            )
+            review_context_service = _build_review_context_service(review_repository)
             review_audit_service = ReviewAuditService(repository=review_repository)
 
         return AppResources(
@@ -273,11 +271,20 @@ async def get_review_context_service() -> ReviewContextService:
             raise RuntimeError("PUBTATOR_LINK_DATABASE_URL is required for review re-RAG")
         return resources.review_context_service
     if _review_context_service is None:
-        _review_context_service = ReviewContextService(
-            repository=await get_review_repository(),
-            retrieval_concurrency=review_rerag_config.retrieval_concurrency,
-        )
+        _review_context_service = _build_review_context_service(await get_review_repository())
     return _review_context_service
+
+
+def _build_review_context_service(
+    repository: PostgresReviewReragRepository,
+) -> ReviewContextService:
+    try:
+        return ReviewContextService(
+            repository=repository,
+            retrieval_concurrency=getattr(review_rerag_config, "retrieval_concurrency", 4),
+        )
+    except TypeError:
+        return ReviewContextService(repository)
 
 
 async def get_source_preflight_service() -> SourcePreflightService:
@@ -288,13 +295,13 @@ async def get_source_preflight_service() -> SourcePreflightService:
         if resources.source_preflight_service is None:
             resources.source_preflight_service = SourcePreflightService.from_pubtator_client(
                 resources.api_client,
-                preflight_concurrency=review_rerag_config.preflight_concurrency,
+                preflight_concurrency=getattr(review_rerag_config, "preflight_concurrency", 3),
             )
         return resources.source_preflight_service
     if _source_preflight_service is None:
         _source_preflight_service = SourcePreflightService.from_pubtator_client(
             await get_api_client(),
-            preflight_concurrency=review_rerag_config.preflight_concurrency,
+            preflight_concurrency=getattr(review_rerag_config, "preflight_concurrency", 3),
         )
     return _source_preflight_service
 
@@ -324,9 +331,7 @@ PublicationPassageServiceDep = Annotated[
 ReviewQueueDep = Annotated[ReviewPreparationQueue, Depends(get_review_queue)]
 ReviewContextServiceDep = Annotated[ReviewContextService, Depends(get_review_context_service)]
 ReviewAuditServiceDep = Annotated[ReviewAuditService, Depends(get_review_audit_service)]
-SourcePreflightServiceDep = Annotated[
-    SourcePreflightService, Depends(get_source_preflight_service)
-]
+SourcePreflightServiceDep = Annotated[SourcePreflightService, Depends(get_source_preflight_service)]
 
 
 def handle_api_errors(func: Callable[..., Any]) -> Callable[..., Any]:
