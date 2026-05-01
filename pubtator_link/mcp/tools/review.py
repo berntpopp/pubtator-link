@@ -24,8 +24,15 @@ from pubtator_link.mcp.service_adapters import (
 )
 from pubtator_link.models.review_rerag import (
     BudgetStrategy,
+    IndexReviewEvidenceResponse,
+    InspectReviewIndexResponse,
+    McpReviewAuditBundleResponse,
     PrepareMode,
+    PreflightReviewSourcesResponse,
     ReviewBatchResponseMode,
+    RetrieveReviewContextBatchResponse,
+    RetrieveReviewContextResponse,
+    ReviewPassageLookupResponse,
     ReviewTableMode,
 )
 
@@ -34,6 +41,7 @@ def register_review_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         name="pubtator.preflight_review_sources",
         title="Preflight Review Sources",
+        output_schema=PreflightReviewSourcesResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def preflight_review_sources(
@@ -46,6 +54,7 @@ def register_review_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         name="pubtator.index_review_evidence",
         title="Index Review Evidence",
+        output_schema=IndexReviewEvidenceResponse.model_json_schema(),
         annotations=REVIEW_WRITE_ANNOTATIONS,
     )
     async def index_review_evidence(
@@ -67,6 +76,7 @@ def register_review_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         name="pubtator.inspect_review_index",
         title="Inspect Review Index",
+        output_schema=InspectReviewIndexResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def inspect_review_index(
@@ -88,6 +98,7 @@ def register_review_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         name="pubtator.get_review_passages_by_id",
         title="Get Review Passages By ID",
+        output_schema=ReviewPassageLookupResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_review_passages_by_id(
@@ -107,6 +118,7 @@ def register_review_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         name="pubtator.get_neighboring_review_passages",
         title="Get Neighboring Review Passages",
+        output_schema=ReviewPassageLookupResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_neighboring_review_passages(
@@ -132,6 +144,7 @@ def register_review_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         name="pubtator.export_review_audit_bundle",
         title="Export Review Audit Bundle",
+        output_schema=McpReviewAuditBundleResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def export_review_audit_bundle(review_id: str) -> dict[str, Any]:
@@ -142,6 +155,7 @@ def register_review_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         name="pubtator.retrieve_review_context",
         title="Retrieve Review Context",
+        output_schema=RetrieveReviewContextResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def retrieve_review_context(
@@ -181,6 +195,7 @@ def register_review_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         name="pubtator.retrieve_review_context_batch",
         title="Retrieve Review Context Batch",
+        output_schema=RetrieveReviewContextBatchResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def retrieve_review_context_batch(

@@ -12,12 +12,14 @@ from pubtator_link.mcp.service_adapters import (
     search_biomedical_entities_impl,
     search_literature_impl,
 )
+from pubtator_link.models.responses import SearchResponse
 
 
 def register_literature_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         name="pubtator.search_literature",
         title="Search Biomedical Literature",
+        output_schema=SearchResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def search_literature(
