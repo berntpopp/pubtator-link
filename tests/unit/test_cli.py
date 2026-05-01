@@ -39,7 +39,7 @@ def test_cli_dispatches_http_server(monkeypatch: pytest.MonkeyPatch) -> None:
             "serve",
             "http",
             "--host",
-            "0.0.0.0",
+            "0.0.0.0",  # noqa: S104 - CLI smoke test verifies host argument dispatch.
             "--port",
             "9000",
             "--reload",
@@ -50,7 +50,7 @@ def test_cli_dispatches_http_server(monkeypatch: pytest.MonkeyPatch) -> None:
 
     cli.main()
 
-    assert calls == [("0.0.0.0", 9000, True), sentinel]
+    assert calls == [("0.0.0.0", 9000, True), sentinel]  # noqa: S104
 
 
 def test_cli_dispatches_unified_server(monkeypatch: pytest.MonkeyPatch) -> None:
