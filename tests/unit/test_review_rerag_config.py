@@ -17,6 +17,14 @@ def test_review_rerag_config_defaults_are_fast_poc_values() -> None:
     assert config.preflight_concurrency == 3
 
 
+def test_review_index_lifecycle_config_defaults_are_hosted_safe() -> None:
+    config = ReviewReragConfig.from_settings(ServerSettings())
+
+    assert config.index_ttl_seconds is None
+    assert config.enable_index_delete is False
+    assert config.enable_index_cleanup_endpoint is False
+
+
 def test_review_rerag_config_reads_prefixed_env(monkeypatch) -> None:
     monkeypatch.setenv("PUBTATOR_LINK_DATABASE_URL", "postgresql://user:pass@localhost/db")
     monkeypatch.setenv("PUBTATOR_LINK_REVIEW_PREP_CONCURRENCY", "4")

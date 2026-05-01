@@ -434,6 +434,42 @@ class McpReviewAuditBundleResponse(BaseModel):
     audit_bundle: ReviewAuditBundle
 
 
+class ReviewIndexInventoryItem(BaseModel):
+    """Inventory summary for one persisted review index."""
+
+    review_id: str
+    created_at: str
+    updated_at: str
+    expires_at: str | None = None
+    preparation_status: PreparationStatus
+    pmid_count: int = Field(default=0, ge=0)
+    source_count: int = Field(default=0, ge=0)
+    passage_count: int = Field(default=0, ge=0)
+    failed_source_count: int = Field(default=0, ge=0)
+    approximate_bytes: int = Field(default=0, ge=0)
+
+
+class ListReviewIndexesResponse(BaseModel):
+    success: bool = True
+    indexes: list[ReviewIndexInventoryItem] = Field(default_factory=list)
+
+
+class ReviewIndexSummaryResponse(BaseModel):
+    success: bool = True
+    index: ReviewIndexInventoryItem | None = None
+
+
+class DeleteReviewIndexResponse(BaseModel):
+    success: bool = True
+    review_id: str
+    deleted: bool
+
+
+class CleanupExpiredReviewIndexesResponse(BaseModel):
+    success: bool = True
+    deleted_review_ids: list[str] = Field(default_factory=list)
+
+
 class ReviewSourceSummary(BaseModel):
     """Inspection summary for one indexed review source."""
 

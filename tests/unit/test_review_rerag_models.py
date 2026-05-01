@@ -7,11 +7,13 @@ from pubtator_link.models.review_rerag import (
     ContextPassage,
     EvidenceTier,
     IndexReviewEvidenceRequest,
+    ListReviewIndexesResponse,
     McpReviewAuditBundleResponse,
     PreparationStatus,
     QueryDiagnosticsSummary,
     ResolverAttemptSummary,
     ReviewAuditBundle,
+    ReviewIndexInventoryItem,
     ReviewIndexTotals,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
@@ -216,6 +218,28 @@ def test_mcp_review_audit_bundle_response_preserves_existing_wrapper_shape() -> 
     assert set(dumped) == {"success", "audit_bundle"}
     assert dumped["success"] is True
     assert dumped["audit_bundle"]["review_id"] == "review-1"
+
+
+def test_review_index_inventory_item_defaults_are_safe() -> None:
+    item = ReviewIndexInventoryItem(
+        review_id="review-1",
+        created_at="2026-05-01T00:00:00Z",
+        updated_at="2026-05-01T00:00:00Z",
+        preparation_status=PreparationStatus(complete=1),
+    )
+
+    assert item.pmid_count == 0
+    assert item.source_count == 0
+    assert item.passage_count == 0
+    assert item.approximate_bytes == 0
+    assert item.expires_at is None
+
+
+def test_list_review_indexes_response_wraps_inventory_items() -> None:
+    response = ListReviewIndexesResponse(indexes=[])
+
+    assert response.success is True
+    assert response.indexes == []
 
 
 def test_evidence_tier_derives_from_actual_coverage() -> None:

@@ -81,6 +81,19 @@ class ServerSettings(BaseSettings):
     review_preflight_concurrency: int = Field(
         default=3, ge=1, le=10, description="Concurrent review source preflight probes"
     )
+    review_index_ttl_seconds: int | None = Field(
+        default=None,
+        ge=60,
+        description="Optional TTL for stale review indexes; disabled when unset",
+    )
+    enable_review_index_delete: bool = Field(
+        default=False,
+        description="Enable destructive review index deletion for private deployments",
+    )
+    enable_review_index_cleanup_endpoint: bool = Field(
+        default=False,
+        description="Enable manual review index cleanup endpoint for private deployments",
+    )
     review_prep_pdf_max_bytes: int = Field(
         default=50 * 1024 * 1024, ge=1024, description="Maximum downloaded PDF bytes"
     )
@@ -208,6 +221,9 @@ class ReviewReragConfig:
     enable_docling: bool
     retrieval_concurrency: int = 4
     preflight_concurrency: int = 3
+    index_ttl_seconds: int | None = None
+    enable_index_delete: bool = False
+    enable_index_cleanup_endpoint: bool = False
 
     @classmethod
     def from_settings(cls, server_settings: ServerSettings) -> "ReviewReragConfig":
@@ -222,6 +238,9 @@ class ReviewReragConfig:
             enable_docling=server_settings.enable_docling,
             retrieval_concurrency=server_settings.review_retrieval_concurrency,
             preflight_concurrency=server_settings.review_preflight_concurrency,
+            index_ttl_seconds=server_settings.review_index_ttl_seconds,
+            enable_index_delete=server_settings.enable_review_index_delete,
+            enable_index_cleanup_endpoint=server_settings.enable_review_index_cleanup_endpoint,
         )
 
 
