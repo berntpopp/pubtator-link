@@ -38,6 +38,23 @@ EXPECTED_PROMPT_NAMES = {
 }
 
 
+def _tool_output_schema(tool: object) -> dict[str, object]:
+    schema = getattr(tool, "output_schema", None) or getattr(tool, "outputSchema", None)
+    if schema is None:
+        metadata = getattr(tool, "fn_metadata", None)
+        schema = getattr(metadata, "output_schema", None) if metadata is not None else None
+    assert isinstance(schema, dict), f"{tool!r} did not expose an output schema"
+    return schema
+
+
+def _assert_specific_object_schema(schema: dict[str, object], required: set[str]) -> None:
+    assert schema.get("type") == "object"
+    properties = schema.get("properties")
+    assert isinstance(properties, dict)
+    assert required.issubset(properties)
+    assert properties != {}
+
+
 def test_server_instructions_are_tool_search_friendly() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
@@ -184,6 +201,33 @@ def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
         assert "request" not in properties
         for property_name in expected_properties:
             assert property_name in properties
+
+
+def test_high_use_mcp_tools_expose_specific_output_schemas() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp()
+    tools = mcp._tool_manager._tools
+
+    expected = {
+        "pubtator.search_literature": {"success", "results"},
+        "pubtator.preflight_review_sources": {"success", "coverage_hints"},
+        "pubtator.index_review_evidence": {"success", "review_id", "preparation_status"},
+        "pubtator.inspect_review_index": {"success", "review_id", "sources", "totals"},
+        "pubtator.retrieve_review_context": {"success", "review_id", "context_pack"},
+        "pubtator.retrieve_review_context_batch": {
+            "success",
+            "review_id",
+            "merged_context_pack",
+            "query_summaries",
+        },
+        "pubtator.get_review_passages_by_id": {"success", "review_id", "passages"},
+        "pubtator.get_neighboring_review_passages": {"success", "review_id", "passages"},
+        "pubtator.export_review_audit_bundle": {"success", "audit_bundle"},
+    }
+
+    for name, required in expected.items():
+        _assert_specific_object_schema(_tool_output_schema(tools[name]), required)
 
 
 def test_curated_facade_registers_resources_and_prompts() -> None:
