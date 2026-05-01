@@ -555,17 +555,12 @@ Add fields to `retrieve_review_context_batch`:
 - `covered_by_other_queries`: for zero-result or all-over-budget queries, list
   other query indices or PMIDs that already covered overlapping passages.
 
-### Improve `prepare_mode`
+### `prepare_mode` Cleanup
 
-Current code accepts `prepare_mode="selected" | "candidate_fast"` but does not
-appear to alter queue behavior. Options:
-
-- Remove `candidate_fast` from the public MCP schema until implemented.
-- Or document it as reserved/currently equivalent.
-- Or implement `candidate_fast` as a real mode that indexes top-N search
-  candidates with cheap coverage preflight and stricter timeout.
-
-Preferred: implement real semantics or hide it.
+The public index request now accepts only `prepare_mode="selected"`. The prior
+reserved `candidate_fast` value was removed because it did not alter queue
+behavior. A future fast-candidate workflow should be designed as a separate
+search-candidate endpoint with measurable selection and latency semantics.
 
 ### Tool Name Token Cost
 

@@ -8,7 +8,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
-PrepareMode = Literal["selected", "candidate_fast"]
+PrepareMode = Literal["selected"]
 JobStatus = Literal["queued", "running", "complete", "partial", "failed"]
 AttemptStatus = Literal["success", "not_available", "blocked", "failed"]
 ReviewBatchResponseMode = Literal["compact", "merged_only", "full", "diagnostics"]

@@ -31,6 +31,11 @@ def test_index_request_rejects_screened_mode() -> None:
         IndexReviewEvidenceRequest(pmids=["40234174"], prepare_mode="screened")
 
 
+def test_index_review_evidence_rejects_candidate_fast_prepare_mode() -> None:
+    with pytest.raises(ValidationError):
+        IndexReviewEvidenceRequest(pmids=["40234174"], prepare_mode="candidate_fast")
+
+
 def test_context_request_defaults_are_poc_values() -> None:
     request = RetrieveReviewContextRequest(question="Should colchicine treat FMF?")
 
