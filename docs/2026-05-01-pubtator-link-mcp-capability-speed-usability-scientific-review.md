@@ -17,28 +17,51 @@ Updated: 2026-05-01
 - [ ] Optional Europe PMC fallback.
 - [ ] Real `candidate_fast` prepare mode or public removal.
 
+## Remaining Roadmap
+
+The scientific-auditability and source-resilience implementation completed the
+highest-risk reliability and traceability gaps: preflight source coverage,
+structured resolver attempts, retry/backoff, bounded batch/preflight
+concurrency, passage addressability, and the audit bundle foundation.
+
+The next recommended implementation sequence is:
+
+1. Typed MCP output schemas for high-use tools plus review index inventory and
+   TTL cleanup.
+2. GRADE-style evidence certainty storage.
+3. Optional Europe PMC fallback plus public `candidate_fast` cleanup.
+
+Typed schemas should come first because they improve client reliability without
+changing the scientific evidence workflow. Review index inventory and TTL cleanup
+belong in the same first phase because hosted deployments need predictable
+storage visibility before adding more persisted review metadata. The
+`candidate_fast` recommendation is public removal for now, not implementation,
+because the current index endpoint accepts explicit PMIDs and curated URLs and
+does not have the search-candidate context needed for real fast screening.
+
+Open follow-up items:
+
+1. Add typed MCP output schemas for high-use tools.
+2. Add review index inventory and TTL cleanup.
+3. Add GRADE-style evidence certainty storage.
+4. Add optional Europe PMC fallback behind explicit configuration and rate
+   limits.
+5. Remove public `candidate_fast` prepare mode unless a later design adds a real
+   search-candidate screening workflow.
+
 ## Executive Summary
 
-PubTator-Link is already a strong LLM-facing biomedical grounding MCP. The current
-`search -> preflight -> index -> inspect -> retrieve` workflow, compact passage packing, stable
-citation keys, source coverage labels, and retrieval diagnostics are the right
-foundation for audit-grade literature synthesis.
+PubTator-Link is now a stronger LLM-facing biomedical grounding MCP for
+audit-grade literature synthesis. The current
+`search -> preflight -> index -> inspect -> retrieve -> address -> audit`
+workflow combines compact passage packing, stable citation keys, source coverage
+labels, resolver attempts, retry diagnostics, bounded concurrency, and
+review-scoped audit bundles.
 
-The next improvement should not be another broad tool-surface rewrite. The highest
-leverage work is to make evidence preparation more transparent, faster, and more
-recoverable:
-
-1. Add preflight source coverage and lawful full-text fallback before or during
-   indexing.
-2. Add bounded async parallelism where calls are currently sequential.
-3. Add exponential backoff, retry, and `Retry-After` handling for upstream APIs.
-4. Add passage-level addressability so LLMs can cheaply expand or re-fetch exact
-   evidence.
-5. Add typed MCP output models so clients see real schemas, not generic objects.
-6. Add review-audit metadata aligned with PRISMA/GRADE-style evidence practice.
-
-This review is a design memo, not an implementation plan. It should be converted
-into scoped specs and implementation plans before code changes.
+The next improvement should not be another broad tool-surface rewrite. The
+highest leverage remaining work is to make high-use MCP responses more
+machine-verifiable through typed output schemas, then add review index lifecycle
+operations for hosted deployments.
 
 ## Current Strengths
 
@@ -626,7 +649,8 @@ recommendations.
 7. PRISMA-style audit bundle.
 8. GRADE-style evidence certainty storage.
 9. Optional Europe PMC fallback.
-10. Real `candidate_fast` prepare mode or public removal.
+10. Public `candidate_fast` prepare-mode removal unless a later search-candidate
+    workflow gives it real semantics.
 
 ## Acceptance Criteria For The Next Major Upgrade
 
