@@ -18,6 +18,10 @@ def _workflow(path: str) -> dict[str, Any]:
     return yaml.safe_load(Path(path).read_text())
 
 
+def _branch_protection_policy() -> dict[str, Any]:
+    return json.loads(Path("docs/development/branch-protection.json").read_text())
+
+
 def test_python_baseline_is_modern_and_consistent() -> None:
     project = _pyproject()["project"]
 
@@ -234,3 +238,25 @@ def test_branch_protection_policy_file_exists_and_parses() -> None:
     assert policy["dismiss_stale_reviews"] is True
     assert policy["require_up_to_date_branch"] is True
     assert policy["postgres_integration_required"] is False
+
+
+def test_branch_protection_required_checks_match_workflow_job_names() -> None:
+    policy = _branch_protection_policy()
+    workflows = {
+        "CI": _workflow(".github/workflows/ci.yml"),
+        "Docker": _workflow(".github/workflows/docker.yml"),
+        "Security": _workflow(".github/workflows/security.yml"),
+    }
+    workflow_checks = {
+        f"{workflow_name} / {job['name']}"
+        for workflow_name, workflow in workflows.items()
+        for job in workflow["jobs"].values()
+    }
+
+    assert set(policy["required_status_checks"]) == {
+        "CI / Format, lint, typecheck, tests, and coverage",
+        "Docker / Docker build and Compose validation",
+        "Security / CodeQL",
+        "Security / Dependency review",
+    }
+    assert set(policy["required_status_checks"]).issubset(workflow_checks)
