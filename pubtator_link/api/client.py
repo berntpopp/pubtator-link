@@ -9,6 +9,7 @@ from structlog.typing import FilteringBoundLogger
 
 from ..config import APIConfig, TextProcessingConfig, api_config, text_processing_config
 from ..logging_config import log_api_request, log_rate_limit_event
+from .retry import RetryPolicy, call_with_retries
 
 
 class RateLimiter:
@@ -132,6 +133,7 @@ class PubTator3Client:
         params: dict[str, Any] | None = None,
         data: dict[str, Any] | None = None,
         use_text_client: bool = False,
+        retry: bool = True,
     ) -> dict[str, Any]:
         """Make rate-limited HTTP request.
 
@@ -141,6 +143,7 @@ class PubTator3Client:
             params: Query parameters
             data: Form data for POST requests
             use_text_client: Use text processing client
+            retry: Retry transient failures for idempotent requests
 
         Returns:
             Response data
@@ -159,19 +162,29 @@ class PubTator3Client:
         start_time = time.time()
 
         try:
-            if method.upper() == "GET":
-                response = await client.get(url, params=params)
-            elif method.upper() == "POST":
-                response = await client.post(url, params=params, data=data)
-            else:
+            method_upper = method.upper()
+            if method_upper not in {"GET", "POST"}:
                 raise ValueError(f"Unsupported HTTP method: {method}")
+
+            async def send() -> httpx.Response:
+                if method_upper == "GET":
+                    return await client.get(url, params=params)
+                return await client.post(url, params=params, data=data)
+
+            if retry and method_upper == "GET":
+                response, _retry_metadata = await call_with_retries(
+                    send,
+                    policy=RetryPolicy(),
+                )
+            else:
+                response = await send()
 
             response_time = time.time() - start_time
 
             if self.logger:
                 log_api_request(
                     self.logger,
-                    method=method.upper(),
+                    method=method_upper,
                     url=str(response.url),
                     response_time=response_time,
                     status_code=response.status_code,
@@ -369,7 +382,13 @@ class PubTator3Client:
         url = f"{self.text_config.base_url}/request.cgi"
         data = {"text": text, "bioconcept": bioconcept}
 
-        response = await self._make_request("POST", url, data=data, use_text_client=True)
+        response = await self._make_request(
+            "POST",
+            url,
+            data=data,
+            use_text_client=True,
+            retry=False,
+        )
 
         # Extract session ID from response
         session_id = str(response.get("content", "")).strip()
@@ -390,7 +409,13 @@ class PubTator3Client:
         url = f"{self.text_config.base_url}/retrieve.cgi"
         data = {"id": session_id}
 
-        return await self._make_request("POST", url, data=data, use_text_client=True)
+        return await self._make_request(
+            "POST",
+            url,
+            data=data,
+            use_text_client=True,
+            retry=False,
+        )
 
     async def get_annotation_results(self, session_id: str) -> dict[str, Any]:
         """Alias for retrieve_text_annotation to match test expectations.
