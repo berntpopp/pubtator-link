@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from pubtator_link.repositories.review_rerag_mappers import (
+    _source_summary_from_row,
     _infer_source_coverage,
     _parse_execute_count,
     _passage_from_row,
@@ -63,6 +64,50 @@ def test_infer_source_coverage_prefers_full_text_sections() -> None:
         )
         == "abstract_only"
     )
+
+
+def test_source_summary_maps_coverage_and_resolver_attempt_metadata() -> None:
+    summary = _source_summary_from_row(
+        {
+            "source_id": "PMID:40234174",
+            "pmid": "40234174",
+            "source_kind": "pubtator_full_bioc",
+            "job_status": "partial",
+            "error": None,
+            "attempt_statuses": ["pubtator_full_bioc:failed", "pubtator_abstract:success"],
+            "sections": ["title", "abstract"],
+            "passage_count": 2,
+            "char_count": 500,
+            "coverage_reason": "abstract_fallback_used",
+            "pmcid": "PMC123",
+            "doi": "10.1000/example",
+            "license_or_access_hint": "oa",
+            "pmc_fallback_available": True,
+            "resolver_attempts": [
+                {
+                    "source_kind": "pubtator_full_bioc",
+                    "status": "failed",
+                    "attempt_count": 3,
+                    "last_status_code": 503,
+                    "retry_after_ms": 1000,
+                    "backoff_ms": 750,
+                    "terminal_reason": "retry_exhausted",
+                    "pmid": "40234174",
+                    "pmcid": "PMC123",
+                    "doi": "10.1000/example",
+                }
+            ],
+        }
+    )
+
+    assert summary.coverage_reason == "abstract_fallback_used"
+    assert summary.pmcid == "PMC123"
+    assert summary.doi == "10.1000/example"
+    assert summary.license_or_access_hint == "oa"
+    assert summary.pmc_fallback_available is True
+    assert len(summary.resolver_attempts) == 1
+    assert summary.resolver_attempts[0].attempt_count == 3
+    assert summary.resolver_attempts[0].last_status_code == 503
 
 
 def test_parse_execute_count_and_recall_query_are_stable() -> None:

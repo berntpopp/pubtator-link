@@ -8,12 +8,20 @@ from typing import Any
 from pubtator_link.models.review_rerag import (
     FailedSourceSummary,
     PreparationStatus,
+    ResolverAttemptSummary,
     ReviewIndexTotals,
     ReviewPassageRow,
     ReviewPassageSample,
     ReviewSourceSummary,
     SourceCoverage,
 )
+
+
+def _get(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
+    try:
+        return row[key]
+    except KeyError:
+        return default
 
 
 def _filter_or_none(values: Sequence[str] | None) -> list[str] | None:
@@ -62,6 +70,7 @@ def _passage_from_row(row: Mapping[str, Any]) -> ReviewPassageRow:
 def _source_summary_from_row(row: Mapping[str, Any]) -> ReviewSourceSummary:
     attempt_statuses = list(row["attempt_statuses"] or [])
     sections = list(row["sections"] or [])
+    resolver_attempts = _resolver_attempts_from_value(_get(row, "resolver_attempts"))
     return ReviewSourceSummary(
         source_id=row["source_id"],
         pmid=row["pmid"],
@@ -77,6 +86,12 @@ def _source_summary_from_row(row: Mapping[str, Any]) -> ReviewSourceSummary:
             sections=sections,
             attempt_statuses=attempt_statuses,
         ),
+        coverage_reason=_get(row, "coverage_reason") or "unknown",
+        pmcid=_get(row, "pmcid"),
+        doi=_get(row, "doi"),
+        license_or_access_hint=_get(row, "license_or_access_hint"),
+        pmc_fallback_available=bool(_get(row, "pmc_fallback_available", False)),
+        resolver_attempts=resolver_attempts,
     )
 
 
@@ -109,7 +124,28 @@ def _failed_source_summary_from_row(row: Mapping[str, Any]) -> FailedSourceSumma
         job_status=row["job_status"],
         error=row["error"],
         attempt_statuses=list(row["attempt_statuses"] or []),
+        coverage_reason=_get(row, "coverage_reason") or "unknown",
+        pmcid=_get(row, "pmcid"),
+        doi=_get(row, "doi"),
+        license_or_access_hint=_get(row, "license_or_access_hint"),
+        pmc_fallback_available=bool(_get(row, "pmc_fallback_available", False)),
+        resolver_attempts=_resolver_attempts_from_value(_get(row, "resolver_attempts")),
     )
+
+
+def _resolver_attempts_from_value(value: Any) -> list[ResolverAttemptSummary]:
+    if not value:
+        return []
+    if isinstance(value, str):
+        value = json.loads(value)
+    attempts = []
+    for item in value:
+        if item is None:
+            continue
+        if isinstance(item, str):
+            item = json.loads(item)
+        attempts.append(ResolverAttemptSummary.model_validate(item))
+    return attempts
 
 
 def _passage_sample_from_row(row: Mapping[str, Any]) -> ReviewPassageSample:

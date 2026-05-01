@@ -45,6 +45,16 @@ class ReviewReragRepository(Protocol):
         *,
         url: str | None = None,
         reason: str | None = None,
+        coverage_reason: str = "unknown",
+        attempt_count: int = 1,
+        last_status_code: int | None = None,
+        retry_after_ms: int | None = None,
+        backoff_ms: int | None = None,
+        terminal_reason: str | None = None,
+        pmcid: str | None = None,
+        doi: str | None = None,
+        license_or_access_hint: str | None = None,
+        pmc_fallback_available: bool = False,
         content_type: str | None = None,
         content_length: int | None = None,
     ) -> None:
@@ -158,6 +168,16 @@ class PostgresReviewReragRepository:
         *,
         url: str | None = None,
         reason: str | None = None,
+        coverage_reason: str = "unknown",
+        attempt_count: int = 1,
+        last_status_code: int | None = None,
+        retry_after_ms: int | None = None,
+        backoff_ms: int | None = None,
+        terminal_reason: str | None = None,
+        pmcid: str | None = None,
+        doi: str | None = None,
+        license_or_access_hint: str | None = None,
+        pmc_fallback_available: bool = False,
         content_type: str | None = None,
         content_length: int | None = None,
     ) -> None:
@@ -172,10 +192,23 @@ class PostgresReviewReragRepository:
                     status,
                     url,
                     reason,
+                    coverage_reason,
+                    attempt_count,
+                    last_status_code,
+                    retry_after_ms,
+                    backoff_ms,
+                    terminal_reason,
+                    pmcid,
+                    doi,
+                    license_or_access_hint,
+                    pmc_fallback_available,
                     content_type,
                     content_length
                 )
-                values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                values (
+                    $1, $2, $3, $4, $5, $6, $7, $8,
+                    $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+                )
                 """,
                 uuid4(),
                 review_id,
@@ -184,6 +217,16 @@ class PostgresReviewReragRepository:
                 status,
                 url,
                 reason,
+                coverage_reason,
+                attempt_count,
+                last_status_code,
+                retry_after_ms,
+                backoff_ms,
+                terminal_reason,
+                pmcid,
+                doi,
+                license_or_access_hint,
+                pmc_fallback_available,
                 content_type,
                 content_length,
             )
@@ -424,7 +467,41 @@ class PostgresReviewReragRepository:
                             else source_id
                         end as source_id,
                         array_agg(distinct status order by status)
-                            filter (where status is not null) as attempt_statuses
+                            filter (where status is not null) as attempt_statuses,
+                        (array_agg(coverage_reason order by created_at desc)
+                            filter (where coverage_reason is not null))[1] as coverage_reason,
+                        (array_agg(pmcid order by created_at desc)
+                            filter (where pmcid is not null))[1] as pmcid,
+                        (array_agg(doi order by created_at desc)
+                            filter (where doi is not null))[1] as doi,
+                        (array_agg(license_or_access_hint order by created_at desc)
+                            filter (where license_or_access_hint is not null))[1]
+                            as license_or_access_hint,
+                        bool_or(pmc_fallback_available) as pmc_fallback_available,
+                        jsonb_agg(
+                            jsonb_build_object(
+                                'source_kind', source_kind,
+                                'status', status,
+                                'attempt_count', attempt_count,
+                                'last_status_code', last_status_code,
+                                'retry_after_ms', retry_after_ms,
+                                'backoff_ms', backoff_ms,
+                                'terminal_reason', terminal_reason,
+                                'source_id', source_id,
+                                'url', url,
+                                'pmid', case
+                                    when source_id ~ '^[0-9]+$' then source_id
+                                    when source_id ~ '^PMID:(.+)$'
+                                        then substring(source_id from '^PMID:(.+)$')
+                                    else null
+                                end,
+                                'pmcid', pmcid,
+                                'doi', doi,
+                                'content_type', content_type,
+                                'content_length', content_length
+                            )
+                            order by created_at
+                        ) filter (where status is not null) as resolver_attempts
                     from full_text_retrieval_attempts
                     where review_id = $1
                     group by review_id, source_id
@@ -450,7 +527,13 @@ class PostgresReviewReragRepository:
                     coalesce(a.attempt_statuses, '{}') as attempt_statuses,
                     coalesce(p.sections, '{}') as sections,
                     coalesce(p.passage_count, 0)::int as passage_count,
-                    coalesce(p.char_count, 0)::int as char_count
+                    coalesce(p.char_count, 0)::int as char_count,
+                    coalesce(a.coverage_reason, 'unknown') as coverage_reason,
+                    a.pmcid,
+                    a.doi,
+                    a.license_or_access_hint,
+                    coalesce(a.pmc_fallback_available, false) as pmc_fallback_available,
+                    coalesce(a.resolver_attempts, '[]'::jsonb) as resolver_attempts
                 from source_scope s
                 left join attempt_stats a
                     on a.review_id = s.review_id
@@ -548,7 +631,42 @@ class PostgresReviewReragRepository:
                         array_agg(distinct a.status order by a.status)
                             filter (where a.status is not null),
                         '{}'
-                    ) as attempt_statuses
+                    ) as attempt_statuses,
+                    coalesce(
+                        (array_agg(a.coverage_reason order by a.created_at desc)
+                            filter (where a.coverage_reason is not null))[1],
+                        'unknown'
+                    ) as coverage_reason,
+                    (array_agg(a.pmcid order by a.created_at desc)
+                        filter (where a.pmcid is not null))[1] as pmcid,
+                    (array_agg(a.doi order by a.created_at desc)
+                        filter (where a.doi is not null))[1] as doi,
+                    (array_agg(a.license_or_access_hint order by a.created_at desc)
+                        filter (where a.license_or_access_hint is not null))[1]
+                        as license_or_access_hint,
+                    coalesce(bool_or(a.pmc_fallback_available), false) as pmc_fallback_available,
+                    coalesce(
+                        jsonb_agg(
+                            jsonb_build_object(
+                                'source_kind', a.source_kind,
+                                'status', a.status,
+                                'attempt_count', a.attempt_count,
+                                'last_status_code', a.last_status_code,
+                                'retry_after_ms', a.retry_after_ms,
+                                'backoff_ms', a.backoff_ms,
+                                'terminal_reason', a.terminal_reason,
+                                'source_id', a.source_id,
+                                'url', a.url,
+                                'pmid', s.pmid,
+                                'pmcid', a.pmcid,
+                                'doi', a.doi,
+                                'content_type', a.content_type,
+                                'content_length', a.content_length
+                            )
+                            order by a.created_at
+                        ) filter (where a.status is not null),
+                        '[]'::jsonb
+                    ) as resolver_attempts
                 from source_scope s
                 left join full_text_retrieval_attempts a
                     on a.review_id = s.review_id
