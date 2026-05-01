@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Mapping, Sequence
+from datetime import datetime, timedelta
 from typing import Any
 
 from pubtator_link.models.review_rerag import (
     FailedSourceSummary,
     PreparationStatus,
+    ReviewIndexInventoryItem,
     ResolverAttemptSummary,
     ReviewIndexTotals,
     ReviewPassageRow,
@@ -167,6 +169,46 @@ def _review_index_totals_from_row(row: Mapping[str, Any] | None) -> ReviewIndexT
         char_count=int(row["char_count"] or 0),
         failed_source_count=int(row["failed_source_count"] or 0),
     )
+
+
+def _review_inventory_item_from_row(
+    row: Mapping[str, Any],
+    *,
+    ttl_seconds: int | None,
+) -> ReviewIndexInventoryItem:
+    updated_at = row["updated_at"]
+    expires_at = _expires_at(updated_at, ttl_seconds)
+    return ReviewIndexInventoryItem(
+        review_id=str(row["review_id"]),
+        created_at=str(row["created_at"]),
+        updated_at=str(updated_at),
+        expires_at=str(expires_at) if expires_at is not None else None,
+        preparation_status=_preparation_status_from_row(row),
+        pmid_count=int(row.get("pmid_count") or 0),
+        source_count=int(row.get("source_count") or 0),
+        passage_count=int(row.get("passage_count") or 0),
+        failed_source_count=int(row.get("failed_source_count") or 0),
+        approximate_bytes=int(row.get("approximate_bytes") or 0),
+    )
+
+
+def _expires_at(value: Any, ttl_seconds: int | None) -> Any:
+    if ttl_seconds is None:
+        return None
+    if isinstance(value, datetime):
+        return value + timedelta(seconds=ttl_seconds)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return f"{value}+{ttl_seconds}s"
+        return parsed + timedelta(seconds=ttl_seconds)
+    if hasattr(value, "__add__"):
+        try:
+            return value + timedelta(seconds=ttl_seconds)
+        except TypeError:
+            return None
+    return None
 
 
 def _parse_execute_count(result: str) -> int:

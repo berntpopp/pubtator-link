@@ -7,6 +7,7 @@ import pytest
 from pubtator_link.models.review_rerag import (
     FailedSourceSummary,
     PreparationStatus,
+    ReviewIndexInventoryItem,
     ReviewIndexTotals,
     ReviewPassageRow,
     ReviewPassageSample,
@@ -661,3 +662,97 @@ async def test_review_index_totals_counts_indexed_and_failed_sources() -> None:
     assert "full_text_retrieval_attempts" in sql
     assert "review_passages" in sql
     assert args == ("review-1",)
+
+
+@pytest.mark.asyncio
+async def test_list_review_indexes_returns_inventory_items() -> None:
+    connection = FakeConnection()
+    connection.fetched_rows = [
+        {
+            "review_id": "review-1",
+            "created_at": "2026-05-01T00:00:00Z",
+            "updated_at": "2026-05-01T01:00:00Z",
+            "queued": 0,
+            "running": 0,
+            "complete": 1,
+            "partial": 0,
+            "failed": 0,
+            "pmid_count": 1,
+            "source_count": 1,
+            "passage_count": 2,
+            "failed_source_count": 0,
+            "approximate_bytes": 400,
+        }
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    indexes = await repository.list_review_indexes(limit=10, offset=5, ttl_seconds=3600)
+
+    assert indexes == [
+        ReviewIndexInventoryItem(
+            review_id="review-1",
+            created_at="2026-05-01T00:00:00Z",
+            updated_at="2026-05-01T01:00:00Z",
+            expires_at="2026-05-01 02:00:00+00:00",
+            preparation_status=PreparationStatus(complete=1),
+            pmid_count=1,
+            source_count=1,
+            passage_count=2,
+            approximate_bytes=400,
+        )
+    ]
+    sql, args = connection.executed[0]
+    assert "from reviews r" in sql
+    assert "left join job_stats" in sql
+    assert args == (10, 5)
+
+
+@pytest.mark.asyncio
+async def test_get_review_index_summary_returns_none_for_missing_review() -> None:
+    connection = FakeConnection()
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    summary = await repository.get_review_index_summary("missing")
+
+    assert summary is None
+    sql, args = connection.executed[0]
+    assert "where r.review_id = $3" in sql
+    assert args == (1, 0, "missing")
+
+
+@pytest.mark.asyncio
+async def test_delete_review_index_deletes_children_before_review() -> None:
+    connection = FakeConnection()
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    deleted = await repository.delete_review_index("review-1")
+
+    assert deleted is False
+    statements = [sql.lower() for sql, _args in connection.executed]
+    assert "delete from review_audit_events" in statements[0]
+    assert "delete from full_text_retrieval_attempts" in statements[1]
+    assert "delete from review_passages" in statements[2]
+    assert "delete from review_preparation_jobs" in statements[3]
+    assert "delete from reviews" in statements[4]
+
+
+@pytest.mark.asyncio
+async def test_cleanup_expired_review_indexes_deletes_expired_ids(monkeypatch) -> None:
+    connection = FakeConnection()
+    connection.fetched_rows = [{"review_id": "review-1"}, {"review_id": "review-2"}]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+    deleted_ids: list[str] = []
+
+    async def fake_delete(review_id: str) -> bool:
+        deleted_ids.append(review_id)
+        return review_id == "review-1"
+
+    monkeypatch.setattr(repository, "delete_review_index", fake_delete)
+
+    deleted = await repository.cleanup_expired_review_indexes(ttl_seconds=3600)
+
+    assert deleted == ["review-1"]
+    assert deleted_ids == ["review-1", "review-2"]
+    sql, args = connection.executed[0]
+    assert "updated_at < now()" in sql
+    assert args == (3600,)

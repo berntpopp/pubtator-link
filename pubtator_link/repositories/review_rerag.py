@@ -10,6 +10,7 @@ from uuid import uuid4
 from pubtator_link.models.review_rerag import (
     FailedSourceSummary,
     PreparationStatus,
+    ReviewIndexInventoryItem,
     ReviewIndexTotals,
     ReviewPassageRow,
     ReviewPassageSample,
@@ -23,6 +24,7 @@ from pubtator_link.repositories.review_rerag_mappers import (
     _passage_sample_from_row,
     _preparation_status_from_row,
     _recall_tsquery,
+    _review_inventory_item_from_row,
     _review_index_totals_from_row,
     _source_summary_from_row,
 )
@@ -134,6 +136,29 @@ class ReviewReragRepository(Protocol):
     async def list_review_audit_events(self, review_id: str) -> list[Mapping[str, object]]:
         """Return append-only review audit events."""
 
+    async def list_review_indexes(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        ttl_seconds: int | None = None,
+    ) -> list[ReviewIndexInventoryItem]:
+        """Return inventory summaries for persisted review indexes."""
+
+    async def get_review_index_summary(
+        self,
+        review_id: str,
+        *,
+        ttl_seconds: int | None = None,
+    ) -> ReviewIndexInventoryItem | None:
+        """Return an inventory summary for one review index."""
+
+    async def delete_review_index(self, review_id: str) -> bool:
+        """Delete one review index and all repository-owned child rows."""
+
+    async def cleanup_expired_review_indexes(self, *, ttl_seconds: int) -> list[str]:
+        """Delete review indexes whose updated timestamp is older than the TTL."""
+
     async def mark_job_running(self, *, review_id: str, source_id: str) -> None:
         """Mark a preparation job as running."""
 
@@ -166,7 +191,8 @@ class PostgresReviewReragRepository:
                 """
                 insert into reviews (review_id)
                 values ($1)
-                on conflict (review_id) do nothing
+                on conflict (review_id) do update
+                set updated_at = now()
                 """,
                 review_id,
             )
@@ -261,6 +287,7 @@ class PostgresReviewReragRepository:
                 content_type,
                 content_length,
             )
+            await self._touch_review_on_connection(connection, review_id)
 
     async def mark_running_jobs_failed_on_startup(self) -> int:
         async with self._pool.acquire() as connection:
@@ -283,11 +310,17 @@ class PostgresReviewReragRepository:
         async with self._pool.acquire() as connection:
             await connection.execute(
                 """
-                update review_preparation_jobs
-                set status = 'running',
-                    started_at = now(),
-                    error = null
-                where review_id = $1 and source_id = $2
+                with updated as (
+                    update review_preparation_jobs
+                    set status = 'running',
+                        started_at = now(),
+                        error = null
+                    where review_id = $1 and source_id = $2
+                    returning review_id
+                )
+                update reviews
+                set updated_at = now()
+                where review_id in (select review_id from updated)
                 """,
                 review_id,
                 source_id,
@@ -299,11 +332,17 @@ class PostgresReviewReragRepository:
         async with self._pool.acquire() as connection:
             await connection.execute(
                 """
-                update review_preparation_jobs
-                set status = $3,
-                    finished_at = now(),
-                    error = $4
-                where review_id = $1 and source_id = $2
+                with updated as (
+                    update review_preparation_jobs
+                    set status = $3,
+                        finished_at = now(),
+                        error = $4
+                    where review_id = $1 and source_id = $2
+                    returning review_id
+                )
+                update reviews
+                set updated_at = now()
+                where review_id in (select review_id from updated)
                 """,
                 review_id,
                 source_id,
@@ -393,6 +432,9 @@ class PostgresReviewReragRepository:
                 """,
                 args,
             )
+            review_ids = sorted({passage.review_id for passage in passages})
+            for review_id in review_ids:
+                await self._touch_review_on_connection(connection, review_id)
 
     async def search_passages(
         self,
@@ -927,6 +969,7 @@ class PostgresReviewReragRepository:
                 event_type,
                 json.dumps(payload, sort_keys=True),
             )
+            await self._touch_review_on_connection(connection, review_id)
 
     async def list_review_audit_events(self, review_id: str) -> list[Mapping[str, object]]:
         async with self._pool.acquire() as connection:
@@ -948,6 +991,71 @@ class PostgresReviewReragRepository:
             for row in rows
         ]
 
+    async def list_review_indexes(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        ttl_seconds: int | None = None,
+    ) -> list[ReviewIndexInventoryItem]:
+        async with self._pool.acquire() as connection:
+            rows = await connection.fetch(
+                self._review_inventory_sql(where_clause=""),
+                limit,
+                offset,
+            )
+        return [_review_inventory_item_from_row(row, ttl_seconds=ttl_seconds) for row in rows]
+
+    async def get_review_index_summary(
+        self,
+        review_id: str,
+        *,
+        ttl_seconds: int | None = None,
+    ) -> ReviewIndexInventoryItem | None:
+        async with self._pool.acquire() as connection:
+            row = await connection.fetchrow(
+                self._review_inventory_sql(where_clause="where r.review_id = $3"),
+                1,
+                0,
+                review_id,
+            )
+        if row is None:
+            return None
+        return _review_inventory_item_from_row(row, ttl_seconds=ttl_seconds)
+
+    async def delete_review_index(self, review_id: str) -> bool:
+        async with self._pool.acquire() as connection, connection.transaction():
+            await connection.execute("delete from review_audit_events where review_id = $1", review_id)
+            await connection.execute(
+                "delete from full_text_retrieval_attempts where review_id = $1",
+                review_id,
+            )
+            await connection.execute("delete from review_passages where review_id = $1", review_id)
+            await connection.execute(
+                "delete from review_preparation_jobs where review_id = $1",
+                review_id,
+            )
+            result = await connection.execute("delete from reviews where review_id = $1", review_id)
+        return _parse_execute_count(result) > 0
+
+    async def cleanup_expired_review_indexes(self, *, ttl_seconds: int) -> list[str]:
+        async with self._pool.acquire() as connection:
+            rows = await connection.fetch(
+                """
+                select review_id
+                from reviews
+                where updated_at < now() - ($1::int * interval '1 second')
+                order by updated_at asc, review_id asc
+                """,
+                ttl_seconds,
+            )
+        review_ids = [str(row["review_id"]) for row in rows]
+        deleted: list[str] = []
+        for review_id in review_ids:
+            if await self.delete_review_index(review_id):
+                deleted.append(review_id)
+        return deleted
+
     async def _preparation_status_on_connection(
         self, connection: Any, review_id: str
     ) -> PreparationStatus:
@@ -965,3 +1073,66 @@ class PostgresReviewReragRepository:
             review_id,
         )
         return _preparation_status_from_row(row)
+
+    async def _touch_review_on_connection(self, connection: Any, review_id: str) -> None:
+        await connection.execute(
+            """
+            update reviews
+            set updated_at = now()
+            where review_id = $1
+            """,
+            review_id,
+        )
+
+    @staticmethod
+    def _review_inventory_sql(*, where_clause: str) -> str:
+        return f"""
+            with job_stats as (
+                select
+                    review_id,
+                    coalesce(sum((status = 'queued')::int), 0)::int as queued,
+                    coalesce(sum((status = 'running')::int), 0)::int as running,
+                    coalesce(sum((status = 'complete')::int), 0)::int as complete,
+                    coalesce(sum((status = 'partial')::int), 0)::int as partial,
+                    coalesce(sum((status = 'failed')::int), 0)::int as failed,
+                    count(distinct source_id)::int as source_count
+                from review_preparation_jobs
+                group by review_id
+            ),
+            passage_stats as (
+                select
+                    review_id,
+                    (count(distinct pmid) filter (where pmid is not null))::int as pmid_count,
+                    count(distinct passage_id)::int as passage_count,
+                    coalesce(sum(length(text)), 0)::int as approximate_bytes
+                from review_passages
+                group by review_id
+            ),
+            failed_stats as (
+                select review_id, count(distinct source_id)::int as failed_source_count
+                from review_preparation_jobs
+                where status = 'failed'
+                group by review_id
+            )
+            select
+                r.review_id,
+                r.created_at,
+                r.updated_at,
+                coalesce(j.queued, 0)::int as queued,
+                coalesce(j.running, 0)::int as running,
+                coalesce(j.complete, 0)::int as complete,
+                coalesce(j.partial, 0)::int as partial,
+                coalesce(j.failed, 0)::int as failed,
+                coalesce(p.pmid_count, 0)::int as pmid_count,
+                coalesce(j.source_count, 0)::int as source_count,
+                coalesce(p.passage_count, 0)::int as passage_count,
+                coalesce(f.failed_source_count, 0)::int as failed_source_count,
+                coalesce(p.approximate_bytes, 0)::int as approximate_bytes
+            from reviews r
+            left join job_stats j on j.review_id = r.review_id
+            left join passage_stats p on p.review_id = r.review_id
+            left join failed_stats f on f.review_id = r.review_id
+            {where_clause}
+            order by r.updated_at desc, r.review_id asc
+            limit $1 offset $2
+            """

@@ -8,6 +8,7 @@ from pubtator_link.repositories.review_rerag_mappers import (
     _passage_from_row,
     _preparation_status_from_row,
     _recall_tsquery,
+    _review_inventory_item_from_row,
     _source_summary_from_row,
 )
 
@@ -116,3 +117,28 @@ def test_parse_execute_count_and_recall_query_are_stable() -> None:
     assert _recall_tsquery("MEFV MEFV colchicine response in FMF") == (
         "mefv | colchicine | response | fmf"
     )
+
+
+def test_review_inventory_mapper_builds_item_from_aggregate_row() -> None:
+    row = {
+        "review_id": "review-1",
+        "created_at": "2026-05-01T00:00:00Z",
+        "updated_at": "2026-05-01T01:00:00Z",
+        "queued": 0,
+        "running": 0,
+        "complete": 1,
+        "partial": 0,
+        "failed": 0,
+        "pmid_count": 1,
+        "source_count": 1,
+        "passage_count": 2,
+        "failed_source_count": 0,
+        "approximate_bytes": 1234,
+    }
+
+    item = _review_inventory_item_from_row(row, ttl_seconds=3600)
+
+    assert item.review_id == "review-1"
+    assert item.preparation_status.complete == 1
+    assert item.approximate_bytes == 1234
+    assert item.expires_at is not None

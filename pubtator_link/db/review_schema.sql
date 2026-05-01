@@ -1,7 +1,11 @@
 create table if not exists reviews (
     review_id text primary key,
-    created_at timestamptz not null default now()
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
 );
+
+create index if not exists reviews_updated_at_idx
+    on reviews(updated_at);
 
 create table if not exists review_preparation_jobs (
     job_id uuid primary key,
