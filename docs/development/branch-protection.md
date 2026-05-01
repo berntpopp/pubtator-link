@@ -1,5 +1,11 @@
 # Branch Protection
 
+The machine-checkable policy is recorded in
+`docs/development/branch-protection.json`. Tests verify that the policy's
+required check names stay aligned with workflow job names. The JSON file does
+not prove GitHub settings are enabled; repository administrators still need to
+apply the settings in GitHub.
+
 Recommended branch protection for `main`:
 
 - Require pull request before merging.

@@ -1,0 +1,20 @@
+{
+  "branch": "main",
+  "require_pull_request": true,
+  "required_review_count": 1,
+  "dismiss_stale_reviews": true,
+  "require_status_checks": true,
+  "require_up_to_date_branch": true,
+  "postgres_integration_required": false,
+  "required_status_checks": [
+    "CI / Format, lint, typecheck, tests, and coverage",
+    "Docker / Docker build and Compose validation",
+    "Security / CodeQL",
+    "Security / Dependency review"
+  ],
+  "optional_settings": [
+    "Require linear history",
+    "Require conversation resolution before merging",
+    "Restrict pushes to repository maintainers or release automation"
+  ]
+}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -220,3 +221,16 @@ def test_branch_protection_docs_define_required_checks() -> None:
     assert "Docker / Docker build and Compose validation" in docs
     assert "Security / CodeQL" in docs
     assert "Security / Dependency review" in docs
+
+
+def test_branch_protection_policy_file_exists_and_parses() -> None:
+    policy_path = Path("docs/development/branch-protection.json")
+
+    assert policy_path.exists()
+    policy = json.loads(policy_path.read_text())
+
+    assert policy["branch"] == "main"
+    assert policy["required_review_count"] == 1
+    assert policy["dismiss_stale_reviews"] is True
+    assert policy["require_up_to_date_branch"] is True
+    assert policy["postgres_integration_required"] is False
