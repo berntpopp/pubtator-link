@@ -11,10 +11,14 @@ EXPECTED_PUBLIC_TOOL_NAMES = {
     "pubtator.find_entity_relations",
     "pubtator.submit_text_annotation",
     "pubtator.get_text_annotation_results",
+    "pubtator.preflight_review_sources",
     "pubtator.index_review_evidence",
     "pubtator.inspect_review_index",
     "pubtator.retrieve_review_context",
     "pubtator.retrieve_review_context_batch",
+    "pubtator.get_review_passages_by_id",
+    "pubtator.get_neighboring_review_passages",
+    "pubtator.export_review_audit_bundle",
 }
 
 EXPECTED_RESOURCE_URIS = {
@@ -47,7 +51,7 @@ def test_server_instructions_are_tool_search_friendly() -> None:
     )
     assert len(instructions.encode("utf-8")) < 2048
     assert "pubtator.get_server_capabilities" in instructions
-    assert "search -> index -> inspect -> retrieve" in instructions
+    assert "search -> preflight -> index -> inspect -> retrieve" in instructions
     assert "raw full BioC can be large" in instructions
     assert "not for diagnosis" in instructions
 
@@ -70,7 +74,10 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
     assert "tool_groups" in capabilities
     assert "large_output_guidance" in capabilities
     assert "review_rerag" in capabilities
-    assert "search -> index -> inspect -> retrieve" in capabilities["recommended_workflows"][0]
+    assert (
+        "search -> preflight -> index -> inspect -> retrieve"
+        in (capabilities["recommended_workflows"][0])
+    )
     assert (
         "pubtator.get_publication_passages" in capabilities["tool_groups"]["publication_grounding"]
     )
@@ -166,7 +173,11 @@ def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
         "pubtator.find_entity_relations": ("entity_id",),
         "pubtator.submit_text_annotation": ("text",),
         "pubtator.get_text_annotation_results": ("session_id",),
+        "pubtator.preflight_review_sources": ("pmids",),
         "pubtator.index_review_evidence": ("review_id",),
+        "pubtator.get_review_passages_by_id": ("review_id", "passage_ids"),
+        "pubtator.get_neighboring_review_passages": ("review_id", "passage_id"),
+        "pubtator.export_review_audit_bundle": ("review_id",),
     }
     for name, expected_properties in required_properties.items():
         properties = tools[name].parameters["properties"]

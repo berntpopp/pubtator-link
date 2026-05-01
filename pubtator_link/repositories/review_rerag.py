@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any, Protocol
 from uuid import uuid4
 
@@ -45,6 +45,16 @@ class ReviewReragRepository(Protocol):
         *,
         url: str | None = None,
         reason: str | None = None,
+        coverage_reason: str = "unknown",
+        attempt_count: int = 1,
+        last_status_code: int | None = None,
+        retry_after_ms: int | None = None,
+        backoff_ms: int | None = None,
+        terminal_reason: str | None = None,
+        pmcid: str | None = None,
+        doi: str | None = None,
+        license_or_access_hint: str | None = None,
+        pmc_fallback_available: bool = False,
         content_type: str | None = None,
         content_length: int | None = None,
     ) -> None:
@@ -71,6 +81,23 @@ class ReviewReragRepository(Protocol):
     ) -> list[ReviewPassageRow]:
         """Search prepared passages for a review."""
 
+    async def get_passages_by_id(
+        self,
+        review_id: str,
+        passage_ids: Sequence[str],
+    ) -> list[ReviewPassageRow]:
+        """Return review passages in the requested passage ID order."""
+
+    async def neighboring_passages(
+        self,
+        review_id: str,
+        passage_id: str,
+        before: int,
+        after: int,
+        same_section: bool,
+    ) -> list[ReviewPassageRow]:
+        """Return passages around an anchor passage."""
+
     async def list_review_sources(
         self,
         review_id: str,
@@ -92,6 +119,20 @@ class ReviewReragRepository(Protocol):
 
     async def indexed_pmids(self, review_id: str) -> list[str]:
         """Return distinct indexed PMIDs for retrieval diagnostics."""
+
+    async def list_review_passage_ids(self, review_id: str) -> list[str]:
+        """Return stable passage IDs for a review."""
+
+    async def record_review_audit_event(
+        self,
+        review_id: str,
+        event_type: str,
+        payload: Mapping[str, object],
+    ) -> None:
+        """Record an append-only review audit event."""
+
+    async def list_review_audit_events(self, review_id: str) -> list[Mapping[str, object]]:
+        """Return append-only review audit events."""
 
     async def mark_job_running(self, *, review_id: str, source_id: str) -> None:
         """Mark a preparation job as running."""
@@ -158,6 +199,16 @@ class PostgresReviewReragRepository:
         *,
         url: str | None = None,
         reason: str | None = None,
+        coverage_reason: str = "unknown",
+        attempt_count: int = 1,
+        last_status_code: int | None = None,
+        retry_after_ms: int | None = None,
+        backoff_ms: int | None = None,
+        terminal_reason: str | None = None,
+        pmcid: str | None = None,
+        doi: str | None = None,
+        license_or_access_hint: str | None = None,
+        pmc_fallback_available: bool = False,
         content_type: str | None = None,
         content_length: int | None = None,
     ) -> None:
@@ -172,10 +223,23 @@ class PostgresReviewReragRepository:
                     status,
                     url,
                     reason,
+                    coverage_reason,
+                    attempt_count,
+                    last_status_code,
+                    retry_after_ms,
+                    backoff_ms,
+                    terminal_reason,
+                    pmcid,
+                    doi,
+                    license_or_access_hint,
+                    pmc_fallback_available,
                     content_type,
                     content_length
                 )
-                values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                values (
+                    $1, $2, $3, $4, $5, $6, $7, $8,
+                    $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+                )
                 """,
                 uuid4(),
                 review_id,
@@ -184,6 +248,16 @@ class PostgresReviewReragRepository:
                 status,
                 url,
                 reason,
+                coverage_reason,
+                attempt_count,
+                last_status_code,
+                retry_after_ms,
+                backoff_ms,
+                terminal_reason,
+                pmcid,
+                doi,
+                license_or_access_hint,
+                pmc_fallback_available,
                 content_type,
                 content_length,
             )
@@ -382,6 +456,126 @@ class PostgresReviewReragRepository:
             )
         return [_passage_from_row(row) for row in rows]
 
+    async def get_passages_by_id(
+        self,
+        review_id: str,
+        passage_ids: Sequence[str],
+    ) -> list[ReviewPassageRow]:
+        if not passage_ids:
+            return []
+        async with self._pool.acquire() as connection:
+            rows = await connection.fetch(
+                """
+                select
+                    passage_id,
+                    review_id,
+                    source_id,
+                    source_kind,
+                    pmid,
+                    pmcid,
+                    doi,
+                    url,
+                    section,
+                    heading_path,
+                    page,
+                    text,
+                    entity_ids,
+                    relation_types,
+                    screening_status,
+                    source_metadata,
+                    0.0::double precision as lexical_rank
+                from review_passages
+                where review_id = $1
+                  and passage_id = any($2::text[])
+                """,
+                review_id,
+                list(passage_ids),
+            )
+        parsed_rows = [_passage_from_row(row) for row in rows]
+        row_by_id = {row.passage_id: row for row in parsed_rows}
+        return [row_by_id[passage_id] for passage_id in passage_ids if passage_id in row_by_id]
+
+    async def neighboring_passages(
+        self,
+        review_id: str,
+        passage_id: str,
+        before: int,
+        after: int,
+        same_section: bool,
+    ) -> list[ReviewPassageRow]:
+        async with self._pool.acquire() as connection:
+            anchor_row = await connection.fetchrow(
+                """
+                select
+                    passage_id,
+                    review_id,
+                    source_id,
+                    source_kind,
+                    pmid,
+                    pmcid,
+                    doi,
+                    url,
+                    section,
+                    heading_path,
+                    page,
+                    text,
+                    entity_ids,
+                    relation_types,
+                    screening_status,
+                    source_metadata,
+                    0.0::double precision as lexical_rank
+                from review_passages
+                where review_id = $1
+                  and passage_id = $2
+                """,
+                review_id,
+                passage_id,
+            )
+            if anchor_row is None:
+                return []
+            anchor = _passage_from_row(anchor_row)
+            rows = await connection.fetch(
+                """
+                select
+                    passage_id,
+                    review_id,
+                    source_id,
+                    source_kind,
+                    pmid,
+                    pmcid,
+                    doi,
+                    url,
+                    section,
+                    heading_path,
+                    page,
+                    text,
+                    entity_ids,
+                    relation_types,
+                    screening_status,
+                    source_metadata,
+                    0.0::double precision as lexical_rank
+                from review_passages
+                where review_id = $1
+                  and source_id = $2
+                  and ($3::boolean = false or section = $4)
+                order by passage_id
+                """,
+                review_id,
+                anchor.source_id,
+                same_section,
+                anchor.section,
+            )
+        candidates = [_passage_from_row(row) for row in rows]
+        anchor_index = next(
+            (index for index, row in enumerate(candidates) if row.passage_id == passage_id),
+            None,
+        )
+        if anchor_index is None:
+            return []
+        start = max(0, anchor_index - before)
+        stop = anchor_index + after + 1
+        return candidates[start:stop]
+
     async def list_review_sources(
         self,
         review_id: str,
@@ -424,7 +618,41 @@ class PostgresReviewReragRepository:
                             else source_id
                         end as source_id,
                         array_agg(distinct status order by status)
-                            filter (where status is not null) as attempt_statuses
+                            filter (where status is not null) as attempt_statuses,
+                        (array_agg(coverage_reason order by created_at desc)
+                            filter (where coverage_reason is not null))[1] as coverage_reason,
+                        (array_agg(pmcid order by created_at desc)
+                            filter (where pmcid is not null))[1] as pmcid,
+                        (array_agg(doi order by created_at desc)
+                            filter (where doi is not null))[1] as doi,
+                        (array_agg(license_or_access_hint order by created_at desc)
+                            filter (where license_or_access_hint is not null))[1]
+                            as license_or_access_hint,
+                        bool_or(pmc_fallback_available) as pmc_fallback_available,
+                        jsonb_agg(
+                            jsonb_build_object(
+                                'source_kind', source_kind,
+                                'status', status,
+                                'attempt_count', attempt_count,
+                                'last_status_code', last_status_code,
+                                'retry_after_ms', retry_after_ms,
+                                'backoff_ms', backoff_ms,
+                                'terminal_reason', terminal_reason,
+                                'source_id', source_id,
+                                'url', url,
+                                'pmid', case
+                                    when source_id ~ '^[0-9]+$' then source_id
+                                    when source_id ~ '^PMID:(.+)$'
+                                        then substring(source_id from '^PMID:(.+)$')
+                                    else null
+                                end,
+                                'pmcid', pmcid,
+                                'doi', doi,
+                                'content_type', content_type,
+                                'content_length', content_length
+                            )
+                            order by created_at
+                        ) filter (where status is not null) as resolver_attempts
                     from full_text_retrieval_attempts
                     where review_id = $1
                     group by review_id, source_id
@@ -450,7 +678,13 @@ class PostgresReviewReragRepository:
                     coalesce(a.attempt_statuses, '{}') as attempt_statuses,
                     coalesce(p.sections, '{}') as sections,
                     coalesce(p.passage_count, 0)::int as passage_count,
-                    coalesce(p.char_count, 0)::int as char_count
+                    coalesce(p.char_count, 0)::int as char_count,
+                    coalesce(a.coverage_reason, 'unknown') as coverage_reason,
+                    a.pmcid,
+                    a.doi,
+                    a.license_or_access_hint,
+                    coalesce(a.pmc_fallback_available, false) as pmc_fallback_available,
+                    coalesce(a.resolver_attempts, '[]'::jsonb) as resolver_attempts
                 from source_scope s
                 left join attempt_stats a
                     on a.review_id = s.review_id
@@ -548,7 +782,42 @@ class PostgresReviewReragRepository:
                         array_agg(distinct a.status order by a.status)
                             filter (where a.status is not null),
                         '{}'
-                    ) as attempt_statuses
+                    ) as attempt_statuses,
+                    coalesce(
+                        (array_agg(a.coverage_reason order by a.created_at desc)
+                            filter (where a.coverage_reason is not null))[1],
+                        'unknown'
+                    ) as coverage_reason,
+                    (array_agg(a.pmcid order by a.created_at desc)
+                        filter (where a.pmcid is not null))[1] as pmcid,
+                    (array_agg(a.doi order by a.created_at desc)
+                        filter (where a.doi is not null))[1] as doi,
+                    (array_agg(a.license_or_access_hint order by a.created_at desc)
+                        filter (where a.license_or_access_hint is not null))[1]
+                        as license_or_access_hint,
+                    coalesce(bool_or(a.pmc_fallback_available), false) as pmc_fallback_available,
+                    coalesce(
+                        jsonb_agg(
+                            jsonb_build_object(
+                                'source_kind', a.source_kind,
+                                'status', a.status,
+                                'attempt_count', a.attempt_count,
+                                'last_status_code', a.last_status_code,
+                                'retry_after_ms', a.retry_after_ms,
+                                'backoff_ms', a.backoff_ms,
+                                'terminal_reason', a.terminal_reason,
+                                'source_id', a.source_id,
+                                'url', a.url,
+                                'pmid', s.pmid,
+                                'pmcid', a.pmcid,
+                                'doi', a.doi,
+                                'content_type', a.content_type,
+                                'content_length', a.content_length
+                            )
+                            order by a.created_at
+                        ) filter (where a.status is not null),
+                        '[]'::jsonb
+                    ) as resolver_attempts
                 from source_scope s
                 left join full_text_retrieval_attempts a
                     on a.review_id = s.review_id
@@ -628,6 +897,56 @@ class PostgresReviewReragRepository:
                 review_id,
             )
         return [str(row["pmid"]) for row in rows]
+
+    async def list_review_passage_ids(self, review_id: str) -> list[str]:
+        async with self._pool.acquire() as connection:
+            rows = await connection.fetch(
+                """
+                select passage_id
+                from review_passages
+                where review_id = $1
+                order by passage_id
+                """,
+                review_id,
+            )
+        return [str(row["passage_id"]) for row in rows]
+
+    async def record_review_audit_event(
+        self,
+        review_id: str,
+        event_type: str,
+        payload: Mapping[str, object],
+    ) -> None:
+        async with self._pool.acquire() as connection:
+            await connection.execute(
+                """
+                insert into review_audit_events (review_id, event_type, payload)
+                values ($1, $2, $3::jsonb)
+                """,
+                review_id,
+                event_type,
+                json.dumps(payload, sort_keys=True),
+            )
+
+    async def list_review_audit_events(self, review_id: str) -> list[Mapping[str, object]]:
+        async with self._pool.acquire() as connection:
+            rows = await connection.fetch(
+                """
+                select event_type, payload, created_at
+                from review_audit_events
+                where review_id = $1
+                order by created_at asc
+                """,
+                review_id,
+            )
+        return [
+            {
+                "event_type": row["event_type"],
+                "payload": row["payload"],
+                "created_at": row["created_at"].isoformat(),
+            }
+            for row in rows
+        ]
 
     async def _preparation_status_on_connection(
         self, connection: Any, review_id: str

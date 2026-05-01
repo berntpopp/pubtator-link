@@ -13,6 +13,8 @@ def test_review_rerag_config_defaults_are_fast_poc_values() -> None:
     assert config.text_max_bytes == 10 * 1024 * 1024
     assert config.allow_http_urls is False
     assert config.enable_docling is False
+    assert config.retrieval_concurrency == 4
+    assert config.preflight_concurrency == 3
 
 
 def test_review_rerag_config_reads_prefixed_env(monkeypatch) -> None:
@@ -24,6 +26,8 @@ def test_review_rerag_config_reads_prefixed_env(monkeypatch) -> None:
     monkeypatch.setenv("PUBTATOR_LINK_REVIEW_PREP_TEXT_MAX_BYTES", "6789")
     monkeypatch.setenv("PUBTATOR_LINK_ALLOW_HTTP_URLS", "true")
     monkeypatch.setenv("PUBTATOR_LINK_ENABLE_DOCLING", "true")
+    monkeypatch.setenv("PUBTATOR_LINK_REVIEW_RETRIEVAL_CONCURRENCY", "5")
+    monkeypatch.setenv("PUBTATOR_LINK_REVIEW_PREFLIGHT_CONCURRENCY", "4")
 
     settings = ServerSettings()
     config = ReviewReragConfig.from_settings(settings)
@@ -36,3 +40,5 @@ def test_review_rerag_config_reads_prefixed_env(monkeypatch) -> None:
     assert config.text_max_bytes == 6789
     assert config.allow_http_urls is True
     assert config.enable_docling is True
+    assert config.retrieval_concurrency == 5
+    assert config.preflight_concurrency == 4

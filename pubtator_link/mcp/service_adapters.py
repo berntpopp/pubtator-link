@@ -34,8 +34,10 @@ from pubtator_link.models.review_rerag import (
 )
 from pubtator_link.services.publication_passage_service import PublicationPassageService
 from pubtator_link.services.publication_service import PublicationService
+from pubtator_link.services.review_audit import ReviewAuditService
 from pubtator_link.services.review_context_service import ReviewContextService
 from pubtator_link.services.review_preparation_queue import ReviewPreparationQueue
+from pubtator_link.services.source_preflight import SourcePreflightService
 
 
 async def search_biomedical_entities_impl(
@@ -394,6 +396,18 @@ async def index_review_evidence_impl(
     return response
 
 
+async def preflight_review_sources_impl(
+    *,
+    service: SourcePreflightService,
+    pmids: list[str],
+) -> dict[str, Any]:
+    hints = await service.preflight_pmids(pmids)
+    return {
+        "success": True,
+        "coverage_hints": [hint.model_dump(mode="json") for hint in hints],
+    }
+
+
 async def inspect_review_index_impl(
     *,
     service: ReviewContextService,
@@ -411,6 +425,51 @@ async def inspect_review_index_impl(
         ),
     )
     return response.model_dump()
+
+
+async def get_review_passages_by_id_impl(
+    *,
+    service: ReviewContextService,
+    review_id: str,
+    passage_ids: list[str],
+    max_chars_per_passage: int = 2200,
+) -> dict[str, Any]:
+    response = await service.get_passages_by_id(
+        review_id=review_id,
+        passage_ids=passage_ids,
+        max_chars_per_passage=max_chars_per_passage,
+    )
+    return response.model_dump()
+
+
+async def get_neighboring_review_passages_impl(
+    *,
+    service: ReviewContextService,
+    review_id: str,
+    passage_id: str,
+    before: int = 1,
+    after: int = 1,
+    same_section: bool = True,
+    max_chars_per_passage: int = 2200,
+) -> dict[str, Any]:
+    response = await service.get_neighboring_passages(
+        review_id=review_id,
+        passage_id=passage_id,
+        before=before,
+        after=after,
+        same_section=same_section,
+        max_chars_per_passage=max_chars_per_passage,
+    )
+    return response.model_dump()
+
+
+async def export_review_audit_bundle_impl(
+    *,
+    service: ReviewAuditService,
+    review_id: str,
+) -> dict[str, Any]:
+    bundle = await service.export_bundle(review_id)
+    return {"success": True, "audit_bundle": bundle.model_dump(mode="json")}
 
 
 async def retrieve_review_context_impl(

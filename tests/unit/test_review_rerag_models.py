@@ -5,11 +5,15 @@ from pubtator_link.models.review_rerag import (
     ContextBudget,
     ContextPack,
     ContextPassage,
+    EvidenceTier,
     IndexReviewEvidenceRequest,
     PreparationStatus,
     QueryDiagnosticsSummary,
+    ResolverAttemptSummary,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
+    SourceCoverageHint,
+    coverage_to_evidence_tier,
     normalize_section,
     passage_id_for_pmid,
 )
@@ -163,3 +167,43 @@ def test_context_pack_generates_stable_citation_map() -> None:
     )
 
     assert pack.stable_citation_map == {passage.stable_citation_key: "PMID:40234174:abstract:1"}
+
+
+def test_source_coverage_hint_defaults_to_unknown_reason() -> None:
+    hint = SourceCoverageHint(pmid="40234174")
+
+    assert hint.expected_coverage == "unknown"
+    assert hint.coverage_reason == "unknown"
+    assert hint.pmc_fallback_available is False
+    assert hint.resolver_attempts == []
+
+
+def test_resolver_attempt_summary_captures_retry_metadata() -> None:
+    attempt = ResolverAttemptSummary(
+        source_kind="pubtator_full_bioc",
+        status="failed",
+        attempt_count=3,
+        last_status_code=503,
+        retry_after_ms=1000,
+        backoff_ms=750,
+        terminal_reason="retry_exhausted",
+    )
+
+    assert attempt.attempt_count == 3
+    assert attempt.last_status_code == 503
+    assert attempt.terminal_reason == "retry_exhausted"
+
+
+def test_evidence_tier_derives_from_actual_coverage() -> None:
+    assert coverage_to_evidence_tier("full_text", "pubtator_full_bioc") == (
+        EvidenceTier.PASSAGE_FULL_TEXT
+    )
+    assert coverage_to_evidence_tier("abstract_only", "pubtator_abstract") == (
+        EvidenceTier.PASSAGE_ABSTRACT
+    )
+    assert coverage_to_evidence_tier("title_only", "pubtator_abstract") == (
+        EvidenceTier.METADATA_TITLE
+    )
+    assert coverage_to_evidence_tier("curated_url", "curated_pdf") == (
+        EvidenceTier.CURATED_FULL_TEXT
+    )

@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 
 from pubtator_link.config import ReviewReragConfig
-from pubtator_link.models.review_rerag import ReviewPassageRow
+from pubtator_link.models.review_rerag import ReviewPassageRow, SourceCoverageHint
 from pubtator_link.services.full_text_preparation import (
     FullTextPreparationService,
     looks_like_pdf,
@@ -54,12 +54,27 @@ class RecordingPubTatorClient:
     def __init__(self, responses: list[dict[str, Any]]) -> None:
         self.responses = responses
         self.calls: list[dict[str, Any]] = []
+        self.retry_metadata_by_call: list[dict[str, Any]] = []
+        self.last_retry_metadata: dict[str, Any] | None = None
 
     async def export_publications(
         self, pmids: list[str], format: str = "biocjson", full: bool = False
     ) -> dict[str, Any]:
         self.calls.append({"pmids": pmids, "format": format, "full": full})
+        self.last_retry_metadata = (
+            self.retry_metadata_by_call.pop(0) if self.retry_metadata_by_call else None
+        )
         return self.responses.pop(0)
+
+
+class StaticPreflightService:
+    def __init__(self, hint: SourceCoverageHint) -> None:
+        self.hint = hint
+        self.calls: list[list[str]] = []
+
+    async def preflight_pmids(self, pmids: list[str]) -> list[SourceCoverageHint]:
+        self.calls.append(pmids)
+        return [self.hint]
 
 
 class StaticFetcher:
@@ -137,10 +152,32 @@ async def test_prepare_pmid_falls_back_to_abstract_and_records_passages() -> Non
             },
         ]
     )
+    pubtator_client.retry_metadata_by_call = [
+        {
+            "attempt_count": 3,
+            "last_status_code": 503,
+            "retry_after_ms": 1000,
+            "backoff_ms": 750,
+            "terminal_reason": "retry_exhausted",
+        },
+        {"attempt_count": 1, "last_status_code": 200},
+    ]
+    preflight = StaticPreflightService(
+        SourceCoverageHint(
+            pmid="40234174",
+            expected_coverage="abstract_only",
+            coverage_reason="no_pmcid",
+            pmcid="PMC123",
+            doi="10.1000/example",
+            license_or_access_hint="oa",
+            pmc_fallback_available=True,
+        )
+    )
     service = FullTextPreparationService(
         config=_config(),
         repository=repository,
         pubtator_client=pubtator_client,
+        source_preflight_service=preflight,
     )
 
     status = await service.prepare_pmid(review_id="review-1", pmid="40234174")
@@ -156,12 +193,41 @@ async def test_prepare_pmid_falls_back_to_abstract_and_records_passages() -> Non
         {
             "review_id": "review-1",
             "source_id": "PMID:40234174",
+            "source_kind": "pubtator_full_bioc",
+            "status": "not_available",
+            "content_type": "application/json",
+            "reason": "No PubTator full-text passages found",
+            "coverage_reason": "no_pmcid",
+            "attempt_count": 3,
+            "last_status_code": 503,
+            "retry_after_ms": 1000,
+            "backoff_ms": 750,
+            "terminal_reason": "retry_exhausted",
+            "pmcid": "PMC123",
+            "doi": "10.1000/example",
+            "license_or_access_hint": "oa",
+            "pmc_fallback_available": True,
+        },
+        {
+            "review_id": "review-1",
+            "source_id": "PMID:40234174",
             "source_kind": "pubtator_abstract",
             "status": "success",
             "content_type": "application/json",
             "reason": None,
-        }
+            "coverage_reason": "abstract_fallback_used",
+            "attempt_count": 1,
+            "last_status_code": 200,
+            "retry_after_ms": None,
+            "backoff_ms": None,
+            "terminal_reason": None,
+            "pmcid": "PMC123",
+            "doi": "10.1000/example",
+            "license_or_access_hint": "oa",
+            "pmc_fallback_available": True,
+        },
     ]
+    assert preflight.calls == [["40234174"]]
 
 
 @pytest.mark.asyncio

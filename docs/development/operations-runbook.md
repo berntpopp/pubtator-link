@@ -38,6 +38,26 @@ enabled.
 Clients may send `X-Request-ID`. The server returns `X-Request-ID` on responses.
 Use this value when correlating logs and user reports.
 
+## Review Auditability And Upstream Resilience
+
+PubTator-Link retries idempotent upstream GET calls on transient statuses
+`408`, `429`, `500`, `502`, `503`, and `504`. The retry helper respects
+`Retry-After` when present and otherwise uses capped full-jitter backoff. Text
+annotation POST submission remains single-attempt by default because the upstream
+service may already have accepted the job.
+
+Review batch retrieval and source preflight use conservative bounded concurrency
+defaults: `PUBTATOR_LINK_REVIEW_RETRIEVAL_CONCURRENCY=4` and
+`PUBTATOR_LINK_REVIEW_PREFLIGHT_CONCURRENCY=3`. Raise these only after checking
+upstream behavior and local database capacity.
+
+For source coverage failures, inspect `coverage_reason` and
+`resolver_attempts` on `inspect_review_index` or
+`export_review_audit_bundle`. Common reasons include `no_pmcid`,
+`abstract_fallback_used`, `upstream_timeout`, `upstream_404`, and
+`retry_exhausted`. Treat abstract-only and title-only coverage as scientific
+limitations in downstream review notes.
+
 ## Logs
 
 ```bash

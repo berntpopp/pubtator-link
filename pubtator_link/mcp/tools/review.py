@@ -5,11 +5,20 @@ from typing import Annotated, Any
 from fastmcp import FastMCP
 from pydantic import Field
 
-from pubtator_link.api.routes.dependencies import get_review_context_service, get_review_queue
+from pubtator_link.api.routes.dependencies import (
+    get_review_audit_service,
+    get_review_context_service,
+    get_review_queue,
+    get_source_preflight_service,
+)
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD, REVIEW_WRITE_ANNOTATIONS
 from pubtator_link.mcp.service_adapters import (
+    export_review_audit_bundle_impl,
+    get_neighboring_review_passages_impl,
+    get_review_passages_by_id_impl,
     index_review_evidence_impl,
     inspect_review_index_impl,
+    preflight_review_sources_impl,
     retrieve_review_context_batch_impl,
     retrieve_review_context_impl,
 )
@@ -22,6 +31,18 @@ from pubtator_link.models.review_rerag import (
 
 
 def register_review_tools(mcp: FastMCP) -> None:
+    @mcp.tool(
+        name="pubtator.preflight_review_sources",
+        title="Preflight Review Sources",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def preflight_review_sources(
+        pmids: list[str],
+    ) -> dict[str, Any]:
+        """Use this before indexing review evidence to estimate PMID source coverage, PMC fallback availability, and likely full-text versus abstract-only retrieval. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_source_preflight_service()
+        return await preflight_review_sources_impl(service=service, pmids=pmids)
+
     @mcp.tool(
         name="pubtator.index_review_evidence",
         title="Index Review Evidence",
@@ -63,6 +84,60 @@ def register_review_tools(mcp: FastMCP) -> None:
             include_passage_samples=include_passage_samples,
             sample_per_pmid=sample_per_pmid,
         )
+
+    @mcp.tool(
+        name="pubtator.get_review_passages_by_id",
+        title="Get Review Passages By ID",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def get_review_passages_by_id(
+        review_id: str,
+        passage_ids: list[str],
+        max_chars_per_passage: int = 2200,
+    ) -> dict[str, Any]:
+        """Use this to retrieve exact prepared review passages by stable passage IDs from prior context packs or audit bundles. This only reads the review index and does not call upstream APIs. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_review_context_service()
+        return await get_review_passages_by_id_impl(
+            service=service,
+            review_id=review_id,
+            passage_ids=passage_ids,
+            max_chars_per_passage=max_chars_per_passage,
+        )
+
+    @mcp.tool(
+        name="pubtator.get_neighboring_review_passages",
+        title="Get Neighboring Review Passages",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def get_neighboring_review_passages(
+        review_id: str,
+        passage_id: str,
+        before: int = 1,
+        after: int = 1,
+        same_section: bool = True,
+        max_chars_per_passage: int = 2200,
+    ) -> dict[str, Any]:
+        """Use this to retrieve prepared review passages near a cited stable passage ID for local context expansion. This only reads the review index and does not call upstream APIs. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_review_context_service()
+        return await get_neighboring_review_passages_impl(
+            service=service,
+            review_id=review_id,
+            passage_id=passage_id,
+            before=before,
+            after=after,
+            same_section=same_section,
+            max_chars_per_passage=max_chars_per_passage,
+        )
+
+    @mcp.tool(
+        name="pubtator.export_review_audit_bundle",
+        title="Export Review Audit Bundle",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def export_review_audit_bundle(review_id: str) -> dict[str, Any]:
+        """Use this to export review preparation status, source coverage, resolver attempts, retrieval runs, passage IDs, and stable citation keys for scientific auditability. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_review_audit_service()
+        return await export_review_audit_bundle_impl(service=service, review_id=review_id)
 
     @mcp.tool(
         name="pubtator.retrieve_review_context",

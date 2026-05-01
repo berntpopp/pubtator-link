@@ -75,6 +75,12 @@ class ServerSettings(BaseSettings):
     review_prep_source_timeout_seconds: int = Field(
         default=20, ge=2, le=120, description="Per-source retrieval timeout"
     )
+    review_retrieval_concurrency: int = Field(
+        default=4, ge=1, le=10, description="Concurrent review context retrieval queries"
+    )
+    review_preflight_concurrency: int = Field(
+        default=3, ge=1, le=10, description="Concurrent review source preflight probes"
+    )
     review_prep_pdf_max_bytes: int = Field(
         default=50 * 1024 * 1024, ge=1024, description="Maximum downloaded PDF bytes"
     )
@@ -200,6 +206,8 @@ class ReviewReragConfig:
     text_max_bytes: int
     allow_http_urls: bool
     enable_docling: bool
+    retrieval_concurrency: int = 4
+    preflight_concurrency: int = 3
 
     @classmethod
     def from_settings(cls, server_settings: ServerSettings) -> "ReviewReragConfig":
@@ -212,6 +220,8 @@ class ReviewReragConfig:
             text_max_bytes=server_settings.review_prep_text_max_bytes,
             allow_http_urls=server_settings.allow_http_urls,
             enable_docling=server_settings.enable_docling,
+            retrieval_concurrency=server_settings.review_retrieval_concurrency,
+            preflight_concurrency=server_settings.review_preflight_concurrency,
         )
 
 

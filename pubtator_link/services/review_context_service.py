@@ -1,10 +1,12 @@
 """Service for retrieving review-scoped context passages."""
 
+import asyncio
 from collections.abc import Sequence
 from typing import Protocol
 
 from pubtator_link.models.review_rerag import (
     ContextPack,
+    ContextPassage,
     FailedSourceSummary,
     InspectReviewIndexRequest,
     InspectReviewIndexResponse,
@@ -14,6 +16,7 @@ from pubtator_link.models.review_rerag import (
     RetrieveReviewContextRequest,
     RetrieveReviewContextResponse,
     ReviewIndexTotals,
+    ReviewPassageLookupResponse,
     ReviewPassageRow,
     ReviewSourceSummary,
     SourceCoverage,
@@ -74,12 +77,35 @@ class ReviewContextRepository(Protocol):
     async def indexed_pmids(self, review_id: str) -> list[str]:
         """Return indexed PMIDs for diagnostics."""
 
+    async def get_passages_by_id(
+        self,
+        review_id: str,
+        passage_ids: Sequence[str],
+    ) -> list[ReviewPassageRow]:
+        """Return review passages in the requested passage ID order."""
+
+    async def neighboring_passages(
+        self,
+        review_id: str,
+        passage_id: str,
+        before: int,
+        after: int,
+        same_section: bool,
+    ) -> list[ReviewPassageRow]:
+        """Return passages around an anchor passage."""
+
 
 class ReviewContextService:
     """Retrieve, rerank, and pack review-scoped context passages."""
 
-    def __init__(self, repository: ReviewContextRepository) -> None:
+    def __init__(
+        self,
+        repository: ReviewContextRepository,
+        *,
+        retrieval_concurrency: int = 4,
+    ) -> None:
         self.repository = repository
+        self.retrieval_concurrency = retrieval_concurrency
 
     async def retrieve_context(
         self,
@@ -143,25 +169,37 @@ class ReviewContextService:
         results: list[RetrieveReviewContextResponse] = []
         query_results: list[RetrieveReviewContextResponse] = []
 
-        for query in request.queries:
-            result = await self.retrieve_context(
-                review_id,
-                RetrieveReviewContextRequest(
-                    question=query,
-                    pmids=request.pmids,
-                    entity_ids=request.entity_ids,
-                    sections=request.sections,
-                    max_passages=request.max_passages_per_query,
-                    max_chars=request.max_chars,
-                    include_diagnostics=request.include_diagnostics
-                    or request.response_mode == "diagnostics",
-                    include_tables=request.include_tables,
-                    include_references=request.include_references,
-                    table_mode=request.table_mode,
-                    allow_truncated_passages=request.allow_truncated_passages,
-                    max_chars_per_passage=request.max_chars_per_passage,
-                ),
-            )
+        semaphore = asyncio.Semaphore(self.retrieval_concurrency)
+
+        async def retrieve_one(
+            query_index: int,
+            query: str,
+        ) -> tuple[int, RetrieveReviewContextResponse]:
+            async with semaphore:
+                result = await self.retrieve_context(
+                    review_id,
+                    RetrieveReviewContextRequest(
+                        question=query,
+                        pmids=request.pmids,
+                        entity_ids=request.entity_ids,
+                        sections=request.sections,
+                        max_passages=request.max_passages_per_query,
+                        max_chars=request.max_chars,
+                        include_diagnostics=request.include_diagnostics
+                        or request.response_mode == "diagnostics",
+                        include_tables=request.include_tables,
+                        include_references=request.include_references,
+                        table_mode=request.table_mode,
+                        allow_truncated_passages=request.allow_truncated_passages,
+                        max_chars_per_passage=request.max_chars_per_passage,
+                    ),
+                )
+                return query_index, result
+
+        indexed_results = await asyncio.gather(
+            *(retrieve_one(index, query) for index, query in enumerate(request.queries))
+        )
+        for _query_index, result in sorted(indexed_results, key=lambda item: item[0]):
             query_results.append(result)
             if request.response_mode == "full":
                 results.append(result)
@@ -174,6 +212,16 @@ class ReviewContextService:
             query_results=query_results,
             coverage_by_source=coverage_by_source,
         )
+        record_audit_event = getattr(self.repository, "record_review_audit_event", None)
+        if record_audit_event is not None:
+            await record_audit_event(
+                review_id,
+                "retrieval_run",
+                {
+                    "queries": request.queries,
+                    "passage_ids": [passage.passage_id for passage in merged.passages],
+                },
+            )
         citation_map = {passage.citation_key: passage.passage_id for passage in merged.passages}
         budget = context_budget(
             max_chars=request.max_chars,
@@ -221,6 +269,73 @@ class ReviewContextService:
             totals=totals,
             failed_sources=failed_sources,
         )
+
+    async def get_passages_by_id(
+        self,
+        *,
+        review_id: str,
+        passage_ids: list[str],
+        max_chars_per_passage: int = 2200,
+    ) -> ReviewPassageLookupResponse:
+        rows = await self.repository.get_passages_by_id(review_id, passage_ids)
+        found_ids = {row.passage_id for row in rows}
+        passages = self._context_passages_from_rows(
+            rows,
+            query=" ".join(passage_ids),
+            max_chars_per_passage=max_chars_per_passage,
+        )
+        return ReviewPassageLookupResponse(
+            review_id=review_id,
+            passages=passages,
+            not_found=[passage_id for passage_id in passage_ids if passage_id not in found_ids],
+        )
+
+    async def get_neighboring_passages(
+        self,
+        *,
+        review_id: str,
+        passage_id: str,
+        before: int = 1,
+        after: int = 1,
+        same_section: bool = True,
+        max_chars_per_passage: int = 2200,
+    ) -> ReviewPassageLookupResponse:
+        rows = await self.repository.neighboring_passages(
+            review_id,
+            passage_id=passage_id,
+            before=before,
+            after=after,
+            same_section=same_section,
+        )
+        passages = self._context_passages_from_rows(
+            rows,
+            query=passage_id,
+            max_chars_per_passage=max_chars_per_passage,
+        )
+        return ReviewPassageLookupResponse(
+            review_id=review_id,
+            passages=passages,
+            not_found=[] if rows else [passage_id],
+        )
+
+    def _context_passages_from_rows(
+        self,
+        rows: Sequence[ReviewPassageRow],
+        *,
+        query: str,
+        max_chars_per_passage: int,
+    ) -> list[ContextPassage]:
+        request = RetrieveReviewContextRequest(
+            question=query or "passage",
+            max_passages=max(1, min(30, len(rows) or 1)),
+            max_chars=max(500, min(30000, max_chars_per_passage * max(1, len(rows)))),
+            max_chars_per_passage=max_chars_per_passage,
+            allow_truncated_passages=True,
+        )
+        return [
+            context_passage_from_row(index=index, row=row, request=request)
+            for index, row in enumerate(rows, start=1)
+        ]
 
     async def _source_coverage_by_key(self, review_id: str) -> dict[str, SourceCoverage]:
         sources = await self.repository.list_review_sources(

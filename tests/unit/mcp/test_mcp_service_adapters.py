@@ -81,6 +81,31 @@ async def test_publication_passages_adapter_calls_service() -> None:
 
 
 @pytest.mark.asyncio
+async def test_preflight_review_sources_adapter_returns_hints() -> None:
+    from pubtator_link.mcp.service_adapters import preflight_review_sources_impl
+    from pubtator_link.models.review_rerag import SourceCoverageHint
+
+    class FakeService:
+        async def preflight_pmids(self, pmids: list[str]) -> list[SourceCoverageHint]:
+            return [
+                SourceCoverageHint(
+                    pmid=pmids[0],
+                    expected_coverage="abstract_only",
+                    coverage_reason="no_pmcid",
+                )
+            ]
+
+    result = await preflight_review_sources_impl(
+        service=FakeService(),
+        pmids=["40234174"],
+    )
+
+    assert result["success"] is True
+    assert result["coverage_hints"][0]["pmid"] == "40234174"
+    assert result["coverage_hints"][0]["coverage_reason"] == "no_pmcid"
+
+
+@pytest.mark.asyncio
 async def test_inspect_review_index_adapter_calls_service() -> None:
     from pubtator_link.mcp.service_adapters import inspect_review_index_impl
     from pubtator_link.models.review_rerag import (
@@ -106,6 +131,98 @@ async def test_inspect_review_index_adapter_calls_service() -> None:
 
     assert result["success"] is True
     assert result["review_id"] == "rev_123"
+
+
+@pytest.mark.asyncio
+async def test_get_review_passages_by_id_adapter_calls_service() -> None:
+    from pubtator_link.mcp.service_adapters import get_review_passages_by_id_impl
+    from pubtator_link.models.review_rerag import ReviewPassageLookupResponse
+
+    class FakeService:
+        async def get_passages_by_id(
+            self,
+            review_id: str,
+            passage_ids: list[str],
+            max_chars_per_passage: int,
+        ) -> ReviewPassageLookupResponse:
+            return ReviewPassageLookupResponse(
+                review_id=review_id,
+                passages=[],
+                not_found=passage_ids,
+            )
+
+    result = await get_review_passages_by_id_impl(
+        service=FakeService(),
+        review_id="rev_123",
+        passage_ids=["p1"],
+    )
+
+    assert result["success"] is True
+    assert result["not_found"] == ["p1"]
+
+
+@pytest.mark.asyncio
+async def test_get_neighboring_review_passages_adapter_calls_service() -> None:
+    from pubtator_link.mcp.service_adapters import get_neighboring_review_passages_impl
+    from pubtator_link.models.review_rerag import ReviewPassageLookupResponse
+
+    class FakeService:
+        async def get_neighboring_passages(
+            self,
+            review_id: str,
+            passage_id: str,
+            before: int,
+            after: int,
+            same_section: bool,
+            max_chars_per_passage: int,
+        ) -> ReviewPassageLookupResponse:
+            return ReviewPassageLookupResponse(
+                review_id=review_id,
+                passages=[],
+                not_found=[passage_id],
+            )
+
+    result = await get_neighboring_review_passages_impl(
+        service=FakeService(),
+        review_id="rev_123",
+        passage_id="missing",
+    )
+
+    assert result["success"] is True
+    assert result["not_found"] == ["missing"]
+
+
+@pytest.mark.asyncio
+async def test_export_review_audit_bundle_adapter_returns_bundle() -> None:
+    from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
+    from pubtator_link.models.review_rerag import (
+        PreparationStatus,
+        ReviewAuditBundle,
+        ReviewIndexTotals,
+    )
+
+    class FakeService:
+        async def export_bundle(self, review_id: str) -> ReviewAuditBundle:
+            return ReviewAuditBundle(
+                review_id=review_id,
+                generated_at="2026-05-01T10:00:00+00:00",
+                preparation_status=PreparationStatus(complete=1),
+                totals=ReviewIndexTotals(),
+                sources=[],
+                failed_sources=[],
+                coverage_distribution={},
+                resolver_attempts=[],
+                passage_ids=[],
+                stable_citation_keys={},
+            )
+
+    result = await export_review_audit_bundle_impl(
+        service=FakeService(),
+        review_id="rev_123",
+    )
+
+    assert result["success"] is True
+    assert result["audit_bundle"]["review_id"] == "rev_123"
 
 
 @pytest.mark.asyncio

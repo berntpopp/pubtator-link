@@ -3,7 +3,12 @@ from unittest.mock import AsyncMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from pubtator_link.api.routes.dependencies import get_review_context_service, get_review_queue
+from pubtator_link.api.routes.dependencies import (
+    get_review_audit_service,
+    get_review_context_service,
+    get_review_queue,
+    get_source_preflight_service,
+)
 from pubtator_link.models.review_rerag import (
     ContextPack,
     InspectReviewIndexResponse,
@@ -11,10 +16,39 @@ from pubtator_link.models.review_rerag import (
     QueryDiagnosticsSummary,
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextResponse,
+    ReviewAuditBundle,
     ReviewIndexTotals,
+    ReviewPassageLookupResponse,
     ReviewSourceSummary,
+    SourceCoverageHint,
 )
 from pubtator_link.server_manager import UnifiedServerManager
+
+
+@pytest.mark.asyncio
+async def test_preflight_review_sources_returns_coverage_hints() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.preflight_pmids.return_value = [
+        SourceCoverageHint(
+            pmid="40234174",
+            expected_coverage="abstract_only",
+            coverage_reason="no_pmcid",
+        )
+    ]
+    app.dependency_overrides[get_source_preflight_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/reviews/source-preflight",
+            json={"pmids": ["40234174"]},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["coverage_hints"][0]["pmid"] == "40234174"
+    assert data["coverage_hints"][0]["coverage_reason"] == "no_pmcid"
+    service.preflight_pmids.assert_awaited_once_with(["40234174"])
 
 
 @pytest.mark.asyncio
@@ -63,6 +97,76 @@ async def test_retrieve_review_context_returns_pack() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_review_passages_by_id_route_returns_passages_and_not_found() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.get_passages_by_id.return_value = ReviewPassageLookupResponse(
+        review_id="rev_123",
+        passages=[],
+        not_found=["missing"],
+    )
+    app.dependency_overrides[get_review_context_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/reviews/rev_123/passages/by-id",
+            json={"passage_ids": ["missing"]},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["not_found"] == ["missing"]
+    service.get_passages_by_id.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_neighboring_review_passages_route_returns_passages_and_not_found() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.get_neighboring_passages.return_value = ReviewPassageLookupResponse(
+        review_id="rev_123",
+        passages=[],
+        not_found=["missing"],
+    )
+    app.dependency_overrides[get_review_context_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/reviews/rev_123/passages/neighbors",
+            json={"passage_id": "missing", "before": 1, "after": 1},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["not_found"] == ["missing"]
+    service.get_neighboring_passages.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_export_review_audit_bundle_route_returns_audit_bundle() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.export_bundle.return_value = ReviewAuditBundle(
+        review_id="rev_123",
+        generated_at="2026-05-01T10:00:00+00:00",
+        preparation_status=PreparationStatus(complete=1),
+        totals=ReviewIndexTotals(),
+        sources=[],
+        failed_sources=[],
+        coverage_distribution={},
+        resolver_attempts=[],
+        passage_ids=[],
+        stable_citation_keys={},
+    )
+    app.dependency_overrides[get_review_audit_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/reviews/rev_123/audit-bundle")
+
+    assert response.status_code == 200
+    assert response.json()["review_id"] == "rev_123"
+    service.export_bundle.assert_awaited_once_with("rev_123")
+
+
+@pytest.mark.asyncio
 async def test_inspect_review_index_returns_sources_and_failures() -> None:
     app = UnifiedServerManager().create_app()
     service = AsyncMock()
@@ -78,6 +182,11 @@ async def test_inspect_review_index_returns_sources_and_failures() -> None:
                 sections=["abstract"],
                 passage_count=1,
                 char_count=13,
+                coverage_reason="abstract_fallback_used",
+                pmcid="PMC123",
+                doi="10.1000/example",
+                license_or_access_hint="oa",
+                pmc_fallback_available=True,
             )
         ],
         totals=ReviewIndexTotals(
@@ -101,6 +210,11 @@ async def test_inspect_review_index_returns_sources_and_failures() -> None:
     data = response.json()
     assert data["review_id"] == "rev_123"
     assert data["totals"]["passage_count"] == 1
+    assert data["sources"][0]["coverage_reason"] == "abstract_fallback_used"
+    assert data["sources"][0]["pmcid"] == "PMC123"
+    assert data["sources"][0]["doi"] == "10.1000/example"
+    assert data["sources"][0]["pmc_fallback_available"] is True
+    assert data["sources"][0]["resolver_attempts"] == []
     service.inspect_review_index.assert_awaited_once()
 
 

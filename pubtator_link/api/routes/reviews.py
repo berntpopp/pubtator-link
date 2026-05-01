@@ -7,14 +7,41 @@ from ...models.review_rerag import (
     IndexReviewEvidenceResponse,
     InspectReviewIndexRequest,
     InspectReviewIndexResponse,
+    PreflightReviewSourcesRequest,
+    PreflightReviewSourcesResponse,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextRequest,
     RetrieveReviewContextResponse,
+    ReviewAuditBundle,
+    ReviewNeighboringPassagesRequest,
+    ReviewPassageLookupRequest,
+    ReviewPassageLookupResponse,
 )
-from .dependencies import ReviewContextServiceDep, ReviewQueueDep, handle_api_errors
+from .dependencies import (
+    ReviewAuditServiceDep,
+    ReviewContextServiceDep,
+    ReviewQueueDep,
+    SourcePreflightServiceDep,
+    handle_api_errors,
+)
 
 router = APIRouter(prefix="/api/reviews", tags=["Reviews"])
+
+
+@router.post(
+    "/source-preflight",
+    response_model=PreflightReviewSourcesResponse,
+    operation_id="preflight_review_sources",
+    summary="Estimate review source coverage before indexing",
+)
+@handle_api_errors
+async def preflight_review_sources(
+    request: PreflightReviewSourcesRequest,
+    service: SourcePreflightServiceDep,
+) -> PreflightReviewSourcesResponse:
+    hints = await service.preflight_pmids(request.pmids)
+    return PreflightReviewSourcesResponse(coverage_hints=hints)
 
 
 @router.post(
@@ -75,6 +102,20 @@ async def inspect_review_index(
     )
 
 
+@router.get(
+    "/{review_id}/audit-bundle",
+    response_model=ReviewAuditBundle,
+    operation_id="export_review_audit_bundle",
+    summary="Export a PRISMA-style review audit bundle",
+)
+@handle_api_errors
+async def export_review_audit_bundle(
+    review_id: str,
+    service: ReviewAuditServiceDep,
+) -> ReviewAuditBundle:
+    return await service.export_bundle(review_id)
+
+
 @router.post(
     "/{review_id}/context",
     response_model=RetrieveReviewContextResponse,
@@ -88,6 +129,47 @@ async def retrieve_review_context(
     service: ReviewContextServiceDep,
 ) -> RetrieveReviewContextResponse:
     return await service.retrieve_context(review_id=review_id, request=request)
+
+
+@router.post(
+    "/{review_id}/passages/by-id",
+    response_model=ReviewPassageLookupResponse,
+    operation_id="get_review_passages_by_id",
+    summary="Get review passages by stable passage ID",
+)
+@handle_api_errors
+async def get_review_passages_by_id(
+    review_id: str,
+    request: ReviewPassageLookupRequest,
+    service: ReviewContextServiceDep,
+) -> ReviewPassageLookupResponse:
+    return await service.get_passages_by_id(
+        review_id=review_id,
+        passage_ids=request.passage_ids,
+        max_chars_per_passage=request.max_chars_per_passage,
+    )
+
+
+@router.post(
+    "/{review_id}/passages/neighbors",
+    response_model=ReviewPassageLookupResponse,
+    operation_id="get_neighboring_review_passages",
+    summary="Get neighboring review passages around a stable passage ID",
+)
+@handle_api_errors
+async def get_neighboring_review_passages(
+    review_id: str,
+    request: ReviewNeighboringPassagesRequest,
+    service: ReviewContextServiceDep,
+) -> ReviewPassageLookupResponse:
+    return await service.get_neighboring_passages(
+        review_id=review_id,
+        passage_id=request.passage_id,
+        before=request.before,
+        after=request.after,
+        same_section=request.same_section,
+        max_chars_per_passage=request.max_chars_per_passage,
+    )
 
 
 @router.post(

@@ -26,14 +26,18 @@ def get_capabilities_resource() -> dict[str, Any]:
             "pubtator.find_entity_relations",
             "pubtator.submit_text_annotation",
             "pubtator.get_text_annotation_results",
+            "pubtator.preflight_review_sources",
             "pubtator.index_review_evidence",
             "pubtator.inspect_review_index",
             "pubtator.retrieve_review_context",
             "pubtator.retrieve_review_context_batch",
+            "pubtator.get_review_passages_by_id",
+            "pubtator.get_neighboring_review_passages",
+            "pubtator.export_review_audit_bundle",
             "pubtator.get_server_capabilities",
         ],
         "recommended_workflows": [
-            "search -> index -> inspect -> retrieve for review-grounded answers",
+            "search -> preflight -> index -> inspect -> retrieve for review-grounded answers",
             "publication passages -> context estimate -> compact passage retrieval before raw BioC",
         ],
         "tool_groups": {
@@ -47,10 +51,14 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "pubtator.fetch_pmc_annotations",
             ],
             "review_grounding": [
+                "pubtator.preflight_review_sources",
                 "pubtator.index_review_evidence",
                 "pubtator.inspect_review_index",
                 "pubtator.retrieve_review_context",
                 "pubtator.retrieve_review_context_batch",
+                "pubtator.get_review_passages_by_id",
+                "pubtator.get_neighboring_review_passages",
+                "pubtator.export_review_audit_bundle",
             ],
             "entities_relations": [
                 "pubtator.search_biomedical_entities",
@@ -100,6 +108,22 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "max_chars": 12000,
                 "max_response_chars": 24000,
             },
+            "pubtator.preflight_review_sources": {
+                "pmids": ["40234174"],
+            },
+            "pubtator.get_review_passages_by_id": {
+                "review_id": "fmf-colchicine-guidelines",
+                "passage_ids": ["PMID:40234174:abstract:0"],
+            },
+            "pubtator.get_neighboring_review_passages": {
+                "review_id": "fmf-colchicine-guidelines",
+                "passage_id": "PMID:40234174:abstract:0",
+                "before": 1,
+                "after": 1,
+            },
+            "pubtator.export_review_audit_bundle": {
+                "review_id": "fmf-colchicine-guidelines",
+            },
             "pubtator.retrieve_review_context_batch:diagnostics": {
                 "review_id": "fmf-colchicine-guidelines",
                 "queries": ["MEFV colchicine", "FMF guideline"],
@@ -130,18 +154,25 @@ def get_capabilities_resource() -> dict[str, Any]:
         "review_rerag": {
             "tools": [
                 "pubtator.index_review_evidence",
+                "pubtator.preflight_review_sources",
                 "pubtator.inspect_review_index",
                 "pubtator.retrieve_review_context",
                 "pubtator.retrieve_review_context_batch",
+                "pubtator.get_review_passages_by_id",
+                "pubtator.get_neighboring_review_passages",
+                "pubtator.export_review_audit_bundle",
             ],
             "prompt": "review_rerag_workflow",
             "scope": "research-use review-scoped evidence preparation and retrieval",
             "workflow": [
+                "preflight candidate PMIDs to estimate source coverage",
                 "index candidate PMIDs or curated URLs for a stable review_id",
                 "inspect the review index before retrieval to check source coverage",
                 "wait for preparation_status to show complete or partial records",
                 "retrieve with short keyword-style questions first",
                 "retry with PMID filters for paper-specific evidence",
+                "look up cited passage IDs or neighboring passages for local context",
+                "export an audit bundle before synthesizing or reporting review conclusions",
                 "use query_summaries[].next_steps when a query returns no passages",
                 "fall back to fetch_publication_annotations full=true when retrieval returns no passages",
             ],

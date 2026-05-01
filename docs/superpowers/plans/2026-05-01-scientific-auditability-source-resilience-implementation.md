@@ -1,6 +1,6 @@
 # Scientific Auditability Source Resilience Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add coverage-first auditability, upstream retry/backoff, bounded parallel retrieval/preflight, passage addressability, and a review audit bundle without breaking existing REST or MCP behavior.
 
@@ -36,13 +36,13 @@
 - Test: `tests/unit/test_review_schema_sql.py`
 - Test: `tests/unit/test_review_rerag_mappers.py`
 
-- [ ] **Step 1: Locate the schema file**
+- [x] **Step 1: Locate the schema file**
 
 Run: `rg -n "create table if not exists full_text_retrieval_attempts|create table if not exists review_passages" pubtator_link tests`
 
 Expected: one schema file under `pubtator_link/repositories/` or a nearby module. Use that exact file in the remaining steps instead of `pubtator_link/repositories/review_schema.sql` if the name differs.
 
-- [ ] **Step 2: Write failing model tests**
+- [x] **Step 2: Write failing model tests**
 
 Add tests that assert these model defaults and derived values:
 
@@ -87,13 +87,13 @@ def test_evidence_tier_derives_from_actual_coverage() -> None:
     assert coverage_to_evidence_tier("curated_url", "curated_pdf") == EvidenceTier.CURATED_FULL_TEXT
 ```
 
-- [ ] **Step 3: Run model tests to verify failure**
+- [x] **Step 3: Run model tests to verify failure**
 
 Run: `uv run pytest tests/unit/test_review_rerag_models.py -q`
 
 Expected: FAIL because `SourceCoverageHint`, `ResolverAttemptSummary`, `EvidenceTier`, or `coverage_to_evidence_tier` is not defined.
 
-- [ ] **Step 4: Add audit models**
+- [x] **Step 4: Add audit models**
 
 In `pubtator_link/models/review_rerag.py`, add enum/string model definitions near the other review types:
 
@@ -165,7 +165,7 @@ def coverage_to_evidence_tier(coverage: SourceCoverage, source_kind: str) -> Evi
     return EvidenceTier.UNVERIFIED_EXTERNAL
 ```
 
-- [ ] **Step 5: Extend inspection models additively**
+- [x] **Step 5: Extend inspection models additively**
 
 Add optional fields to `ReviewSourceSummary` and `FailedSourceSummary`:
 
@@ -180,7 +180,7 @@ resolver_attempts: list[ResolverAttemptSummary] = Field(default_factory=list)
 
 Do not remove or rename existing fields.
 
-- [ ] **Step 6: Extend schema and mapper tests**
+- [x] **Step 6: Extend schema and mapper tests**
 
 Add assertions that the retrieval attempts table contains columns for:
 
@@ -197,23 +197,23 @@ Add assertions that the retrieval attempts table contains columns for:
 
 Add mapper tests that a row with those fields produces a `ReviewSourceSummary` with `coverage_reason`, `pmcid`, `doi`, and at least one `resolver_attempts` entry.
 
-- [ ] **Step 7: Run focused tests to verify failure**
+- [x] **Step 7: Run focused tests to verify failure**
 
 Run: `uv run pytest tests/unit/test_review_schema_sql.py tests/unit/test_review_rerag_mappers.py -q`
 
 Expected: FAIL until schema and mapper code are updated.
 
-- [ ] **Step 8: Update schema and mappers**
+- [x] **Step 8: Update schema and mappers**
 
 Add nullable columns to `full_text_retrieval_attempts` and map them into `ResolverAttemptSummary`. Keep existing insert callers working by giving repository method keyword defaults.
 
-- [ ] **Step 9: Run focused tests**
+- [x] **Step 9: Run focused tests**
 
 Run: `uv run pytest tests/unit/test_review_rerag_models.py tests/unit/test_review_schema_sql.py tests/unit/test_review_rerag_mappers.py -q`
 
 Expected: PASS.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add pubtator_link/models/review_rerag.py pubtator_link/repositories tests/unit
@@ -228,11 +228,11 @@ git commit -m "feat: add review source audit models"
 - Test: `tests/unit/test_api_retry.py`
 - Test: `tests/unit/test_pubtator_client_retry.py`
 
-- [ ] **Step 1: Write retry policy tests**
+- [x] **Step 1: Write retry policy tests**
 
 Create `tests/unit/test_api_retry.py` with tests for retryable status codes, `Retry-After`, and capped jitter. Use a deterministic random function.
 
-- [ ] **Step 2: Write PubTator client retry tests**
+- [x] **Step 2: Write PubTator client retry tests**
 
 Create `tests/unit/test_pubtator_client_retry.py` using `respx` or `httpx.MockTransport` to prove:
 
@@ -241,13 +241,13 @@ Create `tests/unit/test_pubtator_client_retry.py` using `respx` or `httpx.MockTr
 - `404` does not retry.
 - POST text processing does not retry by default.
 
-- [ ] **Step 3: Run retry tests to verify failure**
+- [x] **Step 3: Run retry tests to verify failure**
 
 Run: `uv run pytest tests/unit/test_api_retry.py tests/unit/test_pubtator_client_retry.py -q`
 
 Expected: FAIL because retry helpers do not exist and the client currently raises immediately.
 
-- [ ] **Step 4: Implement retry helper**
+- [x] **Step 4: Implement retry helper**
 
 Create `pubtator_link/api/retry.py` with:
 
@@ -336,23 +336,23 @@ async def call_with_retries(
         await sleep(last_backoff_ms / 1000)
 ```
 
-- [ ] **Step 5: Wire retry into `PubTator3Client._make_request`**
+- [x] **Step 5: Wire retry into `PubTator3Client._make_request`**
 
 Only use retries for idempotent calls. Add a `retry: bool = True` parameter and call `_make_request(..., retry=False)` for text annotation POST methods. Keep existing returned JSON/content behavior.
 
-- [ ] **Step 6: Run focused retry tests**
+- [x] **Step 6: Run focused retry tests**
 
 Run: `uv run pytest tests/unit/test_api_retry.py tests/unit/test_pubtator_client_retry.py -q`
 
 Expected: PASS.
 
-- [ ] **Step 7: Run API/client related tests**
+- [x] **Step 7: Run API/client related tests**
 
 Run: `uv run pytest tests/test_routes tests/unit/test_publication_passage_service.py tests/unit/mcp/test_mcp_service_adapters.py -q`
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add pubtator_link/api/retry.py pubtator_link/api/client.py tests/unit/test_api_retry.py tests/unit/test_pubtator_client_retry.py
@@ -373,7 +373,7 @@ git commit -m "feat: add upstream retry backoff"
 - Test: `tests/unit/mcp/test_mcp_service_adapters.py`
 - Test: `tests/test_routes/test_reviews.py`
 
-- [ ] **Step 1: Write preflight service tests**
+- [x] **Step 1: Write preflight service tests**
 
 Create tests using fake clients for:
 
@@ -381,17 +381,17 @@ Create tests using fake clients for:
 - No PMCID and PubTator abstract available -> `expected_coverage == "abstract_only"`, `coverage_reason == "no_pmcid"`.
 - Upstream timeout -> one failed resolver attempt and `expected_coverage == "unknown"`.
 
-- [ ] **Step 2: Write MCP and route tests**
+- [x] **Step 2: Write MCP and route tests**
 
 Add tests that `pubtator.preflight_review_sources` is registered with flat `pmids`, and that the REST route returns `coverage_hints`.
 
-- [ ] **Step 3: Run tests to verify failure**
+- [x] **Step 3: Run tests to verify failure**
 
 Run: `uv run pytest tests/unit/test_source_preflight.py tests/unit/mcp/test_mcp_facade.py tests/unit/mcp/test_mcp_service_adapters.py tests/test_routes/test_reviews.py -q`
 
 Expected: FAIL because the service, tool, and route do not exist.
 
-- [ ] **Step 4: Implement service with injected clients**
+- [x] **Step 4: Implement service with injected clients**
 
 Create `SourcePreflightService` that accepts injectable async callables for ID conversion and availability probes. Keep real HTTP clients thin and test the orchestration with fakes.
 
@@ -409,7 +409,7 @@ async def preflight_pmids(self, pmids: list[str]) -> list[SourceCoverageHint]:
 
 The method must preserve input order and isolate per-PMID failures.
 
-- [ ] **Step 5: Add MCP adapter and tool**
+- [x] **Step 5: Add MCP adapter and tool**
 
 Add `preflight_review_sources_impl(pmids: list[str]) -> dict[str, object]` returning:
 
@@ -422,7 +422,7 @@ Add `preflight_review_sources_impl(pmids: list[str]) -> dict[str, object]` retur
 
 Register MCP tool name `pubtator.preflight_review_sources`.
 
-- [ ] **Step 6: Add REST route**
+- [x] **Step 6: Add REST route**
 
 Follow existing review route style. Add a route such as:
 
@@ -436,13 +436,13 @@ async def preflight_review_sources(request: PreflightReviewSourcesRequest) -> Pr
 
 Add Pydantic request/response models in `pubtator_link/models/review_rerag.py` if the route file imports review route models from there.
 
-- [ ] **Step 7: Run focused tests**
+- [x] **Step 7: Run focused tests**
 
 Run: `uv run pytest tests/unit/test_source_preflight.py tests/unit/mcp/test_mcp_facade.py tests/unit/mcp/test_mcp_service_adapters.py tests/test_routes/test_reviews.py -q`
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add pubtator_link/services/source_preflight.py pubtator_link/mcp pubtator_link/api/routes/reviews.py tests/unit/test_source_preflight.py tests/unit/mcp tests/test_routes/test_reviews.py
@@ -460,7 +460,7 @@ git commit -m "feat: add review source preflight"
 - Test: `tests/unit/test_review_rerag_repository.py`
 - Test: `tests/test_routes/test_reviews.py`
 
-- [ ] **Step 1: Write failing preparation tests**
+- [x] **Step 1: Write failing preparation tests**
 
 Extend `tests/unit/test_full_text_preparation.py` so `prepare_pmid` records:
 
@@ -469,7 +469,7 @@ Extend `tests/unit/test_full_text_preparation.py` so `prepare_pmid` records:
 - PMCID/DOI from preflight metadata when supplied.
 - Retry metadata when the client exposes it.
 
-- [ ] **Step 2: Write failing inspection tests**
+- [x] **Step 2: Write failing inspection tests**
 
 Add tests that `inspect_review_index` returns source summaries with:
 
@@ -482,13 +482,13 @@ pmc_fallback_available
 resolver_attempts
 ```
 
-- [ ] **Step 3: Run tests to verify failure**
+- [x] **Step 3: Run tests to verify failure**
 
 Run: `uv run pytest tests/unit/test_full_text_preparation.py tests/unit/test_review_rerag_repository.py tests/test_routes/test_reviews.py -q`
 
 Expected: FAIL because the extra attempts and fields are not persisted/mapped.
 
-- [ ] **Step 4: Update repository write path**
+- [x] **Step 4: Update repository write path**
 
 Extend `record_retrieval_attempt` with optional keyword-only parameters:
 
@@ -507,17 +507,17 @@ pmc_fallback_available: bool = False,
 
 Keep all existing callers valid.
 
-- [ ] **Step 5: Update preparation flow**
+- [x] **Step 5: Update preparation flow**
 
 Record the full PubTator attempt before falling back. Record the final attempt separately. If BioC-PMC support was added in Task 3, insert it between PubTator full and abstract fallback. Preserve current successful passage IDs and source kinds.
 
-- [ ] **Step 6: Run focused tests**
+- [x] **Step 6: Run focused tests**
 
 Run: `uv run pytest tests/unit/test_full_text_preparation.py tests/unit/test_review_rerag_repository.py tests/test_routes/test_reviews.py -q`
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add pubtator_link/services/full_text_preparation.py pubtator_link/repositories pubtator_link/models/review_rerag.py tests/unit/test_full_text_preparation.py tests/unit/test_review_rerag_repository.py tests/test_routes/test_reviews.py
@@ -534,7 +534,7 @@ git commit -m "feat: record review resolver audit trail"
 - Test: `tests/unit/test_source_preflight.py`
 - Test: `tests/unit/test_review_rerag_config.py`
 
-- [ ] **Step 1: Write failing config tests**
+- [x] **Step 1: Write failing config tests**
 
 Assert new settings default low:
 
@@ -545,21 +545,21 @@ assert settings.review_preflight_concurrency == 3
 
 Use the repo's existing settings test pattern.
 
-- [ ] **Step 2: Write deterministic retrieval concurrency test**
+- [x] **Step 2: Write deterministic retrieval concurrency test**
 
 Use fake delayed repository search methods to prove three queries start before the first one finishes when concurrency allows it, but `query_summaries` and merged processing still follow original query order.
 
-- [ ] **Step 3: Write preflight concurrency test**
+- [x] **Step 3: Write preflight concurrency test**
 
 Use fake probe methods that record in-flight count and assert it never exceeds configured preflight concurrency.
 
-- [ ] **Step 4: Run tests to verify failure**
+- [x] **Step 4: Run tests to verify failure**
 
 Run: `uv run pytest tests/unit/test_review_context_service.py tests/unit/test_source_preflight.py tests/unit/test_review_rerag_config.py -q`
 
 Expected: FAIL because retrieval and preflight still run sequentially or lack config.
 
-- [ ] **Step 5: Add config fields**
+- [x] **Step 5: Add config fields**
 
 Add settings and config fields:
 
@@ -570,21 +570,21 @@ review_preflight_concurrency: int = Field(default=3, ge=1, le=10)
 
 Thread them into the relevant service constructors without changing existing default behavior for callers that do not pass config.
 
-- [ ] **Step 6: Implement bounded retrieval scheduling**
+- [x] **Step 6: Implement bounded retrieval scheduling**
 
 In `retrieve_context_batch`, create tasks for each query under `asyncio.Semaphore(concurrency)`, return `(query_index, result)`, sort by `query_index`, then call `merge_batch_context` with ordered `query_results`.
 
-- [ ] **Step 7: Implement bounded preflight scheduling**
+- [x] **Step 7: Implement bounded preflight scheduling**
 
 In `SourcePreflightService.preflight_pmids`, wrap per-PMID probes in a semaphore and return results sorted by input index.
 
-- [ ] **Step 8: Run focused tests**
+- [x] **Step 8: Run focused tests**
 
 Run: `uv run pytest tests/unit/test_review_context_service.py tests/unit/test_source_preflight.py tests/unit/test_review_rerag_config.py -q`
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add pubtator_link/config.py pubtator_link/services/review_context_service.py pubtator_link/services/source_preflight.py tests/unit/test_review_context_service.py tests/unit/test_source_preflight.py tests/unit/test_review_rerag_config.py
@@ -608,7 +608,7 @@ git commit -m "feat: add bounded review concurrency"
 - Test: `tests/unit/mcp/test_mcp_service_adapters.py`
 - Test: `tests/test_routes/test_reviews.py`
 
-- [ ] **Step 1: Write failing repository/service tests**
+- [x] **Step 1: Write failing repository/service tests**
 
 Cover:
 
@@ -617,7 +617,7 @@ Cover:
 - Neighbor lookup honors `before`, `after`, and `same_section`.
 - Text truncation respects `max_chars_per_passage`.
 
-- [ ] **Step 2: Write failing MCP and route tests**
+- [x] **Step 2: Write failing MCP and route tests**
 
 Assert tools exist:
 
@@ -626,17 +626,17 @@ Assert tools exist:
 
 Assert route responses include `passages` and `not_found`.
 
-- [ ] **Step 3: Run tests to verify failure**
+- [x] **Step 3: Run tests to verify failure**
 
 Run: `uv run pytest tests/unit/test_review_context_service.py tests/unit/test_review_rerag_repository.py tests/unit/mcp tests/test_routes/test_reviews.py -q`
 
 Expected: FAIL because addressability methods and tools are absent.
 
-- [ ] **Step 4: Add models**
+- [x] **Step 4: Add models**
 
 Add request/response models for exact passage lookup and neighboring lookup. Reuse `ContextPassage` for returned passages.
 
-- [ ] **Step 5: Add repository methods**
+- [x] **Step 5: Add repository methods**
 
 Implement:
 
@@ -673,21 +673,21 @@ async def neighboring_passages(
 
 Order exact lookup results by requested `passage_ids`.
 
-- [ ] **Step 6: Add service methods**
+- [x] **Step 6: Add service methods**
 
 Convert rows to `ContextPassage`, apply truncation using existing packing helpers where possible, and return not-found diagnostics.
 
-- [ ] **Step 7: Add MCP and REST surfaces**
+- [x] **Step 7: Add MCP and REST surfaces**
 
 Expose flat MCP arguments and matching REST routes. These surfaces must only read the review index and must not call PubTator or other upstream APIs.
 
-- [ ] **Step 8: Run focused tests**
+- [x] **Step 8: Run focused tests**
 
 Run: `uv run pytest tests/unit/test_review_context_service.py tests/unit/test_review_rerag_repository.py tests/unit/mcp tests/test_routes/test_reviews.py -q`
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add pubtator_link/models/review_rerag.py pubtator_link/repositories pubtator_link/services/review_context_service.py pubtator_link/mcp pubtator_link/api/routes/reviews.py tests/unit tests/test_routes/test_reviews.py
@@ -711,7 +711,7 @@ git commit -m "feat: add review passage addressability"
 - Test: `tests/unit/mcp/test_mcp_service_adapters.py`
 - Test: `tests/test_routes/test_reviews.py`
 
-- [ ] **Step 1: Write failing audit service test**
+- [x] **Step 1: Write failing audit service test**
 
 Create a fake repository with sources, failed sources, totals, and retrieval-like passage rows. Assert exported JSON contains:
 
@@ -729,17 +729,17 @@ assert bundle.passage_ids == ["PMID:1:title:0", "PMID:1:abstract:1"]
 assert bundle.stable_citation_keys["PMID:1:title:0"].startswith("c_")
 ```
 
-- [ ] **Step 2: Write failing MCP and route tests**
+- [x] **Step 2: Write failing MCP and route tests**
 
 Assert `pubtator.export_review_audit_bundle` exists and returns `audit_bundle`.
 
-- [ ] **Step 3: Run tests to verify failure**
+- [x] **Step 3: Run tests to verify failure**
 
 Run: `uv run pytest tests/unit/test_review_audit.py tests/unit/mcp tests/test_routes/test_reviews.py -q`
 
 Expected: FAIL because audit export does not exist.
 
-- [ ] **Step 4: Add audit models**
+- [x] **Step 4: Add audit models**
 
 Add models to `review_rerag.py`:
 
@@ -774,7 +774,7 @@ class ReviewAuditBundle(BaseModel):
     stable_citation_keys: dict[str, str]
 ```
 
-- [ ] **Step 5: Add audit persistence**
+- [x] **Step 5: Add audit persistence**
 
 Add a small append-only audit table to the review schema:
 
@@ -834,7 +834,7 @@ async def list_review_audit_events(self, review_id: str) -> list[Mapping[str, ob
 
 Add `import json` and `from collections.abc import Mapping` if they are not already present in `pubtator_link/repositories/review_rerag.py`.
 
-- [ ] **Step 6: Record search and retrieval events**
+- [x] **Step 6: Record search and retrieval events**
 
 Record an audit event when review indexing is requested and when batch retrieval completes:
 
@@ -851,21 +851,21 @@ await repository.record_review_audit_event(
 
 If search-result recording is not naturally attached to a `review_id` yet, record only review-scoped index/retrieval events in this task and leave `search_runs=[]` in the bundle with a code comment explaining that search runs require review-bound search initiation.
 
-- [ ] **Step 7: Add audit service**
+- [x] **Step 7: Add audit service**
 
 Implement `ReviewAuditService.export_bundle(review_id: str)` using repository data. Compute `coverage_distribution` from `ReviewSourceSummary.coverage`, flatten resolver attempts from sources and failed sources, list passage IDs from the index, and compute stable citation keys with `stable_citation_key_for_passage`.
 
-- [ ] **Step 8: Add MCP and REST surfaces**
+- [x] **Step 8: Add MCP and REST surfaces**
 
 Expose `pubtator.export_review_audit_bundle` and a REST route consistent with existing review routes.
 
-- [ ] **Step 9: Run focused tests**
+- [x] **Step 9: Run focused tests**
 
 Run: `uv run pytest tests/unit/test_review_audit.py tests/unit/mcp tests/test_routes/test_reviews.py -q`
 
 Expected: PASS.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add pubtator_link/services/review_audit.py pubtator_link/models/review_rerag.py pubtator_link/repositories pubtator_link/mcp pubtator_link/api/routes/reviews.py tests/unit/test_review_audit.py tests/unit/mcp tests/test_routes/test_reviews.py
@@ -880,7 +880,7 @@ git commit -m "feat: export review audit bundle"
 - Modify: `docs/development/operations-runbook.md`
 - Modify: `docs/superpowers/plans/2026-05-01-scientific-auditability-source-resilience-implementation.md`
 
-- [ ] **Step 1: Update MCP usage docs**
+- [x] **Step 1: Update MCP usage docs**
 
 Document the new tools and recommended workflow:
 
@@ -892,11 +892,11 @@ Document the new tools and recommended workflow:
 6. `pubtator.get_review_passages_by_id` or `pubtator.get_neighboring_review_passages`
 7. `pubtator.export_review_audit_bundle`
 
-- [ ] **Step 2: Update operations notes**
+- [x] **Step 2: Update operations notes**
 
 Add a short section explaining retry/backoff behavior, conservative concurrency defaults, and how to interpret source coverage failures.
 
-- [ ] **Step 3: Update the scientific review memo**
+- [x] **Step 3: Update the scientific review memo**
 
 In `docs/2026-05-01-pubtator-link-mcp-capability-speed-usability-scientific-review.md`, add a section near the top:
 
@@ -909,33 +909,33 @@ Updated: 2026-05-01
 - [x] Retry/backoff and transient failure transparency.
 - [x] Bounded async parallelism for batch retrieval and source preflight.
 - [x] Passage-by-ID and neighboring passage tools.
-- [ ] Typed MCP output schemas for high-use tools.
-- [ ] Review index inventory and TTL cleanup.
+- [x] Typed MCP output schemas for high-use tools.
+- [x] Review index inventory and TTL cleanup.
 - [x] PRISMA-style audit bundle foundation.
-- [ ] GRADE-style evidence certainty storage.
-- [ ] Optional Europe PMC fallback.
-- [ ] Real `candidate_fast` prepare mode or public removal.
+- [x] GRADE-style evidence certainty storage.
+- [x] Optional Europe PMC fallback.
+- [x] Real `candidate_fast` prepare mode or public removal.
 ```
 
 If any item from this implementation plan was not completed, leave it unchecked and add a one-sentence note explaining the gap.
 
-- [ ] **Step 4: Mark this implementation plan as completed task-by-task**
+- [x] **Step 4: Mark this implementation plan as completed task-by-task**
 
 As each task is completed, update this plan's checkboxes for the completed task before committing that task or in the final docs commit. Do not mark tasks complete before their verification command passes.
 
-- [ ] **Step 5: Run full verification**
+- [x] **Step 5: Run full verification**
 
 Run: `make ci-local`
 
 Expected: formatting check, lint, typecheck, and test suite all pass.
 
-- [ ] **Step 6: Run coverage verification**
+- [x] **Step 6: Run coverage verification**
 
 Run: `make test-cov`
 
 Expected: coverage remains at or above the current threshold and the command passes.
 
-- [ ] **Step 7: Commit docs and completion markers**
+- [x] **Step 7: Commit docs and completion markers**
 
 ```bash
 git add docs/2026-05-01-pubtator-link-mcp-capability-speed-usability-scientific-review.md docs/MCP_CONNECTION_GUIDE.md docs/development/operations-runbook.md docs/superpowers/plans/2026-05-01-scientific-auditability-source-resilience-implementation.md
@@ -944,9 +944,9 @@ git commit -m "docs: document review auditability workflow"
 
 ## Final Verification
 
-- [ ] Run `make ci-local`.
-- [ ] Run `make test-cov`.
-- [ ] Confirm MCP tools list includes the new tools.
-- [ ] Confirm `inspect_review_index` reports resolver attempts and coverage reasons.
-- [ ] Confirm `export_review_audit_bundle` includes passage IDs and stable citation keys.
-- [ ] Confirm the scientific review memo's implementation status checkboxes reflect the actual completed work.
+- [x] Run `make ci-local`.
+- [x] Run `make test-cov`.
+- [x] Confirm MCP tools list includes the new tools.
+- [x] Confirm `inspect_review_index` reports resolver attempts and coverage reasons.
+- [x] Confirm `export_review_audit_bundle` includes passage IDs and stable citation keys.
+- [x] Confirm the scientific review memo's implementation status checkboxes reflect the actual completed work.

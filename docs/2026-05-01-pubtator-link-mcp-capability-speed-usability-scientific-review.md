@@ -2,10 +2,25 @@
 
 Date: 2026-05-01
 
+## Implementation Status
+
+Updated: 2026-05-01
+
+- [x] Coverage preflight, resolver attempts, and coverage reasons.
+- [x] Retry/backoff and transient failure transparency.
+- [x] Bounded async parallelism for batch retrieval and source preflight.
+- [x] Passage-by-ID and neighboring passage tools.
+- [ ] Typed MCP output schemas for high-use tools.
+- [ ] Review index inventory and TTL cleanup.
+- [x] PRISMA-style audit bundle foundation.
+- [ ] GRADE-style evidence certainty storage.
+- [ ] Optional Europe PMC fallback.
+- [ ] Real `candidate_fast` prepare mode or public removal.
+
 ## Executive Summary
 
 PubTator-Link is already a strong LLM-facing biomedical grounding MCP. The current
-`search -> index -> inspect -> retrieve` workflow, compact passage packing, stable
+`search -> preflight -> index -> inspect -> retrieve` workflow, compact passage packing, stable
 citation keys, source coverage labels, and retrieval diagnostics are the right
 foundation for audit-grade literature synthesis.
 

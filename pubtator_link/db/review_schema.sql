@@ -27,6 +27,16 @@ create table if not exists full_text_retrieval_attempts (
     status text not null,
     url text,
     reason text,
+    coverage_reason text not null default 'unknown',
+    attempt_count integer not null default 1,
+    last_status_code integer,
+    retry_after_ms integer,
+    backoff_ms integer,
+    terminal_reason text,
+    pmcid text,
+    doi text,
+    license_or_access_hint text,
+    pmc_fallback_available boolean not null default false,
     content_type text,
     content_length bigint,
     created_at timestamptz not null default now()
@@ -76,3 +86,13 @@ create index if not exists review_passages_review_id_source_id_idx
 
 create index if not exists review_passages_review_id_section_idx
     on review_passages(review_id, section);
+
+create table if not exists review_audit_events (
+    review_id text not null references reviews(review_id),
+    event_type text not null,
+    payload jsonb not null default '{}'::jsonb,
+    created_at timestamptz not null default now()
+);
+
+create index if not exists review_audit_events_review_id_idx
+    on review_audit_events(review_id, created_at);

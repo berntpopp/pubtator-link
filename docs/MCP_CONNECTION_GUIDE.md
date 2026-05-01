@@ -55,10 +55,12 @@ arguments in addition to raw `filters` JSON.
 Recommended review workflow:
 
 1. `pubtator.search_literature` to find candidate PMIDs.
-2. `pubtator.index_review_evidence` with a stable `review_id`.
-3. `pubtator.inspect_review_index` to verify PMIDs, sections, source coverage, counts, and failures.
-4. `pubtator.retrieve_review_context` or `pubtator.retrieve_review_context_batch` for compact citable passages.
-5. `pubtator.get_publication_passages` for explicit PMID section retrieval.
+2. `pubtator.preflight_review_sources` to estimate full-text, abstract, and fallback coverage.
+3. `pubtator.index_review_evidence` with a stable `review_id`.
+4. `pubtator.inspect_review_index` to verify PMIDs, sections, source coverage, counts, resolver attempts, and failures.
+5. `pubtator.retrieve_review_context` or `pubtator.retrieve_review_context_batch` for compact citable passages.
+6. `pubtator.get_review_passages_by_id` or `pubtator.get_neighboring_review_passages` to re-fetch cited passages or local context.
+7. `pubtator.export_review_audit_bundle` before synthesis/reporting to capture passage IDs, source coverage, resolver attempts, and stable citation keys.
 
 Use `pubtator.fetch_publication_annotations` with `full=true` only when raw BioC is intentionally needed. Compact passage tools are safer for routine grounding. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support.
 
@@ -145,10 +147,14 @@ Use stdio only for local desktop workflows that cannot connect to HTTP MCP endpo
 | `pubtator.find_entity_relations` | Explore literature-derived relations for a PubTator entity |
 | `pubtator.submit_text_annotation` | Submit research text for PubTator biomedical NER |
 | `pubtator.get_text_annotation_results` | Retrieve asynchronous text annotation results |
+| `pubtator.preflight_review_sources` | Estimate source coverage and fallback availability before indexing |
 | `pubtator.index_review_evidence` | Queue review-scoped evidence preparation |
 | `pubtator.inspect_review_index` | Flat-argument review index/source coverage inspection |
 | `pubtator.retrieve_review_context` | Flat-argument compact context from prepared review passages |
 | `pubtator.retrieve_review_context_batch` | Flat-argument batch review retrieval with compact/default diagnostics |
+| `pubtator.get_review_passages_by_id` | Retrieve exact prepared review passages by stable passage ID |
+| `pubtator.get_neighboring_review_passages` | Retrieve local prepared context around a stable passage ID |
+| `pubtator.export_review_audit_bundle` | Export review audit metadata, passage IDs, and stable citation keys |
 | `pubtator.get_server_capabilities` | Discover formats, bioconcepts, relation types, and limitations |
 
 ## Verification

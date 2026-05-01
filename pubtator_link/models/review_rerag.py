@@ -14,6 +14,20 @@ AttemptStatus = Literal["success", "not_available", "blocked", "failed"]
 ReviewBatchResponseMode = Literal["compact", "merged_only", "full", "diagnostics"]
 ReviewTableMode = Literal["off", "preview", "full"]
 SourceCoverage = Literal["title_only", "abstract_only", "full_text", "curated_url", "unknown"]
+CoverageReason = Literal[
+    "full_text_available",
+    "abstract_fallback_used",
+    "title_only_metadata",
+    "no_pmcid",
+    "pmc_not_open_access",
+    "license_reuse_unavailable",
+    "upstream_timeout",
+    "upstream_404",
+    "retry_exhausted",
+    "parser_unsupported",
+    "blocked_source",
+    "unknown",
+]
 BudgetStrategy = Literal["query_fair", "source_fair", "scarcity_first"]
 ZeroResultReason = Literal[
     "review_not_indexed",
@@ -38,6 +52,64 @@ class McpToolKind(StrEnum):
 
     index_review_evidence = "pubtator.index_review_evidence"
     retrieve_review_context = "pubtator.retrieve_review_context"
+
+
+class EvidenceTier(StrEnum):
+    """Scientific evidence tier for returned or inspected source material."""
+
+    PASSAGE_FULL_TEXT = "PASSAGE_FULL_TEXT"
+    PASSAGE_ABSTRACT = "PASSAGE_ABSTRACT"
+    METADATA_TITLE = "METADATA_TITLE"
+    CURATED_FULL_TEXT = "CURATED_FULL_TEXT"
+    UNVERIFIED_EXTERNAL = "UNVERIFIED_EXTERNAL"
+
+
+class ResolverAttemptSummary(BaseModel):
+    """Structured audit summary for one upstream/source resolver attempt."""
+
+    source_kind: str
+    status: AttemptStatus
+    attempt_count: int = Field(default=1, ge=1)
+    last_status_code: int | None = None
+    retry_after_ms: int | None = None
+    backoff_ms: int | None = None
+    terminal_reason: CoverageReason | str | None = None
+    elapsed_ms: int | None = Field(default=None, ge=0)
+    source_id: str | None = None
+    url: str | None = None
+    pmid: str | None = None
+    pmcid: str | None = None
+    doi: str | None = None
+    content_type: str | None = None
+    content_length: int | None = Field(default=None, ge=0)
+
+
+class SourceCoverageHint(BaseModel):
+    """Preflight source coverage estimate for a PMID."""
+
+    pmid: str
+    expected_coverage: SourceCoverage = "unknown"
+    coverage_reason: CoverageReason = "unknown"
+    pmcid: str | None = None
+    doi: str | None = None
+    license_or_access_hint: str | None = None
+    pmc_fallback_available: bool = False
+    resolver_attempts: list[ResolverAttemptSummary] = Field(default_factory=list)
+
+
+def coverage_to_evidence_tier(coverage: SourceCoverage, source_kind: str) -> EvidenceTier:
+    """Map actual source coverage into a review-facing evidence tier."""
+    if coverage == "full_text":
+        return EvidenceTier.PASSAGE_FULL_TEXT
+    if coverage == "abstract_only":
+        return EvidenceTier.PASSAGE_ABSTRACT
+    if coverage == "title_only":
+        return EvidenceTier.METADATA_TITLE
+    if coverage == "curated_url":
+        return EvidenceTier.CURATED_FULL_TEXT
+    if source_kind in {"curated_pdf", "curated_html", "docling_pdf"}:
+        return EvidenceTier.CURATED_FULL_TEXT
+    return EvidenceTier.UNVERIFIED_EXTERNAL
 
 
 class PreparationStatus(BaseModel):
@@ -73,6 +145,19 @@ class IndexReviewEvidenceResponse(BaseModel):
     preparation_status: PreparationStatus
     retry_after_ms: int | None = None
     lifecycle_note: str | None = None
+
+
+class PreflightReviewSourcesRequest(BaseModel):
+    """Request to estimate source coverage before review indexing."""
+
+    pmids: list[str] = Field(min_length=1)
+
+
+class PreflightReviewSourcesResponse(BaseModel):
+    """Response containing source coverage hints for requested PMIDs."""
+
+    success: bool = True
+    coverage_hints: list[SourceCoverageHint]
 
 
 class RetrieveReviewContextRequest(BaseModel):
@@ -286,6 +371,62 @@ class ReviewPassageSample(BaseModel):
     char_count: int
 
 
+class ReviewPassageLookupRequest(BaseModel):
+    """Request exact review passages by stable passage ID."""
+
+    passage_ids: list[str] = Field(min_length=1)
+    max_chars_per_passage: int = Field(default=2200, ge=300, le=10000)
+
+
+class ReviewNeighboringPassagesRequest(BaseModel):
+    """Request neighboring review passages around a stable passage ID."""
+
+    passage_id: str = Field(min_length=1)
+    before: int = Field(default=1, ge=0, le=20)
+    after: int = Field(default=1, ge=0, le=20)
+    same_section: bool = True
+    max_chars_per_passage: int = Field(default=2200, ge=300, le=10000)
+
+
+class ReviewPassageLookupResponse(BaseModel):
+    """Response for exact or neighboring review passage lookups."""
+
+    success: bool = True
+    review_id: str
+    passages: list[ContextPassage]
+    not_found: list[str] = Field(default_factory=list)
+
+
+class ReviewSearchRun(BaseModel):
+    query: str
+    filters: dict[str, object] = Field(default_factory=dict)
+    source: str = "pubtator"
+    returned_count: int = Field(default=0, ge=0)
+    created_at: str | None = None
+
+
+class ReviewRetrievalRun(BaseModel):
+    queries: list[str]
+    passage_ids: list[str] = Field(default_factory=list)
+    created_at: str | None = None
+
+
+class ReviewAuditBundle(BaseModel):
+    success: bool = True
+    review_id: str
+    generated_at: str
+    preparation_status: PreparationStatus
+    totals: "ReviewIndexTotals"
+    sources: list["ReviewSourceSummary"]
+    failed_sources: list["FailedSourceSummary"]
+    coverage_distribution: dict[str, int]
+    resolver_attempts: list[ResolverAttemptSummary]
+    search_runs: list[ReviewSearchRun] = Field(default_factory=list)
+    retrieval_runs: list[ReviewRetrievalRun] = Field(default_factory=list)
+    passage_ids: list[str]
+    stable_citation_keys: dict[str, str]
+
+
 class ReviewSourceSummary(BaseModel):
     """Inspection summary for one indexed review source."""
 
@@ -299,6 +440,12 @@ class ReviewSourceSummary(BaseModel):
     passage_count: int = Field(default=0, ge=0)
     char_count: int = Field(default=0, ge=0)
     coverage: SourceCoverage = "unknown"
+    coverage_reason: CoverageReason = "unknown"
+    pmcid: str | None = None
+    doi: str | None = None
+    license_or_access_hint: str | None = None
+    pmc_fallback_available: bool = False
+    resolver_attempts: list[ResolverAttemptSummary] = Field(default_factory=list)
     sample_passages: list[ReviewPassageSample] = Field(default_factory=list)
 
 
@@ -311,6 +458,12 @@ class FailedSourceSummary(BaseModel):
     job_status: str
     error: str | None = None
     attempt_statuses: list[str] = Field(default_factory=list)
+    coverage_reason: CoverageReason = "unknown"
+    pmcid: str | None = None
+    doi: str | None = None
+    license_or_access_hint: str | None = None
+    pmc_fallback_available: bool = False
+    resolver_attempts: list[ResolverAttemptSummary] = Field(default_factory=list)
 
 
 class ReviewIndexTotals(BaseModel):
