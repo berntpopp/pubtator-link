@@ -82,3 +82,69 @@ def test_cli_dispatches_mcp_server(monkeypatch: pytest.MonkeyPatch) -> None:
     cli.main()
 
     assert calls == ["mcp"]
+
+
+def test_cli_dispatches_entities_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[object] = []
+    sentinel = object()
+
+    def fake_search_entities(query: str, concept: str | None, limit: int) -> object:
+        calls.append((query, concept, limit))
+        return sentinel
+
+    def fake_asyncio_run(coro: object) -> None:
+        calls.append(coro)
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["pubtator-link", "entities", "MEFV", "--concept", "Gene", "--limit", "3"],
+    )
+    monkeypatch.setattr(cli, "search_entities", fake_search_entities)
+    monkeypatch.setattr(cli.asyncio, "run", fake_asyncio_run)
+
+    cli.main()
+
+    assert calls == [("MEFV", "Gene", 3), sentinel]
+
+
+def test_cli_dispatches_search_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[object] = []
+    sentinel = object()
+
+    def fake_search_publications(query: str, page: int) -> object:
+        calls.append((query, page))
+        return sentinel
+
+    def fake_asyncio_run(coro: object) -> None:
+        calls.append(coro)
+
+    monkeypatch.setattr("sys.argv", ["pubtator-link", "search", "colchicine", "--page", "2"])
+    monkeypatch.setattr(cli, "search_publications", fake_search_publications)
+    monkeypatch.setattr(cli.asyncio, "run", fake_asyncio_run)
+
+    cli.main()
+
+    assert calls == [("colchicine", 2), sentinel]
+
+
+def test_cli_dispatches_export_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[object] = []
+    sentinel = object()
+
+    def fake_export_publications(pmids: str, format: str, full: bool) -> object:
+        calls.append((pmids, format, full))
+        return sentinel
+
+    def fake_asyncio_run(coro: object) -> None:
+        calls.append(coro)
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["pubtator-link", "export", "1,2", "--format", "pubtator", "--full"],
+    )
+    monkeypatch.setattr(cli, "export_publications", fake_export_publications)
+    monkeypatch.setattr(cli.asyncio, "run", fake_asyncio_run)
+
+    cli.main()
+
+    assert calls == [("1,2", "pubtator", True), sentinel]
