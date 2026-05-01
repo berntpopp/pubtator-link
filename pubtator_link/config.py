@@ -110,9 +110,7 @@ class ServerSettings(BaseSettings):
         default=False,
         description="Enable opt-in Europe PMC open-access fallback for review preparation",
     )
-    europe_pmc_base_url: str = Field(
-        default="https://www.ebi.ac.uk/europepmc/webservices/rest"
-    )
+    europe_pmc_base_url: str = Field(default="https://www.ebi.ac.uk/europepmc/webservices/rest")
     europe_pmc_rate_limit_per_second: float = Field(default=1.0, gt=0, le=5)
     europe_pmc_timeout_seconds: int = Field(default=20, ge=2, le=120)
     europe_pmc_max_concurrency: int = Field(default=1, ge=1, le=5)

@@ -24,7 +24,6 @@ from pubtator_link.models.responses import (
 )
 from pubtator_link.models.review_rerag import (
     BudgetStrategy,
-    UpsertEvidenceCertaintyRequest,
     IndexReviewEvidenceRequest,
     InspectReviewIndexRequest,
     McpReviewAuditBundleResponse,
@@ -33,6 +32,7 @@ from pubtator_link.models.review_rerag import (
     RetrieveReviewContextRequest,
     ReviewBatchResponseMode,
     ReviewTableMode,
+    UpsertEvidenceCertaintyRequest,
 )
 from pubtator_link.services.publication_passage_service import PublicationPassageService
 from pubtator_link.services.publication_service import PublicationService

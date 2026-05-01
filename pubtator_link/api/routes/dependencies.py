@@ -15,8 +15,8 @@ from ...api.client import PubTator3Client
 from ...config import review_rerag_config
 from ...logging_config import configure_logging
 from ...repositories.review_rerag import PostgresReviewReragRepository
-from ...services.full_text_preparation import FullTextPreparationService
 from ...services.europe_pmc import EuropePmcClient
+from ...services.full_text_preparation import FullTextPreparationService
 from ...services.publication_passage_service import PublicationPassageService
 from ...services.publication_service import PublicationService
 from ...services.review_audit import ReviewAuditService
@@ -122,14 +122,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             api_client,
             preflight_concurrency=getattr(review_rerag_config, "preflight_concurrency", 3),
         )
-        europe_pmc_client = (
-            EuropePmcClient(
-                http_client=api_client.client,
-                base_url=review_rerag_config.europe_pmc_base_url,
-            )
-            if review_rerag_config.enable_europe_pmc_fallback
-            else None
-        )
+        europe_pmc_client = _build_europe_pmc_client(api_client)
         if europe_pmc_client is not None:
             source_preflight_service = SourcePreflightService.from_pubtator_client(
                 api_client,
@@ -143,11 +136,10 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
         if review_rerag_config.database_url is not None:
             review_pool = await asyncpg.create_pool(**review_pool_kwargs())
             review_repository = PostgresReviewReragRepository(review_pool)
-            preparation = FullTextPreparationService(
-                config=review_rerag_config,
+            preparation = _build_full_text_preparation(
                 repository=review_repository,
-                pubtator_client=api_client,
-                logger=logger,
+                client=api_client,
+                logger_instance=logger,
                 europe_pmc_client=europe_pmc_client,
             )
             review_queue = ReviewPreparationQueue(
@@ -282,11 +274,10 @@ async def get_review_queue() -> ReviewPreparationQueue:
         repository = await get_review_repository()
         client = await get_api_client()
         logger_instance = await get_logger()
-        preparation = FullTextPreparationService(
-            config=review_rerag_config,
+        preparation = _build_full_text_preparation(
             repository=repository,
-            pubtator_client=client,
-            logger=logger_instance,
+            client=client,
+            logger_instance=logger_instance,
             europe_pmc_client=_build_europe_pmc_client(client),
         )
         _review_queue = ReviewPreparationQueue(
@@ -346,12 +337,34 @@ async def get_source_preflight_service() -> SourcePreflightService:
 
 
 def _build_europe_pmc_client(client: PubTator3Client) -> EuropePmcClient | None:
-    if not review_rerag_config.enable_europe_pmc_fallback:
+    if not getattr(review_rerag_config, "enable_europe_pmc_fallback", False):
         return None
     return EuropePmcClient(
         http_client=client.client,
-        base_url=review_rerag_config.europe_pmc_base_url,
+        base_url=getattr(
+            review_rerag_config,
+            "europe_pmc_base_url",
+            "https://www.ebi.ac.uk/europepmc/webservices/rest",
+        ),
     )
+
+
+def _build_full_text_preparation(
+    *,
+    repository: PostgresReviewReragRepository,
+    client: PubTator3Client,
+    logger_instance: FilteringBoundLogger,
+    europe_pmc_client: EuropePmcClient | None,
+) -> FullTextPreparationService:
+    kwargs: dict[str, Any] = {
+        "config": review_rerag_config,
+        "repository": repository,
+        "pubtator_client": client,
+        "logger": logger_instance,
+    }
+    if europe_pmc_client is not None:
+        kwargs["europe_pmc_client"] = europe_pmc_client
+    return FullTextPreparationService(**kwargs)
 
 
 async def get_review_audit_service() -> ReviewAuditService:

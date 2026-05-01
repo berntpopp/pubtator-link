@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 import logging
 import time
-from xml.etree import ElementTree
 from typing import TYPE_CHECKING, Any, cast
 
+from defusedxml import ElementTree
 from structlog.typing import FilteringBoundLogger
 
 from pubtator_link.config import ReviewReragConfig
@@ -217,10 +217,13 @@ class FullTextPreparationService:
         return hints[0] if hints else None
 
     async def _europe_pmc_passages(self, *, review_id: str, pmid: str) -> list[ReviewPassageRow]:
-        result = await self.europe_pmc_client.lookup_open_access_record(pmid)
+        europe_pmc_client = self.europe_pmc_client
+        if europe_pmc_client is None:
+            return []
+        result = await europe_pmc_client.lookup_open_access_record(pmid)
         if not result.available or result.full_text_url is None:
             return []
-        xml_text = await self.europe_pmc_client.fetch_full_text_xml(result.full_text_url)
+        xml_text = await europe_pmc_client.fetch_full_text_xml(result.full_text_url)
         return self._passages_from_jats_xml(
             review_id=review_id,
             pmid=pmid,
@@ -250,9 +253,11 @@ class FullTextPreparationService:
         abstract_text = self._xml_text(root, ".//abstract")
         if abstract_text:
             passages.append(("abstract", abstract_text))
-        for section in root.findall(".//body//sec"):
-            heading = self._xml_text(section, "./title") or "body"
-            text_parts = [self._xml_text(paragraph, ".") for paragraph in section.findall("./p")]
+        for section_element in root.findall(".//body//sec"):
+            heading = self._xml_text(section_element, "./title") or "body"
+            text_parts = [
+                self._xml_text(paragraph, ".") for paragraph in section_element.findall("./p")
+            ]
             text = " ".join(part for part in text_parts if part)
             if text:
                 passages.append((heading, text))
@@ -276,7 +281,7 @@ class FullTextPreparationService:
         return rows
 
     @staticmethod
-    def _xml_text(element: ElementTree.Element, path: str) -> str | None:
+    def _xml_text(element: Any, path: str) -> str | None:
         target = element if path == "." else element.find(path)
         if target is None:
             return None

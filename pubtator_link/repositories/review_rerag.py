@@ -27,8 +27,8 @@ from pubtator_link.repositories.review_rerag_mappers import (
     _passage_sample_from_row,
     _preparation_status_from_row,
     _recall_tsquery,
-    _review_inventory_item_from_row,
     _review_index_totals_from_row,
+    _review_inventory_item_from_row,
     _source_summary_from_row,
 )
 
@@ -1022,7 +1022,7 @@ class PostgresReviewReragRepository:
     ) -> list[ReviewIndexInventoryItem]:
         async with self._pool.acquire() as connection:
             rows = await connection.fetch(
-                self._review_inventory_sql(where_clause=""),
+                self._review_inventory_sql(filtered=False),
                 limit,
                 offset,
             )
@@ -1036,7 +1036,7 @@ class PostgresReviewReragRepository:
     ) -> ReviewIndexInventoryItem | None:
         async with self._pool.acquire() as connection:
             row = await connection.fetchrow(
-                self._review_inventory_sql(where_clause="where r.review_id = $3"),
+                self._review_inventory_sql(filtered=True),
                 1,
                 0,
                 review_id,
@@ -1047,7 +1047,9 @@ class PostgresReviewReragRepository:
 
     async def delete_review_index(self, review_id: str) -> bool:
         async with self._pool.acquire() as connection, connection.transaction():
-            await connection.execute("delete from review_audit_events where review_id = $1", review_id)
+            await connection.execute(
+                "delete from review_audit_events where review_id = $1", review_id
+            )
             await connection.execute(
                 "delete from review_evidence_certainty where review_id = $1",
                 review_id,
@@ -1236,8 +1238,12 @@ class PostgresReviewReragRepository:
         )
 
     @staticmethod
-    def _review_inventory_sql(*, where_clause: str) -> str:
-        return f"""
+    def _review_inventory_sql(*, filtered: bool) -> str:
+        if filtered:
+            return PostgresReviewReragRepository._REVIEW_INVENTORY_FILTERED_SQL
+        return PostgresReviewReragRepository._REVIEW_INVENTORY_SQL
+
+    _REVIEW_INVENTORY_SQL = """
             with job_stats as (
                 select
                     review_id,
@@ -1283,7 +1289,57 @@ class PostgresReviewReragRepository:
             left join job_stats j on j.review_id = r.review_id
             left join passage_stats p on p.review_id = r.review_id
             left join failed_stats f on f.review_id = r.review_id
-            {where_clause}
+            order by r.updated_at desc, r.review_id asc
+            limit $1 offset $2
+            """
+
+    _REVIEW_INVENTORY_FILTERED_SQL = """
+            with job_stats as (
+                select
+                    review_id,
+                    coalesce(sum((status = 'queued')::int), 0)::int as queued,
+                    coalesce(sum((status = 'running')::int), 0)::int as running,
+                    coalesce(sum((status = 'complete')::int), 0)::int as complete,
+                    coalesce(sum((status = 'partial')::int), 0)::int as partial,
+                    coalesce(sum((status = 'failed')::int), 0)::int as failed,
+                    count(distinct source_id)::int as source_count
+                from review_preparation_jobs
+                group by review_id
+            ),
+            passage_stats as (
+                select
+                    review_id,
+                    (count(distinct pmid) filter (where pmid is not null))::int as pmid_count,
+                    count(distinct passage_id)::int as passage_count,
+                    coalesce(sum(length(text)), 0)::int as approximate_bytes
+                from review_passages
+                group by review_id
+            ),
+            failed_stats as (
+                select review_id, count(distinct source_id)::int as failed_source_count
+                from review_preparation_jobs
+                where status = 'failed'
+                group by review_id
+            )
+            select
+                r.review_id,
+                r.created_at,
+                r.updated_at,
+                coalesce(j.queued, 0)::int as queued,
+                coalesce(j.running, 0)::int as running,
+                coalesce(j.complete, 0)::int as complete,
+                coalesce(j.partial, 0)::int as partial,
+                coalesce(j.failed, 0)::int as failed,
+                coalesce(p.pmid_count, 0)::int as pmid_count,
+                coalesce(j.source_count, 0)::int as source_count,
+                coalesce(p.passage_count, 0)::int as passage_count,
+                coalesce(f.failed_source_count, 0)::int as failed_source_count,
+                coalesce(p.approximate_bytes, 0)::int as approximate_bytes
+            from reviews r
+            left join job_stats j on j.review_id = r.review_id
+            left join passage_stats p on p.review_id = r.review_id
+            left join failed_stats f on f.review_id = r.review_id
+            where r.review_id = $3
             order by r.updated_at desc, r.review_id asc
             limit $1 offset $2
             """

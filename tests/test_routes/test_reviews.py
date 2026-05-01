@@ -16,8 +16,8 @@ from pubtator_link.models.review_rerag import (
     EvidenceCertaintyRecord,
     EvidenceCertaintyResponse,
     InspectReviewIndexResponse,
-    ListReviewIndexesResponse,
     ListEvidenceCertaintyResponse,
+    ListReviewIndexesResponse,
     PreparationStatus,
     QueryDiagnosticsSummary,
     RetrieveReviewContextBatchResponse,
@@ -111,7 +111,9 @@ async def test_review_index_destructive_routes_are_disabled_by_default() -> None
     app = UnifiedServerManager().create_app()
     service = AsyncMock()
     service.delete_index.side_effect = PermissionError("Review index deletion is disabled")
-    service.cleanup_expired.side_effect = PermissionError("Review index cleanup endpoint is disabled")
+    service.cleanup_expired.side_effect = PermissionError(
+        "Review index cleanup endpoint is disabled"
+    )
     app.dependency_overrides[get_review_index_lifecycle_service] = lambda: service
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

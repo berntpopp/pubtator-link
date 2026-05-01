@@ -271,9 +271,7 @@ async def test_prepare_pmid_uses_enabled_europe_pmc_before_abstract_fallback() -
     )
     europe_pmc = FakeEuropePmcClient()
     config = _config()
-    config = ReviewReragConfig(
-        **{**config.__dict__, "enable_europe_pmc_fallback": True}
-    )
+    config = ReviewReragConfig(**{**config.__dict__, "enable_europe_pmc_fallback": True})
     service = FullTextPreparationService(
         config=config,
         repository=repository,
