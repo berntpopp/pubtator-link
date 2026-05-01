@@ -13,6 +13,7 @@ from pubtator_link.config import ReviewReragConfig
 from pubtator_link.models.review_rerag import (
     JobStatus,
     ReviewPassageRow,
+    SourceCoverageHint,
     passage_id_for_pmcid,
     passage_id_for_pmid,
 )
@@ -51,16 +52,19 @@ class FullTextPreparationService:
         pubtator_client: Any,
         logger: FilteringBoundLogger | logging.Logger | None = None,
         safe_url_fetcher: Any | None = None,
+        source_preflight_service: Any | None = None,
     ) -> None:
         self.config = config
         self.repository = repository
         self.pubtator_client = pubtator_client
         self.logger = logger or logging.getLogger(__name__)
         self.safe_url_fetcher = safe_url_fetcher
+        self.source_preflight_service = source_preflight_service
 
     async def prepare_pmid(self, review_id: str, pmid: str) -> JobStatus:
         """Prepare passages for a PMID from full-text PubTator, then abstract fallback."""
         started = time.monotonic()
+        coverage_hint = await self._coverage_hint_for_pmid(pmid)
         self.logger.info(
             "Review PMID preparation fetching full PubTator export",
             extra={"review_id": review_id, "pmid": pmid, "full": True},
@@ -70,6 +74,7 @@ class FullTextPreparationService:
             format="biocjson",
             full=True,
         )
+        full_retry_metadata = self._last_retry_metadata()
         passages = self._passages_from_export(
             review_id=review_id,
             export_data=full_data,
@@ -83,7 +88,32 @@ class FullTextPreparationService:
                 "pmid": pmid,
                 "passage_count": len(passages),
                 "char_count": _passage_char_count(passages),
-            },
+                },
+            )
+
+        if passages:
+            await self.repository.upsert_passages(passages)
+            await self._record_pmid_attempt(
+                review_id=review_id,
+                pmid=pmid,
+                source_kind="pubtator_full_bioc",
+                status="success",
+                reason=None,
+                coverage_reason="full_text_available",
+                coverage_hint=coverage_hint,
+                retry_metadata=full_retry_metadata,
+            )
+            return "complete"
+
+        await self._record_pmid_attempt(
+            review_id=review_id,
+            pmid=pmid,
+            source_kind="pubtator_full_bioc",
+            status="not_available",
+            reason="No PubTator full-text passages found",
+            coverage_reason=coverage_hint.coverage_reason if coverage_hint else "unknown",
+            coverage_hint=coverage_hint,
+            retry_metadata=full_retry_metadata,
         )
 
         if not passages:
@@ -96,6 +126,7 @@ class FullTextPreparationService:
                 format="biocjson",
                 full=False,
             )
+            abstract_retry_metadata = self._last_retry_metadata()
             passages = self._passages_from_export(
                 review_id=review_id,
                 export_data=abstract_data,
@@ -111,6 +142,8 @@ class FullTextPreparationService:
                     "char_count": _passage_char_count(passages),
                 },
             )
+        else:
+            abstract_retry_metadata = None
 
         if passages:
             self.logger.info(
@@ -126,13 +159,15 @@ class FullTextPreparationService:
             await self.repository.upsert_passages(passages)
 
         status = "success" if passages else "failed"
-        await self.repository.record_retrieval_attempt(
-            review_id,
-            f"PMID:{pmid}",
-            source_kind,
-            status,
-            content_type="application/json",
+        await self._record_pmid_attempt(
+            review_id=review_id,
+            pmid=pmid,
+            source_kind=source_kind,
+            status=status,
             reason=None if passages else "No PubTator passages found",
+            coverage_reason="abstract_fallback_used" if passages else "unknown",
+            coverage_hint=coverage_hint,
+            retry_metadata=abstract_retry_metadata,
         )
         self.logger.info(
             "Review PMID preparation recorded retrieval attempt",
@@ -145,6 +180,56 @@ class FullTextPreparationService:
             },
         )
         return "complete" if passages else "failed"
+
+    async def _coverage_hint_for_pmid(self, pmid: str) -> SourceCoverageHint | None:
+        if self.source_preflight_service is None:
+            return None
+        hints = await self.source_preflight_service.preflight_pmids([pmid])
+        return hints[0] if hints else None
+
+    def _last_retry_metadata(self) -> dict[str, Any]:
+        metadata = getattr(self.pubtator_client, "last_retry_metadata", None)
+        if metadata is None:
+            return {}
+        if hasattr(metadata, "__dict__"):
+            return dict(metadata.__dict__)
+        return dict(metadata)
+
+    async def _record_pmid_attempt(
+        self,
+        *,
+        review_id: str,
+        pmid: str,
+        source_kind: str,
+        status: str,
+        reason: str | None,
+        coverage_reason: str,
+        coverage_hint: SourceCoverageHint | None,
+        retry_metadata: dict[str, Any] | None,
+    ) -> None:
+        retry_metadata = retry_metadata or {}
+        await self.repository.record_retrieval_attempt(
+            review_id,
+            f"PMID:{pmid}",
+            source_kind,
+            status,
+            content_type="application/json",
+            reason=reason,
+            coverage_reason=coverage_reason,
+            attempt_count=int(retry_metadata.get("attempt_count") or 1),
+            last_status_code=retry_metadata.get("last_status_code"),
+            retry_after_ms=retry_metadata.get("retry_after_ms"),
+            backoff_ms=retry_metadata.get("backoff_ms"),
+            terminal_reason=retry_metadata.get("terminal_reason"),
+            pmcid=coverage_hint.pmcid if coverage_hint else None,
+            doi=coverage_hint.doi if coverage_hint else None,
+            license_or_access_hint=(
+                coverage_hint.license_or_access_hint if coverage_hint else None
+            ),
+            pmc_fallback_available=(
+                coverage_hint.pmc_fallback_available if coverage_hint else False
+            ),
+        )
 
     async def prepare_curated_url(self, review_id: str, url: str) -> JobStatus:
         """Prepare a curated URL PDF if a supported parser is available."""

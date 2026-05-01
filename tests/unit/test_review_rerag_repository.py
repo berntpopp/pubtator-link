@@ -292,6 +292,22 @@ async def test_list_review_sources_aggregates_jobs_attempts_passages_and_samples
                 "sections": ["abstract"],
                 "passage_count": 2,
                 "char_count": 30,
+                "coverage_reason": "abstract_fallback_used",
+                "pmcid": "PMC123",
+                "doi": "10.1000/example",
+                "license_or_access_hint": "oa",
+                "pmc_fallback_available": True,
+                "resolver_attempts": [
+                    {
+                        "source_kind": "pubtator_full_bioc",
+                        "status": "not_available",
+                        "attempt_count": 2,
+                        "last_status_code": 503,
+                        "pmid": "111",
+                        "pmcid": "PMC123",
+                        "doi": "10.1000/example",
+                    }
+                ],
             }
         ],
         [
@@ -324,6 +340,22 @@ async def test_list_review_sources_aggregates_jobs_attempts_passages_and_samples
             passage_count=2,
             char_count=30,
             coverage="abstract_only",
+            coverage_reason="abstract_fallback_used",
+            pmcid="PMC123",
+            doi="10.1000/example",
+            license_or_access_hint="oa",
+            pmc_fallback_available=True,
+            resolver_attempts=[
+                {
+                    "source_kind": "pubtator_full_bioc",
+                    "status": "not_available",
+                    "attempt_count": 2,
+                    "last_status_code": 503,
+                    "pmid": "111",
+                    "pmcid": "PMC123",
+                    "doi": "10.1000/example",
+                }
+            ],
             sample_passages=[
                 ReviewPassageSample(
                     passage_id="p1",

@@ -109,6 +109,11 @@ async def test_inspect_review_index_returns_sources_and_failures() -> None:
                 sections=["abstract"],
                 passage_count=1,
                 char_count=13,
+                coverage_reason="abstract_fallback_used",
+                pmcid="PMC123",
+                doi="10.1000/example",
+                license_or_access_hint="oa",
+                pmc_fallback_available=True,
             )
         ],
         totals=ReviewIndexTotals(
@@ -132,6 +137,11 @@ async def test_inspect_review_index_returns_sources_and_failures() -> None:
     data = response.json()
     assert data["review_id"] == "rev_123"
     assert data["totals"]["passage_count"] == 1
+    assert data["sources"][0]["coverage_reason"] == "abstract_fallback_used"
+    assert data["sources"][0]["pmcid"] == "PMC123"
+    assert data["sources"][0]["doi"] == "10.1000/example"
+    assert data["sources"][0]["pmc_fallback_available"] is True
+    assert data["sources"][0]["resolver_attempts"] == []
     service.inspect_review_index.assert_awaited_once()
 
 
