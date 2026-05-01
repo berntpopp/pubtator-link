@@ -148,3 +148,28 @@ def test_cli_dispatches_export_command(monkeypatch: pytest.MonkeyPatch) -> None:
     cli.main()
 
     assert calls == [("1,2", "pubtator", True), sentinel]
+
+
+@pytest.mark.parametrize(("success", "expected_code"), [(True, 0), (False, 1)])
+def test_cli_test_command_maps_connection_result_to_exit_code(
+    monkeypatch: pytest.MonkeyPatch,
+    success: bool,
+    expected_code: int,
+) -> None:
+    sentinel = object()
+
+    def fake_test_connection() -> object:
+        return sentinel
+
+    def fake_asyncio_run(coro: object) -> bool:
+        assert coro is sentinel
+        return success
+
+    monkeypatch.setattr("sys.argv", ["pubtator-link", "test"])
+    monkeypatch.setattr(cli, "test_connection", fake_test_connection)
+    monkeypatch.setattr(cli.asyncio, "run", fake_asyncio_run)
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    assert exc_info.value.code == expected_code
