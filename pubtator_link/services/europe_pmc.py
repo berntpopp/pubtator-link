@@ -50,3 +50,8 @@ class EuropePmcClient:
             full_text_url=full_text_url,
             reason="full_text_available" if full_text_url else "parser_unsupported",
         )
+
+    async def fetch_full_text_xml(self, url: str) -> str:
+        response = await self.http_client.get(url)
+        response.raise_for_status()
+        return response.text

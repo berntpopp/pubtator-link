@@ -16,6 +16,7 @@ from ...config import review_rerag_config
 from ...logging_config import configure_logging
 from ...repositories.review_rerag import PostgresReviewReragRepository
 from ...services.full_text_preparation import FullTextPreparationService
+from ...services.europe_pmc import EuropePmcClient
 from ...services.publication_passage_service import PublicationPassageService
 from ...services.publication_service import PublicationService
 from ...services.review_audit import ReviewAuditService
@@ -51,6 +52,7 @@ class AppResources:
     api_client: PubTator3Client
     publication_service: PublicationService
     publication_passage_service: PublicationPassageService
+    europe_pmc_client: EuropePmcClient | None = None
     review_pool: asyncpg.Pool | None = None
     review_repository: PostgresReviewReragRepository | None = None
     review_queue: ReviewPreparationQueue | None = None
@@ -120,6 +122,20 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             api_client,
             preflight_concurrency=getattr(review_rerag_config, "preflight_concurrency", 3),
         )
+        europe_pmc_client = (
+            EuropePmcClient(
+                http_client=api_client.client,
+                base_url=review_rerag_config.europe_pmc_base_url,
+            )
+            if review_rerag_config.enable_europe_pmc_fallback
+            else None
+        )
+        if europe_pmc_client is not None:
+            source_preflight_service = SourcePreflightService.from_pubtator_client(
+                api_client,
+                preflight_concurrency=getattr(review_rerag_config, "preflight_concurrency", 3),
+                europe_pmc_client=europe_pmc_client,
+            )
 
         review_repository: PostgresReviewReragRepository | None = None
         review_context_service: ReviewContextService | None = None
@@ -132,6 +148,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
                 repository=review_repository,
                 pubtator_client=api_client,
                 logger=logger,
+                europe_pmc_client=europe_pmc_client,
             )
             review_queue = ReviewPreparationQueue(
                 config=review_rerag_config,
@@ -154,6 +171,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             api_client=api_client,
             publication_service=publication_service,
             publication_passage_service=publication_passage_service,
+            europe_pmc_client=europe_pmc_client,
             source_preflight_service=source_preflight_service,
             review_pool=review_pool,
             review_repository=review_repository,
@@ -269,6 +287,7 @@ async def get_review_queue() -> ReviewPreparationQueue:
             repository=repository,
             pubtator_client=client,
             logger=logger_instance,
+            europe_pmc_client=_build_europe_pmc_client(client),
         )
         _review_queue = ReviewPreparationQueue(
             config=review_rerag_config,
@@ -313,14 +332,26 @@ async def get_source_preflight_service() -> SourcePreflightService:
             resources.source_preflight_service = SourcePreflightService.from_pubtator_client(
                 resources.api_client,
                 preflight_concurrency=getattr(review_rerag_config, "preflight_concurrency", 3),
+                europe_pmc_client=resources.europe_pmc_client,
             )
         return resources.source_preflight_service
     if _source_preflight_service is None:
+        client = await get_api_client()
         _source_preflight_service = SourcePreflightService.from_pubtator_client(
-            await get_api_client(),
+            client,
             preflight_concurrency=getattr(review_rerag_config, "preflight_concurrency", 3),
+            europe_pmc_client=_build_europe_pmc_client(client),
         )
     return _source_preflight_service
+
+
+def _build_europe_pmc_client(client: PubTator3Client) -> EuropePmcClient | None:
+    if not review_rerag_config.enable_europe_pmc_fallback:
+        return None
+    return EuropePmcClient(
+        http_client=client.client,
+        base_url=review_rerag_config.europe_pmc_base_url,
+    )
 
 
 async def get_review_audit_service() -> ReviewAuditService:

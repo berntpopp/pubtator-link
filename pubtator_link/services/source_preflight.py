@@ -22,6 +22,7 @@ class SourcePreflightService:
         pmc_bioc_available: PmcProbe | None = None,
         pubtator_abstract_available: AbstractProbe | None = None,
         preflight_concurrency: int = 3,
+        europe_pmc_client: Any | None = None,
     ) -> None:
         self._id_converter = id_converter or self._no_id_conversion
         self._pmc_bioc_available = pmc_bioc_available or self._no_pmc_bioc
@@ -29,6 +30,7 @@ class SourcePreflightService:
             pubtator_abstract_available or self._no_pubtator_abstract
         )
         self.preflight_concurrency = preflight_concurrency
+        self.europe_pmc_client = europe_pmc_client
 
     @classmethod
     def from_pubtator_client(
@@ -36,6 +38,7 @@ class SourcePreflightService:
         client: PubTator3Client,
         *,
         preflight_concurrency: int = 3,
+        europe_pmc_client: Any | None = None,
     ) -> SourcePreflightService:
         async def abstract_available(pmid: str) -> bool:
             response = await client.export_publications([pmid], format="biocjson", full=False)
@@ -51,6 +54,7 @@ class SourcePreflightService:
             pmc_bioc_available=pmc_available,
             pubtator_abstract_available=abstract_available,
             preflight_concurrency=preflight_concurrency,
+            europe_pmc_client=europe_pmc_client,
         )
 
     async def preflight_pmids(self, pmids: list[str]) -> list[SourceCoverageHint]:
@@ -135,6 +139,31 @@ class SourcePreflightService:
                             pmcid=pmcid,
                             doi=doi,
                             terminal_reason="upstream_timeout",
+                        )
+                    ],
+                )
+
+        if self.europe_pmc_client is not None:
+            europe_pmc_result = await self.europe_pmc_client.lookup_open_access_record(
+                pmcid or pmid
+            )
+            if europe_pmc_result.available:
+                return SourceCoverageHint(
+                    pmid=pmid,
+                    expected_coverage="full_text",
+                    coverage_reason="full_text_available",
+                    pmcid=europe_pmc_result.pmcid or pmcid,
+                    doi=europe_pmc_result.doi or doi,
+                    license_or_access_hint=europe_pmc_result.license_or_access_hint,
+                    pmc_fallback_available=True,
+                    resolver_attempts=[
+                        ResolverAttemptSummary(
+                            source_kind="europe_pmc_jats",
+                            status="success",
+                            pmid=pmid,
+                            pmcid=europe_pmc_result.pmcid or pmcid,
+                            doi=europe_pmc_result.doi or doi,
+                            url=europe_pmc_result.full_text_url,
                         )
                     ],
                 )

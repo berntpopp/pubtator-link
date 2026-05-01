@@ -114,6 +114,11 @@ def test_capabilities_document_new_budget_and_stable_citation_fields() -> None:
     assert "prompt_injection" in capabilities
     assert "scarcity_first" in str(capabilities)
     assert "stable_citation_key" in str(capabilities)
+    assert capabilities["review_rerag"]["europe_pmc_fallback"] == {
+        "enabled": False,
+        "default": "disabled",
+        "scope": "open_access_records_only",
+    }
 
 
 def test_curated_facade_registers_pubtator_tools() -> None:

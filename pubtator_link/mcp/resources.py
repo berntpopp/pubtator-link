@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pubtator_link.config import api_config, text_processing_config
+from pubtator_link.config import api_config, review_rerag_config, text_processing_config
 
 RESEARCH_USE_NOTICE = (
     "Research and biomedical literature exploration use only; not for diagnosis, "
@@ -172,6 +172,11 @@ def get_capabilities_resource() -> dict[str, Any]:
             "tables": "excluded by default for review retrieval unless explicitly requested",
         },
         "review_rerag": {
+            "europe_pmc_fallback": {
+                "enabled": review_rerag_config.enable_europe_pmc_fallback,
+                "default": "disabled",
+                "scope": "open_access_records_only",
+            },
             "tools": [
                 "pubtator.index_review_evidence",
                 "pubtator.preflight_review_sources",

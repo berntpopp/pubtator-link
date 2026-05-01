@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from xml.etree import ElementTree
 from typing import TYPE_CHECKING, Any, cast
 
 from structlog.typing import FilteringBoundLogger
@@ -53,6 +54,7 @@ class FullTextPreparationService:
         logger: FilteringBoundLogger | logging.Logger | None = None,
         safe_url_fetcher: Any | None = None,
         source_preflight_service: Any | None = None,
+        europe_pmc_client: Any | None = None,
     ) -> None:
         self.config = config
         self.repository = repository
@@ -60,6 +62,7 @@ class FullTextPreparationService:
         self.logger = logger or logging.getLogger(__name__)
         self.safe_url_fetcher = safe_url_fetcher
         self.source_preflight_service = source_preflight_service
+        self.europe_pmc_client = europe_pmc_client
 
     async def prepare_pmid(self, review_id: str, pmid: str) -> JobStatus:
         """Prepare passages for a PMID from full-text PubTator, then abstract fallback."""
@@ -115,6 +118,32 @@ class FullTextPreparationService:
             coverage_hint=coverage_hint,
             retry_metadata=full_retry_metadata,
         )
+
+        if self.config.enable_europe_pmc_fallback and self.europe_pmc_client is not None:
+            passages = await self._europe_pmc_passages(review_id=review_id, pmid=pmid)
+            if passages:
+                await self.repository.upsert_passages(passages)
+                await self._record_pmid_attempt(
+                    review_id=review_id,
+                    pmid=pmid,
+                    source_kind="europe_pmc_jats",
+                    status="success",
+                    reason=None,
+                    coverage_reason="full_text_available",
+                    coverage_hint=coverage_hint,
+                    retry_metadata=None,
+                )
+                return "complete"
+            await self._record_pmid_attempt(
+                review_id=review_id,
+                pmid=pmid,
+                source_kind="europe_pmc_jats",
+                status="not_available",
+                reason="Europe PMC open-access full text unavailable or unsupported",
+                coverage_reason="parser_unsupported",
+                coverage_hint=coverage_hint,
+                retry_metadata=None,
+            )
 
         if not passages:
             self.logger.info(
@@ -186,6 +215,73 @@ class FullTextPreparationService:
             return None
         hints = await self.source_preflight_service.preflight_pmids([pmid])
         return hints[0] if hints else None
+
+    async def _europe_pmc_passages(self, *, review_id: str, pmid: str) -> list[ReviewPassageRow]:
+        result = await self.europe_pmc_client.lookup_open_access_record(pmid)
+        if not result.available or result.full_text_url is None:
+            return []
+        xml_text = await self.europe_pmc_client.fetch_full_text_xml(result.full_text_url)
+        return self._passages_from_jats_xml(
+            review_id=review_id,
+            pmid=pmid,
+            pmcid=result.pmcid,
+            doi=result.doi,
+            xml_text=xml_text,
+        )
+
+    def _passages_from_jats_xml(
+        self,
+        *,
+        review_id: str,
+        pmid: str,
+        pmcid: str | None,
+        doi: str | None,
+        xml_text: str,
+    ) -> list[ReviewPassageRow]:
+        try:
+            root = ElementTree.fromstring(xml_text)
+        except ElementTree.ParseError:
+            return []
+
+        passages: list[tuple[str, str]] = []
+        title_text = self._xml_text(root, ".//article-title")
+        if title_text:
+            passages.append(("title", title_text))
+        abstract_text = self._xml_text(root, ".//abstract")
+        if abstract_text:
+            passages.append(("abstract", abstract_text))
+        for section in root.findall(".//body//sec"):
+            heading = self._xml_text(section, "./title") or "body"
+            text_parts = [self._xml_text(paragraph, ".") for paragraph in section.findall("./p")]
+            text = " ".join(part for part in text_parts if part)
+            if text:
+                passages.append((heading, text))
+
+        rows: list[ReviewPassageRow] = []
+        for index, (section, text) in enumerate(passages):
+            rows.append(
+                ReviewPassageRow(
+                    passage_id=passage_id_for_pmid(pmid, section, index),
+                    review_id=review_id,
+                    source_id=f"PMID:{pmid}",
+                    source_kind="europe_pmc_jats",
+                    pmid=pmid,
+                    pmcid=pmcid,
+                    doi=doi,
+                    section=section,
+                    text=text,
+                    source_metadata={"source": "europe_pmc"},
+                )
+            )
+        return rows
+
+    @staticmethod
+    def _xml_text(element: ElementTree.Element, path: str) -> str | None:
+        target = element if path == "." else element.find(path)
+        if target is None:
+            return None
+        text = " ".join(part.strip() for part in target.itertext() if part.strip())
+        return text or None
 
     def _last_retry_metadata(self) -> dict[str, Any]:
         metadata = getattr(self.pubtator_client, "last_retry_metadata", None)

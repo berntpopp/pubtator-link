@@ -7,6 +7,24 @@ import pytest
 from pubtator_link.services.source_preflight import SourcePreflightService
 
 
+class FakeEuropePmcClient:
+    def __init__(self, *, available: bool) -> None:
+        self.available = available
+        self.calls: list[str] = []
+
+    async def lookup_open_access_record(self, pmcid_or_pmid: str):
+        from pubtator_link.services.europe_pmc import EuropePmcLookupResult
+
+        self.calls.append(pmcid_or_pmid)
+        return EuropePmcLookupResult(
+            available=self.available,
+            pmcid="PMC123" if self.available else None,
+            license_or_access_hint="CC BY" if self.available else None,
+            full_text_url="https://example.org/full.xml" if self.available else None,
+            reason="full_text_available" if self.available else "not_found",
+        )
+
+
 @pytest.mark.asyncio
 async def test_preflight_reports_full_text_when_pmc_bioc_is_available() -> None:
     async def id_converter(pmid: str) -> dict[str, str]:
@@ -46,6 +64,28 @@ async def test_preflight_uses_abstract_hint_when_no_pmcid_exists() -> None:
 
     assert hints[0].expected_coverage == "abstract_only"
     assert hints[0].coverage_reason == "no_pmcid"
+    assert hints[0].pmc_fallback_available is False
+
+
+@pytest.mark.asyncio
+async def test_preflight_reports_europe_pmc_fallback_when_enabled() -> None:
+    europe_pmc = FakeEuropePmcClient(available=True)
+    service = SourcePreflightService(europe_pmc_client=europe_pmc)
+
+    hints = await service.preflight_pmids(["40234174"])
+
+    assert hints[0].expected_coverage == "full_text"
+    assert hints[0].pmc_fallback_available is True
+    assert hints[0].license_or_access_hint == "CC BY"
+    assert any(attempt.source_kind == "europe_pmc_jats" for attempt in hints[0].resolver_attempts)
+    assert europe_pmc.calls == ["40234174"]
+
+
+@pytest.mark.asyncio
+async def test_preflight_skips_europe_pmc_when_client_is_absent() -> None:
+    hints = await SourcePreflightService().preflight_pmids(["40234174"])
+
+    assert hints[0].resolver_attempts == []
     assert hints[0].pmc_fallback_available is False
 
 

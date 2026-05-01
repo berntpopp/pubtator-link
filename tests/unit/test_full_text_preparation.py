@@ -20,6 +20,7 @@ def _config(*, enable_docling: bool = False) -> ReviewReragConfig:
         text_max_bytes=64,
         allow_http_urls=False,
         enable_docling=enable_docling,
+        enable_europe_pmc_fallback=False,
     )
 
 
@@ -75,6 +76,38 @@ class StaticPreflightService:
     async def preflight_pmids(self, pmids: list[str]) -> list[SourceCoverageHint]:
         self.calls.append(pmids)
         return [self.hint]
+
+
+class FakeEuropePmcClient:
+    def __init__(self) -> None:
+        self.lookup_calls: list[str] = []
+        self.fetch_calls: list[str] = []
+
+    async def lookup_open_access_record(self, pmcid_or_pmid: str):
+        from pubtator_link.services.europe_pmc import EuropePmcLookupResult
+
+        self.lookup_calls.append(pmcid_or_pmid)
+        return EuropePmcLookupResult(
+            available=True,
+            pmcid="PMC123",
+            license_or_access_hint="CC BY",
+            full_text_url="https://example.org/full.xml",
+            reason="full_text_available",
+        )
+
+    async def fetch_full_text_xml(self, url: str) -> str:
+        self.fetch_calls.append(url)
+        return """
+        <article>
+          <front>
+            <article-meta>
+              <title-group><article-title>FMF title</article-title></title-group>
+              <abstract><p>Europe PMC abstract passage.</p></abstract>
+            </article-meta>
+          </front>
+          <body><sec><title>Results</title><p>Europe PMC result passage.</p></sec></body>
+        </article>
+        """
 
 
 class StaticFetcher:
@@ -228,6 +261,38 @@ async def test_prepare_pmid_falls_back_to_abstract_and_records_passages() -> Non
         },
     ]
     assert preflight.calls == [["40234174"]]
+
+
+@pytest.mark.asyncio
+async def test_prepare_pmid_uses_enabled_europe_pmc_before_abstract_fallback() -> None:
+    repository = RecordingRepository()
+    pubtator_client = RecordingPubTatorClient(
+        [{"PubTator3": [{"id": "40234174", "pmid": "40234174", "passages": []}]}]
+    )
+    europe_pmc = FakeEuropePmcClient()
+    config = _config()
+    config = ReviewReragConfig(
+        **{**config.__dict__, "enable_europe_pmc_fallback": True}
+    )
+    service = FullTextPreparationService(
+        config=config,
+        repository=repository,
+        pubtator_client=pubtator_client,
+        europe_pmc_client=europe_pmc,
+    )
+
+    status = await service.prepare_pmid(review_id="review-1", pmid="40234174")
+
+    assert status == "complete"
+    assert europe_pmc.lookup_calls == ["40234174"]
+    assert europe_pmc.fetch_calls == ["https://example.org/full.xml"]
+    assert [passage.source_kind for passage in repository.passages] == [
+        "europe_pmc_jats",
+        "europe_pmc_jats",
+        "europe_pmc_jats",
+    ]
+    assert repository.attempts[-1]["source_kind"] == "europe_pmc_jats"
+    assert repository.attempts[-1]["status"] == "success"
 
 
 @pytest.mark.asyncio
