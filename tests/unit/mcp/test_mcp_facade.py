@@ -21,6 +21,9 @@ EXPECTED_PUBLIC_TOOL_NAMES = {
     "pubtator.export_review_audit_bundle",
     "pubtator.list_review_indexes",
     "pubtator.get_review_index_summary",
+    "pubtator.add_evidence_certainty",
+    "pubtator.list_evidence_certainty",
+    "pubtator.get_evidence_certainty",
 }
 
 EXPECTED_RESOURCE_URIS = {
@@ -122,6 +125,7 @@ def test_curated_facade_registers_pubtator_tools() -> None:
     assert tool_names == EXPECTED_PUBLIC_TOOL_NAMES
     assert "pubtator.clear_api_cache" not in tool_names
     assert "pubtator.delete_review_index" not in tool_names
+    assert "pubtator.delete_evidence_certainty" not in tool_names
 
 
 def test_common_mcp_tools_are_flat_and_unversioned() -> None:

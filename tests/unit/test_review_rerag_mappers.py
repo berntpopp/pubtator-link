@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from pubtator_link.repositories.review_rerag_mappers import (
+    _evidence_certainty_from_row,
     _infer_source_coverage,
     _parse_execute_count,
     _passage_from_row,
@@ -142,3 +143,31 @@ def test_review_inventory_mapper_builds_item_from_aggregate_row() -> None:
     assert item.preparation_status.complete == 1
     assert item.approximate_bytes == 1234
     assert item.expires_at is not None
+
+
+def test_evidence_certainty_mapper_preserves_grade_notes() -> None:
+    row = {
+        "certainty_id": "00000000-0000-0000-0000-000000000001",
+        "review_id": "review-1",
+        "outcome": "Mortality",
+        "question": "Question",
+        "study_design": "observational",
+        "risk_of_bias_notes": "Serious",
+        "inconsistency_notes": None,
+        "indirectness_notes": None,
+        "imprecision_notes": None,
+        "publication_bias_notes": None,
+        "overall_certainty": "low",
+        "certainty_rationale": "Downgraded twice.",
+        "passage_ids": ["PMID:1:abstract:0"],
+        "unresolved_passage_ids": [],
+        "created_by": "client:test",
+        "created_at": "2026-05-01T00:00:00Z",
+        "updated_at": "2026-05-01T00:00:00Z",
+    }
+
+    record = _evidence_certainty_from_row(row)
+
+    assert record.overall_certainty == "low"
+    assert record.risk_of_bias_notes == "Serious"
+    assert record.passage_ids == ["PMID:1:abstract:0"]

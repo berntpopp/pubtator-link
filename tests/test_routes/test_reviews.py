@@ -6,14 +6,18 @@ from httpx import ASGITransport, AsyncClient
 from pubtator_link.api.routes.dependencies import (
     get_review_audit_service,
     get_review_context_service,
+    get_review_evidence_certainty_service,
     get_review_index_lifecycle_service,
     get_review_queue,
     get_source_preflight_service,
 )
 from pubtator_link.models.review_rerag import (
     ContextPack,
+    EvidenceCertaintyRecord,
+    EvidenceCertaintyResponse,
     InspectReviewIndexResponse,
     ListReviewIndexesResponse,
+    ListEvidenceCertaintyResponse,
     PreparationStatus,
     QueryDiagnosticsSummary,
     RetrieveReviewContextBatchResponse,
@@ -116,6 +120,41 @@ async def test_review_index_destructive_routes_are_disabled_by_default() -> None
 
     assert delete_response.status_code == 403
     assert cleanup_response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_evidence_certainty_routes_store_and_return_records() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    record = EvidenceCertaintyRecord(
+        certainty_id="00000000-0000-0000-0000-000000000001",
+        review_id="review-1",
+        outcome="Mortality",
+        overall_certainty="low",
+        created_at="2026-05-01T00:00:00Z",
+        updated_at="2026-05-01T00:00:00Z",
+    )
+    service.upsert.return_value = EvidenceCertaintyResponse(record=record)
+    service.list.return_value = ListEvidenceCertaintyResponse(records=[record])
+    service.get.return_value = EvidenceCertaintyResponse(record=record)
+    app.dependency_overrides[get_review_evidence_certainty_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        post_response = await client.post(
+            "/api/reviews/review-1/certainty",
+            json={"outcome": "Mortality", "overall_certainty": "low"},
+        )
+        list_response = await client.get("/api/reviews/review-1/certainty")
+        get_response = await client.get(
+            "/api/reviews/review-1/certainty/00000000-0000-0000-0000-000000000001"
+        )
+
+    assert post_response.status_code == 200
+    assert list_response.status_code == 200
+    assert get_response.status_code == 200
+    assert post_response.json()["record"]["overall_certainty"] == "low"
+    assert list_response.json()["records"][0]["certainty_id"] == record.certainty_id
+    assert get_response.json()["record"]["outcome"] == "Mortality"
 
 
 @pytest.mark.asyncio

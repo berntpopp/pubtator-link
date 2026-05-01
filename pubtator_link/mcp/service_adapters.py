@@ -24,6 +24,7 @@ from pubtator_link.models.responses import (
 )
 from pubtator_link.models.review_rerag import (
     BudgetStrategy,
+    UpsertEvidenceCertaintyRequest,
     IndexReviewEvidenceRequest,
     InspectReviewIndexRequest,
     McpReviewAuditBundleResponse,
@@ -37,6 +38,7 @@ from pubtator_link.services.publication_passage_service import PublicationPassag
 from pubtator_link.services.publication_service import PublicationService
 from pubtator_link.services.review_audit import ReviewAuditService
 from pubtator_link.services.review_context_service import ReviewContextService
+from pubtator_link.services.review_evidence_certainty import ReviewEvidenceCertaintyService
 from pubtator_link.services.review_index_lifecycle import ReviewIndexLifecycleService
 from pubtator_link.services.review_preparation_queue import ReviewPreparationQueue
 from pubtator_link.services.source_preflight import SourcePreflightService
@@ -576,4 +578,62 @@ async def get_review_index_summary_impl(
     review_id: str,
 ) -> dict[str, Any]:
     response = await service.get_summary(review_id)
+    return response.model_dump(mode="json")
+
+
+async def add_evidence_certainty_impl(
+    *,
+    service: ReviewEvidenceCertaintyService,
+    review_id: str,
+    outcome: str,
+    question: str | None = None,
+    study_design: str | None = None,
+    risk_of_bias_notes: str | None = None,
+    inconsistency_notes: str | None = None,
+    indirectness_notes: str | None = None,
+    imprecision_notes: str | None = None,
+    publication_bias_notes: str | None = None,
+    overall_certainty: str = "not_rated",
+    certainty_rationale: str | None = None,
+    passage_ids: list[str] | None = None,
+    created_by: str | None = None,
+    validate_passages: bool = False,
+) -> dict[str, Any]:
+    response = await service.upsert(
+        review_id,
+        UpsertEvidenceCertaintyRequest(
+            outcome=outcome,
+            question=question,
+            study_design=study_design,
+            risk_of_bias_notes=risk_of_bias_notes,
+            inconsistency_notes=inconsistency_notes,
+            indirectness_notes=indirectness_notes,
+            imprecision_notes=imprecision_notes,
+            publication_bias_notes=publication_bias_notes,
+            overall_certainty=overall_certainty,  # type: ignore[arg-type]
+            certainty_rationale=certainty_rationale,
+            passage_ids=passage_ids or [],
+            created_by=created_by,
+            validate_passages=validate_passages,
+        ),
+    )
+    return response.model_dump(mode="json")
+
+
+async def list_evidence_certainty_impl(
+    *,
+    service: ReviewEvidenceCertaintyService,
+    review_id: str,
+) -> dict[str, Any]:
+    response = await service.list(review_id)
+    return response.model_dump(mode="json")
+
+
+async def get_evidence_certainty_impl(
+    *,
+    service: ReviewEvidenceCertaintyService,
+    review_id: str,
+    certainty_id: str,
+) -> dict[str, Any]:
+    response = await service.get(review_id, certainty_id)
     return response.model_dump(mode="json")

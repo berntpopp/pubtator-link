@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from pubtator_link.models.review_rerag import (
+    EvidenceCertaintyRecord,
     PreparationStatus,
     ResolverAttemptSummary,
     ReviewIndexTotals,
@@ -64,6 +65,18 @@ class FakeAuditRepository:
             },
         ]
 
+    async def list_evidence_certainty(self, review_id: str):
+        return [
+            EvidenceCertaintyRecord(
+                certainty_id="00000000-0000-0000-0000-000000000001",
+                review_id=review_id,
+                outcome="Mortality",
+                overall_certainty="low",
+                created_at="2026-05-01T00:00:00Z",
+                updated_at="2026-05-01T00:00:00Z",
+            )
+        ]
+
 
 @pytest.mark.asyncio
 async def test_review_audit_bundle_exports_sources_attempts_events_and_citation_keys() -> None:
@@ -78,5 +91,6 @@ async def test_review_audit_bundle_exports_sources_attempts_events_and_citation_
     assert bundle.resolver_attempts[0].source_kind == "pubtator_full_bioc"
     assert bundle.search_runs[0].query == "MEFV colchicine"
     assert bundle.retrieval_runs[0].queries == ["MEFV diagnosis", "colchicine response"]
+    assert bundle.evidence_certainty[0].overall_certainty == "low"
     assert bundle.passage_ids == ["PMID:1:title:0", "PMID:1:abstract:1"]
     assert bundle.stable_citation_keys["PMID:1:title:0"].startswith("c_")

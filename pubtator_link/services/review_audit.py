@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from pubtator_link.models.review_rerag import (
+    EvidenceCertaintyRecord,
     FailedSourceSummary,
     PreparationStatus,
     ReviewAuditBundle,
@@ -43,6 +44,9 @@ class ReviewAuditRepository(Protocol):
     async def list_review_audit_events(self, review_id: str) -> list[Mapping[str, Any]]:
         """Return recorded audit events for a review."""
 
+    async def list_evidence_certainty(self, review_id: str) -> list[EvidenceCertaintyRecord]:
+        """Return user-supplied certainty records for a review."""
+
 
 class ReviewAuditService:
     def __init__(self, repository: ReviewAuditRepository) -> None:
@@ -62,6 +66,7 @@ class ReviewAuditService:
         failed_sources = await self.repository.list_review_failed_sources(review_id)
         passage_ids = await self.repository.list_review_passage_ids(review_id)
         events = await self.repository.list_review_audit_events(review_id)
+        evidence_certainty = await self.repository.list_evidence_certainty(review_id)
         search_runs, retrieval_runs = self._runs_from_events(events)
         coverage_distribution = Counter(source.coverage for source in sources)
         resolver_attempts = []
@@ -80,6 +85,7 @@ class ReviewAuditService:
             resolver_attempts=resolver_attempts,
             search_runs=search_runs,
             retrieval_runs=retrieval_runs,
+            evidence_certainty=evidence_certainty,
             passage_ids=passage_ids,
             stable_citation_keys={
                 passage_id: stable_citation_key_for_passage(passage_id)

@@ -3,12 +3,14 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from ...models.review_rerag import (
+    EvidenceCertaintyResponse,
     IndexReviewEvidenceRequest,
     IndexReviewEvidenceResponse,
     InspectReviewIndexRequest,
     InspectReviewIndexResponse,
     CleanupExpiredReviewIndexesResponse,
     DeleteReviewIndexResponse,
+    ListEvidenceCertaintyResponse,
     ListReviewIndexesResponse,
     PreflightReviewSourcesRequest,
     PreflightReviewSourcesResponse,
@@ -21,10 +23,12 @@ from ...models.review_rerag import (
     ReviewNeighboringPassagesRequest,
     ReviewPassageLookupRequest,
     ReviewPassageLookupResponse,
+    UpsertEvidenceCertaintyRequest,
 )
 from .dependencies import (
     ReviewAuditServiceDep,
     ReviewContextServiceDep,
+    ReviewEvidenceCertaintyServiceDep,
     ReviewIndexLifecycleServiceDep,
     ReviewQueueDep,
     SourcePreflightServiceDep,
@@ -94,6 +98,50 @@ async def cleanup_expired_review_indexes(
         return await service.cleanup_expired()
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{review_id}/certainty",
+    response_model=EvidenceCertaintyResponse,
+    operation_id="add_evidence_certainty",
+    summary="Store a user-supplied evidence certainty judgment",
+)
+@handle_api_errors
+async def add_evidence_certainty(
+    review_id: str,
+    request: UpsertEvidenceCertaintyRequest,
+    service: ReviewEvidenceCertaintyServiceDep,
+) -> EvidenceCertaintyResponse:
+    return await service.upsert(review_id, request)
+
+
+@router.get(
+    "/{review_id}/certainty",
+    response_model=ListEvidenceCertaintyResponse,
+    operation_id="list_evidence_certainty",
+    summary="List user-supplied evidence certainty judgments",
+)
+@handle_api_errors
+async def list_evidence_certainty(
+    review_id: str,
+    service: ReviewEvidenceCertaintyServiceDep,
+) -> ListEvidenceCertaintyResponse:
+    return await service.list(review_id)
+
+
+@router.get(
+    "/{review_id}/certainty/{certainty_id}",
+    response_model=EvidenceCertaintyResponse,
+    operation_id="get_evidence_certainty",
+    summary="Get one user-supplied evidence certainty judgment",
+)
+@handle_api_errors
+async def get_evidence_certainty(
+    review_id: str,
+    certainty_id: str,
+    service: ReviewEvidenceCertaintyServiceDep,
+) -> EvidenceCertaintyResponse:
+    return await service.get(review_id, certainty_id)
 
 
 @router.post(

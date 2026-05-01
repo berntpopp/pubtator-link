@@ -8,6 +8,7 @@ from typing import Any, Protocol
 from uuid import uuid4
 
 from pubtator_link.models.review_rerag import (
+    EvidenceCertaintyRecord,
     FailedSourceSummary,
     PreparationStatus,
     ReviewIndexInventoryItem,
@@ -15,8 +16,10 @@ from pubtator_link.models.review_rerag import (
     ReviewPassageRow,
     ReviewPassageSample,
     ReviewSourceSummary,
+    UpsertEvidenceCertaintyRequest,
 )
 from pubtator_link.repositories.review_rerag_mappers import (
+    _evidence_certainty_from_row,
     _failed_source_summary_from_row,
     _filter_or_none,
     _parse_execute_count,
@@ -158,6 +161,25 @@ class ReviewReragRepository(Protocol):
 
     async def cleanup_expired_review_indexes(self, *, ttl_seconds: int) -> list[str]:
         """Delete review indexes whose updated timestamp is older than the TTL."""
+
+    async def upsert_evidence_certainty(
+        self,
+        review_id: str,
+        request: UpsertEvidenceCertaintyRequest,
+        *,
+        certainty_id: str | None = None,
+    ) -> EvidenceCertaintyRecord:
+        """Create or update a user-supplied certainty record."""
+
+    async def list_evidence_certainty(self, review_id: str) -> list[EvidenceCertaintyRecord]:
+        """List user-supplied certainty records for a review."""
+
+    async def get_evidence_certainty(
+        self,
+        review_id: str,
+        certainty_id: str,
+    ) -> EvidenceCertaintyRecord | None:
+        """Get one user-supplied certainty record."""
 
     async def mark_job_running(self, *, review_id: str, source_id: str) -> None:
         """Mark a preparation job as running."""
@@ -1027,6 +1049,10 @@ class PostgresReviewReragRepository:
         async with self._pool.acquire() as connection, connection.transaction():
             await connection.execute("delete from review_audit_events where review_id = $1", review_id)
             await connection.execute(
+                "delete from review_evidence_certainty where review_id = $1",
+                review_id,
+            )
+            await connection.execute(
                 "delete from full_text_retrieval_attempts where review_id = $1",
                 review_id,
             )
@@ -1055,6 +1081,131 @@ class PostgresReviewReragRepository:
             if await self.delete_review_index(review_id):
                 deleted.append(review_id)
         return deleted
+
+    async def upsert_evidence_certainty(
+        self,
+        review_id: str,
+        request: UpsertEvidenceCertaintyRequest,
+        *,
+        certainty_id: str | None = None,
+    ) -> EvidenceCertaintyRecord:
+        record_id = certainty_id or str(uuid4())
+        unresolved_passage_ids = await self._unresolved_passage_ids(
+            review_id,
+            request.passage_ids,
+            validate=request.validate_passages,
+        )
+        async with self._pool.acquire() as connection:
+            await connection.execute(
+                """
+                insert into reviews (review_id)
+                values ($1)
+                on conflict (review_id) do update
+                set updated_at = now()
+                """,
+                review_id,
+            )
+            row = await connection.fetchrow(
+                """
+                insert into review_evidence_certainty (
+                    certainty_id,
+                    review_id,
+                    outcome,
+                    question,
+                    study_design,
+                    risk_of_bias_notes,
+                    inconsistency_notes,
+                    indirectness_notes,
+                    imprecision_notes,
+                    publication_bias_notes,
+                    overall_certainty,
+                    certainty_rationale,
+                    passage_ids,
+                    unresolved_passage_ids,
+                    created_by
+                )
+                values (
+                    $1::uuid, $2, $3, $4, $5, $6, $7, $8, $9,
+                    $10, $11, $12, $13, $14, $15
+                )
+                on conflict (certainty_id) do update
+                set outcome = excluded.outcome,
+                    question = excluded.question,
+                    study_design = excluded.study_design,
+                    risk_of_bias_notes = excluded.risk_of_bias_notes,
+                    inconsistency_notes = excluded.inconsistency_notes,
+                    indirectness_notes = excluded.indirectness_notes,
+                    imprecision_notes = excluded.imprecision_notes,
+                    publication_bias_notes = excluded.publication_bias_notes,
+                    overall_certainty = excluded.overall_certainty,
+                    certainty_rationale = excluded.certainty_rationale,
+                    passage_ids = excluded.passage_ids,
+                    unresolved_passage_ids = excluded.unresolved_passage_ids,
+                    created_by = excluded.created_by,
+                    updated_at = now()
+                returning *
+                """,
+                record_id,
+                review_id,
+                request.outcome,
+                request.question,
+                request.study_design,
+                request.risk_of_bias_notes,
+                request.inconsistency_notes,
+                request.indirectness_notes,
+                request.imprecision_notes,
+                request.publication_bias_notes,
+                request.overall_certainty,
+                request.certainty_rationale,
+                request.passage_ids,
+                unresolved_passage_ids,
+                request.created_by,
+            )
+            await self._touch_review_on_connection(connection, review_id)
+        return _evidence_certainty_from_row(row)
+
+    async def list_evidence_certainty(self, review_id: str) -> list[EvidenceCertaintyRecord]:
+        async with self._pool.acquire() as connection:
+            rows = await connection.fetch(
+                """
+                select *
+                from review_evidence_certainty
+                where review_id = $1
+                order by updated_at desc, certainty_id asc
+                """,
+                review_id,
+            )
+        return [_evidence_certainty_from_row(row) for row in rows]
+
+    async def get_evidence_certainty(
+        self,
+        review_id: str,
+        certainty_id: str,
+    ) -> EvidenceCertaintyRecord | None:
+        async with self._pool.acquire() as connection:
+            row = await connection.fetchrow(
+                """
+                select *
+                from review_evidence_certainty
+                where review_id = $1 and certainty_id = $2::uuid
+                """,
+                review_id,
+                certainty_id,
+            )
+        return _evidence_certainty_from_row(row) if row is not None else None
+
+    async def _unresolved_passage_ids(
+        self,
+        review_id: str,
+        passage_ids: list[str],
+        *,
+        validate: bool,
+    ) -> list[str]:
+        if not validate or not passage_ids:
+            return []
+        existing = await self.get_passages_by_id(review_id, passage_ids)
+        existing_ids = {passage.passage_id for passage in existing}
+        return [passage_id for passage_id in passage_ids if passage_id not in existing_ids]
 
     async def _preparation_status_on_connection(
         self, connection: Any, review_id: str

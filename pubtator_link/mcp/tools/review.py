@@ -8,27 +8,34 @@ from pydantic import Field
 from pubtator_link.api.routes.dependencies import (
     get_review_audit_service,
     get_review_context_service,
+    get_review_evidence_certainty_service,
     get_review_index_lifecycle_service,
     get_review_queue,
     get_source_preflight_service,
 )
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD, REVIEW_WRITE_ANNOTATIONS
 from pubtator_link.mcp.service_adapters import (
+    add_evidence_certainty_impl,
     export_review_audit_bundle_impl,
+    get_evidence_certainty_impl,
     get_neighboring_review_passages_impl,
     get_review_passages_by_id_impl,
     get_review_index_summary_impl,
     index_review_evidence_impl,
     inspect_review_index_impl,
     list_review_indexes_impl,
+    list_evidence_certainty_impl,
     preflight_review_sources_impl,
     retrieve_review_context_batch_impl,
     retrieve_review_context_impl,
 )
 from pubtator_link.models.review_rerag import (
     BudgetStrategy,
+    EvidenceCertaintyLabel,
+    EvidenceCertaintyResponse,
     IndexReviewEvidenceResponse,
     InspectReviewIndexResponse,
+    ListEvidenceCertaintyResponse,
     ListReviewIndexesResponse,
     McpReviewAuditBundleResponse,
     PrepareMode,
@@ -67,6 +74,74 @@ def register_review_tools(mcp: FastMCP) -> None:
         """Use this to inspect one persisted review index summary without loading passage samples. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         service = await get_review_index_lifecycle_service()
         return await get_review_index_summary_impl(service=service, review_id=review_id)
+
+    @mcp.tool(
+        name="pubtator.add_evidence_certainty",
+        title="Add Evidence Certainty",
+        output_schema=EvidenceCertaintyResponse.model_json_schema(),
+        annotations=REVIEW_WRITE_ANNOTATIONS,
+    )
+    async def add_evidence_certainty(
+        review_id: str,
+        outcome: str,
+        question: str | None = None,
+        study_design: str | None = None,
+        risk_of_bias_notes: str | None = None,
+        inconsistency_notes: str | None = None,
+        indirectness_notes: str | None = None,
+        imprecision_notes: str | None = None,
+        publication_bias_notes: str | None = None,
+        overall_certainty: EvidenceCertaintyLabel = "not_rated",
+        certainty_rationale: str | None = None,
+        passage_ids: list[str] | None = None,
+        created_by: str | None = None,
+        validate_passages: bool = False,
+    ) -> dict[str, Any]:
+        """Use this to store a user-supplied GRADE-style evidence certainty judgment linked to prepared passage IDs. The backend stores the judgment; it does not compute certainty. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_review_evidence_certainty_service()
+        return await add_evidence_certainty_impl(
+            service=service,
+            review_id=review_id,
+            outcome=outcome,
+            question=question,
+            study_design=study_design,
+            risk_of_bias_notes=risk_of_bias_notes,
+            inconsistency_notes=inconsistency_notes,
+            indirectness_notes=indirectness_notes,
+            imprecision_notes=imprecision_notes,
+            publication_bias_notes=publication_bias_notes,
+            overall_certainty=overall_certainty,
+            certainty_rationale=certainty_rationale,
+            passage_ids=passage_ids,
+            created_by=created_by,
+            validate_passages=validate_passages,
+        )
+
+    @mcp.tool(
+        name="pubtator.list_evidence_certainty",
+        title="List Evidence Certainty",
+        output_schema=ListEvidenceCertaintyResponse.model_json_schema(),
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def list_evidence_certainty(review_id: str) -> dict[str, Any]:
+        """Use this to list user-supplied evidence certainty judgments for a review. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_review_evidence_certainty_service()
+        return await list_evidence_certainty_impl(service=service, review_id=review_id)
+
+    @mcp.tool(
+        name="pubtator.get_evidence_certainty",
+        title="Get Evidence Certainty",
+        output_schema=EvidenceCertaintyResponse.model_json_schema(),
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def get_evidence_certainty(review_id: str, certainty_id: str) -> dict[str, Any]:
+        """Use this to retrieve one user-supplied evidence certainty judgment. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_review_evidence_certainty_service()
+        return await get_evidence_certainty_impl(
+            service=service,
+            review_id=review_id,
+            certainty_id=certainty_id,
+        )
 
     @mcp.tool(
         name="pubtator.preflight_review_sources",

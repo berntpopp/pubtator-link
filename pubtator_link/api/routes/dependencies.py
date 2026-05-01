@@ -20,6 +20,7 @@ from ...services.publication_passage_service import PublicationPassageService
 from ...services.publication_service import PublicationService
 from ...services.review_audit import ReviewAuditService
 from ...services.review_context_service import ReviewContextService
+from ...services.review_evidence_certainty import ReviewEvidenceCertaintyService
 from ...services.review_index_lifecycle import ReviewIndexLifecycleService
 from ...services.review_preparation_queue import ReviewPreparationQueue
 from ...services.source_preflight import SourcePreflightService
@@ -37,6 +38,7 @@ _review_repository: PostgresReviewReragRepository | None = None
 _review_queue: ReviewPreparationQueue | None = None
 _review_context_service: ReviewContextService | None = None
 _review_audit_service: ReviewAuditService | None = None
+_review_evidence_certainty_service: ReviewEvidenceCertaintyService | None = None
 _review_index_lifecycle_service: ReviewIndexLifecycleService | None = None
 _source_preflight_service: SourcePreflightService | None = None
 
@@ -54,6 +56,7 @@ class AppResources:
     review_queue: ReviewPreparationQueue | None = None
     review_context_service: ReviewContextService | None = None
     review_audit_service: ReviewAuditService | None = None
+    review_evidence_certainty_service: ReviewEvidenceCertaintyService | None = None
     review_index_lifecycle_service: ReviewIndexLifecycleService | None = None
     source_preflight_service: SourcePreflightService | None = None
 
@@ -104,6 +107,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
     review_pool: asyncpg.Pool | None = None
     review_queue: ReviewPreparationQueue | None = None
     review_audit_service: ReviewAuditService | None = None
+    review_evidence_certainty_service: ReviewEvidenceCertaintyService | None = None
     review_index_lifecycle_service: ReviewIndexLifecycleService | None = None
 
     try:
@@ -137,6 +141,9 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             )
             review_context_service = _build_review_context_service(review_repository)
             review_audit_service = ReviewAuditService(repository=review_repository)
+            review_evidence_certainty_service = ReviewEvidenceCertaintyService(
+                repository=review_repository
+            )
             review_index_lifecycle_service = ReviewIndexLifecycleService(
                 repository=review_repository,
                 config=review_rerag_config,
@@ -153,6 +160,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             review_queue=review_queue,
             review_context_service=review_context_service,
             review_audit_service=review_audit_service,
+            review_evidence_certainty_service=review_evidence_certainty_service,
             review_index_lifecycle_service=review_index_lifecycle_service,
         )
     except Exception:
@@ -351,6 +359,25 @@ async def get_review_index_lifecycle_service() -> ReviewIndexLifecycleService:
     return _review_index_lifecycle_service
 
 
+async def get_review_evidence_certainty_service() -> ReviewEvidenceCertaintyService:
+    """Get review evidence certainty service."""
+    global _review_evidence_certainty_service
+    resources = current_app_resources()
+    if resources is not None:
+        if resources.review_evidence_certainty_service is None:
+            if resources.review_repository is None:
+                raise RuntimeError("PUBTATOR_LINK_DATABASE_URL is required for review re-RAG")
+            resources.review_evidence_certainty_service = ReviewEvidenceCertaintyService(
+                repository=resources.review_repository
+            )
+        return resources.review_evidence_certainty_service
+    if _review_evidence_certainty_service is None:
+        _review_evidence_certainty_service = ReviewEvidenceCertaintyService(
+            repository=await get_review_repository()
+        )
+    return _review_evidence_certainty_service
+
+
 # Type aliases for dependency injection
 LoggerDep = Annotated[FilteringBoundLogger, Depends(get_logger)]
 ClientDep = Annotated[PubTator3Client, Depends(get_api_client)]
@@ -361,6 +388,10 @@ PublicationPassageServiceDep = Annotated[
 ReviewQueueDep = Annotated[ReviewPreparationQueue, Depends(get_review_queue)]
 ReviewContextServiceDep = Annotated[ReviewContextService, Depends(get_review_context_service)]
 ReviewAuditServiceDep = Annotated[ReviewAuditService, Depends(get_review_audit_service)]
+ReviewEvidenceCertaintyServiceDep = Annotated[
+    ReviewEvidenceCertaintyService,
+    Depends(get_review_evidence_certainty_service),
+]
 ReviewIndexLifecycleServiceDep = Annotated[
     ReviewIndexLifecycleService,
     Depends(get_review_index_lifecycle_service),
@@ -481,6 +512,7 @@ async def cleanup_dependencies() -> None:
     """Cleanup function for graceful shutdown."""
     global _api_client, _publication_passage_service, _publication_service, _logger
     global _review_context_service, _review_pool, _review_queue, _review_repository
+    global _review_evidence_certainty_service
     global _review_index_lifecycle_service
 
     if _api_client:
@@ -498,6 +530,7 @@ async def cleanup_dependencies() -> None:
 
     _review_repository = None
     _review_context_service = None
+    _review_evidence_certainty_service = None
     _review_index_lifecycle_service = None
     _publication_passage_service = None
     _publication_service = None

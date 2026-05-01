@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from pubtator_link.models.review_rerag import (
+    EvidenceCertaintyRecord,
     FailedSourceSummary,
     PreparationStatus,
     ReviewIndexInventoryItem,
@@ -189,6 +190,28 @@ def _review_inventory_item_from_row(
         passage_count=int(row.get("passage_count") or 0),
         failed_source_count=int(row.get("failed_source_count") or 0),
         approximate_bytes=int(row.get("approximate_bytes") or 0),
+    )
+
+
+def _evidence_certainty_from_row(row: Mapping[str, Any]) -> EvidenceCertaintyRecord:
+    return EvidenceCertaintyRecord(
+        certainty_id=str(row["certainty_id"]),
+        review_id=str(row["review_id"]),
+        outcome=str(row["outcome"]),
+        question=_get(row, "question"),
+        study_design=_get(row, "study_design"),
+        risk_of_bias_notes=_get(row, "risk_of_bias_notes"),
+        inconsistency_notes=_get(row, "inconsistency_notes"),
+        indirectness_notes=_get(row, "indirectness_notes"),
+        imprecision_notes=_get(row, "imprecision_notes"),
+        publication_bias_notes=_get(row, "publication_bias_notes"),
+        overall_certainty=_get(row, "overall_certainty") or "not_rated",
+        certainty_rationale=_get(row, "certainty_rationale"),
+        passage_ids=list(_get(row, "passage_ids") or []),
+        unresolved_passage_ids=list(_get(row, "unresolved_passage_ids") or []),
+        created_by=_get(row, "created_by"),
+        created_at=str(row["created_at"]),
+        updated_at=str(row["updated_at"]),
     )
 
 
