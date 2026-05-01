@@ -36,6 +36,21 @@ class TestHealthAndRoot:
         assert data["status"] == "healthy"
         assert data["version"] == "1.0.0"
 
+    def test_readiness_endpoint_without_database_config(self, test_client):
+        response = test_client.get("/ready")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ready"
+        assert data["version"] == "1.0.0"
+        assert data["dependencies"]["database"]["status"] == "not_configured"
+
+    def test_readiness_endpoint_content_type(self, test_client):
+        response = test_client.get("/ready")
+
+        assert response.status_code == 200
+        assert "application/json" in response.headers["content-type"]
+
     def test_root_endpoint_response_structure(self, test_client):
         """Test that root endpoint returns correct structure."""
         response = test_client.get("/")

@@ -27,7 +27,7 @@ from .api.routes.dependencies import (
     reset_app_resources,
     resources_from_request,
 )
-from .config import settings
+from .config import review_rerag_config, settings
 from .logging_config import configure_logging
 from .mcp.facade import create_pubtator_mcp
 
@@ -128,6 +128,28 @@ class UnifiedServerManager:
                 "status": "healthy",
                 "version": "1.0.0",
                 "transport": settings.transport,
+            }
+
+        @app.get("/ready")
+        async def ready(request: Request) -> dict[str, object]:
+            """Readiness check endpoint."""
+            resources = getattr(request.app.state, "pubtator_resources", None)
+            database_status = "not_configured"
+            if review_rerag_config.database_url is not None:
+                database_status = "ready"
+                if resources is None or resources.review_pool is None:
+                    database_status = "unavailable"
+
+            status = "ready" if database_status != "unavailable" else "not_ready"
+            return {
+                "status": status,
+                "version": "1.0.0",
+                "transport": settings.transport,
+                "dependencies": {
+                    "database": {
+                        "status": database_status,
+                    }
+                },
             }
 
         @app.middleware("http")
