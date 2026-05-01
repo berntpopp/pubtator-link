@@ -5,11 +5,16 @@ from typing import Annotated, Any
 from fastmcp import FastMCP
 from pydantic import Field
 
-from pubtator_link.api.routes.dependencies import get_review_context_service, get_review_queue
+from pubtator_link.api.routes.dependencies import (
+    get_review_context_service,
+    get_review_queue,
+    get_source_preflight_service,
+)
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD, REVIEW_WRITE_ANNOTATIONS
 from pubtator_link.mcp.service_adapters import (
     index_review_evidence_impl,
     inspect_review_index_impl,
+    preflight_review_sources_impl,
     retrieve_review_context_batch_impl,
     retrieve_review_context_impl,
 )
@@ -22,6 +27,18 @@ from pubtator_link.models.review_rerag import (
 
 
 def register_review_tools(mcp: FastMCP) -> None:
+    @mcp.tool(
+        name="pubtator.preflight_review_sources",
+        title="Preflight Review Sources",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def preflight_review_sources(
+        pmids: list[str],
+    ) -> dict[str, Any]:
+        """Use this before indexing review evidence to estimate PMID source coverage, PMC fallback availability, and likely full-text versus abstract-only retrieval. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_source_preflight_service()
+        return await preflight_review_sources_impl(service=service, pmids=pmids)
+
     @mcp.tool(
         name="pubtator.index_review_evidence",
         title="Index Review Evidence",

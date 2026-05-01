@@ -7,14 +7,36 @@ from ...models.review_rerag import (
     IndexReviewEvidenceResponse,
     InspectReviewIndexRequest,
     InspectReviewIndexResponse,
+    PreflightReviewSourcesRequest,
+    PreflightReviewSourcesResponse,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextRequest,
     RetrieveReviewContextResponse,
 )
-from .dependencies import ReviewContextServiceDep, ReviewQueueDep, handle_api_errors
+from .dependencies import (
+    ReviewContextServiceDep,
+    ReviewQueueDep,
+    SourcePreflightServiceDep,
+    handle_api_errors,
+)
 
 router = APIRouter(prefix="/api/reviews", tags=["Reviews"])
+
+
+@router.post(
+    "/source-preflight",
+    response_model=PreflightReviewSourcesResponse,
+    operation_id="preflight_review_sources",
+    summary="Estimate review source coverage before indexing",
+)
+@handle_api_errors
+async def preflight_review_sources(
+    request: PreflightReviewSourcesRequest,
+    service: SourcePreflightServiceDep,
+) -> PreflightReviewSourcesResponse:
+    hints = await service.preflight_pmids(request.pmids)
+    return PreflightReviewSourcesResponse(coverage_hints=hints)
 
 
 @router.post(

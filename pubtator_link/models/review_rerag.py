@@ -147,6 +147,19 @@ class IndexReviewEvidenceResponse(BaseModel):
     lifecycle_note: str | None = None
 
 
+class PreflightReviewSourcesRequest(BaseModel):
+    """Request to estimate source coverage before review indexing."""
+
+    pmids: list[str] = Field(min_length=1)
+
+
+class PreflightReviewSourcesResponse(BaseModel):
+    """Response containing source coverage hints for requested PMIDs."""
+
+    success: bool = True
+    coverage_hints: list[SourceCoverageHint]
+
+
 class RetrieveReviewContextRequest(BaseModel):
     """Request for a fresh review-scoped context pack."""
 

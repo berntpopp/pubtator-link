@@ -3,7 +3,11 @@ from unittest.mock import AsyncMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from pubtator_link.api.routes.dependencies import get_review_context_service, get_review_queue
+from pubtator_link.api.routes.dependencies import (
+    get_review_context_service,
+    get_review_queue,
+    get_source_preflight_service,
+)
 from pubtator_link.models.review_rerag import (
     ContextPack,
     InspectReviewIndexResponse,
@@ -13,8 +17,35 @@ from pubtator_link.models.review_rerag import (
     RetrieveReviewContextResponse,
     ReviewIndexTotals,
     ReviewSourceSummary,
+    SourceCoverageHint,
 )
 from pubtator_link.server_manager import UnifiedServerManager
+
+
+@pytest.mark.asyncio
+async def test_preflight_review_sources_returns_coverage_hints() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.preflight_pmids.return_value = [
+        SourceCoverageHint(
+            pmid="40234174",
+            expected_coverage="abstract_only",
+            coverage_reason="no_pmcid",
+        )
+    ]
+    app.dependency_overrides[get_source_preflight_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/reviews/source-preflight",
+            json={"pmids": ["40234174"]},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["coverage_hints"][0]["pmid"] == "40234174"
+    assert data["coverage_hints"][0]["coverage_reason"] == "no_pmcid"
+    service.preflight_pmids.assert_awaited_once_with(["40234174"])
 
 
 @pytest.mark.asyncio

@@ -20,6 +20,7 @@ from ...services.publication_passage_service import PublicationPassageService
 from ...services.publication_service import PublicationService
 from ...services.review_context_service import ReviewContextService
 from ...services.review_preparation_queue import ReviewPreparationQueue
+from ...services.source_preflight import SourcePreflightService
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ _review_pool: asyncpg.Pool | None = None
 _review_repository: PostgresReviewReragRepository | None = None
 _review_queue: ReviewPreparationQueue | None = None
 _review_context_service: ReviewContextService | None = None
+_source_preflight_service: SourcePreflightService | None = None
 
 
 @dataclass
@@ -47,6 +49,7 @@ class AppResources:
     review_repository: PostgresReviewReragRepository | None = None
     review_queue: ReviewPreparationQueue | None = None
     review_context_service: ReviewContextService | None = None
+    source_preflight_service: SourcePreflightService | None = None
 
 
 _app_resources_context: ContextVar[AppResources | None] = ContextVar(
@@ -101,6 +104,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
         publication_passage_service = PublicationPassageService(
             publication_service=publication_service
         )
+        source_preflight_service = SourcePreflightService.from_pubtator_client(api_client)
 
         review_repository: PostgresReviewReragRepository | None = None
         review_context_service: ReviewContextService | None = None
@@ -127,6 +131,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             api_client=api_client,
             publication_service=publication_service,
             publication_passage_service=publication_passage_service,
+            source_preflight_service=source_preflight_service,
             review_pool=review_pool,
             review_repository=review_repository,
             review_queue=review_queue,
@@ -261,6 +266,23 @@ async def get_review_context_service() -> ReviewContextService:
     return _review_context_service
 
 
+async def get_source_preflight_service() -> SourcePreflightService:
+    """Get review source preflight service."""
+    global _source_preflight_service
+    resources = current_app_resources()
+    if resources is not None:
+        if resources.source_preflight_service is None:
+            resources.source_preflight_service = SourcePreflightService.from_pubtator_client(
+                resources.api_client
+            )
+        return resources.source_preflight_service
+    if _source_preflight_service is None:
+        _source_preflight_service = SourcePreflightService.from_pubtator_client(
+            await get_api_client()
+        )
+    return _source_preflight_service
+
+
 # Type aliases for dependency injection
 LoggerDep = Annotated[FilteringBoundLogger, Depends(get_logger)]
 ClientDep = Annotated[PubTator3Client, Depends(get_api_client)]
@@ -270,6 +292,9 @@ PublicationPassageServiceDep = Annotated[
 ]
 ReviewQueueDep = Annotated[ReviewPreparationQueue, Depends(get_review_queue)]
 ReviewContextServiceDep = Annotated[ReviewContextService, Depends(get_review_context_service)]
+SourcePreflightServiceDep = Annotated[
+    SourcePreflightService, Depends(get_source_preflight_service)
+]
 
 
 def handle_api_errors(func: Callable[..., Any]) -> Callable[..., Any]:

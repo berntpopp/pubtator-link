@@ -36,6 +36,7 @@ from pubtator_link.services.publication_passage_service import PublicationPassag
 from pubtator_link.services.publication_service import PublicationService
 from pubtator_link.services.review_context_service import ReviewContextService
 from pubtator_link.services.review_preparation_queue import ReviewPreparationQueue
+from pubtator_link.services.source_preflight import SourcePreflightService
 
 
 async def search_biomedical_entities_impl(
@@ -392,6 +393,18 @@ async def index_review_evidence_impl(
         ),
     }
     return response
+
+
+async def preflight_review_sources_impl(
+    *,
+    service: SourcePreflightService,
+    pmids: list[str],
+) -> dict[str, Any]:
+    hints = await service.preflight_pmids(pmids)
+    return {
+        "success": True,
+        "coverage_hints": [hint.model_dump(mode="json") for hint in hints],
+    }
 
 
 async def inspect_review_index_impl(

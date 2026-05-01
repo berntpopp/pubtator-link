@@ -26,6 +26,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             "pubtator.find_entity_relations",
             "pubtator.submit_text_annotation",
             "pubtator.get_text_annotation_results",
+            "pubtator.preflight_review_sources",
             "pubtator.index_review_evidence",
             "pubtator.inspect_review_index",
             "pubtator.retrieve_review_context",
@@ -33,7 +34,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             "pubtator.get_server_capabilities",
         ],
         "recommended_workflows": [
-            "search -> index -> inspect -> retrieve for review-grounded answers",
+            "search -> preflight -> index -> inspect -> retrieve for review-grounded answers",
             "publication passages -> context estimate -> compact passage retrieval before raw BioC",
         ],
         "tool_groups": {
@@ -47,6 +48,7 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "pubtator.fetch_pmc_annotations",
             ],
             "review_grounding": [
+                "pubtator.preflight_review_sources",
                 "pubtator.index_review_evidence",
                 "pubtator.inspect_review_index",
                 "pubtator.retrieve_review_context",
@@ -100,6 +102,9 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "max_chars": 12000,
                 "max_response_chars": 24000,
             },
+            "pubtator.preflight_review_sources": {
+                "pmids": ["40234174"],
+            },
             "pubtator.retrieve_review_context_batch:diagnostics": {
                 "review_id": "fmf-colchicine-guidelines",
                 "queries": ["MEFV colchicine", "FMF guideline"],
@@ -130,6 +135,7 @@ def get_capabilities_resource() -> dict[str, Any]:
         "review_rerag": {
             "tools": [
                 "pubtator.index_review_evidence",
+                "pubtator.preflight_review_sources",
                 "pubtator.inspect_review_index",
                 "pubtator.retrieve_review_context",
                 "pubtator.retrieve_review_context_batch",
@@ -137,6 +143,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             "prompt": "review_rerag_workflow",
             "scope": "research-use review-scoped evidence preparation and retrieval",
             "workflow": [
+                "preflight candidate PMIDs to estimate source coverage",
                 "index candidate PMIDs or curated URLs for a stable review_id",
                 "inspect the review index before retrieval to check source coverage",
                 "wait for preparation_status to show complete or partial records",

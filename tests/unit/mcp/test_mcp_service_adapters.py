@@ -81,6 +81,31 @@ async def test_publication_passages_adapter_calls_service() -> None:
 
 
 @pytest.mark.asyncio
+async def test_preflight_review_sources_adapter_returns_hints() -> None:
+    from pubtator_link.mcp.service_adapters import preflight_review_sources_impl
+    from pubtator_link.models.review_rerag import SourceCoverageHint
+
+    class FakeService:
+        async def preflight_pmids(self, pmids: list[str]) -> list[SourceCoverageHint]:
+            return [
+                SourceCoverageHint(
+                    pmid=pmids[0],
+                    expected_coverage="abstract_only",
+                    coverage_reason="no_pmcid",
+                )
+            ]
+
+    result = await preflight_review_sources_impl(
+        service=FakeService(),
+        pmids=["40234174"],
+    )
+
+    assert result["success"] is True
+    assert result["coverage_hints"][0]["pmid"] == "40234174"
+    assert result["coverage_hints"][0]["coverage_reason"] == "no_pmcid"
+
+
+@pytest.mark.asyncio
 async def test_inspect_review_index_adapter_calls_service() -> None:
     from pubtator_link.mcp.service_adapters import inspect_review_index_impl
     from pubtator_link.models.review_rerag import (
