@@ -212,6 +212,18 @@ class ReviewContextService:
             query_results=query_results,
             coverage_by_source=coverage_by_source,
         )
+        record_audit_event = getattr(self.repository, "record_review_audit_event", None)
+        if record_audit_event is not None:
+            await record_audit_event(
+                review_id,
+                "retrieval_run",
+                {
+                    "queries": request.queries,
+                    "passage_ids": [
+                        passage.passage_id for passage in merged.passages
+                    ],
+                },
+            )
         citation_map = {passage.citation_key: passage.passage_id for passage in merged.passages}
         budget = context_budget(
             max_chars=request.max_chars,

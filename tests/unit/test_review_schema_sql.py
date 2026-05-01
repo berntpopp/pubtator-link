@@ -35,3 +35,10 @@ def test_retrieval_attempts_schema_contains_audit_metadata_columns() -> None:
         "license_or_access_hint",
     ):
         assert column in SCHEMA
+
+
+def test_schema_defines_review_audit_events_table() -> None:
+    assert "create table if not exists review_audit_events" in SCHEMA
+    assert "event_type text not null" in SCHEMA
+    assert "payload jsonb not null default '{}'::jsonb" in SCHEMA
+    assert "review_audit_events_review_id_idx" in SCHEMA

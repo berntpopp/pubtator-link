@@ -397,6 +397,36 @@ class ReviewPassageLookupResponse(BaseModel):
     not_found: list[str] = Field(default_factory=list)
 
 
+class ReviewSearchRun(BaseModel):
+    query: str
+    filters: dict[str, object] = Field(default_factory=dict)
+    source: str = "pubtator"
+    returned_count: int = Field(default=0, ge=0)
+    created_at: str | None = None
+
+
+class ReviewRetrievalRun(BaseModel):
+    queries: list[str]
+    passage_ids: list[str] = Field(default_factory=list)
+    created_at: str | None = None
+
+
+class ReviewAuditBundle(BaseModel):
+    success: bool = True
+    review_id: str
+    generated_at: str
+    preparation_status: PreparationStatus
+    totals: "ReviewIndexTotals"
+    sources: list["ReviewSourceSummary"]
+    failed_sources: list["FailedSourceSummary"]
+    coverage_distribution: dict[str, int]
+    resolver_attempts: list[ResolverAttemptSummary]
+    search_runs: list[ReviewSearchRun] = Field(default_factory=list)
+    retrieval_runs: list[ReviewRetrievalRun] = Field(default_factory=list)
+    passage_ids: list[str]
+    stable_citation_keys: dict[str, str]
+
+
 class ReviewSourceSummary(BaseModel):
     """Inspection summary for one indexed review source."""
 

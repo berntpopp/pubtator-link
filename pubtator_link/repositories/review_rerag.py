@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any, Protocol
 from uuid import uuid4
 
@@ -119,6 +119,20 @@ class ReviewReragRepository(Protocol):
 
     async def indexed_pmids(self, review_id: str) -> list[str]:
         """Return distinct indexed PMIDs for retrieval diagnostics."""
+
+    async def list_review_passage_ids(self, review_id: str) -> list[str]:
+        """Return stable passage IDs for a review."""
+
+    async def record_review_audit_event(
+        self,
+        review_id: str,
+        event_type: str,
+        payload: Mapping[str, object],
+    ) -> None:
+        """Record an append-only review audit event."""
+
+    async def list_review_audit_events(self, review_id: str) -> list[Mapping[str, object]]:
+        """Return append-only review audit events."""
 
     async def mark_job_running(self, *, review_id: str, source_id: str) -> None:
         """Mark a preparation job as running."""
@@ -883,6 +897,56 @@ class PostgresReviewReragRepository:
                 review_id,
             )
         return [str(row["pmid"]) for row in rows]
+
+    async def list_review_passage_ids(self, review_id: str) -> list[str]:
+        async with self._pool.acquire() as connection:
+            rows = await connection.fetch(
+                """
+                select passage_id
+                from review_passages
+                where review_id = $1
+                order by passage_id
+                """,
+                review_id,
+            )
+        return [str(row["passage_id"]) for row in rows]
+
+    async def record_review_audit_event(
+        self,
+        review_id: str,
+        event_type: str,
+        payload: Mapping[str, object],
+    ) -> None:
+        async with self._pool.acquire() as connection:
+            await connection.execute(
+                """
+                insert into review_audit_events (review_id, event_type, payload)
+                values ($1, $2, $3::jsonb)
+                """,
+                review_id,
+                event_type,
+                json.dumps(payload, sort_keys=True),
+            )
+
+    async def list_review_audit_events(self, review_id: str) -> list[Mapping[str, object]]:
+        async with self._pool.acquire() as connection:
+            rows = await connection.fetch(
+                """
+                select event_type, payload, created_at
+                from review_audit_events
+                where review_id = $1
+                order by created_at asc
+                """,
+                review_id,
+            )
+        return [
+            {
+                "event_type": row["event_type"],
+                "payload": row["payload"],
+                "created_at": row["created_at"].isoformat(),
+            }
+            for row in rows
+        ]
 
     async def _preparation_status_on_connection(
         self, connection: Any, review_id: str

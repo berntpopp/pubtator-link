@@ -6,6 +6,7 @@ from httpx import ASGITransport, AsyncClient
 from pubtator_link.api.routes.dependencies import (
     get_review_context_service,
     get_review_queue,
+    get_review_audit_service,
     get_source_preflight_service,
 )
 from pubtator_link.models.review_rerag import (
@@ -16,6 +17,7 @@ from pubtator_link.models.review_rerag import (
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextResponse,
     ReviewIndexTotals,
+    ReviewAuditBundle,
     ReviewPassageLookupResponse,
     ReviewSourceSummary,
     SourceCoverageHint,
@@ -136,6 +138,32 @@ async def test_get_neighboring_review_passages_route_returns_passages_and_not_fo
     assert response.status_code == 200
     assert response.json()["not_found"] == ["missing"]
     service.get_neighboring_passages.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_export_review_audit_bundle_route_returns_audit_bundle() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.export_bundle.return_value = ReviewAuditBundle(
+        review_id="rev_123",
+        generated_at="2026-05-01T10:00:00+00:00",
+        preparation_status=PreparationStatus(complete=1),
+        totals=ReviewIndexTotals(),
+        sources=[],
+        failed_sources=[],
+        coverage_distribution={},
+        resolver_attempts=[],
+        passage_ids=[],
+        stable_citation_keys={},
+    )
+    app.dependency_overrides[get_review_audit_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/reviews/rev_123/audit-bundle")
+
+    assert response.status_code == 200
+    assert response.json()["review_id"] == "rev_123"
+    service.export_bundle.assert_awaited_once_with("rev_123")
 
 
 @pytest.mark.asyncio

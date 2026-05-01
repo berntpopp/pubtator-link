@@ -20,6 +20,7 @@ from ...services.publication_passage_service import PublicationPassageService
 from ...services.publication_service import PublicationService
 from ...services.review_context_service import ReviewContextService
 from ...services.review_preparation_queue import ReviewPreparationQueue
+from ...services.review_audit import ReviewAuditService
 from ...services.source_preflight import SourcePreflightService
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ _review_pool: asyncpg.Pool | None = None
 _review_repository: PostgresReviewReragRepository | None = None
 _review_queue: ReviewPreparationQueue | None = None
 _review_context_service: ReviewContextService | None = None
+_review_audit_service: ReviewAuditService | None = None
 _source_preflight_service: SourcePreflightService | None = None
 
 
@@ -49,6 +51,7 @@ class AppResources:
     review_repository: PostgresReviewReragRepository | None = None
     review_queue: ReviewPreparationQueue | None = None
     review_context_service: ReviewContextService | None = None
+    review_audit_service: ReviewAuditService | None = None
     source_preflight_service: SourcePreflightService | None = None
 
 
@@ -131,6 +134,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
                 repository=review_repository,
                 retrieval_concurrency=review_rerag_config.retrieval_concurrency,
             )
+            review_audit_service = ReviewAuditService(repository=review_repository)
 
         return AppResources(
             logger=logger,
@@ -142,6 +146,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             review_repository=review_repository,
             review_queue=review_queue,
             review_context_service=review_context_service,
+            review_audit_service=review_audit_service,
         )
     except Exception:
         if review_queue is not None:
@@ -294,6 +299,21 @@ async def get_source_preflight_service() -> SourcePreflightService:
     return _source_preflight_service
 
 
+async def get_review_audit_service() -> ReviewAuditService:
+    """Get review audit export service."""
+    global _review_audit_service
+    resources = current_app_resources()
+    if resources is not None:
+        if resources.review_audit_service is None:
+            if resources.review_repository is None:
+                raise RuntimeError("PUBTATOR_LINK_DATABASE_URL is required for review re-RAG")
+            resources.review_audit_service = ReviewAuditService(resources.review_repository)
+        return resources.review_audit_service
+    if _review_audit_service is None:
+        _review_audit_service = ReviewAuditService(await get_review_repository())
+    return _review_audit_service
+
+
 # Type aliases for dependency injection
 LoggerDep = Annotated[FilteringBoundLogger, Depends(get_logger)]
 ClientDep = Annotated[PubTator3Client, Depends(get_api_client)]
@@ -303,6 +323,7 @@ PublicationPassageServiceDep = Annotated[
 ]
 ReviewQueueDep = Annotated[ReviewPreparationQueue, Depends(get_review_queue)]
 ReviewContextServiceDep = Annotated[ReviewContextService, Depends(get_review_context_service)]
+ReviewAuditServiceDep = Annotated[ReviewAuditService, Depends(get_review_audit_service)]
 SourcePreflightServiceDep = Annotated[
     SourcePreflightService, Depends(get_source_preflight_service)
 ]

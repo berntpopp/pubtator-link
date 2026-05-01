@@ -9,6 +9,7 @@ from ...models.review_rerag import (
     InspectReviewIndexResponse,
     PreflightReviewSourcesRequest,
     PreflightReviewSourcesResponse,
+    ReviewAuditBundle,
     ReviewNeighboringPassagesRequest,
     ReviewPassageLookupRequest,
     ReviewPassageLookupResponse,
@@ -18,6 +19,7 @@ from ...models.review_rerag import (
     RetrieveReviewContextResponse,
 )
 from .dependencies import (
+    ReviewAuditServiceDep,
     ReviewContextServiceDep,
     ReviewQueueDep,
     SourcePreflightServiceDep,
@@ -98,6 +100,20 @@ async def inspect_review_index(
             sample_per_pmid=sample_per_pmid,
         ),
     )
+
+
+@router.get(
+    "/{review_id}/audit-bundle",
+    response_model=ReviewAuditBundle,
+    operation_id="export_review_audit_bundle",
+    summary="Export a PRISMA-style review audit bundle",
+)
+@handle_api_errors
+async def export_review_audit_bundle(
+    review_id: str,
+    service: ReviewAuditServiceDep,
+) -> ReviewAuditBundle:
+    return await service.export_bundle(review_id)
 
 
 @router.post(

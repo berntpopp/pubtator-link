@@ -8,12 +8,14 @@ from pydantic import Field
 from pubtator_link.api.routes.dependencies import (
     get_review_context_service,
     get_review_queue,
+    get_review_audit_service,
     get_source_preflight_service,
 )
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD, REVIEW_WRITE_ANNOTATIONS
 from pubtator_link.mcp.service_adapters import (
     get_neighboring_review_passages_impl,
     get_review_passages_by_id_impl,
+    export_review_audit_bundle_impl,
     index_review_evidence_impl,
     inspect_review_index_impl,
     preflight_review_sources_impl,
@@ -126,6 +128,16 @@ def register_review_tools(mcp: FastMCP) -> None:
             same_section=same_section,
             max_chars_per_passage=max_chars_per_passage,
         )
+
+    @mcp.tool(
+        name="pubtator.export_review_audit_bundle",
+        title="Export Review Audit Bundle",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def export_review_audit_bundle(review_id: str) -> dict[str, Any]:
+        """Use this to export review preparation status, source coverage, resolver attempts, retrieval runs, passage IDs, and stable citation keys for scientific auditability. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_review_audit_service()
+        return await export_review_audit_bundle_impl(service=service, review_id=review_id)
 
     @mcp.tool(
         name="pubtator.retrieve_review_context",

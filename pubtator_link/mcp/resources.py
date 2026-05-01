@@ -33,6 +33,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             "pubtator.retrieve_review_context_batch",
             "pubtator.get_review_passages_by_id",
             "pubtator.get_neighboring_review_passages",
+            "pubtator.export_review_audit_bundle",
             "pubtator.get_server_capabilities",
         ],
         "recommended_workflows": [
@@ -57,6 +58,7 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "pubtator.retrieve_review_context_batch",
                 "pubtator.get_review_passages_by_id",
                 "pubtator.get_neighboring_review_passages",
+                "pubtator.export_review_audit_bundle",
             ],
             "entities_relations": [
                 "pubtator.search_biomedical_entities",
@@ -119,6 +121,9 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "before": 1,
                 "after": 1,
             },
+            "pubtator.export_review_audit_bundle": {
+                "review_id": "fmf-colchicine-guidelines",
+            },
             "pubtator.retrieve_review_context_batch:diagnostics": {
                 "review_id": "fmf-colchicine-guidelines",
                 "queries": ["MEFV colchicine", "FMF guideline"],
@@ -155,6 +160,7 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "pubtator.retrieve_review_context_batch",
                 "pubtator.get_review_passages_by_id",
                 "pubtator.get_neighboring_review_passages",
+                "pubtator.export_review_audit_bundle",
             ],
             "prompt": "review_rerag_workflow",
             "scope": "research-use review-scoped evidence preparation and retrieval",
@@ -166,6 +172,7 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "retrieve with short keyword-style questions first",
                 "retry with PMID filters for paper-specific evidence",
                 "look up cited passage IDs or neighboring passages for local context",
+                "export an audit bundle before synthesizing or reporting review conclusions",
                 "use query_summaries[].next_steps when a query returns no passages",
                 "fall back to fetch_publication_annotations full=true when retrieval returns no passages",
             ],

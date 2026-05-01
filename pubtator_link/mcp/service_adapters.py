@@ -35,6 +35,7 @@ from pubtator_link.models.review_rerag import (
 from pubtator_link.services.publication_passage_service import PublicationPassageService
 from pubtator_link.services.publication_service import PublicationService
 from pubtator_link.services.review_context_service import ReviewContextService
+from pubtator_link.services.review_audit import ReviewAuditService
 from pubtator_link.services.review_preparation_queue import ReviewPreparationQueue
 from pubtator_link.services.source_preflight import SourcePreflightService
 
@@ -460,6 +461,15 @@ async def get_neighboring_review_passages_impl(
         max_chars_per_passage=max_chars_per_passage,
     )
     return response.model_dump()
+
+
+async def export_review_audit_bundle_impl(
+    *,
+    service: ReviewAuditService,
+    review_id: str,
+) -> dict[str, Any]:
+    bundle = await service.export_bundle(review_id)
+    return {"success": True, "audit_bundle": bundle.model_dump(mode="json")}
 
 
 async def retrieve_review_context_impl(

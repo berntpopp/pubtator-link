@@ -18,6 +18,7 @@ EXPECTED_PUBLIC_TOOL_NAMES = {
     "pubtator.retrieve_review_context_batch",
     "pubtator.get_review_passages_by_id",
     "pubtator.get_neighboring_review_passages",
+    "pubtator.export_review_audit_bundle",
 }
 
 EXPECTED_RESOURCE_URIS = {
@@ -175,6 +176,7 @@ def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
         "pubtator.index_review_evidence": ("review_id",),
         "pubtator.get_review_passages_by_id": ("review_id", "passage_ids"),
         "pubtator.get_neighboring_review_passages": ("review_id", "passage_id"),
+        "pubtator.export_review_audit_bundle": ("review_id",),
     }
     for name, expected_properties in required_properties.items():
         properties = tools[name].parameters["properties"]
