@@ -260,3 +260,16 @@ def test_branch_protection_required_checks_match_workflow_job_names() -> None:
         "Security / Dependency review",
     }
     assert set(policy["required_status_checks"]).issubset(workflow_checks)
+
+
+def test_container_security_workflow_generates_scan_and_sbom_artifacts() -> None:
+    workflow = _workflow(".github/workflows/container-security.yml")
+    job = workflow["jobs"]["container-security"]
+    uses_steps = {step.get("uses") for step in job["steps"]}
+    run_steps = "\n".join(str(step.get("run", "")) for step in job["steps"])
+
+    assert workflow["permissions"] == {"contents": "read"}
+    assert job["name"] == "Container scan and SBOM"
+    assert "aquasecurity/trivy-action" in "\n".join(str(step) for step in job["steps"])
+    assert "docker build -f docker/Dockerfile -t pubtator-link:scan ." in run_steps
+    assert "actions/upload-artifact@v4" in uses_steps
