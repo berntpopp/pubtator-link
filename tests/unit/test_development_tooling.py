@@ -286,3 +286,14 @@ def test_release_workflow_validates_tagged_builds_without_publishing() -> None:
     assert "make docker-prod-config" in commands
     assert "make docker-npm-config" in commands
     assert "docker build -f docker/Dockerfile -t pubtator-link:release ." in commands
+
+
+def test_operations_runbook_documents_deploy_health_and_rollback() -> None:
+    runbook = Path("docs/development/operations-runbook.md").read_text()
+
+    assert "make docker-up" in runbook
+    assert "/health" in runbook
+    assert "/ready" in runbook
+    assert "docker compose" in runbook
+    assert "rollback" in runbook.lower()
+    assert "X-Request-ID" in runbook
