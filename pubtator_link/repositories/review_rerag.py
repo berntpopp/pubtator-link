@@ -81,6 +81,23 @@ class ReviewReragRepository(Protocol):
     ) -> list[ReviewPassageRow]:
         """Search prepared passages for a review."""
 
+    async def get_passages_by_id(
+        self,
+        review_id: str,
+        passage_ids: Sequence[str],
+    ) -> list[ReviewPassageRow]:
+        """Return review passages in the requested passage ID order."""
+
+    async def neighboring_passages(
+        self,
+        review_id: str,
+        passage_id: str,
+        before: int,
+        after: int,
+        same_section: bool,
+    ) -> list[ReviewPassageRow]:
+        """Return passages around an anchor passage."""
+
     async def list_review_sources(
         self,
         review_id: str,
@@ -424,6 +441,126 @@ class PostgresReviewReragRepository:
                 recall_query,
             )
         return [_passage_from_row(row) for row in rows]
+
+    async def get_passages_by_id(
+        self,
+        review_id: str,
+        passage_ids: Sequence[str],
+    ) -> list[ReviewPassageRow]:
+        if not passage_ids:
+            return []
+        async with self._pool.acquire() as connection:
+            rows = await connection.fetch(
+                """
+                select
+                    passage_id,
+                    review_id,
+                    source_id,
+                    source_kind,
+                    pmid,
+                    pmcid,
+                    doi,
+                    url,
+                    section,
+                    heading_path,
+                    page,
+                    text,
+                    entity_ids,
+                    relation_types,
+                    screening_status,
+                    source_metadata,
+                    0.0::double precision as lexical_rank
+                from review_passages
+                where review_id = $1
+                  and passage_id = any($2::text[])
+                """,
+                review_id,
+                list(passage_ids),
+            )
+        parsed_rows = [_passage_from_row(row) for row in rows]
+        row_by_id = {row.passage_id: row for row in parsed_rows}
+        return [row_by_id[passage_id] for passage_id in passage_ids if passage_id in row_by_id]
+
+    async def neighboring_passages(
+        self,
+        review_id: str,
+        passage_id: str,
+        before: int,
+        after: int,
+        same_section: bool,
+    ) -> list[ReviewPassageRow]:
+        async with self._pool.acquire() as connection:
+            anchor_row = await connection.fetchrow(
+                """
+                select
+                    passage_id,
+                    review_id,
+                    source_id,
+                    source_kind,
+                    pmid,
+                    pmcid,
+                    doi,
+                    url,
+                    section,
+                    heading_path,
+                    page,
+                    text,
+                    entity_ids,
+                    relation_types,
+                    screening_status,
+                    source_metadata,
+                    0.0::double precision as lexical_rank
+                from review_passages
+                where review_id = $1
+                  and passage_id = $2
+                """,
+                review_id,
+                passage_id,
+            )
+            if anchor_row is None:
+                return []
+            anchor = _passage_from_row(anchor_row)
+            rows = await connection.fetch(
+                """
+                select
+                    passage_id,
+                    review_id,
+                    source_id,
+                    source_kind,
+                    pmid,
+                    pmcid,
+                    doi,
+                    url,
+                    section,
+                    heading_path,
+                    page,
+                    text,
+                    entity_ids,
+                    relation_types,
+                    screening_status,
+                    source_metadata,
+                    0.0::double precision as lexical_rank
+                from review_passages
+                where review_id = $1
+                  and source_id = $2
+                  and ($3::boolean = false or section = $4)
+                order by passage_id
+                """,
+                review_id,
+                anchor.source_id,
+                same_section,
+                anchor.section,
+            )
+        candidates = [_passage_from_row(row) for row in rows]
+        anchor_index = next(
+            (index for index, row in enumerate(candidates) if row.passage_id == passage_id),
+            None,
+        )
+        if anchor_index is None:
+            return []
+        start = max(0, anchor_index - before)
+        stop = anchor_index + after + 1
+        return candidates[start:stop]
 
     async def list_review_sources(
         self,

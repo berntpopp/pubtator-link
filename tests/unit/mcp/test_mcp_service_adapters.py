@@ -134,6 +134,65 @@ async def test_inspect_review_index_adapter_calls_service() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_review_passages_by_id_adapter_calls_service() -> None:
+    from pubtator_link.mcp.service_adapters import get_review_passages_by_id_impl
+    from pubtator_link.models.review_rerag import ReviewPassageLookupResponse
+
+    class FakeService:
+        async def get_passages_by_id(
+            self,
+            review_id: str,
+            passage_ids: list[str],
+            max_chars_per_passage: int,
+        ) -> ReviewPassageLookupResponse:
+            return ReviewPassageLookupResponse(
+                review_id=review_id,
+                passages=[],
+                not_found=passage_ids,
+            )
+
+    result = await get_review_passages_by_id_impl(
+        service=FakeService(),
+        review_id="rev_123",
+        passage_ids=["p1"],
+    )
+
+    assert result["success"] is True
+    assert result["not_found"] == ["p1"]
+
+
+@pytest.mark.asyncio
+async def test_get_neighboring_review_passages_adapter_calls_service() -> None:
+    from pubtator_link.mcp.service_adapters import get_neighboring_review_passages_impl
+    from pubtator_link.models.review_rerag import ReviewPassageLookupResponse
+
+    class FakeService:
+        async def get_neighboring_passages(
+            self,
+            review_id: str,
+            passage_id: str,
+            before: int,
+            after: int,
+            same_section: bool,
+            max_chars_per_passage: int,
+        ) -> ReviewPassageLookupResponse:
+            return ReviewPassageLookupResponse(
+                review_id=review_id,
+                passages=[],
+                not_found=[passage_id],
+            )
+
+    result = await get_neighboring_review_passages_impl(
+        service=FakeService(),
+        review_id="rev_123",
+        passage_id="missing",
+    )
+
+    assert result["success"] is True
+    assert result["not_found"] == ["missing"]
+
+
+@pytest.mark.asyncio
 async def test_index_review_evidence_adapter_returns_lifecycle_guidance() -> None:
     from pubtator_link.mcp.service_adapters import index_review_evidence_impl
     from pubtator_link.models.review_rerag import PreparationStatus

@@ -109,6 +109,39 @@ class FakeReviewContextRepository:
     async def indexed_pmids(self, review_id: str) -> list[str]:
         return self.indexed_pmids_value
 
+    async def get_passages_by_id(
+        self,
+        review_id: str,
+        passage_ids: Sequence[str],
+    ) -> list[ReviewPassageRow]:
+        by_id = {passage.passage_id: passage for passage in self.passages}
+        return [by_id[passage_id] for passage_id in passage_ids if passage_id in by_id]
+
+    async def neighboring_passages(
+        self,
+        review_id: str,
+        passage_id: str,
+        before: int,
+        after: int,
+        same_section: bool,
+    ) -> list[ReviewPassageRow]:
+        by_id = {passage.passage_id: passage for passage in self.passages}
+        anchor = by_id.get(passage_id)
+        if anchor is None:
+            return []
+        candidates = [
+            passage
+            for passage in self.passages
+            if passage.source_id == anchor.source_id
+            and (not same_section or passage.section == anchor.section)
+        ]
+        anchor_index = next(
+            index for index, passage in enumerate(candidates) if passage.passage_id == passage_id
+        )
+        start = max(0, anchor_index - before)
+        stop = anchor_index + after + 1
+        return candidates[start:stop]
+
 
 class QueryMappedReviewContextRepository(FakeReviewContextRepository):
     def __init__(self, passages_by_query: dict[str, list[ReviewPassageRow]]) -> None:
@@ -292,6 +325,71 @@ async def test_retrieve_context_packs_deterministic_diverse_context() -> None:
     }
     assert response.preparation_status.queued == 1
     assert response.preparation_status.complete == 2
+
+
+@pytest.mark.asyncio
+async def test_get_passages_by_id_preserves_order_reports_missing_and_truncates() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage("p1", pmid="111", text="a" * 500, lexical_rank=1.0),
+            _passage("p2", pmid="222", text="short", lexical_rank=1.0),
+        ]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.get_passages_by_id(
+        review_id="review-1",
+        passage_ids=["p2", "missing", "p1"],
+        max_chars_per_passage=300,
+    )
+
+    assert [passage.passage_id for passage in response.passages] == ["p2", "p1"]
+    assert response.not_found == ["missing"]
+    assert response.passages[1].truncated is True
+    assert len(response.passages[1].text) <= 300
+
+
+@pytest.mark.asyncio
+async def test_get_neighboring_passages_honors_window_and_same_section() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage("p0", pmid="111", text="intro", section="intro", source_id="s1"),
+            _passage("p1", pmid="111", text="before", section="results", source_id="s1"),
+            _passage("p2", pmid="111", text="anchor", section="results", source_id="s1"),
+            _passage("p3", pmid="111", text="after", section="results", source_id="s1"),
+            _passage("p4", pmid="111", text="discussion", section="discussion", source_id="s1"),
+        ]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.get_neighboring_passages(
+        review_id="review-1",
+        passage_id="p2",
+        before=1,
+        after=1,
+        same_section=True,
+        max_chars_per_passage=300,
+    )
+
+    assert [passage.passage_id for passage in response.passages] == ["p1", "p2", "p3"]
+    assert response.not_found == []
+
+
+@pytest.mark.asyncio
+async def test_get_neighboring_passages_reports_missing_anchor() -> None:
+    service = ReviewContextService(FakeReviewContextRepository([]))
+
+    response = await service.get_neighboring_passages(
+        review_id="review-1",
+        passage_id="missing",
+        before=1,
+        after=1,
+        same_section=True,
+        max_chars_per_passage=300,
+    )
+
+    assert response.passages == []
+    assert response.not_found == ["missing"]
 
 
 @pytest.mark.asyncio

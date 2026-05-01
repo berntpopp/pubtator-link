@@ -402,6 +402,120 @@ async def test_list_review_sources_infers_full_text_coverage_from_sections() -> 
 
 
 @pytest.mark.asyncio
+async def test_get_passages_by_id_returns_requested_order() -> None:
+    connection = FakeConnection()
+    connection.fetched_rows = [
+        {
+            "passage_id": "p1",
+            "review_id": "review-1",
+            "source_id": "s1",
+            "source_kind": "pubtator_abstract",
+            "pmid": "111",
+            "pmcid": None,
+            "doi": None,
+            "url": None,
+            "section": "abstract",
+            "heading_path": None,
+            "page": None,
+            "text": "one",
+            "entity_ids": [],
+            "relation_types": [],
+            "screening_status": "candidate",
+            "source_metadata": {},
+            "lexical_rank": 0,
+        },
+        {
+            "passage_id": "p2",
+            "review_id": "review-1",
+            "source_id": "s1",
+            "source_kind": "pubtator_abstract",
+            "pmid": "111",
+            "pmcid": None,
+            "doi": None,
+            "url": None,
+            "section": "abstract",
+            "heading_path": None,
+            "page": None,
+            "text": "two",
+            "entity_ids": [],
+            "relation_types": [],
+            "screening_status": "candidate",
+            "source_metadata": {},
+            "lexical_rank": 0,
+        },
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    rows = await repository.get_passages_by_id("review-1", ["p2", "missing", "p1"])
+
+    assert [row.passage_id for row in rows] == ["p2", "p1"]
+    sql, args = connection.executed[0]
+    assert "passage_id = any($2::text[])" in sql
+    assert args == ("review-1", ["p2", "missing", "p1"])
+
+
+@pytest.mark.asyncio
+async def test_neighboring_passages_fetches_anchor_and_same_section_window() -> None:
+    connection = FakeConnection()
+    connection.fetchrow_rows = [
+        {
+            "passage_id": "p2",
+            "review_id": "review-1",
+            "source_id": "s1",
+            "source_kind": "pubtator_abstract",
+            "pmid": "111",
+            "pmcid": None,
+            "doi": None,
+            "url": None,
+            "section": "results",
+            "heading_path": None,
+            "page": None,
+            "text": "anchor",
+            "entity_ids": [],
+            "relation_types": [],
+            "screening_status": "candidate",
+            "source_metadata": {},
+            "lexical_rank": 0,
+        }
+    ]
+    connection.fetched_rows = [
+        {
+            "passage_id": passage_id,
+            "review_id": "review-1",
+            "source_id": "s1",
+            "source_kind": "pubtator_abstract",
+            "pmid": "111",
+            "pmcid": None,
+            "doi": None,
+            "url": None,
+            "section": "results",
+            "heading_path": None,
+            "page": None,
+            "text": passage_id,
+            "entity_ids": [],
+            "relation_types": [],
+            "screening_status": "candidate",
+            "source_metadata": {},
+            "lexical_rank": 0,
+        }
+        for passage_id in ["p1", "p2", "p3", "p4"]
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    rows = await repository.neighboring_passages(
+        "review-1",
+        passage_id="p2",
+        before=1,
+        after=1,
+        same_section=True,
+    )
+
+    assert [row.passage_id for row in rows] == ["p1", "p2", "p3"]
+    assert len(connection.executed) == 2
+    assert "section = $4" in connection.executed[1][0]
+
+
+@pytest.mark.asyncio
 async def test_list_review_sources_caps_samples_per_pmid_across_sources() -> None:
     connection = FakeConnection()
     connection.fetched_row_batches = [

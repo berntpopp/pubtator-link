@@ -371,6 +371,32 @@ class ReviewPassageSample(BaseModel):
     char_count: int
 
 
+class ReviewPassageLookupRequest(BaseModel):
+    """Request exact review passages by stable passage ID."""
+
+    passage_ids: list[str] = Field(min_length=1)
+    max_chars_per_passage: int = Field(default=2200, ge=300, le=10000)
+
+
+class ReviewNeighboringPassagesRequest(BaseModel):
+    """Request neighboring review passages around a stable passage ID."""
+
+    passage_id: str = Field(min_length=1)
+    before: int = Field(default=1, ge=0, le=20)
+    after: int = Field(default=1, ge=0, le=20)
+    same_section: bool = True
+    max_chars_per_passage: int = Field(default=2200, ge=300, le=10000)
+
+
+class ReviewPassageLookupResponse(BaseModel):
+    """Response for exact or neighboring review passage lookups."""
+
+    success: bool = True
+    review_id: str
+    passages: list[ContextPassage]
+    not_found: list[str] = Field(default_factory=list)
+
+
 class ReviewSourceSummary(BaseModel):
     """Inspection summary for one indexed review source."""
 

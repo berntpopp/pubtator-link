@@ -12,6 +12,8 @@ from pubtator_link.api.routes.dependencies import (
 )
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD, REVIEW_WRITE_ANNOTATIONS
 from pubtator_link.mcp.service_adapters import (
+    get_neighboring_review_passages_impl,
+    get_review_passages_by_id_impl,
     index_review_evidence_impl,
     inspect_review_index_impl,
     preflight_review_sources_impl,
@@ -79,6 +81,50 @@ def register_review_tools(mcp: FastMCP) -> None:
             pmids=pmids,
             include_passage_samples=include_passage_samples,
             sample_per_pmid=sample_per_pmid,
+        )
+
+    @mcp.tool(
+        name="pubtator.get_review_passages_by_id",
+        title="Get Review Passages By ID",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def get_review_passages_by_id(
+        review_id: str,
+        passage_ids: list[str],
+        max_chars_per_passage: int = 2200,
+    ) -> dict[str, Any]:
+        """Use this to retrieve exact prepared review passages by stable passage IDs from prior context packs or audit bundles. This only reads the review index and does not call upstream APIs. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_review_context_service()
+        return await get_review_passages_by_id_impl(
+            service=service,
+            review_id=review_id,
+            passage_ids=passage_ids,
+            max_chars_per_passage=max_chars_per_passage,
+        )
+
+    @mcp.tool(
+        name="pubtator.get_neighboring_review_passages",
+        title="Get Neighboring Review Passages",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def get_neighboring_review_passages(
+        review_id: str,
+        passage_id: str,
+        before: int = 1,
+        after: int = 1,
+        same_section: bool = True,
+        max_chars_per_passage: int = 2200,
+    ) -> dict[str, Any]:
+        """Use this to retrieve prepared review passages near a cited stable passage ID for local context expansion. This only reads the review index and does not call upstream APIs. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_review_context_service()
+        return await get_neighboring_review_passages_impl(
+            service=service,
+            review_id=review_id,
+            passage_id=passage_id,
+            before=before,
+            after=after,
+            same_section=same_section,
+            max_chars_per_passage=max_chars_per_passage,
         )
 
     @mcp.tool(

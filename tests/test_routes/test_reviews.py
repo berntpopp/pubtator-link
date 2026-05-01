@@ -16,6 +16,7 @@ from pubtator_link.models.review_rerag import (
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextResponse,
     ReviewIndexTotals,
+    ReviewPassageLookupResponse,
     ReviewSourceSummary,
     SourceCoverageHint,
 )
@@ -91,6 +92,50 @@ async def test_retrieve_review_context_returns_pack() -> None:
 
     assert response.status_code == 200
     assert response.json()["preparation_status"]["complete"] == 1
+
+
+@pytest.mark.asyncio
+async def test_get_review_passages_by_id_route_returns_passages_and_not_found() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.get_passages_by_id.return_value = ReviewPassageLookupResponse(
+        review_id="rev_123",
+        passages=[],
+        not_found=["missing"],
+    )
+    app.dependency_overrides[get_review_context_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/reviews/rev_123/passages/by-id",
+            json={"passage_ids": ["missing"]},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["not_found"] == ["missing"]
+    service.get_passages_by_id.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_neighboring_review_passages_route_returns_passages_and_not_found() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.get_neighboring_passages.return_value = ReviewPassageLookupResponse(
+        review_id="rev_123",
+        passages=[],
+        not_found=["missing"],
+    )
+    app.dependency_overrides[get_review_context_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/reviews/rev_123/passages/neighbors",
+            json={"passage_id": "missing", "before": 1, "after": 1},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["not_found"] == ["missing"]
+    service.get_neighboring_passages.assert_awaited_once()
 
 
 @pytest.mark.asyncio

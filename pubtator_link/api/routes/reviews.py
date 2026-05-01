@@ -9,6 +9,9 @@ from ...models.review_rerag import (
     InspectReviewIndexResponse,
     PreflightReviewSourcesRequest,
     PreflightReviewSourcesResponse,
+    ReviewNeighboringPassagesRequest,
+    ReviewPassageLookupRequest,
+    ReviewPassageLookupResponse,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextRequest,
@@ -110,6 +113,47 @@ async def retrieve_review_context(
     service: ReviewContextServiceDep,
 ) -> RetrieveReviewContextResponse:
     return await service.retrieve_context(review_id=review_id, request=request)
+
+
+@router.post(
+    "/{review_id}/passages/by-id",
+    response_model=ReviewPassageLookupResponse,
+    operation_id="get_review_passages_by_id",
+    summary="Get review passages by stable passage ID",
+)
+@handle_api_errors
+async def get_review_passages_by_id(
+    review_id: str,
+    request: ReviewPassageLookupRequest,
+    service: ReviewContextServiceDep,
+) -> ReviewPassageLookupResponse:
+    return await service.get_passages_by_id(
+        review_id=review_id,
+        passage_ids=request.passage_ids,
+        max_chars_per_passage=request.max_chars_per_passage,
+    )
+
+
+@router.post(
+    "/{review_id}/passages/neighbors",
+    response_model=ReviewPassageLookupResponse,
+    operation_id="get_neighboring_review_passages",
+    summary="Get neighboring review passages around a stable passage ID",
+)
+@handle_api_errors
+async def get_neighboring_review_passages(
+    review_id: str,
+    request: ReviewNeighboringPassagesRequest,
+    service: ReviewContextServiceDep,
+) -> ReviewPassageLookupResponse:
+    return await service.get_neighboring_passages(
+        review_id=review_id,
+        passage_id=request.passage_id,
+        before=request.before,
+        after=request.after,
+        same_section=request.same_section,
+        max_chars_per_passage=request.max_chars_per_passage,
+    )
 
 
 @router.post(

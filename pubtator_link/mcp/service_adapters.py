@@ -426,6 +426,42 @@ async def inspect_review_index_impl(
     return response.model_dump()
 
 
+async def get_review_passages_by_id_impl(
+    *,
+    service: ReviewContextService,
+    review_id: str,
+    passage_ids: list[str],
+    max_chars_per_passage: int = 2200,
+) -> dict[str, Any]:
+    response = await service.get_passages_by_id(
+        review_id=review_id,
+        passage_ids=passage_ids,
+        max_chars_per_passage=max_chars_per_passage,
+    )
+    return response.model_dump()
+
+
+async def get_neighboring_review_passages_impl(
+    *,
+    service: ReviewContextService,
+    review_id: str,
+    passage_id: str,
+    before: int = 1,
+    after: int = 1,
+    same_section: bool = True,
+    max_chars_per_passage: int = 2200,
+) -> dict[str, Any]:
+    response = await service.get_neighboring_passages(
+        review_id=review_id,
+        passage_id=passage_id,
+        before=before,
+        after=after,
+        same_section=same_section,
+        max_chars_per_passage=max_chars_per_passage,
+    )
+    return response.model_dump()
+
+
 async def retrieve_review_context_impl(
     *,
     service: ReviewContextService,

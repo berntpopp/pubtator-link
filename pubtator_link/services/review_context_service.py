@@ -6,6 +6,7 @@ from typing import Protocol
 
 from pubtator_link.models.review_rerag import (
     ContextPack,
+    ContextPassage,
     FailedSourceSummary,
     InspectReviewIndexRequest,
     InspectReviewIndexResponse,
@@ -15,6 +16,7 @@ from pubtator_link.models.review_rerag import (
     RetrieveReviewContextRequest,
     RetrieveReviewContextResponse,
     ReviewIndexTotals,
+    ReviewPassageLookupResponse,
     ReviewPassageRow,
     ReviewSourceSummary,
     SourceCoverage,
@@ -74,6 +76,23 @@ class ReviewContextRepository(Protocol):
 
     async def indexed_pmids(self, review_id: str) -> list[str]:
         """Return indexed PMIDs for diagnostics."""
+
+    async def get_passages_by_id(
+        self,
+        review_id: str,
+        passage_ids: Sequence[str],
+    ) -> list[ReviewPassageRow]:
+        """Return review passages in the requested passage ID order."""
+
+    async def neighboring_passages(
+        self,
+        review_id: str,
+        passage_id: str,
+        before: int,
+        after: int,
+        same_section: bool,
+    ) -> list[ReviewPassageRow]:
+        """Return passages around an anchor passage."""
 
 
 class ReviewContextService:
@@ -240,6 +259,73 @@ class ReviewContextService:
             totals=totals,
             failed_sources=failed_sources,
         )
+
+    async def get_passages_by_id(
+        self,
+        *,
+        review_id: str,
+        passage_ids: list[str],
+        max_chars_per_passage: int = 2200,
+    ) -> ReviewPassageLookupResponse:
+        rows = await self.repository.get_passages_by_id(review_id, passage_ids)
+        found_ids = {row.passage_id for row in rows}
+        passages = self._context_passages_from_rows(
+            rows,
+            query=" ".join(passage_ids),
+            max_chars_per_passage=max_chars_per_passage,
+        )
+        return ReviewPassageLookupResponse(
+            review_id=review_id,
+            passages=passages,
+            not_found=[passage_id for passage_id in passage_ids if passage_id not in found_ids],
+        )
+
+    async def get_neighboring_passages(
+        self,
+        *,
+        review_id: str,
+        passage_id: str,
+        before: int = 1,
+        after: int = 1,
+        same_section: bool = True,
+        max_chars_per_passage: int = 2200,
+    ) -> ReviewPassageLookupResponse:
+        rows = await self.repository.neighboring_passages(
+            review_id,
+            passage_id=passage_id,
+            before=before,
+            after=after,
+            same_section=same_section,
+        )
+        passages = self._context_passages_from_rows(
+            rows,
+            query=passage_id,
+            max_chars_per_passage=max_chars_per_passage,
+        )
+        return ReviewPassageLookupResponse(
+            review_id=review_id,
+            passages=passages,
+            not_found=[] if rows else [passage_id],
+        )
+
+    def _context_passages_from_rows(
+        self,
+        rows: Sequence[ReviewPassageRow],
+        *,
+        query: str,
+        max_chars_per_passage: int,
+    ) -> list[ContextPassage]:
+        request = RetrieveReviewContextRequest(
+            question=query or "passage",
+            max_passages=max(1, min(30, len(rows) or 1)),
+            max_chars=max(500, min(30000, max_chars_per_passage * max(1, len(rows)))),
+            max_chars_per_passage=max_chars_per_passage,
+            allow_truncated_passages=True,
+        )
+        return [
+            context_passage_from_row(index=index, row=row, request=request)
+            for index, row in enumerate(rows, start=1)
+        ]
 
     async def _source_coverage_by_key(self, review_id: str) -> dict[str, SourceCoverage]:
         sources = await self.repository.list_review_sources(
