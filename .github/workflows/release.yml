@@ -1,0 +1,43 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  release-validation:
+    name: Release validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --group dev --frozen
+
+      - name: Run local CI checks
+        run: make ci-local
+
+      - name: Validate production Compose config
+        run: make docker-prod-config
+
+      - name: Validate NPM Compose config
+        run: make docker-npm-config
+
+      - name: Build release Docker image
+        run: docker build -f docker/Dockerfile -t pubtator-link:release .

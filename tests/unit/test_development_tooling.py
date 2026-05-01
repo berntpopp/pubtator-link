@@ -273,3 +273,16 @@ def test_container_security_workflow_generates_scan_and_sbom_artifacts() -> None
     assert "aquasecurity/trivy-action" in "\n".join(str(step) for step in job["steps"])
     assert "docker build -f docker/Dockerfile -t pubtator-link:scan ." in run_steps
     assert "actions/upload-artifact@v4" in uses_steps
+
+
+def test_release_workflow_validates_tagged_builds_without_publishing() -> None:
+    workflow = _workflow(".github/workflows/release.yml")
+    release_job = workflow["jobs"]["release-validation"]
+    commands = {step.get("run") for step in release_job["steps"]}
+
+    assert workflow["permissions"] == {"contents": "read"}
+    assert release_job["name"] == "Release validation"
+    assert "make ci-local" in commands
+    assert "make docker-prod-config" in commands
+    assert "make docker-npm-config" in commands
+    assert "docker build -f docker/Dockerfile -t pubtator-link:release ." in commands
