@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -151,6 +152,17 @@ class UnifiedServerManager:
                     }
                 },
             }
+
+        @app.middleware("http")
+        async def add_request_id(
+            request: Request,
+            call_next: Callable[[Request], Awaitable[Response]],
+        ) -> Response:
+            request_id = request.headers.get("X-Request-ID") or str(uuid4())
+            request.state.request_id = request_id
+            response = await call_next(request)
+            response.headers["X-Request-ID"] = request_id
+            return response
 
         @app.middleware("http")
         async def bind_pubtator_resources(

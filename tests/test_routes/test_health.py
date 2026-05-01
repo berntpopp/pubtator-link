@@ -51,6 +51,18 @@ class TestHealthAndRoot:
         assert response.status_code == 200
         assert "application/json" in response.headers["content-type"]
 
+    def test_request_id_header_is_preserved(self, test_client):
+        response = test_client.get("/health", headers={"X-Request-ID": "req-123"})
+
+        assert response.status_code == 200
+        assert response.headers["X-Request-ID"] == "req-123"
+
+    def test_request_id_header_is_generated_when_missing(self, test_client):
+        response = test_client.get("/health")
+
+        assert response.status_code == 200
+        assert response.headers["X-Request-ID"]
+
     def test_root_endpoint_response_structure(self, test_client):
         """Test that root endpoint returns correct structure."""
         response = test_client.get("/")
