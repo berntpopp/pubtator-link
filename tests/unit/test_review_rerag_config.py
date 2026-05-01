@@ -25,6 +25,14 @@ def test_review_index_lifecycle_config_defaults_are_hosted_safe() -> None:
     assert config.enable_index_cleanup_endpoint is False
 
 
+def test_europe_pmc_fallback_is_disabled_by_default() -> None:
+    config = ReviewReragConfig.from_settings(ServerSettings())
+
+    assert config.enable_europe_pmc_fallback is False
+    assert config.europe_pmc_rate_limit_per_second <= 1.0
+    assert config.europe_pmc_max_concurrency == 1
+
+
 def test_review_rerag_config_reads_prefixed_env(monkeypatch) -> None:
     monkeypatch.setenv("PUBTATOR_LINK_DATABASE_URL", "postgresql://user:pass@localhost/db")
     monkeypatch.setenv("PUBTATOR_LINK_REVIEW_PREP_CONCURRENCY", "4")

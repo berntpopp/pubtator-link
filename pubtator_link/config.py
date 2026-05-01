@@ -106,6 +106,16 @@ class ServerSettings(BaseSettings):
         default=False, description="Allow http URLs for local curated URL development"
     )
     enable_docling: bool = Field(default=False, description="Enable Docling PDF fallback")
+    enable_europe_pmc_fallback: bool = Field(
+        default=False,
+        description="Enable opt-in Europe PMC open-access fallback for review preparation",
+    )
+    europe_pmc_base_url: str = Field(
+        default="https://www.ebi.ac.uk/europepmc/webservices/rest"
+    )
+    europe_pmc_rate_limit_per_second: float = Field(default=1.0, gt=0, le=5)
+    europe_pmc_timeout_seconds: int = Field(default=20, ge=2, le=120)
+    europe_pmc_max_concurrency: int = Field(default=1, ge=1, le=5)
 
     @field_validator("mcp_path")
     @classmethod
@@ -224,6 +234,11 @@ class ReviewReragConfig:
     index_ttl_seconds: int | None = None
     enable_index_delete: bool = False
     enable_index_cleanup_endpoint: bool = False
+    enable_europe_pmc_fallback: bool = False
+    europe_pmc_base_url: str = "https://www.ebi.ac.uk/europepmc/webservices/rest"
+    europe_pmc_rate_limit_per_second: float = 1.0
+    europe_pmc_timeout_seconds: int = 20
+    europe_pmc_max_concurrency: int = 1
 
     @classmethod
     def from_settings(cls, server_settings: ServerSettings) -> "ReviewReragConfig":
@@ -241,6 +256,11 @@ class ReviewReragConfig:
             index_ttl_seconds=server_settings.review_index_ttl_seconds,
             enable_index_delete=server_settings.enable_review_index_delete,
             enable_index_cleanup_endpoint=server_settings.enable_review_index_cleanup_endpoint,
+            enable_europe_pmc_fallback=server_settings.enable_europe_pmc_fallback,
+            europe_pmc_base_url=server_settings.europe_pmc_base_url,
+            europe_pmc_rate_limit_per_second=server_settings.europe_pmc_rate_limit_per_second,
+            europe_pmc_timeout_seconds=server_settings.europe_pmc_timeout_seconds,
+            europe_pmc_max_concurrency=server_settings.europe_pmc_max_concurrency,
         )
 
 
