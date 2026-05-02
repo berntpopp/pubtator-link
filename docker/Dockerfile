@@ -3,7 +3,7 @@
 
 # --- Builder Stage ---
 # This stage installs all dependencies and creates a clean Python environment
-FROM python:3.11-slim AS builder
+FROM python:3.14-slim AS builder
 
 # Set environment variables for optimal Python behavior
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -36,7 +36,7 @@ RUN pip install --upgrade pip uv && \
 
 # --- Production Stage ---
 # This stage creates the final, minimal production image
-FROM python:3.11-slim AS production
+FROM python:3.14-slim AS production
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \

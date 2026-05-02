@@ -1,6 +1,6 @@
 services:
   pubtator-postgres:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     container_name: pubtator_link_postgres
 
     environment:
@@ -12,7 +12,7 @@ services:
       - "${PUBTATOR_LINK_POSTGRES_PORT:-5434}:5432"
 
     volumes:
-      - pubtator_postgres_data:/var/lib/postgresql/data
+      - pubtator_postgres_data:/var/lib/postgresql
       - ../pubtator_link/db/review_schema.sql:/docker-entrypoint-initdb.d/010-review-schema.sql:ro
 
     healthcheck:
