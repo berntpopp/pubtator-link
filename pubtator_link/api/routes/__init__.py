@@ -2,6 +2,7 @@
 
 from .annotations import router as annotations_router
 from .cache import router as cache_router
+from .discovery import router as discovery_router
 from .entities import router as entities_router
 from .publications import router as publications_router
 from .relations import router as relations_router
@@ -12,6 +13,7 @@ from .search import router as search_router
 __all__ = [
     "annotations_router",
     "cache_router",
+    "discovery_router",
     "entities_router",
     "publications_router",
     "relations_router",
@@ -25,6 +27,7 @@ ROUTE_MODULES = {
     "entities": entities_router,
     "search": search_router,
     "relations": relations_router,
+    "discovery": discovery_router,
     "reviews": reviews_router,
     "annotations": annotations_router,
     "cache": cache_router,

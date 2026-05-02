@@ -21,6 +21,7 @@ from ...logging_config import configure_logging
 from ...repositories.review_rerag import PostgresReviewReragRepository
 from ...services.europe_pmc import EuropePmcClient
 from ...services.full_text_preparation import FullTextPreparationService
+from ...services.ncbi_discovery import DiscoveryService, NcbiDiscoveryClient
 from ...services.publication_passage_service import PublicationPassageService
 from ...services.publication_service import PublicationService
 from ...services.research_session import ResearchSessionSearchProvider, ResearchSessionService
@@ -38,6 +39,8 @@ logger = logging.getLogger(__name__)
 _api_client: PubTator3Client | None = None
 _publication_service: PublicationService | None = None
 _publication_passage_service: PublicationPassageService | None = None
+_ncbi_discovery_client: NcbiDiscoveryClient | None = None
+_discovery_service: DiscoveryService | None = None
 _logger: FilteringBoundLogger | None = None
 _review_pool: asyncpg.Pool | None = None
 _review_repository: PostgresReviewReragRepository | None = None
@@ -58,6 +61,8 @@ class AppResources:
     api_client: PubTator3Client
     publication_service: PublicationService
     publication_passage_service: PublicationPassageService
+    ncbi_discovery_client: NcbiDiscoveryClient | None = None
+    discovery_service: DiscoveryService | None = None
     europe_pmc_client: EuropePmcClient | None = None
     review_pool: asyncpg.Pool | None = None
     review_repository: PostgresReviewReragRepository | None = None
@@ -113,6 +118,7 @@ def review_pool_kwargs() -> dict[str, Any]:
 async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
     """Create resources owned by one FastAPI application lifespan."""
     api_client: PubTator3Client | None = None
+    ncbi_discovery_client: NcbiDiscoveryClient | None = None
     review_pool: asyncpg.Pool | None = None
     review_queue: ReviewPreparationQueue | None = None
     review_audit_service: ReviewAuditService | None = None
@@ -125,6 +131,8 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
         publication_passage_service = PublicationPassageService(
             publication_service=publication_service
         )
+        ncbi_discovery_client = NcbiDiscoveryClient()
+        discovery_service = DiscoveryService(ncbi_discovery_client)
         source_preflight_service = SourcePreflightService.from_pubtator_client(
             api_client,
             preflight_concurrency=getattr(review_rerag_config, "preflight_concurrency", 3),
@@ -170,6 +178,8 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             api_client=api_client,
             publication_service=publication_service,
             publication_passage_service=publication_passage_service,
+            ncbi_discovery_client=ncbi_discovery_client,
+            discovery_service=discovery_service,
             europe_pmc_client=europe_pmc_client,
             source_preflight_service=source_preflight_service,
             review_pool=review_pool,
@@ -185,6 +195,8 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             await review_queue.stop()
         if review_pool is not None:
             await review_pool.close()
+        if ncbi_discovery_client is not None:
+            await ncbi_discovery_client.close()
         if api_client is not None:
             await api_client.close()
         raise
@@ -196,6 +208,8 @@ async def close_app_resources(resources: AppResources) -> None:
         await resources.review_queue.stop()
     if resources.review_pool is not None:
         await resources.review_pool.close()
+    if resources.ncbi_discovery_client is not None:
+        await resources.ncbi_discovery_client.close()
     await resources.api_client.close()
 
 
@@ -246,6 +260,23 @@ async def get_publication_passage_service() -> PublicationPassageService:
             publication_service=await get_publication_service()
         )
     return _publication_passage_service
+
+
+async def get_discovery_service() -> DiscoveryService:
+    """Get NCBI discovery service."""
+    global _ncbi_discovery_client, _discovery_service
+    resources = current_app_resources()
+    if resources is not None:
+        if resources.discovery_service is None:
+            if resources.ncbi_discovery_client is None:
+                resources.ncbi_discovery_client = NcbiDiscoveryClient()
+            resources.discovery_service = DiscoveryService(resources.ncbi_discovery_client)
+        return resources.discovery_service
+    if _discovery_service is None:
+        if _ncbi_discovery_client is None:
+            _ncbi_discovery_client = NcbiDiscoveryClient()
+        _discovery_service = DiscoveryService(_ncbi_discovery_client)
+    return _discovery_service
 
 
 async def get_review_pool() -> asyncpg.Pool:
@@ -521,6 +552,7 @@ PublicationServiceDep = Annotated[PublicationService, Depends(get_publication_se
 PublicationPassageServiceDep = Annotated[
     PublicationPassageService, Depends(get_publication_passage_service)
 ]
+DiscoveryServiceDep = Annotated[DiscoveryService, Depends(get_discovery_service)]
 ReviewQueueDep = Annotated[ReviewPreparationQueue, Depends(get_review_queue)]
 ReviewContextServiceDep = Annotated[ReviewContextService, Depends(get_review_context_service)]
 ReviewAuditServiceDep = Annotated[ReviewAuditService, Depends(get_review_audit_service)]

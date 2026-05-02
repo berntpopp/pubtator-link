@@ -14,6 +14,7 @@ from structlog.typing import FilteringBoundLogger
 from .api.routes import (
     annotations_router,
     cache_router,
+    discovery_router,
     entities_router,
     publications_router,
     relations_router,
@@ -184,6 +185,7 @@ class UnifiedServerManager:
         app.include_router(entities_router)
         app.include_router(search_router)
         app.include_router(relations_router)
+        app.include_router(discovery_router)
         app.include_router(annotations_router)
         app.include_router(cache_router)
         app.include_router(reviews_router)
