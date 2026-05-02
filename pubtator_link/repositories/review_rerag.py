@@ -1236,7 +1236,13 @@ class PostgresReviewReragRepository:
         )
 
     async def list_research_sessions(self, review_id: str) -> list[ResearchSessionManifest]:
-        async with self._pool.acquire() as connection:
+        async with (
+            self._pool.acquire() as connection,
+            connection.transaction(
+                isolation="repeatable_read",
+                readonly=True,
+            ),
+        ):
             sessions = await connection.fetch(
                 """
                 select review_id, session_id, query, status,

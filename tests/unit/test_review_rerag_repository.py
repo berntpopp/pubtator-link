@@ -37,7 +37,12 @@ class FakePool:
 
 
 class FakeTransaction:
+    def __init__(self, calls: list[dict[str, Any]], options: dict[str, Any]) -> None:
+        self.calls = calls
+        self.options = options
+
     async def __aenter__(self) -> None:
+        self.calls.append(self.options)
         return None
 
     async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
@@ -52,9 +57,10 @@ class FakeConnection:
         self.same_pmid_sample_rows: list[dict[str, Any]] = []
         self.fetchrow_rows: list[dict[str, Any] | None] = []
         self.executemany_calls: list[tuple[str, list[tuple[Any, ...]]]] = []
+        self.transaction_calls: list[dict[str, Any]] = []
 
-    def transaction(self) -> FakeTransaction:
-        return FakeTransaction()
+    def transaction(self, **kwargs: Any) -> FakeTransaction:
+        return FakeTransaction(self.transaction_calls, kwargs)
 
     async def execute(self, sql: str, *args: Any) -> str:
         self.executed.append((sql, args))
@@ -245,6 +251,7 @@ async def test_list_research_sessions_groups_candidates_with_bounded_queries() -
     assert sessions[1].candidate_count == 1
     assert sessions[1].coverage_summary == {"abstract_only": 1}
     assert len(connection.executed) == 2
+    assert connection.transaction_calls == [{"isolation": "repeatable_read", "readonly": True}]
     assert all("from review_research_sessions" not in sql for sql, _args in connection.executed[1:])
     assert connection.executed[0][1] == ("review-1",)
     assert connection.executed[1][1] == ("review-1",)
