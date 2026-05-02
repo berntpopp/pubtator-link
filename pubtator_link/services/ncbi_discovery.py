@@ -6,6 +6,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from typing import Protocol
 
 import httpx
+from httpx._types import PrimitiveData, QueryParamTypes
 
 from pubtator_link.api.retry import RetryPolicy, call_with_retries
 from pubtator_link.models.discovery import (
@@ -26,7 +27,7 @@ NCBI_EUTILS_BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 NCBI_ID_CONVERTER_BASE_URL = "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/"
 NCBI_EUTILS_SOURCE_URL = "https://www.ncbi.nlm.nih.gov/books/NBK25501/"
 NCBI_MESH_SOURCE_URL = "https://www.ncbi.nlm.nih.gov/mesh/"
-QueryParams = Mapping[str, str]
+QueryParams = QueryParamTypes
 
 
 class NcbiDiscoveryClientProtocol(Protocol):
@@ -239,16 +240,17 @@ class NcbiDiscoveryClient:
             "cited_by": "pubmed_pubmed_citedin",
             "references": "pubmed_pubmed_refs",
         }
+        params: list[tuple[str, PrimitiveData]] = [
+            ("dbfrom", "pubmed"),
+            ("db", "pubmed"),
+            *(("id", pmid) for pmid in pmids),
+            ("linkname", linknames[mode]),
+            ("retmode", "json"),
+            ("tool", "pubtator-link"),
+        ]
         response = await self._get(
             "elink.fcgi",
-            {
-                "dbfrom": "pubmed",
-                "db": "pubmed",
-                "id": ",".join(pmids),
-                "linkname": linknames[mode],
-                "retmode": "json",
-                "tool": "pubtator-link",
-            },
+            params,
         )
         payload = response.json()
         linksets = payload.get("linksets", []) if isinstance(payload, dict) else []
@@ -269,19 +271,25 @@ class NcbiDiscoveryClient:
                 continue
 
             for linksetdb in linksetdbs:
-                if emitted_for_source >= limit or not isinstance(linksetdb, dict):
+                if emitted_for_source >= limit:
+                    break
+                if not isinstance(linksetdb, dict):
                     continue
 
                 links = linksetdb.get("links", [])
                 if not isinstance(links, list | tuple):
                     continue
 
-                remaining = limit - emitted_for_source
-                for linked_pmid in links[:remaining]:
+                for linked_pmid in links:
+                    linked_pmid_str = str(linked_pmid)
+                    if linked_pmid_str == source_pmid:
+                        continue
+                    if emitted_for_source >= limit:
+                        break
                     records.append(
                         RelatedArticleRecord(
                             source_pmid=source_pmid,
-                            pmid=str(linked_pmid),
+                            pmid=linked_pmid_str,
                             relation=mode,
                         )
                     )

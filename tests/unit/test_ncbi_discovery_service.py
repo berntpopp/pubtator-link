@@ -355,3 +355,58 @@ async def test_ncbi_client_parses_related_article_links() -> None:
     assert transport.requests[0].url.params["retmode"] == "json"
     assert transport.requests[0].url.params["tool"] == "pubtator-link"
     await client.close()
+
+
+@pytest.mark.asyncio
+async def test_ncbi_client_preserves_related_article_source_attribution() -> None:
+    payload = {
+        "linksets": [
+            {
+                "ids": ["123"],
+                "linksetdbs": [{"linkname": "pubmed_pubmed", "links": ["123", "456", "457"]}],
+            },
+            {
+                "ids": ["999"],
+                "linksetdbs": [
+                    {"linkname": "pubmed_pubmed", "links": ["998"]},
+                    {"linkname": "pubmed_pubmed", "links": ["997"]},
+                ],
+            },
+        ]
+    }
+    transport = MockTransport(payload)
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = NcbiDiscoveryClient(http_client=http_client)
+
+    records = await client.find_related_articles(["123", "999"], "similar", 1)
+
+    assert [(record.source_pmid, record.pmid) for record in records] == [
+        ("123", "456"),
+        ("999", "998"),
+    ]
+    assert transport.requests[0].url.params.get_list("id") == ["123", "999"]
+    assert transport.requests[0].url.params["linkname"] == "pubmed_pubmed"
+    await client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("mode", "linkname"),
+    [
+        ("cited_by", "pubmed_pubmed_citedin"),
+        ("references", "pubmed_pubmed_refs"),
+    ],
+)
+async def test_ncbi_client_maps_related_article_modes(
+    mode: RelatedArticleMode,
+    linkname: str,
+) -> None:
+    transport = MockTransport({"linksets": []})
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = NcbiDiscoveryClient(http_client=http_client)
+
+    records = await client.find_related_articles(["123"], mode, 10)
+
+    assert records == []
+    assert transport.requests[0].url.params["linkname"] == linkname
+    await client.close()
