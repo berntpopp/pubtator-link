@@ -29,6 +29,31 @@ async def test_search_entities_adapter_calls_client() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_biomedical_entities_accepts_phenotype() -> None:
+    from pubtator_link.mcp.service_adapters import search_biomedical_entities_impl
+
+    class FakeClient:
+        async def autocomplete_entity(
+            self, query: str, concept: str | None, limit: int
+        ) -> list[dict[str, object]]:
+            return [
+                {
+                    "_id": "@PHENOTYPE_HP:0001945",
+                    "name": "Fever",
+                    "biotype": "Phenotype",
+                }
+            ]
+
+    result = await search_biomedical_entities_impl(
+        client=FakeClient(),
+        query="familial Mediterranean fever",
+        concept="Phenotype",
+    )
+
+    assert result["concept_filter"] == "Phenotype"
+
+
+@pytest.mark.asyncio
 async def test_publication_adapter_validates_pmids() -> None:
     from pubtator_link.mcp.service_adapters import fetch_publication_annotations_impl
 

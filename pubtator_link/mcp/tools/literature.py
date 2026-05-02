@@ -146,8 +146,10 @@ def register_literature_tools(mcp: FastMCP) -> None:
     )
     async def search_biomedical_entities(
         query: str,
-        concept: Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"]
-        | None = None,
+        concept: (
+            Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine", "Phenotype"]
+            | None
+        ) = None,
         limit: int = 10,
     ) -> dict[str, Any]:
         """Use this when a user needs canonical PubTator biomedical entity IDs for genes, diseases, chemicals, species, variants, or cell lines."""

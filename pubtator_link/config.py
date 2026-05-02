@@ -160,6 +160,7 @@ class APIConfig:
             "Species",
             "Variant",
             "CellLine",
+            "Phenotype",
         ]
     )
 

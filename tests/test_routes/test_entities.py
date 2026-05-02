@@ -240,6 +240,7 @@ class TestEntityRoutes:
             "Species",
             "Variant",
             "CellLine",
+            "Phenotype",
         ]
 
         for concept in valid_concepts:
@@ -249,6 +250,13 @@ class TestEntityRoutes:
             )
             # Should not return validation error for valid concepts
             assert response.status_code != 400
+
+    def test_phenotype_is_valid_entity_concept(self) -> None:
+        from pubtator_link.models.requests import EntityAutocompleteRequest
+
+        request = EntityAutocompleteRequest(query="fever", concept="Phenotype")
+
+        assert request.concept == "Phenotype"
 
     @patch.object(PubTator3Client, "autocomplete_entity")
     def test_search_entity_ids_unicode_query(self, mock_autocomplete, test_client):
