@@ -1,4 +1,8 @@
-from pubtator_link.services.search_shaping import shaped_search_response
+from pubtator_link.services.search_shaping import (
+    selected_search_items,
+    shaped_search_response,
+    shaped_search_result,
+)
 
 
 def test_shaped_search_response_can_merge_basic_metadata() -> None:
@@ -211,3 +215,45 @@ def test_shaped_search_response_metadata_does_not_overwrite_search_values() -> N
     assert result.doi == "10.1000/search"
     assert result.pmcid == "PMCSEARCH"
     assert result.publication_types == ["Search Type"]
+
+
+def test_guideline_boost_prioritizes_named_consensus_guidelines() -> None:
+    items = [
+        {
+            "pmid": "1",
+            "title": "Familial Mediterranean fever review",
+            "abstract": "General review of MEFV.",
+            "publication_types": ["Review"],
+        },
+        {
+            "pmid": "2",
+            "title": "EULAR recommendations for the management of familial Mediterranean fever",
+            "abstract": "Ozen 2016 consensus recommendations.",
+            "publication_types": ["Practice Guideline"],
+        },
+    ]
+
+    selected = selected_search_items(items, guideline_boost=True, limit=2)
+
+    assert [item["pmid"] for item in selected] == ["2", "1"]
+
+
+def test_guideline_rank_features_include_reasons() -> None:
+    result = shaped_search_result(
+        item={
+            "pmid": "2",
+            "title": "EULAR recommendations for FMF",
+            "abstract": "Consensus guidance.",
+            "publication_types": ["Practice Guideline"],
+        },
+        response_mode="standard",
+        include_citations="none",
+        text_hl_format="plain",
+        guideline_boost=True,
+        metadata="none",
+    )
+
+    assert result.rank_features is not None
+    assert result.rank_features["guideline_boost"] > 0
+    assert "practice guideline" in result.ranking_reasons
+    assert "eular" in result.ranking_reasons

@@ -39,7 +39,10 @@ from pubtator_link.models.review_rerag import (
 )
 from pubtator_link.models.variants import VariantEvidenceRequest, VariantEvidenceSource
 from pubtator_link.services.corpus_suggestion import CorpusSuggestionService
-from pubtator_link.services.entity_matching import matched_terms_from_match_text
+from pubtator_link.services.entity_matching import (
+    matched_terms_from_match_text,
+    synonyms_from_entity_item,
+)
 from pubtator_link.services.publication_metadata import PublicationMetadataService
 from pubtator_link.services.publication_passage_service import PublicationPassageService
 from pubtator_link.services.publication_service import PublicationService
@@ -104,7 +107,7 @@ async def search_biomedical_entities_impl(
             name=item.get("name", ""),
             type=item.get("biotype", concept or "Unknown"),
             score=item.get("score"),
-            synonyms=item.get("synonyms", []),
+            synonyms=synonyms_from_entity_item(item),
             matched_terms=matched_terms_from_match_text(item.get("match")),
             db_id=item.get("db_id"),
             db=item.get("db"),

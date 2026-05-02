@@ -123,6 +123,7 @@ def shaped_search_result(
         publication_types=item.get("publication_types", []),
         coverage_hint=item.get("coverage_hint"),
         rank_features=rank_features,
+        ranking_reasons=rank_features.get("ranking_reasons", []) if rank_features else [],
         matched_terms=item.get("matched_terms", []),
     )
     _merge_metadata_fields(shaped, metadata, metadata_item)
@@ -249,8 +250,20 @@ def _guideline_rank_features(item: dict[str, Any]) -> dict[str, Any]:
     publication_types = [str(value).lower() for value in item.get("publication_types", [])]
     title = str(item.get("title") or "").lower()
     abstract = str(item.get("abstract") or "").lower()
-    type_boost = sum(
-        3 for value in publication_types if any(term in value for term in GUIDELINE_TYPES)
-    )
-    term_boost = sum(1 for term in GUIDELINE_TERMS if term in title or term in abstract)
-    return {"guideline_boost": type_boost + term_boost}
+    reasons: list[str] = []
+    type_boost = 0
+    for value in publication_types:
+        for term in sorted(GUIDELINE_TYPES, key=len, reverse=True):
+            if term in value:
+                type_boost += 3
+                reasons.append(term)
+                break
+    term_boost = 0
+    for term in GUIDELINE_TERMS:
+        if term in title or term in abstract:
+            term_boost += 1
+            reasons.append(term)
+    return {
+        "guideline_boost": type_boost + term_boost,
+        "ranking_reasons": list(dict.fromkeys(reasons)),
+    }

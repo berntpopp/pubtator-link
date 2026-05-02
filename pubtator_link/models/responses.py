@@ -183,6 +183,9 @@ class SearchResult(BaseModel):
         default=None, description="Confidence of the preflight coverage guess"
     )
     rank_features: dict[str, Any] | None = Field(default=None, description="Ranking features")
+    ranking_reasons: list[str] = Field(
+        default_factory=list, description="Transparent ranking reasons"
+    )
     matched_terms: list[str] = Field(default_factory=list, description="Matched query terms")
 
     @field_validator("pub_date", mode="before")
