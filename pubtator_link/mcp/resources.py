@@ -52,6 +52,8 @@ def get_capabilities_resource() -> dict[str, Any]:
         ],
         "recommended_workflows": [
             "search -> preflight -> index -> inspect -> retrieve for review-grounded answers",
+            "If review indexing is unavailable, call pubtator.diagnostics and fall back "
+            "to pubtator.get_publication_passages with the same PMIDs.",
             "Discovery tools can normalize MeSH terms, resolve citations or article IDs, "
             "and expand seed PMIDs before staging or indexing candidate PMIDs.",
             "For live research sessions, call `pubtator.stage_research_session` with a "
@@ -67,6 +69,50 @@ def get_capabilities_resource() -> dict[str, Any]:
             "Pass discovery candidate_pmids as pmids to pubtator.stage_research_session "
             "before indexing large corpora.",
         ],
+        "core_tools": [
+            "pubtator.search_literature",
+            "pubtator.search_guidelines",
+            "pubtator.search_biomedical_entities",
+            "pubtator.get_publication_passages",
+            "pubtator.preflight_review_sources",
+            "pubtator.stage_research_session",
+            "pubtator.index_review_evidence",
+            "pubtator.inspect_review_index",
+            "pubtator.retrieve_review_context_batch",
+            "pubtator.diagnostics",
+        ],
+        "advanced_tools": [
+            "pubtator.fetch_publication_annotations",
+            "pubtator.fetch_pmc_annotations",
+            "pubtator.submit_text_annotation",
+            "pubtator.get_text_annotation_results",
+            "pubtator.export_review_audit_bundle",
+            "pubtator.add_evidence_certainty",
+            "pubtator.list_evidence_certainty",
+            "pubtator.get_evidence_certainty",
+        ],
+        "recovery_flow": {
+            "index_unavailable": [
+                "call pubtator.diagnostics",
+                "run make db-migrate for self-hosted review databases",
+                "fall back to pubtator.get_publication_passages with the same PMIDs",
+            ],
+            "fallback_tool": "pubtator.get_publication_passages",
+            "diagnostics_tool": "pubtator.diagnostics",
+            "migration_command": "make db-migrate",
+        },
+        "search_defaults": {
+            "response_mode": "compact",
+            "include_citations": "none",
+            "text_hl_format": "plain",
+            "coverage": "preflight",
+            "guideline_tool": "pubtator.search_guidelines",
+        },
+        "review_id_semantics": {
+            "scope": "durable caller-provided namespace for one review corpus",
+            "collision_behavior": "same review_id appends new PMIDs and treats already prepared PMIDs as no-ops",
+            "recommended_shape": "stable project slug without PHI",
+        },
         "tool_groups": {
             "literature_search": [
                 "pubtator.search_literature",
@@ -137,6 +183,9 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "text": "MEFV colchicine familial Mediterranean fever guideline",
                 "sort": "score desc",
                 "response_mode": "compact",
+                "include_citations": "none",
+                "text_hl_format": "plain",
+                "coverage": "preflight",
             },
             "pubtator.search_guidelines": {
                 "text": "MEFV familial Mediterranean fever EULAR recommendations",
@@ -209,6 +258,7 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "review_id": "fmf-colchicine-guidelines",
                 "queries": ["MEFV colchicine", "FMF guideline"],
                 "response_mode": "diagnostics",
+                "dry_run": True,
             },
         },
         "output_cheatsheet": {

@@ -201,6 +201,8 @@ For hosted deployments, configure remote MCP clients with `https://your-domain.e
 | Tool | Use When |
 |------|----------|
 | `pubtator.search_literature` | Search PubMed literature through PubTator3 |
+| `pubtator.search_guidelines` | Search guideline, recommendation, consensus, and systematic review papers |
+| `pubtator.diagnostics` | Check MCP subsystem readiness and recovery hints |
 | `pubtator.convert_article_ids` | Read-only research-use article ID conversion; returns candidate PMIDs for staging/indexing |
 | `pubtator.lookup_mesh` | Read-only research-use MeSH vocabulary lookup before search |
 | `pubtator.lookup_citation` | Read-only research-use citation-to-PMID lookup; returns candidate PMIDs |
@@ -229,6 +231,22 @@ citable passages plus per-query summaries. Use `response_mode="diagnostics"` to
 refine queries without passage text, `response_mode="merged_only"` for the
 smallest citable response, and `response_mode="full"` only when full per-query
 passage packs are intentionally needed.
+
+Search defaults are compact for LLM use: `response_mode="compact"`,
+`include_citations="none"`, `text_hl_format="plain"`, and MCP coverage
+preflight enabled. Ask for `include_citations="nlm"` or `"bibtex"` only for the
+final source list, and use `pubtator.search_guidelines` when a guideline or
+consensus source should be boosted.
+
+`review_id` is a durable caller-provided namespace for one review corpus.
+Reusing it appends new PMIDs and treats already prepared PMIDs as no-ops. Use a
+stable project slug and never include PHI.
+
+If `pubtator.index_review_evidence` is unavailable, call
+`pubtator.diagnostics` first. For self-hosted databases, run `make db-migrate`
+to repair stale review schema, then retry. While indexing is unavailable, fall
+back to `pubtator.get_publication_passages` with the same PMIDs so the LLM can
+continue with abstract/compact passage grounding.
 
 Review retrieval excludes tables and references by default and returns budget
 metadata (`budget`, `total_chars`, `estimated_tokens`) so clients can avoid

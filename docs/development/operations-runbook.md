@@ -33,6 +33,27 @@ curl -f http://localhost:${PUBTATOR_LINK_PORT:-8000}/ready
 readiness, including database state when review re-RAG database configuration is
 enabled.
 
+## Review Database Migrations
+
+Review indexing requires the schema managed by `pubtator_link/db/migrations`.
+For self-hosted deployments, repair or initialize the configured review database
+from the repository root:
+
+```bash
+make db-migrate
+```
+
+For a Docker database exposed on the development port:
+
+```bash
+PUBTATOR_LINK_DATABASE_URL=postgresql://pubtator_link:pubtator_link@localhost:${PUBTATOR_LINK_POSTGRES_PORT:-5434}/pubtator_link make db-migrate
+```
+
+Docker rebuilds do not reset an existing PostgreSQL volume. If `/ready` reports
+`schema_current: false`, run the migration command, restart the server, then
+call `pubtator.diagnostics`. Until the schema is current, LLM clients should
+fall back to `pubtator.get_publication_passages` with the same PMIDs.
+
 ## Request IDs
 
 Clients may send `X-Request-ID`. The server returns `X-Request-ID` on responses.

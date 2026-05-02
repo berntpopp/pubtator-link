@@ -163,6 +163,13 @@ docker run -d --name pubtator-link -p 8000:8000 --env-file .env your-registry/pu
 2. For simple changes: `docker-compose restart pubtator-link`
 3. For dependency changes: `docker-compose up --build`
 
+Review re-RAG data lives in the PostgreSQL volume. Rebuilding the image does not
+reset or migrate an existing volume. From the repository root, run
+`make db-migrate` after pulling review-index schema changes, then restart the
+server. If the MCP reports `index_review_evidence` unavailable, call
+`pubtator.diagnostics` and use `pubtator.get_publication_passages` with the same
+PMIDs until `/ready` reports a current schema.
+
 ## 🚨 Troubleshooting
 
 **Port conflicts:**
@@ -218,7 +225,7 @@ curl http://localhost:8000/docs
 # Confirm the review schema exists
 docker-compose exec pubtator-postgres \
   psql -U pubtator_link -d pubtator_link \
-  -c "select tablename from pg_tables where tablename = 'review_passages';"
+  -c "select column_name from information_schema.columns where table_name='reviews' order by ordinal_position;"
 ```
 
 ### Test Production Container

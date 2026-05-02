@@ -160,6 +160,31 @@ def test_capabilities_document_new_budget_and_stable_citation_fields() -> None:
     }
 
 
+def test_capabilities_document_error_recovery_and_compact_search() -> None:
+    import json
+
+    from pubtator_link.mcp.resources import get_capabilities_resource
+
+    text = json.dumps(get_capabilities_resource()).lower()
+
+    assert "db-migrate" in text
+    assert "get_publication_passages" in text
+    assert "text_hl_format" in text
+    assert "include_citations" in text
+    assert "review_id" in text
+
+
+def test_server_instructions_include_schema_failure_fallback() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp()
+    instructions = (mcp.instructions or "").lower()
+
+    assert "if index_review_evidence is unavailable" in instructions
+    assert "get_publication_passages" in instructions
+    assert "pubtator.diagnostics" in instructions
+
+
 def test_curated_facade_registers_pubtator_tools() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
