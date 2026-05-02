@@ -88,6 +88,14 @@ class ReviewReragRepository(Protocol):
     async def preparation_status(self, review_id: str) -> PreparationStatus:
         """Return aggregate preparation status counts for a review."""
 
+    async def link_review_session_source(
+        self, review_id: str, session_id: str, source_id: str
+    ) -> None:
+        """Link a prepared source to a research session."""
+
+    async def research_session_exists(self, review_id: str, session_id: str) -> bool:
+        """Return whether a research session exists."""
+
     async def upsert_passages(self, passages: Sequence[ReviewPassageRow]) -> None:
         """Insert or replace prepared review passages."""
 
@@ -99,6 +107,7 @@ class ReviewReragRepository(Protocol):
         entity_ids: Sequence[str] | None = None,
         pmids: Sequence[str] | None = None,
         sections: Sequence[str] | None = None,
+        session_id: str | None = None,
         limit: int = 8,
     ) -> list[ReviewPassageRow]:
         """Search prepared passages for a review."""
@@ -107,6 +116,8 @@ class ReviewReragRepository(Protocol):
         self,
         review_id: str,
         passage_ids: Sequence[str],
+        *,
+        session_id: str | None = None,
     ) -> list[ReviewPassageRow]:
         """Return review passages in the requested passage ID order."""
 
@@ -117,6 +128,8 @@ class ReviewReragRepository(Protocol):
         before: int,
         after: int,
         same_section: bool,
+        *,
+        session_id: str | None = None,
     ) -> list[ReviewPassageRow]:
         """Return passages around an anchor passage."""
 
@@ -129,22 +142,29 @@ class ReviewReragRepository(Protocol):
         sample_per_pmid: int = 2,
         min_sample_chars: int = 80,
         sample_section_policy: SampleSectionPolicy = "evidence_first",
+        session_id: str | None = None,
     ) -> list[ReviewSourceSummary]:
         """List review source summaries, optionally with passage samples."""
 
-    async def list_review_failed_sources(self, review_id: str) -> list[FailedSourceSummary]:
+    async def list_review_failed_sources(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> list[FailedSourceSummary]:
         """List failed review sources with audit reasons."""
 
-    async def review_index_totals(self, review_id: str) -> ReviewIndexTotals:
+    async def review_index_totals(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> ReviewIndexTotals:
         """Return aggregate index counts for a review."""
 
-    async def available_sections(self, review_id: str) -> list[str]:
+    async def available_sections(self, review_id: str, *, session_id: str | None = None) -> list[str]:
         """Return distinct indexed sections for retrieval diagnostics."""
 
-    async def indexed_pmids(self, review_id: str) -> list[str]:
+    async def indexed_pmids(self, review_id: str, *, session_id: str | None = None) -> list[str]:
         """Return distinct indexed PMIDs for retrieval diagnostics."""
 
-    async def list_review_passage_ids(self, review_id: str) -> list[str]:
+    async def list_review_passage_ids(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> list[str]:
         """Return stable passage IDs for a review."""
 
     async def record_review_audit_event(
@@ -430,6 +450,34 @@ class PostgresReviewReragRepository:
         async with self._acquire() as connection:
             return await self._preparation_status_on_connection(connection, review_id)
 
+    async def link_review_session_source(
+        self, review_id: str, session_id: str, source_id: str
+    ) -> None:
+        async with self._acquire() as connection:
+            await connection.execute(
+                """
+                insert into review_session_sources (review_id, session_id, source_id)
+                values ($1, $2, $3)
+                on conflict (review_id, session_id, source_id) do nothing
+                """,
+                review_id,
+                session_id,
+                source_id,
+            )
+
+    async def research_session_exists(self, review_id: str, session_id: str) -> bool:
+        async with self._acquire() as connection:
+            row = await connection.fetchrow(
+                """
+                select 1
+                from review_research_sessions
+                where review_id = $1 and session_id = $2
+                """,
+                review_id,
+                session_id,
+            )
+        return row is not None
+
     async def mark_job_running(self, *, review_id: str, source_id: str) -> None:
         async with self._acquire() as connection:
             await connection.execute(
@@ -568,6 +616,7 @@ class PostgresReviewReragRepository:
         entity_ids: Sequence[str] | None = None,
         pmids: Sequence[str] | None = None,
         sections: Sequence[str] | None = None,
+        session_id: str | None = None,
         limit: int = 8,
     ) -> list[ReviewPassageRow]:
         entity_filter = _filter_or_none(entity_ids)
@@ -609,6 +658,16 @@ class PostgresReviewReragRepository:
                   and ($3::text[] is null or entity_ids && $3::text[])
                   and ($4::text[] is null or pmid = any($4::text[]))
                   and ($5::text[] is null or section = any($5::text[]))
+                  and (
+                      $8::text is null
+                      or exists (
+                          select 1
+                          from review_session_sources rss
+                          where rss.review_id = review_passages.review_id
+                            and rss.session_id = $8
+                            and rss.source_id = review_passages.source_id
+                      )
+                  )
                 order by lexical_rank desc, passage_id asc
                 limit $6
                 """,
@@ -619,6 +678,7 @@ class PostgresReviewReragRepository:
                 section_filter,
                 limit,
                 recall_query,
+                session_id,
             )
         return [_passage_from_row(row) for row in rows]
 
@@ -626,6 +686,8 @@ class PostgresReviewReragRepository:
         self,
         review_id: str,
         passage_ids: Sequence[str],
+        *,
+        session_id: str | None = None,
     ) -> list[ReviewPassageRow]:
         if not passage_ids:
             return []
@@ -653,9 +715,20 @@ class PostgresReviewReragRepository:
                 from review_passages
                 where review_id = $1
                   and passage_id = any($2::text[])
+                  and (
+                      $3::text is null
+                      or exists (
+                          select 1
+                          from review_session_sources rss
+                          where rss.review_id = review_passages.review_id
+                            and rss.session_id = $3
+                            and rss.source_id = review_passages.source_id
+                      )
+                  )
                 """,
                 review_id,
                 list(passage_ids),
+                session_id,
             )
         parsed_rows = [_passage_from_row(row) for row in rows]
         row_by_id = {row.passage_id: row for row in parsed_rows}
@@ -668,6 +741,8 @@ class PostgresReviewReragRepository:
         before: int,
         after: int,
         same_section: bool,
+        *,
+        session_id: str | None = None,
     ) -> list[ReviewPassageRow]:
         async with self._acquire() as connection:
             anchor_row = await connection.fetchrow(
@@ -693,9 +768,20 @@ class PostgresReviewReragRepository:
                 from review_passages
                 where review_id = $1
                   and passage_id = $2
+                  and (
+                      $3::text is null
+                      or exists (
+                          select 1
+                          from review_session_sources rss
+                          where rss.review_id = review_passages.review_id
+                            and rss.session_id = $3
+                            and rss.source_id = review_passages.source_id
+                      )
+                  )
                 """,
                 review_id,
                 passage_id,
+                session_id,
             )
             if anchor_row is None:
                 return []
@@ -724,12 +810,23 @@ class PostgresReviewReragRepository:
                 where review_id = $1
                   and source_id = $2
                   and ($3::boolean = false or section = $4)
+                  and (
+                      $5::text is null
+                      or exists (
+                          select 1
+                          from review_session_sources rss
+                          where rss.review_id = review_passages.review_id
+                            and rss.session_id = $5
+                            and rss.source_id = review_passages.source_id
+                      )
+                  )
                 order by passage_id
                 """,
                 review_id,
                 anchor.source_id,
                 same_section,
                 anchor.section,
+                session_id,
             )
         candidates = [_passage_from_row(row) for row in rows]
         anchor_index = next(
@@ -751,6 +848,7 @@ class PostgresReviewReragRepository:
         sample_per_pmid: int = 2,
         min_sample_chars: int = 80,
         sample_section_policy: SampleSectionPolicy = "evidence_first",
+        session_id: str | None = None,
     ) -> list[ReviewSourceSummary]:
         pmid_filter = _filter_or_none(pmids)
         async with self._acquire() as connection:
@@ -776,6 +874,16 @@ class PostgresReviewReragRepository:
                         on p.review_id = j.review_id
                        and p.source_id = j.source_id
                     where j.review_id = $1
+                      and (
+                          $3::text is null
+                          or exists (
+                              select 1
+                              from review_session_sources rss
+                              where rss.review_id = j.review_id
+                                and rss.session_id = $3
+                                and rss.source_id = j.source_id
+                          )
+                      )
                     group by j.review_id, j.source_id, j.source_kind, j.status, j.error
                 ),
                 attempt_stats as (
@@ -823,6 +931,20 @@ class PostgresReviewReragRepository:
                         ) filter (where status is not null) as resolver_attempts
                     from full_text_retrieval_attempts
                     where review_id = $1
+                      and (
+                          $3::text is null
+                          or exists (
+                              select 1
+                              from review_session_sources rss
+                              where rss.review_id = full_text_retrieval_attempts.review_id
+                                and rss.session_id = $3
+                                and rss.source_id = case
+                                    when full_text_retrieval_attempts.source_id ~ '^https?://'
+                                        then 'URL:' || full_text_retrieval_attempts.source_id
+                                    else full_text_retrieval_attempts.source_id
+                                end
+                          )
+                      )
                     group by review_id, source_id
                 ),
                 passage_stats as (
@@ -835,6 +957,16 @@ class PostgresReviewReragRepository:
                         coalesce(sum(length(text)), 0)::int as char_count
                     from review_passages
                     where review_id = $1
+                      and (
+                          $3::text is null
+                          or exists (
+                              select 1
+                              from review_session_sources rss
+                              where rss.review_id = review_passages.review_id
+                                and rss.session_id = $3
+                                and rss.source_id = review_passages.source_id
+                          )
+                      )
                     group by review_id, source_id
                 )
                 select
@@ -865,6 +997,7 @@ class PostgresReviewReragRepository:
                 """,
                 review_id,
                 pmid_filter,
+                session_id,
             )
             sources = [_source_summary_from_row(row) for row in rows]
             if include_passage_samples and sources and sample_per_pmid > 0:
@@ -913,6 +1046,16 @@ class PostgresReviewReragRepository:
                         where review_id = $1
                           and ($2::text[] is null or pmid = any($2::text[]))
                           and source_id = any($3::text[])
+                          and (
+                              $7::text is null
+                              or exists (
+                                  select 1
+                                  from review_session_sources rss
+                                  where rss.review_id = review_passages.review_id
+                                    and rss.session_id = $7
+                                    and rss.source_id = review_passages.source_id
+                              )
+                          )
                     )
                     select source_id, passage_id, section, text, char_count
                     from ranked
@@ -925,6 +1068,7 @@ class PostgresReviewReragRepository:
                     sample_per_pmid,
                     sample_section_policy,
                     min_sample_chars,
+                    session_id,
                 )
                 samples_by_source: dict[str, list[ReviewPassageSample]] = {}
                 for row in sample_rows:
@@ -945,7 +1089,9 @@ class PostgresReviewReragRepository:
                 ]
         return sources
 
-    async def list_review_failed_sources(self, review_id: str) -> list[FailedSourceSummary]:
+    async def list_review_failed_sources(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> list[FailedSourceSummary]:
         async with self._acquire() as connection:
             rows = await connection.fetch(
                 """
@@ -969,6 +1115,16 @@ class PostgresReviewReragRepository:
                         on p.review_id = j.review_id
                        and p.source_id = j.source_id
                     where j.review_id = $1
+                      and (
+                          $2::text is null
+                          or exists (
+                              select 1
+                              from review_session_sources rss
+                              where rss.review_id = j.review_id
+                                and rss.session_id = $2
+                                and rss.source_id = j.source_id
+                          )
+                      )
                     group by j.review_id, j.source_id, j.source_kind, j.status, j.error
                 )
                 select
@@ -1034,10 +1190,13 @@ class PostgresReviewReragRepository:
                 order by s.source_id
                 """,
                 review_id,
+                session_id,
             )
         return [_failed_source_summary_from_row(row) for row in rows]
 
-    async def review_index_totals(self, review_id: str) -> ReviewIndexTotals:
+    async def review_index_totals(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> ReviewIndexTotals:
         async with self._acquire() as connection:
             row = await connection.fetchrow(
                 """
@@ -1050,6 +1209,16 @@ class PostgresReviewReragRepository:
                         coalesce(sum(length(p.text)), 0)::int as char_count
                     from review_passages p
                     where p.review_id = $1
+                      and (
+                          $2::text is null
+                          or exists (
+                              select 1
+                              from review_session_sources rss
+                              where rss.review_id = p.review_id
+                                and rss.session_id = $2
+                                and rss.source_id = p.source_id
+                          )
+                      )
                 ),
                 failed as (
                     select count(distinct j.source_id)::int as failed_source_count
@@ -1058,6 +1227,16 @@ class PostgresReviewReragRepository:
                         on a.review_id = j.review_id
                        and a.source_id = j.source_id
                     where j.review_id = $1
+                      and (
+                          $2::text is null
+                          or exists (
+                              select 1
+                              from review_session_sources rss
+                              where rss.review_id = j.review_id
+                                and rss.session_id = $2
+                                and rss.source_id = j.source_id
+                          )
+                      )
                       and (
                         j.status = 'failed'
                         or (a.status is not null and a.status <> 'success')
@@ -1072,45 +1251,83 @@ class PostgresReviewReragRepository:
                 from indexed, failed
                 """,
                 review_id,
+                session_id,
             )
         return _review_index_totals_from_row(row)
 
-    async def available_sections(self, review_id: str) -> list[str]:
+    async def available_sections(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> list[str]:
         async with self._acquire() as connection:
             rows = await connection.fetch(
                 """
                 select distinct section
                 from review_passages
                 where review_id = $1 and section is not null
+                  and (
+                      $2::text is null
+                      or exists (
+                          select 1
+                          from review_session_sources rss
+                          where rss.review_id = review_passages.review_id
+                            and rss.session_id = $2
+                            and rss.source_id = review_passages.source_id
+                      )
+                  )
                 order by section
                 """,
                 review_id,
+                session_id,
             )
         return [str(row["section"]) for row in rows]
 
-    async def indexed_pmids(self, review_id: str) -> list[str]:
+    async def indexed_pmids(self, review_id: str, *, session_id: str | None = None) -> list[str]:
         async with self._acquire() as connection:
             rows = await connection.fetch(
                 """
                 select distinct pmid
                 from review_passages
                 where review_id = $1 and pmid is not null
+                  and (
+                      $2::text is null
+                      or exists (
+                          select 1
+                          from review_session_sources rss
+                          where rss.review_id = review_passages.review_id
+                            and rss.session_id = $2
+                            and rss.source_id = review_passages.source_id
+                      )
+                  )
                 order by pmid
                 """,
                 review_id,
+                session_id,
             )
         return [str(row["pmid"]) for row in rows]
 
-    async def list_review_passage_ids(self, review_id: str) -> list[str]:
+    async def list_review_passage_ids(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> list[str]:
         async with self._acquire() as connection:
             rows = await connection.fetch(
                 """
                 select passage_id
                 from review_passages
                 where review_id = $1
+                  and (
+                      $2::text is null
+                      or exists (
+                          select 1
+                          from review_session_sources rss
+                          where rss.review_id = review_passages.review_id
+                            and rss.session_id = $2
+                            and rss.source_id = review_passages.source_id
+                      )
+                  )
                 order by passage_id
                 """,
                 review_id,
+                session_id,
             )
         return [str(row["passage_id"]) for row in rows]
 

@@ -202,6 +202,71 @@ async def test_repository_round_trips_research_session() -> None:
 
 
 @pytest.mark.asyncio
+async def test_link_review_session_source_inserts_link() -> None:
+    connection = FakeConnection()
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    await repository.link_review_session_source("review-1", "session-1", "PMID:40234174")
+
+    sql, args = connection.executed[0]
+    assert "insert into review_session_sources" in sql.lower()
+    assert args == ("review-1", "session-1", "PMID:40234174")
+
+
+@pytest.mark.asyncio
+async def test_search_passages_with_session_joins_session_sources() -> None:
+    connection = FakeConnection()
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    await repository.search_passages("review-1", "MEFV", session_id="session-1")
+
+    sql, args = connection.executed[0]
+    assert "review_session_sources" in sql.lower()
+    assert args[7] == "session-1"
+
+
+@pytest.mark.asyncio
+async def test_lookup_and_neighbor_queries_with_session_join_session_sources() -> None:
+    connection = FakeConnection()
+    connection.fetchrow_rows = [None]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    await repository.get_passages_by_id("review-1", ["PMID:1:abstract:0"], session_id="session-1")
+    await repository.neighboring_passages(
+        "review-1",
+        "PMID:1:abstract:0",
+        before=1,
+        after=1,
+        same_section=True,
+        session_id="session-1",
+    )
+
+    lookup_sql, lookup_args = connection.executed[0]
+    neighbor_anchor_sql, neighbor_anchor_args = connection.executed[1]
+    assert "review_session_sources" in lookup_sql.lower()
+    assert lookup_args[2] == "session-1"
+    assert "review_session_sources" in neighbor_anchor_sql.lower()
+    assert neighbor_anchor_args[2] == "session-1"
+
+
+@pytest.mark.asyncio
+async def test_summary_queries_with_session_join_session_sources() -> None:
+    connection = FakeConnection()
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    await repository.list_review_sources("review-1", session_id="session-1")
+    await repository.list_review_failed_sources("review-1", session_id="session-1")
+    await repository.review_index_totals("review-1", session_id="session-1")
+    await repository.available_sections("review-1", session_id="session-1")
+    await repository.indexed_pmids("review-1", session_id="session-1")
+    await repository.list_review_passage_ids("review-1", session_id="session-1")
+
+    for sql, args in connection.executed:
+        assert "review_session_sources" in sql.lower()
+        assert "session-1" in args
+
+
+@pytest.mark.asyncio
 async def test_list_research_sessions_groups_candidates_with_bounded_queries() -> None:
     connection = FakeConnection()
     connection.fetched_row_batches = [
@@ -397,6 +462,7 @@ async def test_search_passages_maps_rows_and_uses_none_for_empty_filters() -> No
         None,
         8,
         "when | start | colchicine",
+        None,
     )
 
 
@@ -459,7 +525,7 @@ async def test_search_passages_uses_relaxed_or_query_for_candidate_recall() -> N
     assert "search_vector @@ query.strict_query or search_vector @@ query.recall_query" in (
         normalized_sql
     )
-    assert args[-1] == "should | colchicine | start | after | clinical | diagnosis | fmf | children"
+    assert args[-2] == "should | colchicine | start | after | clinical | diagnosis | fmf | children"
 
 
 @pytest.mark.asyncio
@@ -557,9 +623,9 @@ async def test_list_review_sources_aggregates_jobs_attempts_passages_and_samples
     assert "review_preparation_jobs" in summary_sql
     assert "full_text_retrieval_attempts" in summary_sql
     assert "review_passages" in summary_sql
-    assert summary_args == ("review-1", ["111"])
+    assert summary_args == ("review-1", ["111"], None)
     assert "row_number()" in sample_sql.lower()
-    assert sample_args == ("review-1", ["111"], ["111"], 1, "evidence_first", 80)
+    assert sample_args == ("review-1", ["111"], ["111"], 1, "evidence_first", 80, None)
 
 
 @pytest.mark.asyncio
@@ -614,6 +680,7 @@ async def test_list_review_sources_prefers_informative_non_stub_samples() -> Non
         1,
         "evidence_first",
         80,
+        None,
     )
 
 
@@ -777,7 +844,7 @@ async def test_get_passages_by_id_returns_requested_order() -> None:
     assert [row.passage_id for row in rows] == ["p2", "p1"]
     sql, args = connection.executed[0]
     assert "passage_id = any($2::text[])" in sql
-    assert args == ("review-1", ["p2", "missing", "p1"])
+    assert args == ("review-1", ["p2", "missing", "p1"], None)
 
 
 @pytest.mark.asyncio
@@ -910,7 +977,7 @@ async def test_list_review_sources_derives_pmid_from_prefixed_source_ids() -> No
     sql, args = connection.executed[0]
     assert "PMID:(.+)$" in sql
     assert "s.pmid = any($2::text[])" in sql
-    assert args == ("review-1", ["40234174"])
+    assert args == ("review-1", ["40234174"], None)
 
 
 @pytest.mark.asyncio
@@ -944,7 +1011,7 @@ async def test_list_review_failed_sources_includes_failure_reasons() -> None:
     assert "review_preparation_jobs" in sql
     assert "full_text_retrieval_attempts" in sql
     assert "reason" in sql
-    assert args == ("review-1",)
+    assert args == ("review-1", None)
 
 
 @pytest.mark.asyncio
@@ -986,7 +1053,7 @@ async def test_review_index_totals_counts_indexed_and_failed_sources() -> None:
     assert "review_preparation_jobs" in sql
     assert "full_text_retrieval_attempts" in sql
     assert "review_passages" in sql
-    assert args == ("review-1",)
+    assert args == ("review-1", None)
 
 
 @pytest.mark.asyncio
