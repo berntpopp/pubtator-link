@@ -30,6 +30,7 @@ from ...services.corpus_suggestion import CorpusSuggestionService
 from ...services.diagnostics import DiagnosticsService
 from ...services.europe_pmc import EuropePmcClient
 from ...services.full_text_preparation import FullTextPreparationService
+from ...services.clinvar import ClinVarService
 from ...services.ncbi_discovery import DiscoveryService, NcbiDiscoveryClient
 from ...services.publication_metadata import (
     NcbiPublicationMetadataClient,
@@ -44,6 +45,7 @@ from ...services.review_evidence_certainty import ReviewEvidenceCertaintyService
 from ...services.review_index_lifecycle import ReviewIndexLifecycleService
 from ...services.review_preparation_queue import ReviewPreparationQueue
 from ...services.source_preflight import SourcePreflightService
+from ...services.variant_evidence import VariantEvidenceService
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +70,8 @@ _source_preflight_service: SourcePreflightService | None = None
 _research_session_service: ResearchSessionService | None = None
 _diagnostics_service: DiagnosticsService | None = None
 _corpus_suggestion_service: CorpusSuggestionService | None = None
+_clinvar_service: ClinVarService | None = None
+_variant_evidence_service: VariantEvidenceService | None = None
 
 
 @dataclass
@@ -95,6 +99,8 @@ class AppResources:
     schema_diagnostics: ReviewSchemaDiagnostics | None = None
     diagnostics_service: DiagnosticsService | None = None
     corpus_suggestion_service: CorpusSuggestionService | None = None
+    clinvar_service: ClinVarService | None = None
+    variant_evidence_service: VariantEvidenceService | None = None
 
 
 _app_resources_context: ContextVar[AppResources | None] = ContextVar(
@@ -168,6 +174,12 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
         )
         ncbi_discovery_client = NcbiDiscoveryClient()
         discovery_service = DiscoveryService(ncbi_discovery_client)
+        clinvar_service = ClinVarService()
+        variant_evidence_service = VariantEvidenceService(
+            clinvar=clinvar_service,
+            pubtator_client=api_client,
+            metadata_service=publication_metadata_service,
+        )
         europe_pmc_client = _build_europe_pmc_client(api_client)
         source_preflight_service = _build_source_preflight_service(
             api_client=api_client,
@@ -246,6 +258,8 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             review_index_lifecycle_service=review_index_lifecycle_service,
             schema_diagnostics=schema_diagnostics,
             diagnostics_service=diagnostics_service,
+            clinvar_service=clinvar_service,
+            variant_evidence_service=variant_evidence_service,
         )
     except Exception:
         if review_queue is not None:
@@ -369,6 +383,40 @@ async def get_discovery_service() -> DiscoveryService:
             _ncbi_discovery_client = NcbiDiscoveryClient()
         _discovery_service = DiscoveryService(_ncbi_discovery_client)
     return _discovery_service
+
+
+async def get_clinvar_service() -> ClinVarService:
+    """Get ClinVar lookup service."""
+    global _clinvar_service
+    resources = current_app_resources()
+    if resources is not None:
+        if resources.clinvar_service is None:
+            resources.clinvar_service = ClinVarService()
+        return resources.clinvar_service
+    if _clinvar_service is None:
+        _clinvar_service = ClinVarService()
+    return _clinvar_service
+
+
+async def get_variant_evidence_service() -> VariantEvidenceService:
+    """Get variant evidence lookup service."""
+    global _variant_evidence_service
+    resources = current_app_resources()
+    if resources is not None:
+        if resources.variant_evidence_service is None:
+            resources.variant_evidence_service = VariantEvidenceService(
+                clinvar=await get_clinvar_service(),
+                pubtator_client=resources.api_client,
+                metadata_service=await get_publication_metadata_service(),
+            )
+        return resources.variant_evidence_service
+    if _variant_evidence_service is None:
+        _variant_evidence_service = VariantEvidenceService(
+            clinvar=await get_clinvar_service(),
+            pubtator_client=await get_api_client(),
+            metadata_service=await get_publication_metadata_service(),
+        )
+    return _variant_evidence_service
 
 
 async def get_diagnostics_service() -> DiagnosticsService:
@@ -768,6 +816,10 @@ ResearchSessionServiceDep = Annotated[
     ResearchSessionService,
     Depends(get_research_session_service),
 ]
+VariantEvidenceServiceDep = Annotated[
+    VariantEvidenceService,
+    Depends(get_variant_evidence_service),
+]
 
 
 def handle_api_errors(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -895,6 +947,7 @@ async def cleanup_dependencies() -> None:
     global _review_index_lifecycle_service
     global _research_session_service
     global _corpus_suggestion_service
+    global _clinvar_service, _variant_evidence_service
 
     if _api_client:
         api_client = _api_client
@@ -925,6 +978,8 @@ async def cleanup_dependencies() -> None:
     _review_index_lifecycle_service = None
     _research_session_service = None
     _corpus_suggestion_service = None
+    _clinvar_service = None
+    _variant_evidence_service = None
     _discovery_service = None
     _publication_passage_service = None
     _publication_metadata_service = None

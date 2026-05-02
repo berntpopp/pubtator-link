@@ -21,6 +21,7 @@ from .api.routes import (
     relations_router,
     reviews_router,
     search_router,
+    variants_router,
 )
 from .api.routes.dependencies import (
     AppResources,
@@ -217,6 +218,7 @@ class UnifiedServerManager:
         app.include_router(annotations_router)
         app.include_router(cache_router)
         app.include_router(reviews_router)
+        app.include_router(variants_router)
 
         if mcp_http_app is not None:
             app.mount("/", mcp_http_app)

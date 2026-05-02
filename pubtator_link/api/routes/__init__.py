@@ -8,6 +8,7 @@ from .publications import router as publications_router
 from .relations import router as relations_router
 from .reviews import router as reviews_router
 from .search import router as search_router
+from .variants import router as variants_router
 
 # Export all routers for easy import in server manager
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "relations_router",
     "reviews_router",
     "search_router",
+    "variants_router",
 ]
 
 # Router registry for dynamic inclusion
@@ -29,6 +31,7 @@ ROUTE_MODULES = {
     "relations": relations_router,
     "discovery": discovery_router,
     "reviews": reviews_router,
+    "variants": variants_router,
     "annotations": annotations_router,
     "cache": cache_router,
 }
