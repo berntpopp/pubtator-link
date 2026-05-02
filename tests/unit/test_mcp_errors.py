@@ -101,6 +101,67 @@ def test_public_mcp_tools_use_centralized_error_wrapper() -> None:
     assert missing == []
 
 
+def test_recent_mcp_errors_are_bounded_and_clearable() -> None:
+    from pubtator_link.mcp.errors import (
+        RECENT_MCP_ERROR_LIMIT,
+        clear_recent_mcp_errors,
+        get_recent_mcp_errors,
+        record_mcp_error,
+    )
+
+    clear_recent_mcp_errors()
+    record_mcp_error(
+        tool_name="pubtator.index_review_evidence",
+        error_code="review_index_unavailable",
+        message="Review database operation failed.",
+        raw_message="relation review_sources does not exist",
+    )
+
+    errors = get_recent_mcp_errors()
+
+    assert errors[-1]["tool_name"] == "pubtator.index_review_evidence"
+    assert errors[-1]["error_code"] == "review_index_unavailable"
+    assert "relation review_sources does not exist" in errors[-1]["raw_message"]
+
+    for index in range(RECENT_MCP_ERROR_LIMIT + 5):
+        record_mcp_error(
+            tool_name=f"pubtator.test_tool_{index}",
+            error_code="internal_error",
+            message="The tool could not complete the requested operation.",
+        )
+
+    errors = get_recent_mcp_errors(limit=RECENT_MCP_ERROR_LIMIT + 10)
+
+    assert len(errors) == RECENT_MCP_ERROR_LIMIT
+    assert errors[0]["tool_name"] == "pubtator.test_tool_5"
+    assert errors[-1]["tool_name"] == "pubtator.test_tool_54"
+
+    clear_recent_mcp_errors()
+
+    assert get_recent_mcp_errors() == []
+
+
+def test_record_mcp_error_sanitizes_stored_message() -> None:
+    from pubtator_link.mcp.errors import (
+        clear_recent_mcp_errors,
+        get_recent_mcp_errors,
+        record_mcp_error,
+    )
+
+    clear_recent_mcp_errors()
+    record_mcp_error(
+        tool_name="pubtator.index_review_evidence",
+        error_code="review_index_unavailable",
+        message='relation "review_sources" does not exist',
+        raw_message='relation "review_sources" does not exist at host db.internal',
+    )
+
+    errors = get_recent_mcp_errors()
+
+    assert errors[-1]["message"] == "Review database operation failed."
+    assert "db.internal" in errors[-1]["raw_message"]
+
+
 @pytest.mark.asyncio
 async def test_mcp_error_wrapper_raises_tool_error() -> None:
     from pubtator_link.mcp.errors import run_mcp_tool
@@ -117,6 +178,42 @@ async def test_mcp_error_wrapper_raises_tool_error() -> None:
 
     payload = json.loads(str(exc_info.value))
     assert payload["error_code"] == "review_schema_not_current"
+
+
+@pytest.mark.asyncio
+async def test_mcp_tool_wrapper_preserves_json_tool_error_code_in_recent_errors_and_metrics(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from pubtator_link.mcp.errors import (
+        clear_recent_mcp_errors,
+        get_recent_mcp_errors,
+        run_mcp_tool,
+    )
+    from pubtator_link.observability.metrics import metrics_payload
+
+    async def failing() -> dict[str, object]:
+        raise mcp_tool_error(
+            RuntimeError('column "updated_at" of relation "reviews" does not exist'),
+            McpErrorContext(tool_name="pubtator.index_review_evidence"),
+        )
+
+    clear_recent_mcp_errors()
+    caplog.set_level(logging.WARNING, logger="pubtator_link.mcp.errors")
+
+    with pytest.raises(ToolError):
+        await run_mcp_tool("pubtator.index_review_evidence", failing)
+
+    errors = get_recent_mcp_errors()
+    failed_records = [record for record in caplog.records if record.message == "mcp_tool_failed"]
+    metrics = metrics_payload().decode()
+
+    assert errors[-1]["error_code"] == "review_schema_not_current"
+    assert errors[-1]["message"] == "Review database schema is not current."
+    assert failed_records[-1].error_code == "review_schema_not_current"
+    assert (
+        'mcp_tool_calls_total{error_code="review_schema_not_current",'
+        'outcome="failure",tool_name="pubtator.index_review_evidence"}'
+    ) in metrics
 
 
 @pytest.mark.asyncio
