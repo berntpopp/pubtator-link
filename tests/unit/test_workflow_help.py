@@ -53,3 +53,10 @@ def test_workflow_help_mentions_genereviews_nbk_recovery() -> None:
     assert "GeneReviews" in payload
     assert "NBK" in payload
     assert "lookup_citation" in payload
+
+
+def test_workflow_help_documents_guideline_search_as_filtered_literature_search() -> None:
+    payload = WorkflowHelpService().get_help("clinical_genetics_review").model_dump_json()
+
+    assert "pubtator.search_guidelines" in payload
+    assert "filtered search_literature" in payload

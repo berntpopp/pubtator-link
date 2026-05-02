@@ -105,7 +105,7 @@ def register_literature_tools(mcp: FastMCP) -> None:
         entity_ids: list[str] | None = None,
         coverage: SearchCoverageMode = "preflight",
     ) -> dict[str, Any]:
-        """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. Defaults to source coverage preflight so abstract-only guideline hits are visible before indexing."""
+        """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. This is a convenience wrapper over pubtator.search_literature with guideline/systematic-review publication-type filters and guideline boosting, not an independent guideline database. Defaults to source coverage preflight so abstract-only guideline hits are visible before indexing."""
 
         async def call() -> dict[str, Any]:
             preflight_service = (
