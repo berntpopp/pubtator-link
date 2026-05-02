@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 EXPECTED_PUBLIC_TOOL_NAMES = {
+    "pubtator.workflow_help",
     "pubtator.get_server_capabilities",
     "pubtator.search_literature",
     "pubtator.convert_article_ids",
@@ -44,6 +45,7 @@ EXPECTED_RESOURCE_URIS = {
     "pubtator://relation-types",
     "pubtator://formats",
     "pubtator://text-processing",
+    "pubtator://workflow-help",
     "pubtator://compliance/research-use",
 }
 
@@ -123,13 +125,14 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
     sample_calls = capabilities["sample_calls"]
 
     assert "recommended_workflows" in capabilities
+    assert "workflow_help" in capabilities
     assert "tool_groups" in capabilities
     assert "large_output_guidance" in capabilities
     assert "review_rerag" in capabilities
     assert "discovery_workflow" in capabilities
-    assert (
-        "search -> preflight -> index -> inspect -> retrieve"
-        in (capabilities["recommended_workflows"][0])
+    assert any(
+        "search -> preflight -> index -> inspect -> retrieve" in workflow
+        for workflow in capabilities["recommended_workflows"]
     )
     assert (
         "pubtator.get_publication_passages" in capabilities["tool_groups"]["publication_grounding"]
@@ -138,6 +141,9 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
     assert "pubtator.lookup_mesh" in capabilities["tool_groups"]["discovery"]
     assert capabilities["output_cheatsheet"]["discovery_candidate_pmids"] == "candidate_pmids"
     assert capabilities["output_cheatsheet"]["handoff_next_commands"] == "_meta.next_commands"
+    assert "pubtator.workflow_help" in capabilities["tools"]
+    assert "pubtator.workflow_help" in capabilities["tool_groups"]["workflow"]
+    assert len(capabilities["workflow_help"]["fallbacks"]) == 2
     assert "limit" in sample_calls["pubtator.lookup_mesh"]
     assert "max_results" not in sample_calls["pubtator.lookup_mesh"]
     assert "limit" in sample_calls["pubtator.find_related_articles"]
@@ -391,6 +397,7 @@ def test_high_use_mcp_tools_expose_specific_output_schemas() -> None:
 
     expected = {
         "pubtator.search_literature": {"success", "results"},
+        "pubtator.workflow_help": {"task", "steps", "fallbacks", "tool_sequence", "_meta"},
         "pubtator.convert_article_ids": {"records", "candidate_pmids", "unresolved", "_meta"},
         "pubtator.lookup_mesh": {"query", "descriptors", "candidate_pmids", "_meta"},
         "pubtator.lookup_citation": {"records", "candidate_pmids", "_meta"},

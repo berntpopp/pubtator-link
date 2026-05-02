@@ -19,7 +19,10 @@ from pubtator_link.mcp.resources import (
     get_relation_types_resource,
     get_research_use_resource,
     get_text_processing_resource,
+    get_workflow_help_resource,
 )
+from pubtator_link.models.workflow_help import WorkflowHelpResponse, WorkflowTask
+from pubtator_link.services.workflow_help import WorkflowHelpService
 
 
 def register_metadata(mcp: FastMCP) -> None:
@@ -36,9 +39,29 @@ def register_metadata(mcp: FastMCP) -> None:
 
         return await run_mcp_tool("pubtator.get_server_capabilities", call)
 
+    @mcp.tool(
+        name="pubtator.workflow_help",
+        title="Workflow Help",
+        output_schema=WorkflowHelpResponse.model_json_schema(),
+        annotations=READ_ONLY_CLOSED_WORLD,
+    )
+    async def workflow_help(
+        task: WorkflowTask = "clinical_genetics_review",
+    ) -> dict[str, Any]:
+        """Use this when a fresh context needs the canonical PubTator-Link research workflow. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+
+        async def call() -> dict[str, Any]:
+            return WorkflowHelpService().get_help(task).model_dump(by_alias=True)
+
+        return await run_mcp_tool("pubtator.workflow_help", call)
+
     @mcp.resource("pubtator://capabilities")
     def capabilities() -> dict[str, Any]:
         return get_capabilities_resource()
+
+    @mcp.resource("pubtator://workflow-help")
+    def workflow_help_resource() -> dict[str, Any]:
+        return get_workflow_help_resource()
 
     @mcp.resource("pubtator://bioconcepts")
     def bioconcepts() -> dict[str, Any]:

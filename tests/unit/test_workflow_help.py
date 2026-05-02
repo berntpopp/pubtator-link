@@ -1,0 +1,26 @@
+from pubtator_link.services.workflow_help import WorkflowHelpService
+
+
+def test_workflow_help_includes_metadata_and_review_index_steps() -> None:
+    service = WorkflowHelpService()
+
+    response = service.get_help("clinical_genetics_review")
+
+    names = [step.tool_name for step in response.steps]
+    assert "pubtator.search_biomedical_entities" in names
+    assert "pubtator.search_literature" in names
+    assert "pubtator.get_publication_metadata" in names
+    assert "pubtator.index_review_evidence" in names
+    assert "pubtator.retrieve_review_context_batch" in names
+    assert response.meta["next_commands"]
+
+
+def test_workflow_help_entity_discovery_uses_discovery_tools() -> None:
+    response = WorkflowHelpService().get_help("entity_discovery")
+
+    assert response.tool_sequence == [
+        "pubtator.search_biomedical_entities",
+        "pubtator.lookup_mesh",
+        "pubtator.search_literature",
+    ]
+    assert response.meta["next_commands"][0] == "pubtator.search_biomedical_entities"
