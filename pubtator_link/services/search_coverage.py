@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal, Protocol
+from typing import Literal, Protocol, cast
 
 from pubtator_link.models.responses import SearchResponse
 from pubtator_link.models.review_rerag import SourceCoverageHint
@@ -44,9 +44,12 @@ async def attach_preflight_coverage(
         result.coverage_hint = None if _coverage_hint_has_no_signal(hint) else hint
         result.preflight_coverage_guess = hint.get("expected_coverage")
         result.preflight_coverage_reason = hint.get("coverage_reason")
-        result.preflight_confidence = _preflight_confidence(
-            str(hint.get("expected_coverage") or "unknown"),
-            str(hint.get("coverage_reason") or "unknown"),
+        result.preflight_confidence = cast(
+            Literal["high", "medium", "low"],
+            _preflight_confidence(
+                str(hint.get("expected_coverage") or "unknown"),
+                str(hint.get("coverage_reason") or "unknown"),
+            ),
         )
     response.source_versions["coverage_preflight"] = "included"
 

@@ -383,9 +383,10 @@ class ReviewContextService:
         metadata_mode: str,
     ) -> None:
         pmids = list(dict.fromkeys(source.pmid for source in sources if source.pmid))
-        if not pmids:
+        metadata_service = self.metadata_service
+        if not pmids or metadata_service is None:
             return
-        response = await self.metadata_service.get_metadata(
+        response = await metadata_service.get_metadata(
             PublicationMetadataRequest(
                 pmids=pmids,
                 include_mesh=metadata_mode == "full",

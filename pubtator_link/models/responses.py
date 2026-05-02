@@ -193,6 +193,21 @@ class SearchResult(BaseModel):
             return info.data["date"]
         return v
 
+    @field_validator("authors", mode="before")
+    @classmethod
+    def normalize_authors(cls, value: Any) -> list[PublicationAuthor]:
+        if not isinstance(value, list):
+            return []
+        authors: list[PublicationAuthor] = []
+        for author in value:
+            if isinstance(author, PublicationAuthor):
+                authors.append(author)
+            elif isinstance(author, str) and author.strip():
+                authors.append(PublicationAuthor(collective_name=author.strip()))
+            elif isinstance(author, dict):
+                authors.append(PublicationAuthor.model_validate(author))
+        return authors
+
 
 class SearchResponse(BaseResponse):
     """Response model for search."""
@@ -240,9 +255,9 @@ def _coverage_hint_has_no_signal(value: Any) -> bool:
     }
     if any(value.get(key) for key in signal_keys):
         return False
-    if value.get("pmc_fallback_available"):
+    if bool(value.get("pmc_fallback_available")):
         return False
-    return (
+    return bool(
         value.get("expected_coverage", "unknown") == "unknown"
         and value.get("coverage_reason", "unknown") == "unknown"
     )

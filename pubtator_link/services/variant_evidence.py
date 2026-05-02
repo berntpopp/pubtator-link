@@ -18,7 +18,14 @@ SOURCE_ATTRIBUTION_WARNING = (
 
 
 class VariantPubTatorClient(Protocol):
-    async def search_publications(self, **kwargs: Any) -> dict[str, Any]:
+    async def search_publications(
+        self,
+        text: str,
+        page: int = 1,
+        sort: str | None = None,
+        filters: str | None = None,
+        sections: str | None = None,
+    ) -> dict[str, Any]:
         """Search PubTator publications."""
 
 

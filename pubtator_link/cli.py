@@ -157,7 +157,7 @@ async def search_publications(query: str, page: int = 1) -> None:
                     pub_content.append(f"[bold cyan]PMID: {pub.pmid}[/bold cyan]")
 
                     if pub.authors:
-                        authors_str = ", ".join(pub.authors[:3])  # Show first 3 authors
+                        authors_str = ", ".join(author.display_name for author in pub.authors[:3])
                         if len(pub.authors) > 3:
                             authors_str += f" et al. ({len(pub.authors)} total)"
                         pub_content.append(f"[dim]Authors: {authors_str}[/dim]")

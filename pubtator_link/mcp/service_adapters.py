@@ -406,7 +406,7 @@ async def lookup_variant_evidence_impl(
         include_citations=include_citations,
     )
     response = await service.lookup(request)
-    return response.model_dump()
+    return cast(dict[str, Any], response.model_dump())
 
 
 async def submit_text_annotation_impl(
