@@ -9,6 +9,7 @@ from pubtator_link.models.review_rerag import (
 from pubtator_link.services.review_context.diagnostics import (
     query_summary,
     query_tokens,
+    recovery_from_query_summary,
     suggested_queries,
 )
 
@@ -79,3 +80,50 @@ def test_high_drop_nonzero_query_summary_has_next_steps() -> None:
     )
 
     assert summary.next_steps == ["increase_budget", "narrow_query", "inspect_review_index"]
+
+
+def test_recovery_from_zero_result_query_summary_promotes_next_steps() -> None:
+    from pubtator_link.models.review_rerag import QueryDiagnosticsSummary
+
+    summary = QueryDiagnosticsSummary(
+        query="MEFV colchicine",
+        query_tokens=["mefv", "colchicine"],
+        candidate_count=0,
+        selected_count=0,
+        returned_count=0,
+        dropped_count=0,
+        zero_result_reason="no_candidate_matches",
+        suggested_queries=["mefv"],
+        next_steps=["shorten_query", "drop_filters"],
+    )
+
+    recovery = recovery_from_query_summary(summary)
+
+    assert recovery is not None
+    assert recovery.reason == "no_candidate_matches"
+    assert recovery.suggested_queries == ["mefv"]
+    assert recovery.next_steps == ["shorten_query", "drop_filters"]
+
+
+def test_recovery_from_high_drop_query_summary_suggests_budget() -> None:
+    from pubtator_link.models.review_rerag import QueryDiagnosticsSummary
+
+    summary = QueryDiagnosticsSummary(
+        query="MEFV colchicine",
+        query_tokens=["mefv", "colchicine"],
+        candidate_count=20,
+        selected_count=8,
+        returned_count=2,
+        dropped_count=8,
+        top_sections=["abstract"],
+        top_pmids=["40234174"],
+        next_steps=["increase_budget", "narrow_query"],
+    )
+
+    recovery = recovery_from_query_summary(summary)
+
+    assert recovery is not None
+    assert recovery.reason == "high_drop_pressure"
+    assert recovery.suggested_filters is not None
+    assert recovery.suggested_filters.sections == ["abstract"]
+    assert recovery.budget_advice is not None

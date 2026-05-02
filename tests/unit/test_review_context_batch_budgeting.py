@@ -11,14 +11,19 @@ from pubtator_link.models.review_rerag import (
 from pubtator_link.services.review_context.batch_budgeting import merge_batch_context
 
 
-def _passage(passage_id: str, text: str, pmid: str = "1") -> ContextPassage:
+def _passage(
+    passage_id: str,
+    text: str,
+    pmid: str = "1",
+    section: str = "abstract",
+) -> ContextPassage:
     return ContextPassage(
         citation_key="S1",
         passage_id=passage_id,
         source_id=f"source-{pmid}",
         pmid=pmid,
         pmcid=None,
-        section="abstract",
+        section=section,
         text=text,
         source_kind="pubtator_abstract",
     )
@@ -174,7 +179,7 @@ def test_batch_response_truncates_large_dropped_list_with_summary() -> None:
     )
 
     assert len(response.dropped) <= 10
-    assert response.dropped_summary["truncated_count"] > 0
+    assert response.dropped_summary.truncated_count > 0
 
 
 def test_batch_budgeting_honors_min_passages_per_pmid() -> None:
@@ -219,3 +224,31 @@ def test_batch_response_includes_pmid_status_summary() -> None:
 
     assert merged.pmid_status_summary[0].pmid == "1"
     assert merged.pmid_status_summary[0].passages_returned == 1
+
+
+def test_merge_batch_context_structures_dropped_summary_with_filter_advice() -> None:
+    request = RetrieveReviewContextBatchRequest(
+        queries=["MEFV colchicine"],
+        max_total_passages=1,
+        max_chars=500,
+        max_response_chars=2000,
+    )
+    result = _result(
+        "MEFV colchicine",
+        [
+            _passage("p1", "A" * 100, pmid="40234174", section="abstract"),
+            _passage("p2", "B" * 100, pmid="40234174", section="results"),
+            _passage("p3", "C" * 100, pmid="26802180", section="discussion"),
+        ],
+    )
+
+    merged = merge_batch_context(
+        request=request,
+        query_results=[result],
+        coverage_by_source={},
+    )
+
+    assert hasattr(merged.dropped_summary, "by_reason")
+    assert merged.dropped_summary.by_reason["max_total_passages_exceeded"] >= 1
+    assert merged.dropped_summary.suggested_filters is not None
+    assert merged.dropped_summary.suggested_filters.sections

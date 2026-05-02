@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 
 from pubtator_link.models.review_rerag import (
@@ -8,10 +8,13 @@ from pubtator_link.models.review_rerag import (
     ContextPassage,
     PmidStatusSummary,
     QueryDiagnosticsSummary,
+    RecoveryBudgetAdvice,
+    RecoverySuggestedFilters,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextResponse,
     SourceBudgetSummary,
     SourceCoverage,
+    SourceDroppedSummary,
 )
 from pubtator_link.services.review_context.diagnostics import query_summary
 from pubtator_link.services.review_context.packing import context_budget, pack_totals
@@ -24,7 +27,7 @@ MAX_DROPPED_ITEMS = 10
 class MergedBatchContext:
     passages: list[ContextPassage]
     dropped: list[ContextDropReason]
-    dropped_summary: dict[str, int]
+    dropped_summary: SourceDroppedSummary
     query_summaries: list[QueryDiagnosticsSummary]
     source_budget_summaries: list[SourceBudgetSummary]
     pmid_status_summary: list[PmidStatusSummary]
@@ -348,9 +351,12 @@ def merge_batch_context(
             or sum(len(passage.text) for passage in result.context_pack.passages)
             for result in query_results
         )
-    truncated_count = max(0, len(dropped) - MAX_DROPPED_ITEMS)
     visible_dropped = dropped[:MAX_DROPPED_ITEMS]
-    dropped_summary = {"truncated_count": truncated_count} if truncated_count else {}
+    dropped_summary = build_dropped_summary(
+        dropped=dropped,
+        visible_dropped=visible_dropped,
+        request=request,
+    )
     return MergedBatchContext(
         passages=merged_passages,
         dropped=visible_dropped,
@@ -363,4 +369,47 @@ def merge_batch_context(
         text_chars=text_chars,
         estimated_tokens=estimated_tokens,
         budget_text_chars=budget_text_chars,
+    )
+
+
+def build_dropped_summary(
+    *,
+    dropped: list[ContextDropReason],
+    visible_dropped: list[ContextDropReason],
+    request: RetrieveReviewContextBatchRequest,
+) -> SourceDroppedSummary:
+    by_reason = dict(Counter(item.reason for item in dropped))
+    section_counts = Counter(item.section for item in dropped if item.section)
+    pmid_counts = Counter(item.pmid for item in dropped if item.pmid)
+    budget_reasons = {
+        "char_budget_exceeded",
+        "response_char_budget_exceeded",
+        "passage_over_max_chars_per_passage",
+    }
+    budget_advice = None
+    if budget_reasons.intersection(by_reason):
+        budget_advice = RecoveryBudgetAdvice(
+            increase_max_chars_to=min(
+                50000,
+                max(request.max_chars + 2000, int(request.max_chars * 1.5)),
+            ),
+            increase_max_response_chars_to=min(
+                100000,
+                max(
+                    request.max_response_chars + 4000,
+                    int(request.max_response_chars * 1.5),
+                ),
+            ),
+            lower_max_passages_per_query_to=max(1, request.max_passages_per_query // 2),
+        )
+    return SourceDroppedSummary(
+        total_dropped=len(dropped),
+        visible_dropped=len(visible_dropped),
+        truncated_count=max(0, len(dropped) - len(visible_dropped)),
+        by_reason=by_reason,
+        suggested_filters=RecoverySuggestedFilters(
+            sections=[section for section, _count in section_counts.most_common(3)],
+            pmids=[pmid for pmid, _count in pmid_counts.most_common(5)],
+        ),
+        budget_advice=budget_advice,
     )

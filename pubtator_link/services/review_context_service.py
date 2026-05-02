@@ -27,6 +27,8 @@ from pubtator_link.services.provenance import corpus_snapshot_date, stable_cache
 from pubtator_link.services.review_context.batch_budgeting import merge_batch_context
 from pubtator_link.services.review_context.diagnostics import (
     build_diagnostics,
+    query_summary,
+    recovery_from_query_summary,
 )
 from pubtator_link.services.review_context.packing import (
     context_budget,
@@ -181,7 +183,10 @@ class ReviewContextService:
             review_id,
             session_id=request.session_id,
         )
-        return RetrieveReviewContextResponse(
+        preparation_status = await self._preparation_status(
+            review_id, session_id=request.session_id
+        )
+        response = RetrieveReviewContextResponse(
             review_id=review_id,
             context_pack=ContextPack(
                 question=request.question,
@@ -192,14 +197,29 @@ class ReviewContextService:
                 budget=budget,
                 dropped=dropped,
             ),
-            preparation_status=await self._preparation_status(
-                review_id, session_id=request.session_id
-            ),
+            preparation_status=preparation_status,
             index_snapshot_date=index_snapshot_date(),
             diagnostics=diagnostics,
             prepared_pmids=prepared_pmids,
             still_preparing_pmids=still_preparing_pmids,
             failed_pmids=failed_pmids,
+        )
+        single_summary = query_summary(
+            query=request.question,
+            result=response,
+            returned_count=len(passages),
+            dropped_count=len(dropped),
+        )
+        recovery = recovery_from_query_summary(single_summary)
+        if recovery is None:
+            return response
+        return response.model_copy(
+            update={
+                "recovery": recovery,
+                "context_pack": response.context_pack.model_copy(
+                    update={"recovery": recovery}
+                ),
+            }
         )
 
     async def retrieve_context_batch(
@@ -266,6 +286,17 @@ class ReviewContextService:
             query_results=query_results,
             coverage_by_source=coverage_by_source,
         )
+        recovery = next(
+            (
+                hint
+                for hint in (
+                    recovery_from_query_summary(summary)
+                    for summary in merged.query_summaries
+                )
+                if hint is not None
+            ),
+            None,
+        )
         if request.dry_run:
             dry_run_budget = context_budget(
                 max_chars=request.max_chars,
@@ -287,6 +318,7 @@ class ReviewContextService:
                     budget=dry_run_budget,
                     dropped=[],
                     dropped_summary=merged.dropped_summary,
+                    recovery=recovery,
                 ),
                 preparation_status=await self._preparation_status(
                     review_id, session_id=request.session_id
@@ -299,6 +331,7 @@ class ReviewContextService:
                 prepared_pmids=[],
                 still_preparing_pmids=[],
                 failed_pmids=[],
+                recovery=recovery,
             )
         record_audit_event = getattr(self.repository, "record_review_audit_event", None)
         if record_audit_event is not None:
@@ -336,6 +369,7 @@ class ReviewContextService:
                 budget=budget,
                 dropped=merged.dropped,
                 dropped_summary=merged.dropped_summary,
+                recovery=recovery,
             ),
             preparation_status=await self._preparation_status(
                 review_id, session_id=request.session_id
@@ -348,6 +382,7 @@ class ReviewContextService:
             prepared_pmids=prepared_pmids,
             still_preparing_pmids=still_preparing_pmids,
             failed_pmids=failed_pmids,
+            recovery=recovery,
         )
 
     async def inspect_review_index(

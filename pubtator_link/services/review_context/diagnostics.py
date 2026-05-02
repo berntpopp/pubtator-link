@@ -7,6 +7,9 @@ from typing import Protocol
 from pubtator_link.models.review_rerag import (
     FailedSourceSummary,
     QueryDiagnosticsSummary,
+    RecoveryBudgetAdvice,
+    RecoveryHint,
+    RecoverySuggestedFilters,
     RetrieveReviewContextRequest,
     RetrieveReviewContextResponse,
     RetrieveReviewDiagnostics,
@@ -76,6 +79,37 @@ def query_summary(
         suggested_queries=suggested_queries_value,
         next_steps=next_steps,
     )
+
+
+def recovery_from_query_summary(summary: QueryDiagnosticsSummary) -> RecoveryHint | None:
+    if summary.returned_count == 0 and summary.zero_result_reason is not None:
+        return RecoveryHint(
+            reason=summary.zero_result_reason,
+            message=f"No passages returned for query: {summary.query}",
+            next_steps=summary.next_steps,
+            suggested_queries=summary.suggested_queries,
+            suggested_filters=RecoverySuggestedFilters(
+                sections=summary.top_sections[:3],
+                pmids=summary.top_pmids[:5],
+            ),
+        )
+    if summary.dropped_count >= max(3, summary.returned_count * 3):
+        return RecoveryHint(
+            reason="high_drop_pressure",
+            message=f"Many candidate passages were dropped for query: {summary.query}",
+            next_steps=summary.next_steps or ["increase_budget", "filter_sections"],
+            suggested_queries=summary.suggested_queries,
+            suggested_filters=RecoverySuggestedFilters(
+                sections=summary.top_sections[:3],
+                pmids=summary.top_pmids[:5],
+            ),
+            budget_advice=RecoveryBudgetAdvice(
+                increase_max_chars_to=18000,
+                increase_max_response_chars_to=36000,
+                lower_max_passages_per_query_to=4,
+            ),
+        )
+    return None
 
 
 async def build_diagnostics(
