@@ -12,11 +12,55 @@ RESEARCH_USE_NOTICE = (
 )
 
 
+def get_llm_driver_contract() -> dict[str, Any]:
+    return {
+        "version": "2026-05-02",
+        "recommended_entrypoint": "pubtator.workflow_help",
+        "discovery_policy": {
+            "strategy": "progressive_discovery",
+            "rationale": "Full tool schemas are large; inspect core workflow tools as needed.",
+        },
+        "core_workflow_tools": [
+            "pubtator.search_biomedical_entities",
+            "pubtator.search_literature",
+            "pubtator.preflight_review_sources",
+            "pubtator.index_review_evidence",
+            "pubtator.inspect_review_index",
+            "pubtator.retrieve_review_context_batch",
+            "pubtator.retrieve_review_context",
+            "pubtator.get_review_passages_by_id",
+            "pubtator.get_review_audit_trail",
+        ],
+        "detail_levels": ["catalog", "schemas", "examples"],
+        "schema_bundle": {
+            "pubtator.index_review_evidence": {
+                "input_schema": "tools/list.parameters.pubtator.index_review_evidence",
+                "output_schema": "IndexReviewEvidenceResponse",
+            },
+            "pubtator.retrieve_review_context_batch": {
+                "input_schema": "tools/list.parameters.pubtator.retrieve_review_context_batch",
+                "output_schema": "RetrieveReviewContextBatchResponse",
+            },
+            "pubtator.get_review_audit_trail": {
+                "input_schema": "tools/list.parameters.pubtator.get_review_audit_trail",
+                "output_schema": "ReviewAuditTrailResponse",
+            },
+        },
+        "response_contracts": {
+            "recovery": "Top-level recovery hints appear on empty, degraded, or high-drop retrievals.",
+            "quote": "Context passages include optional quote offsets for returned text and original passage text.",
+            "confidence_for_grounding": "Deterministic retrieval confidence for source grounding, not clinical certainty.",
+            "dropped_summary": "Structured dropped-passage reason counts plus bounded filter and budget advice.",
+        },
+    }
+
+
 def get_capabilities_resource() -> dict[str, Any]:
     return {
         "server": "pubtator-link",
         "transport": "streamable_http",
         "endpoint": "/mcp",
+        "llm_driver_contract": get_llm_driver_contract(),
         "tools": [
             "pubtator.workflow_help",
             "pubtator.review_quickstart",

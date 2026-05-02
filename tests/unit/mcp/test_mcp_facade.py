@@ -563,6 +563,20 @@ def test_batch_output_schema_allows_omitted_empty_results() -> None:
     assert "results" in schema["properties"]
 
 
+def test_capabilities_expose_llm_driver_contract_for_core_workflow() -> None:
+    from pubtator_link.mcp.resources import get_capabilities_resource
+
+    contract = get_capabilities_resource()["llm_driver_contract"]
+
+    assert contract["version"] == "2026-05-02"
+    assert contract["discovery_policy"]["strategy"] == "progressive_discovery"
+    assert "pubtator.retrieve_review_context_batch" in contract["core_workflow_tools"]
+    assert "pubtator.get_review_audit_trail" in contract["core_workflow_tools"]
+    assert "schemas" in contract["detail_levels"]
+    assert "pubtator.index_review_evidence" in contract["schema_bundle"]
+    assert "recovery" in contract["response_contracts"]
+
+
 def test_curated_facade_registers_resources_and_prompts() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 

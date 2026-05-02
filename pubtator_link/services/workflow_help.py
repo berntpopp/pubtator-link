@@ -159,5 +159,11 @@ def _response(
         tool_sequence=[step.tool_name for step in steps],
         _meta={
             "next_commands": [step.tool_name for step in steps[:3]],
+            "review_retrieval_fields": (
+                "After retrieval, prefer top-level recovery for empty/high-drop queries, "
+                "use passages[].quote for short verbatim snippets, "
+                "passages[].confidence_for_grounding for retrieval confidence, and "
+                "pubtator.get_review_audit_trail for selected passage audit blocks."
+            ),
         },
     )

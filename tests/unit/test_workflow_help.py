@@ -34,3 +34,14 @@ def test_workflow_help_does_not_show_prepare_mode_argument() -> None:
     )
 
     assert "prepare_mode" not in help_text
+
+
+def test_workflow_help_mentions_recovery_quote_confidence_and_audit_trail() -> None:
+    help_text = (
+        WorkflowHelpService().get_help("clinical_genetics_review").model_dump_json(by_alias=True)
+    )
+
+    assert "recovery" in help_text
+    assert "quote" in help_text
+    assert "confidence_for_grounding" in help_text
+    assert "pubtator.get_review_audit_trail" in help_text
