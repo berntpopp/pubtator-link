@@ -63,7 +63,6 @@ async def _warn_if_degraded(ctx: Context | None, result: dict[str, Any]) -> None
         await ctx.warning(
             "Review evidence is degraded: "
             f"{degraded_mode}. Inspect coverage before relying on passage-level claims.",
-            logger="pubtator.review",
         )
 
 

@@ -540,5 +540,5 @@ async def test_retrieve_review_context_batch_accepts_response_mode() -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["response_mode"] == "diagnostics"
-    assert data["results"] == []
+    assert "results" not in data
     assert data["query_summaries"][0]["zero_result_reason"] == "no_candidate_matches"

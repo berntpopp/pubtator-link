@@ -13,9 +13,9 @@ from structlog.typing import FilteringBoundLogger
 
 from pubtator_link.config import ReviewReragConfig
 from pubtator_link.models.review_rerag import (
+    CoverageReason,
     JobStatus,
     ReviewPassageRow,
-    CoverageReason,
     SourceCoverageHint,
     passage_id_for_pmcid,
     passage_id_for_pmid,
@@ -53,7 +53,7 @@ def _europe_pmc_coverage_reason(reason: str | None) -> CoverageReason:
         "upstream_404",
         "parser_unsupported",
     }:
-        return reason
+        return cast(CoverageReason, reason)
     if reason == "not_found":
         return "pmc_not_open_access"
     return "parser_unsupported"

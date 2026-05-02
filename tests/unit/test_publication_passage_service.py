@@ -185,7 +185,9 @@ async def test_get_publication_passages_enforces_per_pmid_limit() -> None:
 async def test_get_publication_passages_reports_upstream_errors() -> None:
     service = PublicationPassageService(RaisingPublicationService())
 
-    response = await service.get_passages(PublicationPassageRequest(pmids=["111"], mode="abstracts"))
+    response = await service.get_passages(
+        PublicationPassageRequest(pmids=["111"], mode="abstracts")
+    )
 
     assert response.success is False
     assert response.passages == []
@@ -238,7 +240,9 @@ async def test_section_text_warns_when_only_abstract_passages_returned() -> None
 async def test_get_passages_sets_degraded_mode_for_abstract_only_response() -> None:
     service = PublicationPassageService(FakePublicationService())
 
-    response = await service.get_passages(PublicationPassageRequest(pmids=["111"], mode="abstracts"))
+    response = await service.get_passages(
+        PublicationPassageRequest(pmids=["111"], mode="abstracts")
+    )
 
     assert response.coverage_by_pmid == {"111": "abstract_only"}
     assert response.degraded_mode == "abstract_only"

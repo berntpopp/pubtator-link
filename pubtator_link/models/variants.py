@@ -9,6 +9,10 @@ from pubtator_link.models.publication_metadata import PublicationMetadata
 VariantEvidenceSource = Literal["clinvar", "pubtator"]
 
 
+def _default_variant_sources() -> list[VariantEvidenceSource]:
+    return ["clinvar", "pubtator"]
+
+
 class VariantEvidenceRequest(BaseModel):
     """Request source-attributed evidence for a gene and variant expression."""
 
@@ -16,7 +20,7 @@ class VariantEvidenceRequest(BaseModel):
     variant: str | None = Field(default=None, min_length=1)
     protein: str | None = Field(default=None, min_length=1)
     condition: str | None = Field(default=None, min_length=1)
-    sources: list[VariantEvidenceSource] = Field(default_factory=lambda: ["clinvar", "pubtator"])
+    sources: list[VariantEvidenceSource] = Field(default_factory=_default_variant_sources)
     max_literature_pmids: int = Field(default=20, ge=0, le=100)
     include_citations: bool = True
 

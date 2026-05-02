@@ -4,7 +4,7 @@ import hashlib
 import math
 import re
 from enum import StrEnum
-from typing import Any, Literal, Self
+from typing import Any, Literal, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
@@ -518,7 +518,7 @@ class RetrieveReviewContextBatchResponse(BaseModel):
 
     @model_serializer(mode="wrap")
     def omit_empty_results_for_compact(self, handler: Any) -> dict[str, Any]:
-        data = handler(self)
+        data = cast(dict[str, Any], handler(self))
         if self.response_mode in {"compact", "merged_only", "diagnostics"} and not self.results:
             data.pop("results", None)
         return data

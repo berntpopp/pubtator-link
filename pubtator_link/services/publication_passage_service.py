@@ -97,10 +97,10 @@ class PublicationPassageService:
                 warnings=["Publication export failed"],
                 cache_key=_publication_passage_cache_key(request),
                 corpus_snapshot_date=corpus_snapshot_date(),
-            source_versions={"pubtator3": "live"},
-            degraded_mode=degraded_mode_from_coverage(coverage_by_pmid),
-            dry_run=request.dry_run,
-        )
+                source_versions={"pubtator3": "live"},
+                degraded_mode=degraded_mode_from_coverage(coverage_by_pmid),
+                dry_run=request.dry_run,
+            )
 
         passages, dropped = self._compact_export(
             export_data=export_data,

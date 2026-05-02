@@ -335,9 +335,7 @@ async def test_prepare_pmid_records_resolver_attempts_before_abstract_fallback()
     )
     europe_pmc = UnavailableEuropePmcClient(pmcid="PMC123", doi="10.1000/example")
     base_config = _config()
-    config = ReviewReragConfig(
-        **{**base_config.__dict__, "enable_europe_pmc_fallback": True}
-    )
+    config = ReviewReragConfig(**{**base_config.__dict__, "enable_europe_pmc_fallback": True})
     service = FullTextPreparationService(
         config=config,
         repository=repository,
