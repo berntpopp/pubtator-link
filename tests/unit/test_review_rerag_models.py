@@ -281,6 +281,36 @@ def test_batch_request_defaults_to_compact_context_safe_mode() -> None:
     assert request.table_mode == "preview"
 
 
+def test_batch_response_accepts_quotes_mode() -> None:
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        PreparationStatus,
+        RetrieveReviewContextBatchResponse,
+        ReviewQuote,
+    )
+
+    response = RetrieveReviewContextBatchResponse(
+        review_id="r1",
+        response_mode="quotes",
+        results=[],
+        merged_context_pack=ContextPack(question="q1", passages=[], citation_map={}),
+        preparation_status=PreparationStatus(),
+        quotes=[
+            ReviewQuote(
+                stable_citation_key="c_abc",
+                pmid="123",
+                passage_id="PMID:123:abstract:1",
+                section="abstract",
+                quote="MEFV evidence.",
+                matched_queries=["MEFV"],
+                coverage_status="abstract_only",
+            )
+        ],
+    )
+
+    assert response.quotes[0].stable_citation_key == "c_abc"
+
+
 def test_context_pack_budget_metadata_defaults() -> None:
     budget = ContextBudget(
         max_chars=12000,

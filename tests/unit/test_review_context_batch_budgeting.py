@@ -206,6 +206,51 @@ def test_merge_batch_context_drops_when_response_budget_would_be_exceeded() -> N
     assert merged.dropped[0].reason == "response_char_budget_exceeded"
 
 
+def test_merge_batch_context_quotes_mode_enforces_quote_payload_budget() -> None:
+    request = RetrieveReviewContextBatchRequest(
+        queries=["q1"],
+        response_mode="quotes",
+        max_total_passages=10,
+        max_chars=50000,
+        max_response_chars=2000,
+    )
+    passages = [
+        _passage(
+            f"PMID:{index}:abstract:1",
+            (
+                f"Quote candidate {index} includes enough evidence to be citable. "
+                + "Long passage context should not drive quote-mode budgeting. " * 20
+            ),
+            pmid=str(index),
+        )
+        for index in range(10)
+    ]
+
+    merged = merge_batch_context(
+        request=request,
+        query_results=[_result("q1", passages)],
+        coverage_by_source={},
+    )
+
+    assert 0 < len(merged.passages) < len(passages)
+    assert [passage.passage_id for passage in merged.passages] == [
+        "PMID:0:abstract:1",
+        "PMID:1:abstract:1",
+        "PMID:2:abstract:1",
+    ]
+    assert all(drop.reason == "response_char_budget_exceeded" for drop in merged.dropped)
+    quote_payload_chars = sum(
+        len(passage.stable_citation_key or "")
+        + len(passage.pmid or "")
+        + len(passage.passage_id)
+        + len(passage.section)
+        + min(len(" ".join(passage.text.split())), 350)
+        + sum(len(query) for query in passage.matched_queries)
+        for passage in merged.passages
+    )
+    assert quote_payload_chars <= request.max_response_chars
+
+
 def test_merge_batch_context_diagnostics_mode_skips_merged_passages() -> None:
     request = RetrieveReviewContextBatchRequest(
         queries=["q1"],

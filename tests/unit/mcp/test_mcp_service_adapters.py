@@ -748,6 +748,53 @@ async def test_retrieve_review_context_batch_adapter_validates_quotes_numeric_bo
 
 
 @pytest.mark.asyncio
+async def test_retrieve_review_context_batch_adapter_constructs_quotes_request_directly(
+    monkeypatch,
+) -> None:
+    from pubtator_link.mcp import service_adapters
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        PreparationStatus,
+        RetrieveReviewContextBatchRequest,
+        RetrieveReviewContextBatchResponse,
+    )
+
+    constructed_modes: list[str] = []
+
+    class RecordingRequest(RetrieveReviewContextBatchRequest):
+        def __init__(self, **data):
+            constructed_modes.append(data["response_mode"])
+            super().__init__(**data)
+
+    class Service:
+        request = None
+
+        async def retrieve_context_batch(self, review_id, request):
+            self.request = request
+            return RetrieveReviewContextBatchResponse(
+                review_id=review_id,
+                response_mode=request.response_mode,
+                results=[],
+                merged_context_pack=ContextPack(question="", passages=[], citation_map={}),
+                preparation_status=PreparationStatus(),
+            )
+
+    monkeypatch.setattr(service_adapters, "RetrieveReviewContextBatchRequest", RecordingRequest)
+    service = Service()
+
+    await retrieve_review_context_batch_impl(
+        service=service,
+        review_id="r1",
+        queries=["MEFV"],
+        response_mode="Quotes",
+    )
+
+    assert constructed_modes == ["quotes"]
+    assert service.request.response_mode == "quotes"
+
+
+@pytest.mark.asyncio
 async def test_list_review_indexes_adapter_calls_lifecycle_service() -> None:
     from pubtator_link.mcp.service_adapters import list_review_indexes_impl
     from pubtator_link.models.review_rerag import ListReviewIndexesResponse

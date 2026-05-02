@@ -41,6 +41,13 @@ def test_review_tools_are_registered_with_flat_canonical_schemas() -> None:
     assert inspect_properties["metadata"]["default"] == "basic"
 
 
+def test_batch_response_mode_schema_includes_quotes() -> None:
+    mcp = create_pubtator_mcp()
+    schema = mcp._tool_manager._tools["pubtator.retrieve_review_context_batch"].parameters
+
+    assert "quotes" in schema["properties"]["response_mode"]["enum"]
+
+
 def test_review_tools_accept_context_without_exposing_ctx_parameter() -> None:
     mcp = create_pubtator_mcp()
     tool = mcp._tool_manager._tools["pubtator.retrieve_review_context_batch"]

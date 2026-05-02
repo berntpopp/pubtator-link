@@ -1182,6 +1182,44 @@ async def test_batch_diagnostics_mode_returns_no_passage_text() -> None:
 
 
 @pytest.mark.asyncio
+async def test_batch_quotes_mode_returns_short_quotes_without_merged_passages() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage(
+                "PMID:111:abstract:1",
+                pmid="111",
+                section="abstract",
+                source_kind="pubtator_abstract",
+                text=(
+                    "MEFV evidence supports colchicine response in this cohort. "
+                    + "Additional mechanistic context. " * 30
+                ),
+            )
+        ]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["MEFV"],
+            response_mode="quotes",
+            max_chars=12000,
+        ),
+    )
+
+    assert response.response_mode == "quotes"
+    assert response.quotes
+    assert response.quotes[0].stable_citation_key.startswith("c_")
+    assert response.quotes[0].pmid == "111"
+    assert response.quotes[0].section == "abstract"
+    assert response.quotes[0].matched_queries == ["MEFV"]
+    assert response.quotes[0].coverage_status == "abstract_only"
+    assert all(len(item.quote) <= 350 for item in response.quotes)
+    assert response.merged_context_pack.passages == []
+
+
+@pytest.mark.asyncio
 async def test_batch_dry_run_returns_diagnostics_without_passage_text() -> None:
     repository = FakeReviewContextRepository(
         [_passage("p1", pmid="111", text="colchicine evidence", lexical_rank=9.0)]

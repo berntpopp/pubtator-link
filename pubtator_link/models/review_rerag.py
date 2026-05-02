@@ -18,7 +18,7 @@ PreparationEnqueueResult = Literal[
     "previously_failed_requeued",
 ]
 AttemptStatus = Literal["success", "not_available", "blocked", "failed"]
-ReviewBatchResponseMode = Literal["compact", "merged_only", "full", "diagnostics"]
+ReviewBatchResponseMode = Literal["compact", "merged_only", "full", "diagnostics", "quotes"]
 ReviewTableMode = Literal["off", "preview", "full"]
 SourceCoverage = Literal["title_only", "abstract_only", "full_text", "curated_url", "unknown"]
 CoverageTier = SourceCoverage
@@ -572,6 +572,18 @@ class RetrieveReviewBatchDiagnostics(BaseModel):
     dropped_summary: SourceDroppedSummary | dict[str, int] = Field(default_factory=dict)
 
 
+class ReviewQuote(BaseModel):
+    """Short citable quote returned by batch quotes mode."""
+
+    stable_citation_key: str
+    pmid: str | None = None
+    passage_id: str
+    section: str
+    quote: str = Field(max_length=350)
+    matched_queries: list[str] = Field(default_factory=list)
+    coverage_status: SourceCoverage = "unknown"
+
+
 class RetrieveReviewContextBatchRequest(BaseModel):
     """Request for multiple review-scoped context retrieval queries."""
 
@@ -622,11 +634,15 @@ class RetrieveReviewContextBatchResponse(BaseModel):
     still_preparing_pmids: list[str] = Field(default_factory=list)
     failed_pmids: list[str] = Field(default_factory=list)
     recovery: RecoveryHint | None = None
+    quotes: list[ReviewQuote] = Field(default_factory=list)
 
     @model_serializer(mode="wrap")
     def omit_empty_results_for_compact(self, handler: Any) -> dict[str, Any]:
         data = cast(dict[str, Any], handler(self))
-        if self.response_mode in {"compact", "merged_only", "diagnostics"} and not self.results:
+        if (
+            self.response_mode in {"compact", "merged_only", "diagnostics", "quotes"}
+            and not self.results
+        ):
             data.pop("results", None)
         if self.response_mode in {"compact", "merged_only"} or (
             not self.include_diagnostics and self.response_mode != "diagnostics"

@@ -925,14 +925,7 @@ async def retrieve_review_context_batch_impl(
         "max_chars_per_passage": normalized_args["max_chars_per_passage"],
         "dry_run": normalized_args["dry_run"],
     }
-    if request_args["response_mode"] == "quotes":
-        validated_request = RetrieveReviewContextBatchRequest(
-            **{**request_args, "response_mode": "compact"}
-        )
-        # Task 4 stages the quotes mode before the shared model enum is widened.
-        request = validated_request.model_copy(update={"response_mode": "quotes"})
-    else:
-        request = RetrieveReviewContextBatchRequest(**request_args)
+    request = RetrieveReviewContextBatchRequest(**request_args)
     response = await service.retrieve_context_batch(
         review_id=review_id,
         request=request,

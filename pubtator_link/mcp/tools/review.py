@@ -611,7 +611,7 @@ def register_review_tools(mcp: FastMCP) -> None:
         include_resolver_trace: bool = False,
         ctx: Context | None = None,
     ) -> dict[str, Any]:
-        """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode uses query_fair budgeting: merged passages plus per-query summaries, a fair first-pass budget across queries before overflow, and next_steps for zero-result queries. Use dry_run to get diagnostics and predicted hit counts without returning passage text. Opt into source_fair or scarcity_first to give each PMID/source first-pass representation before overflow. Use diagnostics for query refinement and full only when per-query passage text is needed."""
+        """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode uses query_fair budgeting: merged passages plus per-query summaries, a fair first-pass budget across queries before overflow, and next_steps for zero-result queries. Use response_mode="quotes" for short citable snippets without long passage windows. Use dry_run to get diagnostics and predicted hit counts without returning passage text. Opt into source_fair or scarcity_first to give each PMID/source first-pass representation before overflow. Use diagnostics for query refinement and full only when per-query passage text is needed."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_context_service()
