@@ -3,6 +3,13 @@ from __future__ import annotations
 from typing import Any
 
 from pubtator_link.config import api_config, review_rerag_config, text_processing_config
+from pubtator_link.mcp.contracts import (
+    CORE_WORKFLOW_TOOLS,
+    PREFERRED_TOOL_NAMES,
+    SAMPLE_CALLS,
+    SCHEMA_POLICY,
+    TOOL_CATEGORIES,
+)
 from pubtator_link.services.workflow_help import WorkflowHelpService
 
 RESEARCH_USE_NOTICE = (
@@ -55,7 +62,7 @@ def get_llm_driver_contract() -> dict[str, Any]:
     }
 
 
-def get_capabilities_resource() -> dict[str, Any]:
+def _get_capabilities_details_resource() -> dict[str, Any]:
     return {
         "server": "pubtator-link",
         "transport": "streamable_http",
@@ -550,6 +557,36 @@ def get_capabilities_resource() -> dict[str, Any]:
         },
         "workflow_help": get_workflow_help_resource(),
     }
+
+
+def get_capabilities_resource(details: list[str] | None = None) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "server": "pubtator-link",
+        "transport": "streamable_http",
+        "endpoint": "/mcp",
+        "research_use_only": True,
+        "core_workflow_tools": CORE_WORKFLOW_TOOLS,
+        "tool_categories": TOOL_CATEGORIES,
+        "next_tool": "pubtator.workflow_help",
+    }
+    if not details:
+        return payload
+
+    rich_details = _get_capabilities_details_resource()
+    detail_overrides: dict[str, Any] = {
+        "sample_calls": SAMPLE_CALLS,
+        "schema_policy": SCHEMA_POLICY,
+        "preferred_tool_names": PREFERRED_TOOL_NAMES,
+    }
+    selected_details: dict[str, Any] = {}
+    for name in details:
+        if name in detail_overrides:
+            selected_details[name] = detail_overrides[name]
+        elif name in rich_details:
+            selected_details[name] = rich_details[name]
+    if selected_details:
+        payload["details"] = selected_details
+    return payload
 
 
 def get_bioconcepts_resource() -> dict[str, Any]:

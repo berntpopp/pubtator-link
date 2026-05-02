@@ -12,6 +12,7 @@ from pubtator_link.models.review_rerag import (
     InspectReviewIndexRequest,
     InspectReviewIndexResponse,
     PreparationStatus,
+    RetrieveReviewBatchDiagnostics,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextRequest,
@@ -39,6 +40,7 @@ from pubtator_link.services.review_context.packing import (
     pack_passages,
     pack_totals,
 )
+from pubtator_link.services.review_context.quotes import quotes_from_passages
 from pubtator_link.services.review_context.ranking import (
     SOURCE_COVERAGE_SCARCITY_PRIORITY,
     rerank_key,
@@ -287,6 +289,19 @@ class ReviewContextService:
             query_results=query_results,
             coverage_by_source=coverage_by_source,
         )
+        include_batch_diagnostics = (
+            request.include_diagnostics or request.response_mode == "diagnostics"
+        )
+        diagnostics = (
+            RetrieveReviewBatchDiagnostics(
+                query_summaries=merged.query_summaries,
+                source_budget_summaries=merged.source_budget_summaries,
+                pmid_status_summary=merged.pmid_status_summary,
+                dropped_summary=merged.dropped_summary,
+            )
+            if include_batch_diagnostics
+            else None
+        )
         recovery = next(
             (
                 hint
@@ -306,9 +321,12 @@ class ReviewContextService:
             return RetrieveReviewContextBatchResponse(
                 review_id=review_id,
                 response_mode="diagnostics",
+                include_diagnostics=include_batch_diagnostics,
+                diagnostics=diagnostics,
                 results=[],
                 query_summaries=merged.query_summaries,
                 source_budget_summaries=merged.source_budget_summaries,
+                pmid_status_summary=merged.pmid_status_summary,
                 merged_context_pack=ContextPack(
                     question="\n".join(request.queries),
                     passages=[],
@@ -349,6 +367,8 @@ class ReviewContextService:
             text_chars=merged.budget_text_chars,
             dropped_count=len(merged.dropped),
         )
+        quotes = quotes_from_passages(merged.passages) if request.response_mode == "quotes" else []
+        merged_passages = [] if request.response_mode == "quotes" else merged.passages
         prepared_pmids, still_preparing_pmids, failed_pmids = await self._preparation_pmids(
             review_id,
             session_id=request.session_id,
@@ -356,13 +376,15 @@ class ReviewContextService:
         return RetrieveReviewContextBatchResponse(
             review_id=review_id,
             response_mode=request.response_mode,
+            include_diagnostics=include_batch_diagnostics,
+            diagnostics=diagnostics,
             results=results,
             query_summaries=merged.query_summaries,
             source_budget_summaries=merged.source_budget_summaries,
             pmid_status_summary=merged.pmid_status_summary,
             merged_context_pack=ContextPack(
                 question="\n".join(request.queries),
-                passages=merged.passages,
+                passages=merged_passages,
                 citation_map=citation_map,
                 total_chars=merged.text_chars,
                 estimated_tokens=merged.estimated_tokens,
@@ -383,6 +405,7 @@ class ReviewContextService:
             still_preparing_pmids=still_preparing_pmids,
             failed_pmids=failed_pmids,
             recovery=recovery,
+            quotes=quotes,
         )
 
     async def inspect_review_index(

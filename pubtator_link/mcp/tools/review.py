@@ -14,7 +14,11 @@ from pubtator_link.api.routes.dependencies import (
     get_review_queue,
     get_source_preflight_service,
 )
-from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD, REVIEW_WRITE_ANNOTATIONS
+from pubtator_link.mcp.annotations import (
+    FILE_EXPORT_ANNOTATIONS,
+    READ_ONLY_OPEN_WORLD,
+    REVIEW_WRITE_ANNOTATIONS,
+)
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.service_adapters import (
     add_evidence_certainty_impl,
@@ -509,11 +513,13 @@ def register_review_tools(mcp: FastMCP) -> None:
         name="pubtator.export_review_audit_bundle",
         title="Export Review Audit Bundle",
         output_schema=McpReviewAuditBundleResponse.model_json_schema(),
-        annotations=READ_ONLY_OPEN_WORLD,
+        annotations=FILE_EXPORT_ANNOTATIONS,
     )
     async def export_review_audit_bundle(
         review_id: str,
         session_id: str | None = None,
+        export_path: str | None = None,
+        fallback_inline: bool = False,
     ) -> dict[str, Any]:
         """Use this to export review preparation status, source coverage, resolver attempts, retrieval runs, passage IDs, and stable citation keys for scientific auditability."""
 
@@ -523,6 +529,8 @@ def register_review_tools(mcp: FastMCP) -> None:
                 service=service,
                 review_id=review_id,
                 session_id=session_id,
+                export_path=export_path,
+                fallback_inline=fallback_inline,
             )
 
         return await run_mcp_tool("pubtator.export_review_audit_bundle", call)
@@ -601,7 +609,7 @@ def register_review_tools(mcp: FastMCP) -> None:
         min_passages_per_source: int = 1,
         min_passages_per_pmid: int = 0,
         prioritize_pmids: list[str] | None = None,
-        include_diagnostics: bool = True,
+        include_diagnostics: bool = False,
         include_tables: bool = False,
         include_references: bool = False,
         table_mode: ReviewTableMode = "preview",
@@ -611,7 +619,7 @@ def register_review_tools(mcp: FastMCP) -> None:
         include_resolver_trace: bool = False,
         ctx: Context | None = None,
     ) -> dict[str, Any]:
-        """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode uses query_fair budgeting: merged passages plus per-query summaries, a fair first-pass budget across queries before overflow, and next_steps for zero-result queries. Use dry_run to get diagnostics and predicted hit counts without returning passage text. Opt into source_fair or scarcity_first to give each PMID/source first-pass representation before overflow. Use diagnostics for query refinement and full only when per-query passage text is needed."""
+        """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode uses query_fair budgeting: merged passages plus per-query summaries, a fair first-pass budget across queries before overflow, and next_steps for zero-result queries. Use response_mode="quotes" for short citable snippets without long passage windows. Use dry_run to get diagnostics and predicted hit counts without returning passage text. Opt into source_fair or scarcity_first to give each PMID/source first-pass representation before overflow. Use diagnostics for query refinement and full only when per-query passage text is needed."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_context_service()

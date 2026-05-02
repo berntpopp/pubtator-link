@@ -21,6 +21,8 @@ from pubtator_link.services.review_context.packing import context_budget, pack_t
 from pubtator_link.services.review_context.ranking import SOURCE_COVERAGE_SCARCITY_PRIORITY
 
 MAX_DROPPED_ITEMS = 10
+QUOTE_MAX_CHARS = 350
+QUOTE_PAYLOAD_OVERHEAD_CHARS = 180
 
 
 @dataclass
@@ -46,6 +48,7 @@ def merge_batch_context(
     merged_passages: list[ContextPassage] = []
     dropped: list[ContextDropReason] = []
     seen_passage_ids: set[str] = set()
+    passage_by_id: dict[str, ContextPassage] = {}
     handled_passages: set[tuple[int, int]] = set()
     returned_counts: list[int] = []
     dropped_counts: list[int] = []
@@ -55,6 +58,7 @@ def merge_batch_context(
     pmid_stats: dict[str, PmidStatusSummary] = {}
     pmid_order: list[str] = []
     total_chars = 0
+    total_quote_payload_chars = 0
     prioritized_pmids = set(request.prioritize_pmids)
 
     for result in query_results:
@@ -123,7 +127,7 @@ def merge_batch_context(
         *,
         source_key: str | None = None,
     ) -> None:
-        nonlocal total_chars
+        nonlocal total_chars, total_quote_payload_chars
         seen_passage_ids.add(passage.passage_id)
         merged_passages.append(
             passage.model_copy(
@@ -131,11 +135,16 @@ def merge_batch_context(
                     "citation_key": f"S{len(merged_passages) + 1}",
                     "stable_citation_key": passage.stable_citation_key,
                     "char_count": len(passage.text),
+                    "matched_queries": [request.queries[query_index]],
+                    "matched_query_indices": [query_index],
                 }
             )
         )
+        passage_by_id[passage.passage_id] = merged_passages[-1]
         passage_len = len(passage.text)
         total_chars += passage_len
+        if request.response_mode == "quotes":
+            total_quote_payload_chars += quote_payload_chars(merged_passages[-1])
         query_chars[query_index] += passage_len
         returned_counts[query_index] += 1
         if source_key in source_budget_stats:
@@ -143,6 +152,15 @@ def merge_batch_context(
         pmid_summary = ensure_pmid_summary(passage.pmid)
         if pmid_summary is not None:
             pmid_summary.passages_returned += 1
+
+    def add_duplicate_match(query_index: int, passage: ContextPassage) -> None:
+        merged_passage = passage_by_id.get(passage.passage_id)
+        if merged_passage is None:
+            return
+        if query_index not in merged_passage.matched_query_indices:
+            merged_passage.matched_query_indices.append(query_index)
+            merged_passage.matched_queries.append(request.queries[query_index])
+            returned_counts[query_index] += 1
 
     def try_merge_passage(
         query_index: int,
@@ -164,7 +182,7 @@ def merge_batch_context(
             return False
         handled_passages.add(handled_key)
         if request.deduplicate_passages and passage.passage_id in seen_passage_ids:
-            drop_passage(query_index, passage, "duplicate_passage", source_key=source_key)
+            add_duplicate_match(query_index, passage)
             return True
         if len(merged_passages) >= request.max_total_passages:
             drop_passage(
@@ -177,7 +195,20 @@ def merge_batch_context(
         if total_chars + passage_len > request.max_chars:
             drop_passage(query_index, passage, "char_budget_exceeded", source_key=source_key)
             return True
-        if request.response_mode != "full":
+        if request.response_mode == "quotes":
+            next_quote_payload_chars = total_quote_payload_chars + quote_payload_chars(
+                passage,
+                matched_queries=[request.queries[query_index]],
+            )
+            if next_quote_payload_chars > request.max_response_chars:
+                drop_passage(
+                    query_index,
+                    passage,
+                    "response_char_budget_exceeded",
+                    source_key=source_key,
+                )
+                return True
+        elif request.response_mode != "full":
             next_budget = context_budget(
                 max_chars=request.max_chars,
                 text_chars=total_chars + passage_len,
@@ -369,6 +400,27 @@ def merge_batch_context(
         text_chars=text_chars,
         estimated_tokens=estimated_tokens,
         budget_text_chars=budget_text_chars,
+    )
+
+
+def quote_payload_chars(
+    passage: ContextPassage,
+    *,
+    matched_queries: list[str] | None = None,
+) -> int:
+    quote = passage.quote.text.strip() if passage.quote is not None else ""
+    if not quote:
+        quote = " ".join(passage.text.split())
+    quote_chars = min(len(quote), QUOTE_MAX_CHARS)
+    queries = passage.matched_queries if matched_queries is None else matched_queries
+    return (
+        QUOTE_PAYLOAD_OVERHEAD_CHARS
+        + len(passage.stable_citation_key or "")
+        + len(passage.pmid or "")
+        + len(passage.passage_id)
+        + len(passage.section)
+        + quote_chars
+        + sum(len(query) for query in queries)
     )
 
 

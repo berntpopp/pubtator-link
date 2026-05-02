@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import re
+from pathlib import Path
 from typing import Any, Literal, cast
 
 from pubtator_link.api.client import PubTator3Client
 from pubtator_link.api.search_filters import merge_search_filters
 from pubtator_link.config import text_processing_config
+from pubtator_link.mcp.errors import mcp_field_validation_error
+from pubtator_link.mcp.input_normalization import (
+    attach_normalization_meta,
+    normalize_retrieve_review_context_batch_args,
+)
 from pubtator_link.models.corpus_suggestion import CorpusSuggestionRequest
 from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 from pubtator_link.models.publication_passages import (
@@ -71,6 +79,8 @@ from pubtator_link.services.search_shaping import (
     shaped_search_response,
 )
 from pubtator_link.services.source_preflight import SourcePreflightService
+
+INLINE_AUDIT_BUNDLE_MAX_BYTES = 1_000_000
 
 
 def _strip_resolver_trace(result: dict[str, Any]) -> dict[str, Any]:
@@ -307,9 +317,29 @@ async def search_literature_impl(
         metadata=metadata,
         metadata_by_pmid=metadata_by_pmid,
     )
+    candidate_pmids = [item.pmid for item in response.results]
+    response_meta = {
+        "coverage_note": (
+            "Search is read-only metadata discovery. Use coverage='preflight' or "
+            "pubtator.preflight_review_sources before indexing if source coverage matters."
+        ),
+        "next_commands": [
+            {
+                "tool": "pubtator.preflight_review_sources",
+                "arguments": {"pmids": candidate_pmids},
+            },
+            {
+                "tool": "pubtator.index_review_evidence",
+                "arguments": {"review_id": "<review_id>", "pmids": candidate_pmids},
+                "requires": ["review_id"],
+            },
+        ],
+    }
     if coverage == "preflight" and preflight_service is not None:
         await attach_preflight_coverage(response, preflight_service)
-    return response.model_dump()
+    dumped = response.model_dump()
+    dumped["_meta"] = response_meta
+    return dumped
 
 
 def _selected_search_items(
@@ -768,9 +798,109 @@ async def export_review_audit_bundle_impl(
     service: ReviewAuditService,
     review_id: str,
     session_id: str | None = None,
+    export_path: str | None = None,
+    fallback_inline: bool = False,
 ) -> dict[str, Any]:
     bundle = await service.export_bundle(review_id, session_id=session_id)
-    return McpReviewAuditBundleResponse(audit_bundle=bundle).model_dump(mode="json")
+    bundle_json = bundle.model_dump(mode="json")
+    if export_path is None:
+        return McpReviewAuditBundleResponse(audit_bundle=bundle).model_dump(
+            mode="json",
+            exclude_none=True,
+        )
+
+    output_path = Path(export_path).expanduser()
+    serialized = json.dumps(bundle_json, separators=(",", ":"), sort_keys=True)
+    field_error = _audit_export_path_error(output_path)
+    if field_error is not None:
+        if fallback_inline:
+            return _inline_audit_bundle_or_error(
+                bundle_json,
+                len(serialized.encode("utf-8")),
+                field_error=field_error,
+            )
+        return McpReviewAuditBundleResponse(
+            success=False,
+            error=field_error,
+        ).model_dump(mode="json", exclude_none=True)
+
+    try:
+        with output_path.open("x", encoding="utf-8") as output_file:
+            output_file.write(serialized)
+    except FileExistsError:
+        field_error = _audit_export_path_field_error("export path already exists")
+    except IsADirectoryError:
+        field_error = _audit_export_path_field_error("export path is a directory")
+    except OSError:
+        field_error = _audit_export_path_field_error("parent directory is not writable")
+
+    if field_error is not None:
+        if fallback_inline:
+            return _inline_audit_bundle_or_error(
+                bundle_json,
+                len(serialized.encode("utf-8")),
+                field_error=field_error,
+            )
+        return McpReviewAuditBundleResponse(
+            success=False,
+            error=field_error,
+        ).model_dump(mode="json", exclude_none=True)
+
+    return McpReviewAuditBundleResponse(export_path=str(output_path)).model_dump(
+        mode="json",
+        exclude_none=True,
+    )
+
+
+def _audit_export_path_error(output_path: Path) -> dict[str, Any] | None:
+    if output_path.is_symlink():
+        return _audit_export_path_field_error("export path is a symlink")
+    if output_path.exists():
+        if output_path.is_dir():
+            return _audit_export_path_field_error("export path is a directory")
+        return _audit_export_path_field_error("export path already exists")
+
+    parent = output_path.parent
+    if not parent.exists():
+        return _audit_export_path_field_error("parent directory does not exist")
+    if not parent.is_dir():
+        return _audit_export_path_field_error("parent path is not a directory")
+    if not os.access(parent, os.W_OK):
+        return _audit_export_path_field_error("parent directory is not writable")
+    return None
+
+
+def _audit_export_path_field_error(reason: str) -> dict[str, Any]:
+    return mcp_field_validation_error(
+        field="export_path",
+        reason=reason,
+        recovery_hint="Use fallback_inline=True or choose a writable path.",
+    )
+
+
+def _inline_audit_bundle_or_error(
+    bundle_json: dict[str, Any],
+    serialized_size_bytes: int,
+    *,
+    field_error: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if serialized_size_bytes > INLINE_AUDIT_BUNDLE_MAX_BYTES:
+        error: dict[str, Any] = {
+            "code": "export_unavailable",
+            "recovery_hint": "Choose a writable export_path; the audit bundle is too large for inline JSON.",
+        }
+        if field_error is not None and "field_errors" in field_error:
+            error["field_errors"] = field_error["field_errors"]
+        return McpReviewAuditBundleResponse(
+            success=False,
+            error=error,
+        ).model_dump(mode="json", exclude_none=True)
+    response = McpReviewAuditBundleResponse(inline_bundle=bundle_json).model_dump(
+        mode="json",
+        exclude_none=True,
+    )
+    response["export_path"] = None
+    return response
 
 
 async def retrieve_review_context_impl(
@@ -818,59 +948,98 @@ async def retrieve_review_context_batch_impl(
     *,
     service: ReviewContextService,
     review_id: str,
-    queries: list[str],
+    queries: list[str] | str,
+    query: str | None = None,
+    question: str | None = None,
     session_id: str | None = None,
     pmids: list[str] | None = None,
     entity_ids: list[str] | None = None,
     sections: list[str] | None = None,
-    response_mode: ReviewBatchResponseMode = "compact",
+    response_mode: ReviewBatchResponseMode | str = "compact",
     max_passages_per_query: int = 8,
-    max_total_passages: int = 20,
+    max_total_passages: int | None = None,
+    limit: int | None = None,
+    size: int | None = None,
     max_chars: int = 12000,
     max_response_chars: int = 24000,
     deduplicate_passages: bool = True,
-    budget_strategy: BudgetStrategy = "query_fair",
+    budget_strategy: BudgetStrategy | str = "query_fair",
     min_passages_per_source: int = 1,
     min_passages_per_pmid: int = 0,
-    prioritize_pmids: list[str] | None = None,
-    include_diagnostics: bool = True,
+    prioritize_pmids: list[str] | str | None = None,
+    include_diagnostics: bool = False,
     include_tables: bool = False,
     include_references: bool = False,
-    table_mode: ReviewTableMode = "preview",
+    table_mode: ReviewTableMode | str = "preview",
     allow_truncated_passages: bool = True,
     max_chars_per_passage: int = 2200,
     dry_run: bool = False,
     include_resolver_trace: bool = False,
 ) -> dict[str, Any]:
+    args: dict[str, Any] = {
+        "review_id": review_id,
+        "queries": queries,
+        "query": query,
+        "question": question,
+        "session_id": session_id,
+        "pmids": pmids,
+        "entity_ids": entity_ids,
+        "sections": sections,
+        "response_mode": response_mode,
+        "max_passages_per_query": max_passages_per_query,
+        "max_total_passages": max_total_passages,
+        "limit": limit,
+        "size": size,
+        "max_chars": max_chars,
+        "max_response_chars": max_response_chars,
+        "deduplicate_passages": deduplicate_passages,
+        "budget_strategy": budget_strategy,
+        "min_passages_per_source": min_passages_per_source,
+        "min_passages_per_pmid": min_passages_per_pmid,
+        "prioritize_pmids": prioritize_pmids,
+        "include_diagnostics": include_diagnostics,
+        "include_tables": include_tables,
+        "include_references": include_references,
+        "table_mode": table_mode,
+        "allow_truncated_passages": allow_truncated_passages,
+        "max_chars_per_passage": max_chars_per_passage,
+        "dry_run": dry_run,
+    }
+    args = {key: value for key, value in args.items() if value is not None}
+    normalized_args, normalization_warnings = normalize_retrieve_review_context_batch_args(args)
+    request_args = {
+        "queries": normalized_args["queries"],
+        "session_id": normalized_args.get("session_id"),
+        "pmids": normalized_args.get("pmids") or [],
+        "entity_ids": normalized_args.get("entity_ids") or [],
+        "sections": normalized_args.get("sections") or [],
+        "response_mode": normalized_args["response_mode"],
+        "max_passages_per_query": normalized_args["max_passages_per_query"],
+        "max_total_passages": normalized_args.get("max_total_passages", 20),
+        "max_chars": normalized_args["max_chars"],
+        "max_response_chars": normalized_args["max_response_chars"],
+        "deduplicate_passages": normalized_args["deduplicate_passages"],
+        "budget_strategy": normalized_args["budget_strategy"],
+        "min_passages_per_source": normalized_args["min_passages_per_source"],
+        "min_passages_per_pmid": normalized_args["min_passages_per_pmid"],
+        "prioritize_pmids": normalized_args.get("prioritize_pmids") or [],
+        "include_diagnostics": normalized_args["include_diagnostics"],
+        "include_tables": normalized_args["include_tables"],
+        "include_references": normalized_args["include_references"],
+        "table_mode": normalized_args["table_mode"],
+        "allow_truncated_passages": normalized_args["allow_truncated_passages"],
+        "max_chars_per_passage": normalized_args["max_chars_per_passage"],
+        "dry_run": normalized_args["dry_run"],
+    }
+    request = RetrieveReviewContextBatchRequest(**request_args)
     response = await service.retrieve_context_batch(
         review_id=review_id,
-        request=RetrieveReviewContextBatchRequest(
-            queries=queries,
-            session_id=session_id,
-            pmids=pmids or [],
-            entity_ids=entity_ids or [],
-            sections=sections or [],
-            response_mode=response_mode,
-            max_passages_per_query=max_passages_per_query,
-            max_total_passages=max_total_passages,
-            max_chars=max_chars,
-            max_response_chars=max_response_chars,
-            deduplicate_passages=deduplicate_passages,
-            budget_strategy=budget_strategy,
-            min_passages_per_source=min_passages_per_source,
-            min_passages_per_pmid=min_passages_per_pmid,
-            prioritize_pmids=prioritize_pmids or [],
-            include_diagnostics=include_diagnostics,
-            include_tables=include_tables,
-            include_references=include_references,
-            table_mode=table_mode,
-            allow_truncated_passages=allow_truncated_passages,
-            max_chars_per_passage=max_chars_per_passage,
-            dry_run=dry_run,
-        ),
+        request=request,
     )
     result = response.model_dump()
-    return result if include_resolver_trace else _strip_resolver_trace(result)
+    if not include_resolver_trace:
+        result = _strip_resolver_trace(result)
+    return attach_normalization_meta(result, normalization_warnings)
 
 
 async def list_review_indexes_impl(

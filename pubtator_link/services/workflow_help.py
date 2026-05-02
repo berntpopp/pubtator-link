@@ -53,21 +53,31 @@ class WorkflowHelpService:
             ),
             WorkflowStep(
                 order=5,
+                tool_name="pubtator.search_guidelines",
+                purpose=(
+                    "Convenience wrapper for filtered search_literature when guideline, "
+                    "recommendation, consensus, or systematic review publication types "
+                    "should be boosted."
+                ),
+                required=False,
+            ),
+            WorkflowStep(
+                order=6,
                 tool_name="pubtator.get_publication_metadata",
                 purpose="Fetch citation-grade author and journal metadata for selected PMIDs.",
             ),
             WorkflowStep(
-                order=6,
+                order=7,
                 tool_name="pubtator.index_review_evidence",
                 purpose="Prepare the selected corpus for review-scoped retrieval.",
             ),
             WorkflowStep(
-                order=7,
+                order=8,
                 tool_name="pubtator.inspect_review_index",
                 purpose="Verify indexed coverage, source status, and sample passages.",
             ),
             WorkflowStep(
-                order=8,
+                order=9,
                 tool_name="pubtator.retrieve_review_context_batch",
                 purpose="Retrieve citable passages for final claims.",
             ),
@@ -82,6 +92,15 @@ class WorkflowHelpService:
                 condition="search results lack authors",
                 tool_name="pubtator.get_publication_metadata",
                 action="Fetch citation metadata before drafting references.",
+            ),
+            WorkflowFallback(
+                condition="GeneReviews/NBK source is an NCBI Bookshelf URL",
+                tool_name="pubtator.lookup_citation",
+                action=(
+                    "GeneReviews/NBK: do not index NCBI Bookshelf URLs directly. "
+                    "Call pubtator.lookup_citation with the NBK ID, then index the "
+                    "returned PMID when available."
+                ),
             ),
         ]
         return _response(task=task, steps=steps, fallbacks=fallbacks)

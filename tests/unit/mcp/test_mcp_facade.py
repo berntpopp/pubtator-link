@@ -86,6 +86,20 @@ def _assert_specific_object_schema(schema: dict[str, object], required: set[str]
     assert properties != {}
 
 
+def _schema_enum_values(schema: dict[str, object]) -> set[object]:
+    values: set[object] = set()
+    enum = schema.get("enum")
+    if isinstance(enum, list):
+        values.update(enum)
+    for nested_key in ("anyOf", "oneOf"):
+        nested_schemas = schema.get(nested_key)
+        if isinstance(nested_schemas, list):
+            for nested_schema in nested_schemas:
+                if isinstance(nested_schema, dict):
+                    values.update(_schema_enum_values(nested_schema))
+    return values
+
+
 def test_server_instructions_are_tool_search_friendly() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
@@ -148,6 +162,8 @@ def test_search_literature_schema_defaults_to_nlm_citations_for_metadata() -> No
 
     assert schema["properties"]["metadata"]["default"] == "basic"
     assert schema["properties"]["include_citations"]["default"] == "nlm"
+    assert schema["properties"]["coverage"]["default"] == "none"
+    assert "preflight" in _schema_enum_values(schema["properties"]["coverage"])
     assert "coverage_preflight_internal_error" in tool.description
     assert "retryable=false" in tool.description
 
@@ -184,6 +200,16 @@ def test_index_review_evidence_schema_exposes_wait_until_ready_alias() -> None:
     assert schema["properties"]["timeout_ms"]["default"] == 0
 
 
+def test_get_server_capabilities_accepts_details_argument() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp()._tool_manager._tools["pubtator.get_server_capabilities"]
+    properties = tool.parameters["properties"]
+
+    assert "details" in properties
+    assert properties["details"]["default"] is None
+
+
 def test_capabilities_expose_tool_categories_and_diagnostics_workflow() -> None:
     from pubtator_link.mcp.resources import get_capabilities_resource
 
@@ -191,9 +217,9 @@ def test_capabilities_expose_tool_categories_and_diagnostics_workflow() -> None:
 
     assert capabilities["tool_categories"]["discovery"]
     assert "pubtator.search_literature" in capabilities["tool_categories"]["discovery"]
-    assert "pubtator.index_review_evidence" in capabilities["tool_categories"]["indexing"]
+    assert "pubtator.index_review_evidence" in capabilities["tool_categories"]["review"]
     assert "pubtator.retrieve_review_context_batch" in capabilities["tool_categories"]["retrieval"]
-    assert "pubtator.diagnostics" in capabilities["workflow"]["recommended_tools"]
+    assert "pubtator.diagnostics" in capabilities["core_workflow_tools"]
 
 
 def test_capabilities_resource_advertises_grounding_workflows() -> None:
@@ -202,7 +228,21 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
     from pubtator_link.models.discovery import MeshLookupRequest, RelatedArticlesRequest
     from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 
-    capabilities = get_capabilities_resource()
+    payload = get_capabilities_resource(
+        details=[
+            "recommended_workflows",
+            "workflow_help",
+            "tool_groups",
+            "large_output_guidance",
+            "review_rerag",
+            "discovery_workflow",
+            "output_cheatsheet",
+            "tools",
+            "search_defaults",
+            "sample_calls",
+        ]
+    )
+    capabilities = payload["details"]
     sample_calls = capabilities["sample_calls"]
 
     assert "recommended_workflows" in capabilities
@@ -228,7 +268,12 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
     assert "pubtator.suggest_corpus" in capabilities["tool_groups"]["discovery"]
     assert capabilities["search_defaults"]["metadata_modes"] == ["none", "basic", "full"]
     assert sample_calls["pubtator.search_literature"]["metadata"] == "basic"
-    assert len(capabilities["workflow_help"]["fallbacks"]) == 2
+    assert any(
+        fallback["tool_name"] == "pubtator.lookup_citation"
+        and "GeneReviews/NBK" in fallback["condition"]
+        and "NBK ID" in fallback["action"]
+        for fallback in capabilities["workflow_help"]["fallbacks"]
+    )
     assert "limit" in sample_calls["pubtator.lookup_mesh"]
     assert "max_results" not in sample_calls["pubtator.lookup_mesh"]
     assert "limit" in sample_calls["pubtator.find_related_articles"]
@@ -242,7 +287,18 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
 def test_capabilities_document_new_budget_and_stable_citation_fields() -> None:
     from pubtator_link.mcp.resources import get_capabilities_resource
 
-    capabilities = get_capabilities_resource()
+    payload = get_capabilities_resource(
+        details=[
+            "prompt_injection",
+            "budgeting_defaults",
+            "schema_policy",
+            "section_taxonomy",
+            "citation_keys",
+            "output_cheatsheet",
+            "review_rerag",
+        ]
+    )
+    capabilities = payload["details"]
 
     assert "prompt_injection" in capabilities
     assert "scarcity_first" in str(capabilities)
@@ -266,7 +322,9 @@ def test_capabilities_document_error_recovery_and_compact_search() -> None:
 
     from pubtator_link.mcp.resources import get_capabilities_resource
 
-    text = json.dumps(get_capabilities_resource()).lower()
+    text = json.dumps(
+        get_capabilities_resource(details=["recovery_flow", "search_defaults", "sample_calls"])
+    ).lower()
 
     assert "db-migrate" in text
     assert "get_publication_passages" in text
@@ -458,7 +516,8 @@ def test_common_mcp_tools_are_flat_and_unversioned() -> None:
     assert search_schema["properties"]["limit"]["default"] == 5
     assert "entity_ids" in search_schema["properties"]
     assert "guideline_boost" in search_schema["properties"]
-    assert search_schema["properties"]["coverage"]["default"] == "preflight"
+    assert search_schema["properties"]["coverage"]["default"] == "none"
+    assert "preflight" in _schema_enum_values(search_schema["properties"]["coverage"])
     assert search_schema["properties"]["metadata"]["default"] == "basic"
 
 
@@ -477,7 +536,7 @@ def test_review_context_schema_defaults_are_stable() -> None:
     batch_schema = tools["pubtator.retrieve_review_context_batch"].parameters["properties"]
     assert batch_schema["response_mode"]["default"] == "compact"
     assert batch_schema["budget_strategy"]["default"] == "query_fair"
-    assert batch_schema["include_diagnostics"]["default"] is True
+    assert batch_schema["include_diagnostics"]["default"] is False
     assert batch_schema["table_mode"]["default"] == "preview"
 
 
@@ -510,6 +569,20 @@ def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
         assert "request" not in properties
         for property_name in expected_properties:
             assert property_name in properties
+
+
+def test_export_review_audit_bundle_exposes_export_options() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp()
+    tool = mcp._tool_manager._tools["pubtator.export_review_audit_bundle"]
+    properties = tool.parameters["properties"]
+    required = set(tool.parameters.get("required", []))
+
+    assert "export_path" in properties
+    assert "fallback_inline" in properties
+    assert "export_path" not in required
+    assert "fallback_inline" not in required
 
 
 def test_high_use_mcp_tools_expose_specific_output_schemas() -> None:
@@ -566,7 +639,9 @@ def test_batch_output_schema_allows_omitted_empty_results() -> None:
 def test_capabilities_expose_llm_driver_contract_for_core_workflow() -> None:
     from pubtator_link.mcp.resources import get_capabilities_resource
 
-    contract = get_capabilities_resource()["llm_driver_contract"]
+    contract = get_capabilities_resource(details=["llm_driver_contract"])["details"][
+        "llm_driver_contract"
+    ]
 
     assert contract["version"] == "2026-05-02"
     assert contract["discovery_policy"]["strategy"] == "progressive_discovery"
@@ -657,7 +732,7 @@ def test_public_hosted_tools_have_expected_annotations() -> None:
         assert tool.annotations.destructiveHint is False
 
 
-def test_write_capable_mcp_tools_have_expected_annotations() -> None:
+def test_write_capable_mcp_tools_include_audit_export_annotations() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
     mcp = create_pubtator_mcp()
@@ -674,6 +749,12 @@ def test_write_capable_mcp_tools_have_expected_annotations() -> None:
     assert review_index.destructiveHint is False
     assert review_index.idempotentHint is True
     assert review_index.openWorldHint is True
+
+    audit_export = tools["pubtator.export_review_audit_bundle"].annotations
+    assert audit_export.readOnlyHint is False
+    assert audit_export.destructiveHint is False
+    assert audit_export.idempotentHint is False
+    assert audit_export.openWorldHint is True
 
 
 def test_open_world_tools_are_marked_open_world() -> None:
@@ -692,19 +773,27 @@ def test_capabilities_resource_tool_names_are_registered() -> None:
     mcp = create_pubtator_mcp()
     registered_tools = set(mcp._tool_manager._tools)
     capabilities = get_capabilities_resource()
-    advertised_tools = set(capabilities["tools"])
-    for group_tools in capabilities["tool_groups"].values():
+    advertised_tools = set(capabilities["core_workflow_tools"])
+    for group_tools in capabilities["tool_categories"].values():
         advertised_tools.update(group_tools)
-    advertised_tools.update(capabilities["review_rerag"]["tools"])
 
     assert registered_tools == EXPECTED_PUBLIC_TOOL_NAMES
-    assert advertised_tools == registered_tools == EXPECTED_PUBLIC_TOOL_NAMES
+    assert advertised_tools <= registered_tools
 
 
 def test_capabilities_include_context_management_cheatsheet() -> None:
     from pubtator_link.mcp.resources import get_capabilities_resource
 
-    capabilities = get_capabilities_resource()
+    payload = get_capabilities_resource(
+        details=[
+            "sample_calls",
+            "output_cheatsheet",
+            "budgeting_defaults",
+            "large_output_guidance",
+            "tools",
+        ]
+    )
+    capabilities = payload["details"]
 
     assert "sample_calls" in capabilities
     assert "output_cheatsheet" in capabilities

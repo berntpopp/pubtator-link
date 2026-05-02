@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from pubtator_link.db.migrate import ReviewSchemaDiagnostics
+from pubtator_link.mcp.errors import get_recent_mcp_errors
 from pubtator_link.models.responses import DiagnosticsResponse
 
 
@@ -24,6 +25,7 @@ class DiagnosticsService:
     async def get_diagnostics(self) -> DiagnosticsResponse:
         recovery: list[str] = []
         schema = await self._inspect_schema()
+        recent_errors = get_recent_mcp_errors()
         database: dict[str, Any] = {
             "connected": schema.connected,
             "schema_current": schema.current,
@@ -44,10 +46,26 @@ class DiagnosticsService:
             "review_queue": {"available": self._review_queue_available()},
             "pubtator_api": {"status": "unknown"},
             "europe_pmc": {"enabled": self._europe_pmc_enabled()},
+            "recent_mcp_errors": {"count": len(recent_errors), "latest": recent_errors},
         }
+        review_error_prefixes = (
+            "pubtator.index_review",
+            "pubtator.stage_research_session",
+            "pubtator.retrieve_review_context",
+            "pubtator.export_review_audit_bundle",
+        )
+        recent_review_errors = [
+            error
+            for error in recent_errors
+            if str(error.get("tool_name", "")).startswith(review_error_prefixes)
+        ]
+        for error in recent_review_errors:
+            tool_name = error["tool_name"]
+            reason = error.get("raw_message") or error.get("message")
+            recovery.append(f"Recent MCP tool failure in {tool_name}: {reason}")
         if not database["connected"]:
             status = "not_ready"
-        elif not database["schema_current"]:
+        elif not database["schema_current"] or recent_review_errors:
             status = "degraded"
         else:
             status = "ready"

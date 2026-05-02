@@ -77,6 +77,82 @@ async def test_dry_run_reports_counts_without_enqueueing() -> None:
 
 
 @pytest.mark.asyncio
+async def test_index_includes_source_coverage_summary_before_enqueue() -> None:
+    class Repository(FakeIndexRepository):
+        def __init__(self) -> None:
+            super().__init__()
+            self.coverage_source_ids: list[str] = []
+
+        async def source_coverage_summary(self, review_id, source_ids):
+            self.coverage_source_ids = source_ids
+            return {
+                "total_sources": 2,
+                "full_text": 1,
+                "abstract_only": 1,
+                "title_only": 0,
+                "failed": 0,
+            }
+
+    repository = Repository()
+    service = ReviewIndexingService(repository=repository, queue=FakeQueue())
+
+    response = await service.index_review_evidence(
+        "review-1",
+        IndexReviewEvidenceRequest(pmids=["1", "2"], dry_run=True),
+    )
+
+    assert repository.coverage_source_ids == ["PMID:1", "PMID:2"]
+    assert response.source_preflight_summary["total_sources"] == 2
+    assert "abstract_only" in response.source_preflight_message
+
+
+@pytest.mark.asyncio
+async def test_index_continues_when_source_coverage_summary_raises() -> None:
+    class Repository(FakeIndexRepository):
+        async def source_coverage_summary(self, review_id, source_ids):
+            raise RuntimeError("coverage store unavailable")
+
+    queue = FakeQueue()
+    service = ReviewIndexingService(repository=Repository(), queue=queue)
+
+    response = await service.index_review_evidence(
+        "review-1",
+        IndexReviewEvidenceRequest(pmids=["1"], dry_run=False),
+    )
+
+    assert queue.calls == [("pmid", "review-1", "1")]
+    assert response.queued == 1
+    assert response.source_preflight_summary == {}
+    assert any(
+        "source_coverage_summary_unavailable" in warning
+        for warning in response.source_preflight_warnings
+    )
+
+
+@pytest.mark.asyncio
+async def test_index_continues_when_source_coverage_summary_is_malformed() -> None:
+    class Repository(FakeIndexRepository):
+        async def source_coverage_summary(self, review_id, source_ids):
+            return {"total_sources": "unknown", "full_text": None}
+
+    queue = FakeQueue()
+    service = ReviewIndexingService(repository=Repository(), queue=queue)
+
+    response = await service.index_review_evidence(
+        "review-1",
+        IndexReviewEvidenceRequest(pmids=["1"], dry_run=False),
+    )
+
+    assert queue.calls == [("pmid", "review-1", "1")]
+    assert response.queued == 1
+    assert response.source_preflight_summary == {}
+    assert any(
+        "source_coverage_summary_unavailable" in warning
+        for warning in response.source_preflight_warnings
+    )
+
+
+@pytest.mark.asyncio
 async def test_wait_for_terminal_times_out_with_retry_after() -> None:
     repository = FakeIndexRepository(
         existing={"PMID:1": "queued"},
@@ -107,6 +183,33 @@ async def test_index_links_sources_to_session() -> None:
 
     assert response.newly_queued == 1
     assert repository.linked == [("review-1", "session-1", "PMID:1")]
+
+
+@pytest.mark.asyncio
+async def test_index_rejects_bookshelf_url_before_enqueue() -> None:
+    service = ReviewIndexingService(repository=FakeIndexRepository(), queue=FakeQueue())
+
+    with pytest.raises(ValueError, match="bookshelf_url_not_indexable"):
+        await service.index_review_evidence(
+            "review-1",
+            IndexReviewEvidenceRequest(
+                curated_urls=["https://www.ncbi.nlm.nih.gov/books/NBK1139/"]
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_index_rejects_bookshelf_url_without_nbk_before_enqueue() -> None:
+    queue = FakeQueue()
+    service = ReviewIndexingService(repository=FakeIndexRepository(), queue=queue)
+
+    with pytest.raises(ValueError, match="bookshelf_url_not_indexable"):
+        await service.index_review_evidence(
+            "review-1",
+            IndexReviewEvidenceRequest(curated_urls=["https://www.ncbi.nlm.nih.gov/books/"]),
+        )
+
+    assert queue.calls == []
 
 
 @pytest.mark.asyncio

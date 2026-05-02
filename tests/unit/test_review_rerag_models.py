@@ -162,6 +162,31 @@ def test_index_review_evidence_rejects_candidate_fast_prepare_mode() -> None:
         IndexReviewEvidenceRequest(pmids=["40234174"], prepare_mode="candidate_fast")
 
 
+def test_index_review_evidence_response_exposes_source_preflight_summary() -> None:
+    from pubtator_link.models.review_rerag import (
+        IndexReviewEvidenceResponse,
+        PreparationStatus,
+    )
+
+    response = IndexReviewEvidenceResponse(
+        review_id="r1",
+        queued=0,
+        already_prepared=0,
+        preparation_status=PreparationStatus(),
+        source_preflight_summary={
+            "total_sources": 2,
+            "full_text": 1,
+            "abstract_only": 1,
+            "title_only": 0,
+            "failed": 0,
+        },
+        source_preflight_message="1/2 sources full_text, 1/2 abstract_only, 0/2 title_only, 0/2 failed.",
+    )
+
+    assert response.source_preflight_summary["abstract_only"] == 1
+    assert "abstract_only" in response.source_preflight_message
+
+
 def test_stage_research_session_request_accepts_query_and_limits() -> None:
     request = StageResearchSessionRequest(
         query="familial mediterranean fever colchicine guideline",
@@ -254,6 +279,36 @@ def test_batch_request_defaults_to_compact_context_safe_mode() -> None:
     assert request.include_tables is False
     assert request.include_references is False
     assert request.table_mode == "preview"
+
+
+def test_batch_response_accepts_quotes_mode() -> None:
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        PreparationStatus,
+        RetrieveReviewContextBatchResponse,
+        ReviewQuote,
+    )
+
+    response = RetrieveReviewContextBatchResponse(
+        review_id="r1",
+        response_mode="quotes",
+        results=[],
+        merged_context_pack=ContextPack(question="q1", passages=[], citation_map={}),
+        preparation_status=PreparationStatus(),
+        quotes=[
+            ReviewQuote(
+                stable_citation_key="c_abc",
+                pmid="123",
+                passage_id="PMID:123:abstract:1",
+                section="abstract",
+                quote="MEFV evidence.",
+                matched_queries=["MEFV"],
+                coverage_status="abstract_only",
+            )
+        ],
+    )
+
+    assert response.quotes[0].stable_citation_key == "c_abc"
 
 
 def test_context_pack_budget_metadata_defaults() -> None:
@@ -389,11 +444,32 @@ def test_mcp_review_audit_bundle_response_preserves_existing_wrapper_shape() -> 
         stable_citation_keys={},
     )
 
-    dumped = McpReviewAuditBundleResponse(audit_bundle=bundle).model_dump(mode="json")
+    dumped = McpReviewAuditBundleResponse(audit_bundle=bundle).model_dump(
+        mode="json",
+        exclude_none=True,
+    )
 
     assert set(dumped) == {"success", "audit_bundle"}
     assert dumped["success"] is True
     assert dumped["audit_bundle"]["review_id"] == "review-1"
+
+
+def test_audit_bundle_response_can_report_field_errors() -> None:
+    from pubtator_link.models.review_rerag import McpReviewAuditBundleResponse
+
+    response = McpReviewAuditBundleResponse(
+        success=False,
+        audit_bundle=None,
+        error={
+            "code": "validation_failed",
+            "field_errors": [
+                {"field": "export_path", "reason": "parent directory is not writable"}
+            ],
+            "recovery_hint": "Use fallback_inline=True or choose a writable path.",
+        },
+    )
+
+    assert response.error["field_errors"][0]["field"] == "export_path"
 
 
 def test_review_index_inventory_item_defaults_are_safe() -> None:

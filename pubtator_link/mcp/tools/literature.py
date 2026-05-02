@@ -52,7 +52,7 @@ def register_literature_tools(mcp: FastMCP) -> None:
         limit: Annotated[int | None, Field(ge=1, le=20)] = 5,
         entity_ids: list[str] | None = None,
         guideline_boost: bool = False,
-        coverage: SearchCoverageMode = "preflight",
+        coverage: SearchCoverageMode = "none",
         metadata: SearchMetadataMode = "basic",
     ) -> dict[str, Any]:
         """Use this when a user needs PubMed literature search through PubTator3. Use short biomedical queries, optional sort such as 'score desc' or 'date desc', flat publication/year filters, raw filters JSON, optional section filters, and coverage='preflight' when source coverage should be visible before indexing. If preflight_error_code is coverage_preflight_internal_error, retryable=false means do not retry blindly; continue with search results or inspect diagnostics."""
@@ -105,7 +105,7 @@ def register_literature_tools(mcp: FastMCP) -> None:
         entity_ids: list[str] | None = None,
         coverage: SearchCoverageMode = "preflight",
     ) -> dict[str, Any]:
-        """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. Defaults to source coverage preflight so abstract-only guideline hits are visible before indexing."""
+        """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. This is a convenience wrapper over pubtator.search_literature with guideline/systematic-review publication-type filters and guideline boosting, not an independent guideline database. Defaults to source coverage preflight so abstract-only guideline hits are visible before indexing."""
 
         async def call() -> dict[str, Any]:
             preflight_service = (

@@ -6,6 +6,31 @@ from typing import ClassVar
 import pytest
 
 from pubtator_link.mcp.service_adapters import stage_research_session_impl
+from pubtator_link.models.review_rerag import (
+    PreparationStatus,
+    ReviewAuditBundle,
+    ReviewIndexTotals,
+)
+
+
+class _FakeReviewAuditBundleService:
+    async def export_bundle(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> ReviewAuditBundle:
+        return ReviewAuditBundle(
+            review_id=review_id,
+            session_id=session_id,
+            generated_at="2026-05-02T00:00:00Z",
+            preparation_status=PreparationStatus(),
+            totals=ReviewIndexTotals(),
+            sources=[],
+            failed_sources=[],
+            coverage_distribution={},
+            resolver_attempts=[],
+            passage_ids=[],
+            stable_citation_keys={},
+            index_snapshot_date="2026-05-02",
+        )
 
 
 @pytest.mark.asyncio
@@ -287,11 +312,6 @@ async def test_get_neighboring_review_passages_adapter_calls_service() -> None:
 @pytest.mark.asyncio
 async def test_export_review_audit_bundle_adapter_returns_bundle() -> None:
     from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
-    from pubtator_link.models.review_rerag import (
-        PreparationStatus,
-        ReviewAuditBundle,
-        ReviewIndexTotals,
-    )
 
     class FakeService:
         async def export_bundle(
@@ -321,6 +341,132 @@ async def test_export_review_audit_bundle_adapter_returns_bundle() -> None:
     assert result["success"] is True
     assert result["audit_bundle"]["review_id"] == "rev_123"
     assert result["audit_bundle"]["index_snapshot_date"] is not None
+
+
+@pytest.mark.asyncio
+async def test_export_review_audit_bundle_adapter_writes_new_file(tmp_path) -> None:
+    from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
+
+    export_path = tmp_path / "audit.json"
+
+    result = await export_review_audit_bundle_impl(
+        service=_FakeReviewAuditBundleService(),
+        review_id="rev_123",
+        export_path=str(export_path),
+    )
+
+    assert result == {"success": True, "export_path": str(export_path)}
+    written = json.loads(export_path.read_text(encoding="utf-8"))
+    assert written["review_id"] == "rev_123"
+
+
+@pytest.mark.asyncio
+async def test_export_review_audit_bundle_adapter_refuses_existing_file(tmp_path) -> None:
+    from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
+
+    export_path = tmp_path / "audit.json"
+    export_path.write_text("do not replace", encoding="utf-8")
+
+    result = await export_review_audit_bundle_impl(
+        service=_FakeReviewAuditBundleService(),
+        review_id="rev_123",
+        export_path=str(export_path),
+    )
+
+    assert result["success"] is False
+    assert result["error"]["field_errors"][0]["field"] == "export_path"
+    assert "already exists" in result["error"]["field_errors"][0]["reason"]
+    assert export_path.read_text(encoding="utf-8") == "do not replace"
+
+
+@pytest.mark.asyncio
+async def test_export_review_audit_bundle_adapter_refuses_directory(tmp_path) -> None:
+    from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
+
+    result = await export_review_audit_bundle_impl(
+        service=_FakeReviewAuditBundleService(),
+        review_id="rev_123",
+        export_path=str(tmp_path),
+    )
+
+    assert result["success"] is False
+    assert result["error"]["field_errors"][0]["field"] == "export_path"
+    assert "directory" in result["error"]["field_errors"][0]["reason"]
+
+
+@pytest.mark.asyncio
+async def test_export_review_audit_bundle_adapter_returns_field_error_without_inline(
+    tmp_path,
+) -> None:
+    from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
+
+    result = await export_review_audit_bundle_impl(
+        service=_FakeReviewAuditBundleService(),
+        review_id="rev_123",
+        export_path=str(tmp_path / "missing" / "audit.json"),
+        fallback_inline=False,
+    )
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "validation_failed"
+    assert result["error"]["field_errors"][0]["field"] == "export_path"
+
+
+@pytest.mark.asyncio
+async def test_export_review_audit_bundle_adapter_returns_inline_fallback() -> None:
+    from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
+    from pubtator_link.models.review_rerag import (
+        PreparationStatus,
+        ReviewAuditBundle,
+        ReviewIndexTotals,
+    )
+
+    class Service:
+        async def export_bundle(self, review_id, session_id=None):
+            return ReviewAuditBundle(
+                review_id=review_id,
+                session_id=session_id,
+                generated_at="2026-05-02T00:00:00Z",
+                preparation_status=PreparationStatus(),
+                totals=ReviewIndexTotals(),
+                sources=[],
+                failed_sources=[],
+                coverage_distribution={},
+                resolver_attempts=[],
+                passage_ids=[],
+                stable_citation_keys={},
+            )
+
+    result = await export_review_audit_bundle_impl(
+        service=Service(),
+        review_id="r1",
+        fallback_inline=True,
+        export_path="/not/writable/audit.json",
+    )
+
+    assert result["success"] is True
+    assert result["inline_bundle"] is not None
+    assert result["export_path"] is None
+
+
+@pytest.mark.asyncio
+async def test_export_review_audit_bundle_oversized_inline_fallback_preserves_field_errors(
+    monkeypatch, tmp_path
+) -> None:
+    from pubtator_link.mcp import service_adapters
+
+    monkeypatch.setattr(service_adapters, "INLINE_AUDIT_BUNDLE_MAX_BYTES", 1)
+
+    result = await service_adapters.export_review_audit_bundle_impl(
+        service=_FakeReviewAuditBundleService(),
+        review_id="rev_123",
+        export_path=str(tmp_path / "missing" / "audit.json"),
+        fallback_inline=True,
+    )
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "export_unavailable"
+    assert result["error"]["field_errors"][0]["field"] == "export_path"
 
 
 async def test_stage_research_session_impl_calls_service() -> None:
@@ -478,6 +624,15 @@ async def test_index_review_evidence_adapter_returns_lifecycle_guidance() -> Non
                 "URL:https://example.org/already-prepared.pdf": "complete",
             }
 
+        async def source_coverage_summary(self, review_id, source_ids):
+            return {
+                "total_sources": 3,
+                "full_text": 1,
+                "abstract_only": 2,
+                "title_only": 0,
+                "failed": 0,
+            }
+
         async def preparation_status(self, review_id, *, session_id=None):
             return PreparationStatus(queued=1, complete=2)
 
@@ -502,6 +657,8 @@ async def test_index_review_evidence_adapter_returns_lifecycle_guidance() -> Non
     assert set(result) >= {"success", "review_id", "preparation_status"}
     assert result["retry_after_ms"] == 3000
     assert result["index_snapshot_date"] is not None
+    assert result["source_preflight_summary"]["abstract_only"] == 2
+    assert "abstract_only" in result["source_preflight_message"]
     assert "already indexed sources are no-ops" in result["lifecycle_note"]
     assert "inspect_review_index" in result["lifecycle_note"]
 
@@ -656,6 +813,134 @@ async def test_retrieve_review_context_batch_adapter_omits_resolver_trace_by_def
 
 
 @pytest.mark.asyncio
+async def test_retrieve_review_context_batch_adapter_normalizes_llm_input_mistakes() -> None:
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        PreparationStatus,
+        RetrieveReviewContextBatchResponse,
+    )
+
+    captured_request = None
+
+    class Service:
+        async def retrieve_context_batch(self, review_id, request):
+            nonlocal captured_request
+            captured_request = request
+            return RetrieveReviewContextBatchResponse(
+                review_id=review_id,
+                response_mode="compact",
+                results=[],
+                merged_context_pack=ContextPack(question="", passages=[], citation_map={}),
+                preparation_status=PreparationStatus(),
+            )
+
+    result = await retrieve_review_context_batch_impl(
+        service=Service(),
+        review_id="r1",
+        queries="MEFV",
+        response_mode="Quotes",
+        limit=3,
+    )
+
+    assert result["_meta"]["normalized_arguments"]
+    assert captured_request.queries == ["MEFV"]
+    assert captured_request.response_mode == "quotes"
+    assert captured_request.max_total_passages == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("alias", ["limit", "size"])
+async def test_retrieve_review_context_batch_adapter_rejects_ambiguous_limit_alias(
+    alias: str,
+) -> None:
+    from pubtator_link.mcp.input_normalization import InputNormalizationError
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
+
+    class Service:
+        async def retrieve_context_batch(self, review_id, request):
+            raise AssertionError("service should not be called for ambiguous arguments")
+
+    with pytest.raises(InputNormalizationError) as error:
+        await retrieve_review_context_batch_impl(
+            service=Service(),
+            review_id="r1",
+            queries=["MEFV"],
+            max_total_passages=5,
+            **{alias: 3},
+        )
+
+    assert error.value.field_errors[0]["field"] == "max_total_passages"
+
+
+@pytest.mark.asyncio
+async def test_retrieve_review_context_batch_adapter_validates_quotes_numeric_bounds() -> None:
+    from pydantic import ValidationError
+
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
+
+    class Service:
+        async def retrieve_context_batch(self, review_id, request):
+            raise AssertionError("service should not be called for invalid arguments")
+
+    with pytest.raises(ValidationError):
+        await retrieve_review_context_batch_impl(
+            service=Service(),
+            review_id="r1",
+            queries=["MEFV"],
+            response_mode="Quotes",
+            max_total_passages=999,
+        )
+
+
+@pytest.mark.asyncio
+async def test_retrieve_review_context_batch_adapter_constructs_quotes_request_directly(
+    monkeypatch,
+) -> None:
+    from pubtator_link.mcp import service_adapters
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        PreparationStatus,
+        RetrieveReviewContextBatchRequest,
+        RetrieveReviewContextBatchResponse,
+    )
+
+    constructed_modes: list[str] = []
+
+    class RecordingRequest(RetrieveReviewContextBatchRequest):
+        def __init__(self, **data):
+            constructed_modes.append(data["response_mode"])
+            super().__init__(**data)
+
+    class Service:
+        request = None
+
+        async def retrieve_context_batch(self, review_id, request):
+            self.request = request
+            return RetrieveReviewContextBatchResponse(
+                review_id=review_id,
+                response_mode=request.response_mode,
+                results=[],
+                merged_context_pack=ContextPack(question="", passages=[], citation_map={}),
+                preparation_status=PreparationStatus(),
+            )
+
+    monkeypatch.setattr(service_adapters, "RetrieveReviewContextBatchRequest", RecordingRequest)
+    service = Service()
+
+    await retrieve_review_context_batch_impl(
+        service=service,
+        review_id="r1",
+        queries=["MEFV"],
+        response_mode="Quotes",
+    )
+
+    assert constructed_modes == ["quotes"]
+    assert service.request.response_mode == "quotes"
+
+
+@pytest.mark.asyncio
 async def test_list_review_indexes_adapter_calls_lifecycle_service() -> None:
     from pubtator_link.mcp.service_adapters import list_review_indexes_impl
     from pubtator_link.models.review_rerag import ListReviewIndexesResponse
@@ -802,6 +1087,44 @@ async def test_search_literature_adapter_maps_client_results() -> None:
     assert result["success"] is True
     assert result["query"] == "BRCA1"
     assert result["results"][0]["pmid"] == "29355051"
+
+
+@pytest.mark.asyncio
+async def test_search_literature_default_does_not_require_preflight_service() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {"results": [{"pmid": "123", "title": "MEFV colchicine"}], "count": 1}
+
+    class ExplodingPreflight:
+        async def preflight_pmids(self, pmids):
+            raise RuntimeError("review database unavailable")
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="MEFV colchicine",
+        coverage="none",
+        preflight_service=ExplodingPreflight(),
+        metadata="none",
+        metadata_service=None,
+    )
+
+    assert result["success"] is True
+    assert result["results"]
+    assert "review database unavailable" not in str(result).lower()
+    assert result["_meta"]["coverage_note"].startswith("Search is read-only metadata discovery.")
+    assert result["_meta"]["next_commands"] == [
+        {
+            "tool": "pubtator.preflight_review_sources",
+            "arguments": {"pmids": ["123"]},
+        },
+        {
+            "tool": "pubtator.index_review_evidence",
+            "arguments": {"review_id": "<review_id>", "pmids": ["123"]},
+            "requires": ["review_id"],
+        },
+    ]
 
 
 @pytest.mark.asyncio
