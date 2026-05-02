@@ -286,6 +286,7 @@ class ReviewContextService:
                     estimated_tokens=0,
                     budget=dry_run_budget,
                     dropped=[],
+                    dropped_summary=merged.dropped_summary,
                 ),
                 preparation_status=await self._preparation_status(
                     review_id, session_id=request.session_id
@@ -334,6 +335,7 @@ class ReviewContextService:
                 estimated_tokens=merged.estimated_tokens,
                 budget=budget,
                 dropped=merged.dropped,
+                dropped_summary=merged.dropped_summary,
             ),
             preparation_status=await self._preparation_status(
                 review_id, session_id=request.session_id
@@ -373,12 +375,16 @@ class ReviewContextService:
         )
         if request.include_metadata and self.metadata_service is not None:
             await self._attach_source_metadata(sources, request.metadata)
+        coverage_summary = {"full_text": 0, "abstract_only": 0, "title_only": 0, "unknown": 0}
+        for source in sources:
+            coverage_summary[source.coverage] = coverage_summary.get(source.coverage, 0) + 1
         return InspectReviewIndexResponse(
             review_id=review_id,
             preparation_status=preparation_status,
             sources=sources,
             totals=totals,
             failed_sources=failed_sources,
+            coverage_summary=coverage_summary,
             index_snapshot_date=index_snapshot_date(),
         )
 

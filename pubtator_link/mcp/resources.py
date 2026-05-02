@@ -55,6 +55,43 @@ def get_capabilities_resource() -> dict[str, Any]:
             "pubtator.get_evidence_certainty",
             "pubtator.get_server_capabilities",
         ],
+        "tool_categories": {
+            "discovery": [
+                "pubtator.search_literature",
+                "pubtator.search_guidelines",
+                "pubtator.search_biomedical_entities",
+                "pubtator.find_entity_relations",
+                "pubtator.lookup_variant_evidence",
+            ],
+            "indexing": [
+                "pubtator.preflight_review_sources",
+                "pubtator.stage_research_session",
+                "pubtator.index_review_evidence",
+                "pubtator.inspect_review_index",
+            ],
+            "retrieval": [
+                "pubtator.retrieve_review_context",
+                "pubtator.retrieve_review_context_batch",
+                "pubtator.get_review_passages_by_id",
+                "pubtator.get_neighboring_review_passages",
+            ],
+            "metadata": [
+                "pubtator.get_publication_metadata",
+                "pubtator.get_publication_passages",
+                "pubtator.estimate_publication_context",
+                "pubtator.diagnostics",
+            ],
+        },
+        "workflow": {
+            "recommended_tools": [
+                "pubtator.search_literature",
+                "pubtator.preflight_review_sources",
+                "pubtator.index_review_evidence",
+                "pubtator.inspect_review_index",
+                "pubtator.diagnostics",
+                "pubtator.retrieve_review_context_batch",
+            ],
+        },
         "recommended_workflows": [
             "Call pubtator.workflow_help for the canonical task-specific sequence.",
             "search -> preflight -> index -> inspect -> retrieve for review-grounded answers",

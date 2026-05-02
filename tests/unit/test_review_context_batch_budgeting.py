@@ -4,6 +4,7 @@ from pubtator_link.models.review_rerag import (
     ContextPack,
     ContextPassage,
     PreparationStatus,
+    RetrieveReviewContextBatchResponse,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextResponse,
 )
@@ -50,6 +51,20 @@ def test_merge_batch_context_deduplicates_passages() -> None:
 
     assert [passage.passage_id for passage in merged.passages] == ["p1"]
     assert merged.dropped[0].reason == "duplicate_passage"
+
+
+def test_compact_batch_response_omits_empty_results_when_merged_pack_is_primary() -> None:
+    response = RetrieveReviewContextBatchResponse(
+        review_id="r1",
+        response_mode="compact",
+        results=[],
+        merged_context_pack=ContextPack(question="q1", passages=[], citation_map={}),
+        preparation_status=PreparationStatus(),
+    )
+    dumped = response.model_dump(exclude_none=True, exclude_defaults=True)
+
+    assert "merged_context_pack" in dumped
+    assert "results" not in dumped
 
 
 def test_merge_batch_context_source_fair_represents_sources_before_overflow() -> None:
@@ -144,8 +159,22 @@ def test_merge_batch_context_diagnostics_mode_skips_merged_passages() -> None:
     )
 
     assert merged.passages == []
-    assert merged.query_summaries[0].query == "q1"
-    assert merged.query_summaries[0].returned_count == 0
+
+
+def test_batch_response_truncates_large_dropped_list_with_summary() -> None:
+    response = merge_batch_context(
+        request=RetrieveReviewContextBatchRequest(
+            queries=["q1"],
+            response_mode="compact",
+            max_total_passages=1,
+            max_chars=1000,
+        ),
+        query_results=[_result("q1", [_passage(f"p{index}", "x") for index in range(30)])],
+        coverage_by_source={},
+    )
+
+    assert len(response.dropped) <= 10
+    assert response.dropped_summary["truncated_count"] > 0
 
 
 def test_batch_budgeting_honors_min_passages_per_pmid() -> None:

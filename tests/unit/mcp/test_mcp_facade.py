@@ -148,6 +148,37 @@ def test_search_literature_schema_defaults_to_nlm_citations_for_metadata() -> No
     assert schema["properties"]["include_citations"]["default"] == "nlm"
 
 
+def test_index_review_evidence_schema_does_not_expose_prepare_mode() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp()._tool_manager._tools["pubtator.index_review_evidence"]
+    schema = tool.parameters
+
+    assert "prepare_mode" not in schema["properties"]
+
+
+def test_index_review_evidence_schema_exposes_wait_until_ready_alias() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp()._tool_manager._tools["pubtator.index_review_evidence"]
+    schema = tool.parameters
+
+    assert schema["properties"]["wait_until_ready"]["default"] is False
+    assert schema["properties"]["timeout_ms"]["default"] == 0
+
+
+def test_capabilities_expose_tool_categories_and_diagnostics_workflow() -> None:
+    from pubtator_link.mcp.resources import get_capabilities_resource
+
+    capabilities = get_capabilities_resource()
+
+    assert capabilities["tool_categories"]["discovery"]
+    assert "pubtator.search_literature" in capabilities["tool_categories"]["discovery"]
+    assert "pubtator.index_review_evidence" in capabilities["tool_categories"]["indexing"]
+    assert "pubtator.retrieve_review_context_batch" in capabilities["tool_categories"]["retrieval"]
+    assert "pubtator.diagnostics" in capabilities["workflow"]["recommended_tools"]
+
+
 def test_capabilities_resource_advertises_grounding_workflows() -> None:
     from pubtator_link.mcp.resources import get_capabilities_resource
     from pubtator_link.models.corpus_suggestion import CorpusSuggestionRequest

@@ -26,3 +26,11 @@ def test_workflow_help_entity_discovery_uses_discovery_tools() -> None:
         "pubtator.search_literature",
     ]
     assert response.meta["next_commands"][0] == "pubtator.search_biomedical_entities"
+
+
+def test_workflow_help_does_not_show_prepare_mode_argument() -> None:
+    help_text = WorkflowHelpService().get_help("clinical_genetics_review").model_dump_json(
+        by_alias=True
+    )
+
+    assert "prepare_mode" not in help_text

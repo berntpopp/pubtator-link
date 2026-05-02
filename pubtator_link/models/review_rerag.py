@@ -6,7 +6,7 @@ import re
 from enum import StrEnum
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 PrepareMode = Literal["selected"]
 JobStatus = Literal["queued", "running", "complete", "partial", "failed"]
@@ -386,6 +386,7 @@ class ContextPack(BaseModel):
     estimated_tokens: int = 0
     budget: ContextBudget | None = None
     dropped: list[ContextDropReason] = Field(default_factory=list)
+    dropped_summary: dict[str, int] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def fill_stable_citation_map(self) -> Self:
@@ -514,6 +515,13 @@ class RetrieveReviewContextBatchResponse(BaseModel):
     prepared_pmids: list[str] = Field(default_factory=list)
     still_preparing_pmids: list[str] = Field(default_factory=list)
     failed_pmids: list[str] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def omit_empty_results_for_compact(self, handler: Any) -> dict[str, Any]:
+        data = handler(self)
+        if self.response_mode in {"compact", "merged_only", "diagnostics"} and not self.results:
+            data.pop("results", None)
+        return data
 
 
 class ReviewPassageSample(BaseModel):
@@ -753,6 +761,7 @@ class InspectReviewIndexResponse(BaseModel):
     sources: list[ReviewSourceSummary]
     totals: ReviewIndexTotals
     failed_sources: list[FailedSourceSummary]
+    coverage_summary: dict[str, int] = Field(default_factory=dict)
     index_snapshot_date: str | None = None
 
 

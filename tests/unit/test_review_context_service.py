@@ -697,6 +697,44 @@ async def test_inspect_review_index_returns_sources_totals_and_failures() -> Non
 
 
 @pytest.mark.asyncio
+async def test_inspect_review_index_includes_coverage_summary() -> None:
+    repository = FakeReviewContextRepository([])
+    repository.source_summaries = [
+        ReviewSourceSummary(
+            source_id="s1",
+            pmid="1",
+            source_kind="pubtator_full_bioc",
+            job_status="complete",
+            coverage="full_text",
+        ),
+        ReviewSourceSummary(
+            source_id="s2",
+            pmid="2",
+            source_kind="pubtator_abstract",
+            job_status="complete",
+            coverage="abstract_only",
+        ),
+        ReviewSourceSummary(
+            source_id="s3",
+            pmid="3",
+            source_kind="pubtator_abstract",
+            job_status="complete",
+            coverage="title_only",
+        ),
+    ]
+    service = ReviewContextService(repository)
+
+    response = await service.inspect_review_index("review-1", InspectReviewIndexRequest())
+
+    assert response.coverage_summary == {
+        "full_text": 1,
+        "abstract_only": 1,
+        "title_only": 1,
+        "unknown": 0,
+    }
+
+
+@pytest.mark.asyncio
 async def test_inspect_review_index_attaches_citation_metadata() -> None:
     repository = FakeReviewContextRepository([], preparation_status={"complete": 1})
     repository.source_summaries = [

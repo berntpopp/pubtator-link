@@ -291,13 +291,13 @@ def register_review_tools(mcp: FastMCP) -> None:
         pmids: list[str] | None = None,
         curated_urls: list[str] | None = None,
         session_id: str | None = None,
-        wait_for_completion: bool = False,
         wait_for_status: Literal["complete", "complete_or_partial", "terminal"] | None = None,
+        wait_until_ready: bool = False,
         timeout_ms: int = 0,
         dry_run: bool = False,
         ctx: Context | None = None,
     ) -> dict[str, Any]:
-        """Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs. Call this before retrieve_review_context, use session_id to scope staged research sessions, set wait_for_completion for small corpora, and inspect preparation_status before retrieval."""
+        """Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs. Call this before retrieve_review_context, use session_id to scope staged research sessions, set wait_until_ready for small corpora, and inspect preparation_status before retrieval."""
 
         async def call() -> dict[str, Any]:
             queue = await get_review_queue()
@@ -307,8 +307,8 @@ def register_review_tools(mcp: FastMCP) -> None:
                 pmids=pmids,
                 curated_urls=curated_urls,
                 session_id=session_id,
-                wait_for_completion=wait_for_completion,
-                wait_for_status=wait_for_status,
+                wait_for_completion=wait_until_ready,
+                wait_for_status="complete_or_partial" if wait_until_ready else wait_for_status,
                 timeout_ms=timeout_ms,
                 dry_run=dry_run,
             )

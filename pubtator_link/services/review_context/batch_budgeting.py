@@ -17,11 +17,14 @@ from pubtator_link.services.review_context.diagnostics import query_summary
 from pubtator_link.services.review_context.packing import context_budget, pack_totals
 from pubtator_link.services.review_context.ranking import SOURCE_COVERAGE_SCARCITY_PRIORITY
 
+MAX_DROPPED_ITEMS = 10
+
 
 @dataclass
 class MergedBatchContext:
     passages: list[ContextPassage]
     dropped: list[ContextDropReason]
+    dropped_summary: dict[str, int]
     query_summaries: list[QueryDiagnosticsSummary]
     source_budget_summaries: list[SourceBudgetSummary]
     pmid_status_summary: list[PmidStatusSummary]
@@ -345,9 +348,13 @@ def merge_batch_context(
             or sum(len(passage.text) for passage in result.context_pack.passages)
             for result in query_results
         )
+    truncated_count = max(0, len(dropped) - MAX_DROPPED_ITEMS)
+    visible_dropped = dropped[:MAX_DROPPED_ITEMS]
+    dropped_summary = {"truncated_count": truncated_count} if truncated_count else {}
     return MergedBatchContext(
         passages=merged_passages,
-        dropped=dropped,
+        dropped=visible_dropped,
+        dropped_summary=dropped_summary,
         query_summaries=query_summaries,
         source_budget_summaries=[
             source_budget_stats[source_key] for source_key in source_budget_order
