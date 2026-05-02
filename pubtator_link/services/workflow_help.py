@@ -38,27 +38,32 @@ class WorkflowHelpService:
             ),
             WorkflowStep(
                 order=3,
+                tool_name="pubtator.lookup_variant_evidence",
+                purpose="Look up source-attributed variant records and literature evidence without backend classification.",
+            ),
+            WorkflowStep(
+                order=4,
                 tool_name="pubtator.search_literature",
                 purpose="Find candidate PMIDs with compact results and optional metadata.",
                 key_args={"metadata": "basic", "coverage": "preflight"},
             ),
             WorkflowStep(
-                order=4,
+                order=5,
                 tool_name="pubtator.get_publication_metadata",
                 purpose="Fetch citation-grade author and journal metadata for selected PMIDs.",
             ),
             WorkflowStep(
-                order=5,
+                order=6,
                 tool_name="pubtator.index_review_evidence",
                 purpose="Prepare the selected corpus for review-scoped retrieval.",
             ),
             WorkflowStep(
-                order=6,
+                order=7,
                 tool_name="pubtator.inspect_review_index",
                 purpose="Verify indexed coverage, source status, and sample passages.",
             ),
             WorkflowStep(
-                order=7,
+                order=8,
                 tool_name="pubtator.retrieve_review_context_batch",
                 purpose="Retrieve citable passages for final claims.",
             ),

@@ -22,6 +22,7 @@ from pubtator_link.models.responses import (
     TextAnnotationResultResponse,
     TextAnnotationSubmitResponse,
 )
+from pubtator_link.models.variants import VariantEvidenceRequest, VariantEvidenceSource
 from pubtator_link.models.review_rerag import (
     BudgetStrategy,
     IndexReviewEvidenceRequest,
@@ -380,6 +381,30 @@ async def find_entity_relations_impl(
         relation_filter=relation_type,
         entity_filter=target_entity_type,
     ).model_dump()
+
+
+async def lookup_variant_evidence_impl(
+    *,
+    service: Any,
+    gene: str,
+    variant: str | None = None,
+    protein: str | None = None,
+    condition: str | None = None,
+    sources: list[VariantEvidenceSource] | None = None,
+    max_literature_pmids: int = 20,
+    include_citations: bool = True,
+) -> dict[str, Any]:
+    request = VariantEvidenceRequest(
+        gene=gene,
+        variant=variant,
+        protein=protein,
+        condition=condition,
+        sources=sources or ["clinvar", "pubtator"],
+        max_literature_pmids=max_literature_pmids,
+        include_citations=include_citations,
+    )
+    response = await service.lookup(request)
+    return response.model_dump()
 
 
 async def submit_text_annotation_impl(

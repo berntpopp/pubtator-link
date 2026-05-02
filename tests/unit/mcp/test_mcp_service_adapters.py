@@ -1277,6 +1277,24 @@ async def test_relations_adapter_maps_related_entities() -> None:
 
 
 @pytest.mark.asyncio
+async def test_lookup_variant_evidence_adapter_calls_service() -> None:
+    from pubtator_link.mcp.service_adapters import lookup_variant_evidence_impl
+    from pubtator_link.models.variants import VariantEvidenceResponse
+
+    class FakeVariantEvidenceService:
+        async def lookup(self, request):
+            return VariantEvidenceResponse(query=request.model_dump(exclude_none=True))
+
+    response = await lookup_variant_evidence_impl(
+        gene="MEFV",
+        variant="c.2177T>C",
+        service=FakeVariantEvidenceService(),
+    )
+
+    assert response["query"]["gene"] == "MEFV"
+
+
+@pytest.mark.asyncio
 async def test_submit_text_annotation_adapter_returns_session_metadata() -> None:
     from pubtator_link.mcp.service_adapters import submit_text_annotation_impl
 

@@ -34,6 +34,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             "pubtator.fetch_pmc_annotations",
             "pubtator.search_biomedical_entities",
             "pubtator.find_entity_relations",
+            "pubtator.lookup_variant_evidence",
             "pubtator.submit_text_annotation",
             "pubtator.get_text_annotation_results",
             "pubtator.preflight_review_sources",
@@ -60,6 +61,8 @@ def get_capabilities_resource() -> dict[str, Any]:
             "Use pubtator.get_publication_metadata when citation-grade PMID metadata is needed.",
             "After entity grounding, use pubtator.find_entity_relations to inspect relation evidence "
             "before choosing search terms or candidate PMIDs.",
+            "Use pubtator.lookup_variant_evidence for source-attributed ClinVar and literature "
+            "evidence about a gene and variant; it does not compute clinical classification.",
             "If review indexing is unavailable, call pubtator.diagnostics and fall back "
             "to pubtator.get_publication_passages with the same PMIDs.",
             "Discovery tools can normalize MeSH terms, resolve citations or article IDs, "
@@ -177,6 +180,9 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "pubtator.search_biomedical_entities",
                 "pubtator.find_entity_relations",
             ],
+            "variant_evidence": [
+                "pubtator.lookup_variant_evidence",
+            ],
             "text_annotation": [
                 "pubtator.submit_text_annotation",
                 "pubtator.get_text_annotation_results",
@@ -233,6 +239,12 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "entity_id": "@GENE_MEFV",
                 "relation_type": "associate",
                 "target_entity_type": "Disease",
+            },
+            "pubtator.lookup_variant_evidence": {
+                "gene": "MEFV",
+                "variant": "c.2177T>C",
+                "condition": "familial Mediterranean fever",
+                "max_literature_pmids": 10,
             },
             "pubtator.suggest_corpus": {
                 "question": "FMF MEFV VUS colchicine",

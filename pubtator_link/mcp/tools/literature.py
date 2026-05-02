@@ -9,15 +9,18 @@ from pubtator_link.api.routes.dependencies import (
     get_api_client,
     get_publication_metadata_service,
     get_source_preflight_service,
+    get_variant_evidence_service,
 )
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.service_adapters import (
     find_entity_relations_impl,
+    lookup_variant_evidence_impl,
     search_biomedical_entities_impl,
     search_literature_impl,
 )
 from pubtator_link.models.responses import EntityAutocompleteResponse, SearchResponse
+from pubtator_link.models.variants import VariantEvidenceResponse, VariantEvidenceSource
 from pubtator_link.services.search_coverage import SearchCoverageMode
 from pubtator_link.services.search_shaping import (
     IncludeCitations,
@@ -185,3 +188,35 @@ def register_literature_tools(mcp: FastMCP) -> None:
             )
 
         return await run_mcp_tool("pubtator.find_entity_relations", call)
+
+    @mcp.tool(
+        name="pubtator.lookup_variant_evidence",
+        title="Lookup Variant Evidence",
+        output_schema=VariantEvidenceResponse.model_json_schema(),
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def lookup_variant_evidence(
+        gene: Annotated[str, Field(min_length=1)],
+        variant: Annotated[str | None, Field(min_length=1)] = None,
+        protein: Annotated[str | None, Field(min_length=1)] = None,
+        condition: Annotated[str | None, Field(min_length=1)] = None,
+        sources: list[VariantEvidenceSource] | None = None,
+        max_literature_pmids: Annotated[int, Field(ge=0, le=100)] = 20,
+        include_citations: bool = True,
+    ) -> dict[str, Any]:
+        """Look up source-attributed variant records and literature evidence for a gene and variant. Does not compute clinical classification."""
+
+        async def call() -> dict[str, Any]:
+            service = await get_variant_evidence_service()
+            return await lookup_variant_evidence_impl(
+                service=service,
+                gene=gene,
+                variant=variant,
+                protein=protein,
+                condition=condition,
+                sources=sources,
+                max_literature_pmids=max_literature_pmids,
+                include_citations=include_citations,
+            )
+
+        return await run_mcp_tool("pubtator.lookup_variant_evidence", call)

@@ -20,6 +20,7 @@ EXPECTED_PUBLIC_TOOL_NAMES = {
     "pubtator.fetch_pmc_annotations",
     "pubtator.search_biomedical_entities",
     "pubtator.find_entity_relations",
+    "pubtator.lookup_variant_evidence",
     "pubtator.submit_text_annotation",
     "pubtator.get_text_annotation_results",
     "pubtator.preflight_review_sources",
@@ -232,6 +233,10 @@ def test_research_session_tools_are_registered(mcp_tool_names) -> None:
     assert "pubtator.stage_research_session" in mcp_tool_names
     assert "pubtator.get_research_session_status" in mcp_tool_names
     assert "pubtator.list_research_sessions" in mcp_tool_names
+
+
+def test_variant_evidence_tool_is_registered(mcp_tool_names) -> None:
+    assert "pubtator.lookup_variant_evidence" in mcp_tool_names
 
 
 def test_research_session_tool_schema_and_annotations_are_stable() -> None:
