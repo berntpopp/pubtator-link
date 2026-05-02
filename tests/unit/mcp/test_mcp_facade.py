@@ -30,6 +30,7 @@ EXPECTED_PUBLIC_TOOL_NAMES = {
     "pubtator.retrieve_review_context",
     "pubtator.retrieve_review_context_batch",
     "pubtator.get_review_passages_by_id",
+    "pubtator.get_review_audit_trail",
     "pubtator.get_neighboring_review_passages",
     "pubtator.export_review_audit_bundle",
     "pubtator.list_review_indexes",
@@ -496,6 +497,7 @@ def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
         "pubtator.preflight_review_sources": ("pmids",),
         "pubtator.index_review_evidence": ("review_id",),
         "pubtator.get_review_passages_by_id": ("review_id", "passage_ids"),
+        "pubtator.get_review_audit_trail": ("review_id", "passage_ids"),
         "pubtator.get_neighboring_review_passages": ("review_id", "passage_id"),
         "pubtator.export_review_audit_bundle": ("review_id",),
         "pubtator.convert_article_ids": ("ids",),
@@ -542,6 +544,7 @@ def test_high_use_mcp_tools_expose_specific_output_schemas() -> None:
             "query_summaries",
         },
         "pubtator.get_review_passages_by_id": {"success", "review_id", "passages"},
+        "pubtator.get_review_audit_trail": {"success", "review_id", "items", "audit_block"},
         "pubtator.get_neighboring_review_passages": {"success", "review_id", "passages"},
         "pubtator.export_review_audit_bundle": {"success", "audit_bundle"},
     }

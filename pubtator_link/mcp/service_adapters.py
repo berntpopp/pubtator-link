@@ -34,6 +34,7 @@ from pubtator_link.models.review_rerag import (
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
     ReviewBatchResponseMode,
+    ReviewAuditTrailResponse,
     ReviewQuickstartResponse,
     ReviewTableMode,
     SampleSectionPolicy,
@@ -720,6 +721,23 @@ async def get_review_passages_by_id_impl(
         max_chars_per_passage=max_chars_per_passage,
     )
     return response.model_dump()
+
+
+async def get_review_audit_trail_impl(
+    *,
+    service: ReviewContextService,
+    review_id: str,
+    passage_ids: list[str],
+    session_id: str | None = None,
+    max_chars_per_passage: int = 500,
+) -> dict[str, Any]:
+    response: ReviewAuditTrailResponse = await service.get_audit_trail(
+        review_id=review_id,
+        passage_ids=passage_ids,
+        session_id=session_id,
+        max_chars_per_passage=max_chars_per_passage,
+    )
+    return response.model_dump(mode="json")
 
 
 async def get_neighboring_review_passages_impl(

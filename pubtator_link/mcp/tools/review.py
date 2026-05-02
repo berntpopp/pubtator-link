@@ -22,6 +22,7 @@ from pubtator_link.mcp.service_adapters import (
     get_evidence_certainty_impl,
     get_neighboring_review_passages_impl,
     get_research_session_status_impl,
+    get_review_audit_trail_impl,
     get_review_index_summary_impl,
     get_review_passages_by_id_impl,
     index_review_evidence_impl,
@@ -50,6 +51,7 @@ from pubtator_link.models.review_rerag import (
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextResponse,
     ReviewBatchResponseMode,
+    ReviewAuditTrailResponse,
     ReviewIndexSummaryResponse,
     ReviewPassageLookupResponse,
     ReviewQuickstartResponse,
@@ -418,6 +420,32 @@ def register_review_tools(mcp: FastMCP) -> None:
             )
 
         return await run_mcp_tool("pubtator.get_review_passages_by_id", call)
+
+    @mcp.tool(
+        name="pubtator.get_review_audit_trail",
+        title="Get Review Audit Trail",
+        output_schema=ReviewAuditTrailResponse.model_json_schema(),
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def get_review_audit_trail(
+        review_id: str,
+        passage_ids: list[str],
+        session_id: str | None = None,
+        max_chars_per_passage: int = 500,
+    ) -> dict[str, Any]:
+        """Use this to return a copy-ready audit block for selected prepared review passage IDs without calling upstream APIs."""
+
+        async def call() -> dict[str, Any]:
+            service = await get_review_context_service()
+            return await get_review_audit_trail_impl(
+                service=service,
+                review_id=review_id,
+                passage_ids=passage_ids,
+                session_id=session_id,
+                max_chars_per_passage=max_chars_per_passage,
+            )
+
+        return await run_mcp_tool("pubtator.get_review_audit_trail", call)
 
     @mcp.tool(
         name="pubtator.get_neighboring_review_passages",

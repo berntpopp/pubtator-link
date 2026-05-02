@@ -492,6 +492,33 @@ async def test_get_passages_by_id_preserves_order_reports_missing_and_truncates(
 
 
 @pytest.mark.asyncio
+async def test_get_audit_trail_returns_copy_ready_items() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage(
+                "PMID:40234174:abstract:0",
+                pmid="40234174",
+                text="MEFV variants respond to colchicine in familial Mediterranean fever.",
+                section="abstract",
+                source_kind="pubtator_abstract",
+            )
+        ]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.get_audit_trail(
+        review_id="review-1",
+        passage_ids=["PMID:40234174:abstract:0", "missing"],
+        max_chars_per_passage=500,
+    )
+
+    assert response.items[0].pmid == "40234174"
+    assert response.items[0].stable_citation_key.startswith("c_")
+    assert response.not_found == ["missing"]
+    assert "PMID:40234174:abstract:0" in response.audit_block
+
+
+@pytest.mark.asyncio
 async def test_get_neighboring_passages_honors_window_and_same_section() -> None:
     repository = FakeReviewContextRepository(
         [

@@ -47,6 +47,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             "pubtator.retrieve_review_context",
             "pubtator.retrieve_review_context_batch",
             "pubtator.get_review_passages_by_id",
+            "pubtator.get_review_audit_trail",
             "pubtator.get_neighboring_review_passages",
             "pubtator.export_review_audit_bundle",
             "pubtator.list_review_indexes",
@@ -75,6 +76,7 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "pubtator.retrieve_review_context",
                 "pubtator.retrieve_review_context_batch",
                 "pubtator.get_review_passages_by_id",
+                "pubtator.get_review_audit_trail",
                 "pubtator.get_neighboring_review_passages",
             ],
             "metadata": [
@@ -215,6 +217,7 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "pubtator.retrieve_review_context",
                 "pubtator.retrieve_review_context_batch",
                 "pubtator.get_review_passages_by_id",
+                "pubtator.get_review_audit_trail",
                 "pubtator.get_neighboring_review_passages",
                 "pubtator.export_review_audit_bundle",
                 "pubtator.list_review_indexes",
@@ -338,6 +341,10 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "review_id": "fmf-colchicine-guidelines",
                 "passage_ids": ["PMID:40234174:abstract:0"],
             },
+            "pubtator.get_review_audit_trail": {
+                "review_id": "fmf-colchicine-guidelines",
+                "passage_ids": ["PMID:40234174:abstract:0"],
+            },
             "pubtator.get_neighboring_review_passages": {
                 "review_id": "fmf-colchicine-guidelines",
                 "passage_id": "PMID:40234174:abstract:0",
@@ -456,6 +463,7 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "pubtator.retrieve_review_context",
                 "pubtator.retrieve_review_context_batch",
                 "pubtator.get_review_passages_by_id",
+                "pubtator.get_review_audit_trail",
                 "pubtator.get_neighboring_review_passages",
                 "pubtator.export_review_audit_bundle",
                 "pubtator.list_review_indexes",

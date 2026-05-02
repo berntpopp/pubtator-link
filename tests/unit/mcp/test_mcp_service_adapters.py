@@ -220,6 +220,39 @@ async def test_get_review_passages_by_id_adapter_calls_service() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_review_audit_trail_adapter_calls_service() -> None:
+    from pubtator_link.mcp.service_adapters import get_review_audit_trail_impl
+    from pubtator_link.models.review_rerag import ReviewAuditTrailItem, ReviewAuditTrailResponse
+
+    class Service:
+        async def get_audit_trail(self, **kwargs):
+            assert kwargs["review_id"] == "rev-1"
+            assert kwargs["passage_ids"] == ["p1"]
+            return ReviewAuditTrailResponse(
+                review_id="rev-1",
+                items=[
+                    ReviewAuditTrailItem(
+                        passage_id="p1",
+                        stable_citation_key="c_1",
+                        section="abstract",
+                        quote="Evidence text.",
+                        char_count=14,
+                    )
+                ],
+                audit_block="- c_1 PMID unavailable p1 abstract: Evidence text.",
+            )
+
+    result = await get_review_audit_trail_impl(
+        service=Service(),
+        review_id="rev-1",
+        passage_ids=["p1"],
+    )
+
+    assert result["success"] is True
+    assert result["items"][0]["stable_citation_key"] == "c_1"
+
+
+@pytest.mark.asyncio
 async def test_get_neighboring_review_passages_adapter_calls_service() -> None:
     from pubtator_link.mcp.service_adapters import get_neighboring_review_passages_impl
     from pubtator_link.models.review_rerag import ReviewPassageLookupResponse
