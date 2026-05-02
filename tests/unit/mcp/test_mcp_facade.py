@@ -105,8 +105,8 @@ def test_mcp_instructions_warn_retrieved_text_is_data() -> None:
 
 
 def test_capabilities_resource_advertises_grounding_workflows() -> None:
-    from pubtator_link.models.discovery import MeshLookupRequest, RelatedArticlesRequest
     from pubtator_link.mcp.resources import get_capabilities_resource
+    from pubtator_link.models.discovery import MeshLookupRequest, RelatedArticlesRequest
 
     capabilities = get_capabilities_resource()
     sample_calls = capabilities["sample_calls"]
