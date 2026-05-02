@@ -457,6 +457,16 @@ class SourceBudgetSummary(BaseModel):
     first_pass_eligible: bool = False
 
 
+class PmidStatusSummary(BaseModel):
+    """Per-PMID accounting for batch retrieval."""
+
+    pmid: str
+    candidate_count: int = Field(default=0, ge=0)
+    passages_returned: int = Field(default=0, ge=0)
+    passages_dropped: int = Field(default=0, ge=0)
+    prioritized: bool = False
+
+
 class RetrieveReviewContextBatchRequest(BaseModel):
     """Request for multiple review-scoped context retrieval queries."""
 
@@ -472,6 +482,8 @@ class RetrieveReviewContextBatchRequest(BaseModel):
     deduplicate_passages: bool = True
     budget_strategy: BudgetStrategy = "query_fair"
     min_passages_per_source: int = Field(default=1, ge=1, le=10)
+    min_passages_per_pmid: int = Field(default=0, ge=0, le=10)
+    prioritize_pmids: list[str] = Field(default_factory=list)
     include_diagnostics: bool = True
     response_mode: ReviewBatchResponseMode = "compact"
     include_tables: bool = False
@@ -493,6 +505,7 @@ class RetrieveReviewContextBatchResponse(BaseModel):
     response_mode: ReviewBatchResponseMode = "compact"
     query_summaries: list[QueryDiagnosticsSummary] = Field(default_factory=list)
     source_budget_summaries: list[SourceBudgetSummary] = Field(default_factory=list)
+    pmid_status_summary: list[PmidStatusSummary] = Field(default_factory=list)
     budget: ContextBudget | None = None
     cache_key: str | None = None
     corpus_snapshot_date: str | None = None

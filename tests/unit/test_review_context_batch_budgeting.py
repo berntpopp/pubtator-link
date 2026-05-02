@@ -146,3 +146,47 @@ def test_merge_batch_context_diagnostics_mode_skips_merged_passages() -> None:
     assert merged.passages == []
     assert merged.query_summaries[0].query == "q1"
     assert merged.query_summaries[0].returned_count == 0
+
+
+def test_batch_budgeting_honors_min_passages_per_pmid() -> None:
+    request = RetrieveReviewContextBatchRequest(
+        queries=["q1"],
+        max_total_passages=2,
+        max_chars=1000,
+        min_passages_per_pmid=1,
+    )
+
+    merged = merge_batch_context(
+        request=request,
+        query_results=[
+            _result(
+                "q1",
+                [
+                    _passage("p1", "one", pmid="1"),
+                    _passage("p2", "two", pmid="1"),
+                    _passage("p3", "three", pmid="2"),
+                ],
+            )
+        ],
+        coverage_by_source={},
+    )
+
+    assert {passage.pmid for passage in merged.passages} == {"1", "2"}
+
+
+def test_batch_response_includes_pmid_status_summary() -> None:
+    request = RetrieveReviewContextBatchRequest(
+        queries=["q1"],
+        max_total_passages=1,
+        max_chars=1000,
+        min_passages_per_pmid=1,
+    )
+
+    merged = merge_batch_context(
+        request=request,
+        query_results=[_result("q1", [_passage("p1", "one", pmid="1")])],
+        coverage_by_source={},
+    )
+
+    assert merged.pmid_status_summary[0].pmid == "1"
+    assert merged.pmid_status_summary[0].passages_returned == 1

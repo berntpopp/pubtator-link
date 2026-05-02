@@ -321,6 +321,7 @@ class ReviewContextService:
             results=results,
             query_summaries=merged.query_summaries,
             source_budget_summaries=merged.source_budget_summaries,
+            pmid_status_summary=merged.pmid_status_summary,
             merged_context_pack=ContextPack(
                 question="\n".join(request.queries),
                 passages=merged.passages,
