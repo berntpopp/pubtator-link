@@ -65,6 +65,8 @@ class FakeReviewContextRepository:
         *,
         include_passage_samples: bool = False,
         sample_per_pmid: int = 2,
+        min_sample_chars: int = 80,
+        sample_section_policy: str = "evidence_first",
     ) -> list[ReviewSourceSummary]:
         self.inspect_calls.append(
             {
@@ -73,6 +75,8 @@ class FakeReviewContextRepository:
                 "pmids": pmids,
                 "include_passage_samples": include_passage_samples,
                 "sample_per_pmid": sample_per_pmid,
+                "min_sample_chars": min_sample_chars,
+                "sample_section_policy": sample_section_policy,
             }
         )
         if self.source_summaries:
@@ -177,6 +181,8 @@ class QueryMappedReviewContextRepository(FakeReviewContextRepository):
         *,
         include_passage_samples: bool = False,
         sample_per_pmid: int = 2,
+        min_sample_chars: int = 80,
+        sample_section_policy: str = "evidence_first",
     ) -> list[ReviewSourceSummary]:
         self.inspect_calls.append(
             {
@@ -185,6 +191,8 @@ class QueryMappedReviewContextRepository(FakeReviewContextRepository):
                 "pmids": pmids,
                 "include_passage_samples": include_passage_samples,
                 "sample_per_pmid": sample_per_pmid,
+                "min_sample_chars": min_sample_chars,
+                "sample_section_policy": sample_section_policy,
             }
         )
         if self.source_summaries:
@@ -526,6 +534,8 @@ async def test_inspect_review_index_returns_sources_totals_and_failures() -> Non
             pmids=["111"],
             include_passage_samples=True,
             sample_per_pmid=1,
+            min_sample_chars=90,
+            sample_section_policy="original_order",
         ),
     )
 
@@ -544,6 +554,8 @@ async def test_inspect_review_index_returns_sources_totals_and_failures() -> Non
             "pmids": ["111"],
             "include_passage_samples": True,
             "sample_per_pmid": 1,
+            "min_sample_chars": 90,
+            "sample_section_policy": "original_order",
         },
         {"method": "review_index_totals", "review_id": "review-1"},
         {"method": "list_review_failed_sources", "review_id": "review-1"},

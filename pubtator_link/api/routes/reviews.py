@@ -25,6 +25,7 @@ from ...models.review_rerag import (
     ReviewNeighboringPassagesRequest,
     ReviewPassageLookupRequest,
     ReviewPassageLookupResponse,
+    SampleSectionPolicy,
     StageResearchSessionRequest,
     StageResearchSessionResponse,
     UpsertEvidenceCertaintyRequest,
@@ -259,7 +260,9 @@ async def inspect_review_index(
     service: ReviewContextServiceDep,
     pmids: str | None = None,
     include_passage_samples: bool = False,
-    sample_per_pmid: int = 2,
+    sample_per_pmid: int = Query(default=2, ge=0, le=10),
+    min_sample_chars: int = Query(default=80, ge=0, le=1000),
+    sample_section_policy: SampleSectionPolicy = "evidence_first",
 ) -> InspectReviewIndexResponse:
     pmid_list = [pmid.strip() for pmid in pmids.split(",") if pmid.strip()] if pmids else []
     return await service.inspect_review_index(
@@ -268,6 +271,8 @@ async def inspect_review_index(
             pmids=pmid_list,
             include_passage_samples=include_passage_samples,
             sample_per_pmid=sample_per_pmid,
+            min_sample_chars=min_sample_chars,
+            sample_section_policy=sample_section_policy,
         ),
     )
 

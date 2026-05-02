@@ -19,6 +19,7 @@ from pubtator_link.models.review_rerag import (
     ReviewPassageLookupResponse,
     ReviewPassageRow,
     ReviewSourceSummary,
+    SampleSectionPolicy,
     SourceCoverage,
 )
 from pubtator_link.services.provenance import corpus_snapshot_date, stable_cache_key
@@ -64,6 +65,8 @@ class ReviewContextRepository(Protocol):
         *,
         include_passage_samples: bool = False,
         sample_per_pmid: int = 2,
+        min_sample_chars: int = 80,
+        sample_section_policy: SampleSectionPolicy = "evidence_first",
     ) -> list[ReviewSourceSummary]:
         """Return index source summaries for a review."""
 
@@ -297,6 +300,8 @@ class ReviewContextService:
             request.pmids,
             include_passage_samples=request.include_passage_samples,
             sample_per_pmid=request.sample_per_pmid,
+            min_sample_chars=request.min_sample_chars,
+            sample_section_policy=request.sample_section_policy,
         )
         totals = await self.repository.review_index_totals(review_id)
         failed_sources = await self.repository.list_review_failed_sources(review_id)

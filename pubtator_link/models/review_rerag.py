@@ -15,6 +15,7 @@ ReviewBatchResponseMode = Literal["compact", "merged_only", "full", "diagnostics
 ReviewTableMode = Literal["off", "preview", "full"]
 SourceCoverage = Literal["title_only", "abstract_only", "full_text", "curated_url", "unknown"]
 CoverageTier = SourceCoverage
+SampleSectionPolicy = Literal["evidence_first", "original_order"]
 CoverageReason = Literal[
     "full_text_available",
     "pmc_oa_bioc",
@@ -651,6 +652,7 @@ class ReviewSourceSummary(BaseModel):
     pmc_fallback_available: bool = False
     resolver_attempts: list[ResolverAttemptSummary] = Field(default_factory=list)
     sample_passages: list[ReviewPassageSample] = Field(default_factory=list)
+    sample_warning: str | None = None
 
 
 class FailedSourceSummary(BaseModel):
@@ -685,7 +687,9 @@ class InspectReviewIndexRequest(BaseModel):
 
     pmids: list[str] = Field(default_factory=list)
     include_passage_samples: bool = False
-    sample_per_pmid: int = Field(default=2, ge=1, le=5)
+    sample_per_pmid: int = Field(default=2, ge=0, le=10)
+    min_sample_chars: int = Field(default=80, ge=0, le=1000)
+    sample_section_policy: SampleSectionPolicy = "evidence_first"
 
 
 class InspectReviewIndexResponse(BaseModel):

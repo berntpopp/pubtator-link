@@ -579,11 +579,15 @@ async def test_inspect_review_index_adapter_builds_request_from_flat_args() -> N
         pmids=["40234174"],
         include_passage_samples=True,
         sample_per_pmid=3,
+        min_sample_chars=120,
+        sample_section_policy="original_order",
     )
 
     assert service.review_id == "rev"
     assert service.request.pmids == ["40234174"]
     assert service.request.sample_per_pmid == 3
+    assert service.request.min_sample_chars == 120
+    assert service.request.sample_section_policy == "original_order"
     assert result["review_id"] == "rev"
     assert result["index_snapshot_date"] is not None
 

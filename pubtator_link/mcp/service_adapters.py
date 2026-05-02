@@ -32,6 +32,7 @@ from pubtator_link.models.review_rerag import (
     RetrieveReviewContextRequest,
     ReviewBatchResponseMode,
     ReviewTableMode,
+    SampleSectionPolicy,
     StageResearchSessionRequest,
     UpsertEvidenceCertaintyRequest,
 )
@@ -561,6 +562,8 @@ async def inspect_review_index_impl(
     pmids: list[str] | None = None,
     include_passage_samples: bool = False,
     sample_per_pmid: int = 2,
+    min_sample_chars: int = 80,
+    sample_section_policy: SampleSectionPolicy = "evidence_first",
 ) -> dict[str, Any]:
     response = await service.inspect_review_index(
         review_id=review_id,
@@ -568,6 +571,8 @@ async def inspect_review_index_impl(
             pmids=pmids or [],
             include_passage_samples=include_passage_samples,
             sample_per_pmid=sample_per_pmid,
+            min_sample_chars=min_sample_chars,
+            sample_section_policy=sample_section_policy,
         ),
     )
     return response.model_dump()
