@@ -83,6 +83,15 @@ class WorkflowHelpService:
                 tool_name="pubtator.get_publication_metadata",
                 action="Fetch citation metadata before drafting references.",
             ),
+            WorkflowFallback(
+                condition="GeneReviews/NBK source is an NCBI Bookshelf URL",
+                tool_name="pubtator.lookup_citation",
+                action=(
+                    "GeneReviews/NBK: do not index NCBI Bookshelf URLs directly. "
+                    "Call pubtator.lookup_citation with the NBK ID, then index the "
+                    "returned PMID when available."
+                ),
+            ),
         ]
         return _response(task=task, steps=steps, fallbacks=fallbacks)
 

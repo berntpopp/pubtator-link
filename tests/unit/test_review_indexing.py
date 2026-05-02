@@ -110,6 +110,33 @@ async def test_index_links_sources_to_session() -> None:
 
 
 @pytest.mark.asyncio
+async def test_index_rejects_bookshelf_url_before_enqueue() -> None:
+    service = ReviewIndexingService(repository=FakeIndexRepository(), queue=FakeQueue())
+
+    with pytest.raises(ValueError, match="bookshelf_url_not_indexable"):
+        await service.index_review_evidence(
+            "review-1",
+            IndexReviewEvidenceRequest(
+                curated_urls=["https://www.ncbi.nlm.nih.gov/books/NBK1139/"]
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_index_rejects_bookshelf_url_without_nbk_before_enqueue() -> None:
+    queue = FakeQueue()
+    service = ReviewIndexingService(repository=FakeIndexRepository(), queue=queue)
+
+    with pytest.raises(ValueError, match="bookshelf_url_not_indexable"):
+        await service.index_review_evidence(
+            "review-1",
+            IndexReviewEvidenceRequest(curated_urls=["https://www.ncbi.nlm.nih.gov/books/"]),
+        )
+
+    assert queue.calls == []
+
+
+@pytest.mark.asyncio
 async def test_index_rejects_unknown_session() -> None:
     service = ReviewIndexingService(
         repository=FakeIndexRepository(session_exists=False),

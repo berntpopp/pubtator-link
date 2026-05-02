@@ -45,3 +45,11 @@ def test_workflow_help_mentions_recovery_quote_confidence_and_audit_trail() -> N
     assert "quote" in help_text
     assert "confidence_for_grounding" in help_text
     assert "pubtator.get_review_audit_trail" in help_text
+
+
+def test_workflow_help_mentions_genereviews_nbk_recovery() -> None:
+    payload = WorkflowHelpService().get_help("clinical_genetics_review").model_dump_json()
+
+    assert "GeneReviews" in payload
+    assert "NBK" in payload
+    assert "lookup_citation" in payload

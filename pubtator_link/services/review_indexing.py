@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from typing import Protocol
 
@@ -13,6 +14,8 @@ from pubtator_link.models.review_rerag import (
     PreparationStatus,
 )
 from pubtator_link.services.review_state import index_snapshot_date, retry_after_ms_for_status
+
+NBK_RE = re.compile(r"\bNBK\d+\b", re.IGNORECASE)
 
 
 class ReviewIndexingRepository(Protocol):
@@ -56,6 +59,21 @@ class ReviewIndexingService:
         review_id: str,
         request: IndexReviewEvidenceRequest,
     ) -> IndexReviewEvidenceResponse:
+        bookshelf_urls = _bookshelf_urls(request.curated_urls)
+        if bookshelf_urls:
+            nbk_ids = _nbk_ids(bookshelf_urls)
+            if nbk_ids:
+                raise ValueError(
+                    "bookshelf_url_not_indexable: "
+                    f"{', '.join(nbk_ids)}; "
+                    "call pubtator.lookup_citation with the NBK ID and index the returned PMID"
+                )
+            raise ValueError(
+                "bookshelf_url_not_indexable: "
+                "call pubtator.lookup_citation with the Bookshelf citation or NBK ID and "
+                "index the returned PMID"
+            )
+
         if request.session_id is not None:
             exists = await self.repository.research_session_exists(review_id, request.session_id)
             if not exists:
@@ -134,6 +152,17 @@ def _source_specs(request: IndexReviewEvidenceRequest) -> list[tuple[str, str, s
         *[(f"PMID:{pmid}", "pmid", pmid) for pmid in request.pmids],
         *[(f"URL:{url}", "url", url) for url in request.curated_urls],
     ]
+
+
+def _bookshelf_urls(urls: list[str]) -> list[str]:
+    return [url for url in urls if "ncbi.nlm.nih.gov/books/" in url.lower()]
+
+
+def _nbk_ids(values: list[str]) -> list[str]:
+    ids: list[str] = []
+    for value in values:
+        ids.extend(match.group(0).upper() for match in NBK_RE.finditer(value))
+    return list(dict.fromkeys(ids))
 
 
 def _counters_from_statuses(statuses: dict[str, str]) -> dict[str, int]:

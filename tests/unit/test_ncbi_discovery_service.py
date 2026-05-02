@@ -105,6 +105,39 @@ async def test_convert_article_ids_adds_candidates_and_next_commands() -> None:
 
 
 @pytest.mark.asyncio
+async def test_lookup_citation_extracts_nbk_and_adds_recovery_hint() -> None:
+    class Client(FakeDiscoveryClient):
+        async def lookup_citations(self, citations):
+            assert citations == ["GeneReviews NBK1139 familial Mediterranean fever"]
+            return [
+                CitationLookupRecord(
+                    citation=citations[0],
+                    status="not_found",
+                    reason="not_found",
+                )
+            ]
+
+        async def convert_article_ids(self, ids, source):
+            assert ids == ["NBK1139"]
+            return [
+                ArticleIdConversionRecord(
+                    input_id="NBK1139",
+                    input_kind="auto",
+                    status="unresolved",
+                    reason="not_found",
+                )
+            ]
+
+    service = DiscoveryService(Client())
+
+    response = await service.lookup_citation(["https://www.ncbi.nlm.nih.gov/books/NBK1139/"])
+
+    assert response.records[0].reason in {"nbk_not_mapped", "not_found"}
+    assert response.meta.next_commands
+    assert "NBK1139" in str(response.meta.next_commands)
+
+
+@pytest.mark.asyncio
 async def test_ncbi_client_parses_id_conversion_json() -> None:
     transport = MockTransport(
         {

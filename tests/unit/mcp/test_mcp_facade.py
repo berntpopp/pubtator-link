@@ -268,7 +268,12 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
     assert "pubtator.suggest_corpus" in capabilities["tool_groups"]["discovery"]
     assert capabilities["search_defaults"]["metadata_modes"] == ["none", "basic", "full"]
     assert sample_calls["pubtator.search_literature"]["metadata"] == "basic"
-    assert len(capabilities["workflow_help"]["fallbacks"]) == 2
+    assert any(
+        fallback["tool_name"] == "pubtator.lookup_citation"
+        and "GeneReviews/NBK" in fallback["condition"]
+        and "NBK ID" in fallback["action"]
+        for fallback in capabilities["workflow_help"]["fallbacks"]
+    )
     assert "limit" in sample_calls["pubtator.lookup_mesh"]
     assert "max_results" not in sample_calls["pubtator.lookup_mesh"]
     assert "limit" in sample_calls["pubtator.find_related_articles"]

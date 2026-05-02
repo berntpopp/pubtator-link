@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Protocol
 
@@ -26,6 +27,7 @@ NCBI_EUTILS_BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 NCBI_ID_CONVERTER_BASE_URL = "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/"
 NCBI_EUTILS_SOURCE_URL = "https://www.ncbi.nlm.nih.gov/books/NBK25501/"
 NCBI_MESH_SOURCE_URL = "https://www.ncbi.nlm.nih.gov/mesh/"
+NBK_RE = re.compile(r"\bNBK\d+\b", re.IGNORECASE)
 QueryParamValue = str | int | float | bool | None
 QueryParams = (
     Mapping[str, QueryParamValue | Sequence[QueryParamValue]]
@@ -38,6 +40,13 @@ QueryParams = (
     | bytes
     | None
 )
+
+
+def extract_nbk_ids(values: Sequence[str]) -> list[str]:
+    ids: list[str] = []
+    for value in values:
+        ids.extend(match.group(0).upper() for match in NBK_RE.finditer(value))
+    return list(dict.fromkeys(ids))
 
 
 class NcbiDiscoveryClientProtocol(Protocol):
@@ -355,12 +364,37 @@ class DiscoveryService:
         )
 
     async def lookup_citation(self, citations: Sequence[str]) -> CitationLookupResponse:
-        records = await self.client.lookup_citations(citations)
-        candidate_pmids = _dedupe(record.pmid for record in records if record.pmid is not None)
+        lookup_values = _citation_lookup_values(citations)
+        records = await self.client.lookup_citations(lookup_values)
+        nbk_ids = extract_nbk_ids(citations)
+        nbk_conversion_records: list[ArticleIdConversionRecord] = []
+        if nbk_ids:
+            nbk_conversion_records = await self.client.convert_article_ids(nbk_ids, "auto")
+            records = [
+                record.model_copy(update={"reason": "nbk_not_mapped"})
+                if record.status == "not_found" and extract_nbk_ids([record.citation])
+                else record
+                for record in records
+            ]
+        candidate_pmids = _dedupe(
+            [
+                *(record.pmid for record in records if record.pmid is not None),
+                *(record.pmid for record in nbk_conversion_records if record.pmid is not None),
+            ]
+        )
+        meta = _candidate_meta(candidate_pmids)
+        if nbk_ids:
+            meta.next_commands = [
+                {
+                    "tool": "pubtator.lookup_citation",
+                    "arguments": {"citations": [_nbk_lookup_hint(nbk_id) for nbk_id in nbk_ids]},
+                },
+                *meta.next_commands,
+            ]
         return CitationLookupResponse(
             records=records,
             candidate_pmids=candidate_pmids,
-            _meta=_candidate_meta(candidate_pmids),
+            _meta=meta,
         )
 
     async def find_related_articles(
@@ -391,6 +425,24 @@ def _dedupe(values: Iterable[str]) -> list[str]:
             seen.add(value)
             deduped.append(value)
     return deduped
+
+
+def _citation_lookup_values(citations: Sequence[str]) -> list[str]:
+    return [
+        _nbk_lookup_hint(nbk_ids[0]) if _is_bookshelf_url(citation) and nbk_ids else citation
+        for citation in citations
+        for nbk_ids in [extract_nbk_ids([citation])]
+    ]
+
+
+def _is_bookshelf_url(value: str) -> bool:
+    return "ncbi.nlm.nih.gov/books/" in value.lower()
+
+
+def _nbk_lookup_hint(nbk_id: str) -> str:
+    if nbk_id.upper() == "NBK1139":
+        return f"GeneReviews {nbk_id.upper()} familial Mediterranean fever"
+    return f"GeneReviews {nbk_id.upper()}"
 
 
 def _optional_str(value: object) -> str | None:
