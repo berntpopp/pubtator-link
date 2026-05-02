@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from pubtator_link.models.publication_metadata import PublicationAuthor
+
 
 class BaseResponse(BaseModel):
     """Base response model with common fields."""
@@ -146,7 +148,7 @@ class SearchResult(BaseModel):
         return str(v)
 
     abstract: str | None = Field(default=None, description="Article abstract")
-    authors: list[Any] = Field(default_factory=list, description="Authors")
+    authors: list[PublicationAuthor] = Field(default_factory=list, description="Authors")
     pub_year: int | None = Field(default=None, description="Publication year")
     journal: str | None = Field(default=None, description="Journal name")
     pub_date: str | None = Field(default=None, description="Publication date")

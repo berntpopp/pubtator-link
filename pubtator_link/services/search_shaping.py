@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, Literal
 
+from pubtator_link.models.publication_metadata import PublicationAuthor
 from pubtator_link.models.responses import SearchResponse, SearchResult
 from pubtator_link.services.provenance import corpus_snapshot_date, stable_cache_key
 
@@ -104,7 +105,11 @@ def shaped_search_result(
         pmid=item.get("pmid", ""),
         title=item.get("title", ""),
         abstract=item.get("abstract") if response_mode in {"standard", "full"} else None,
-        authors=item.get("authors", []) if response_mode in {"standard", "full"} else [],
+        authors=(
+            _shape_authors(item.get("authors", []))
+            if response_mode in {"standard", "full"}
+            else []
+        ),
         journal=item.get("journal"),
         pub_date=item.get("pub_date") or item.get("meta_date_publication") or item.get("date"),
         annotations=item.get("annotations", []) if response_mode == "full" else [],
@@ -151,11 +156,30 @@ def _merge_metadata_fields(
         if _has_metadata_value(getattr(shaped, field_name)):
             continue
         if field_name in metadata_item and _has_metadata_value(metadata_item[field_name]):
-            setattr(shaped, field_name, metadata_item[field_name])
+            value = metadata_item[field_name]
+            if field_name == "authors":
+                value = _shape_authors(value)
+            setattr(shaped, field_name, value)
 
 
 def _has_metadata_value(value: Any) -> bool:
     return value not in (None, "", [], {})
+
+
+def _shape_authors(authors: Any) -> list[PublicationAuthor]:
+    if not isinstance(authors, list):
+        return []
+    shaped: list[PublicationAuthor] = []
+    for author in authors:
+        if isinstance(author, PublicationAuthor):
+            shaped.append(author)
+        elif isinstance(author, str):
+            stripped = author.strip()
+            if stripped:
+                shaped.append(PublicationAuthor(collective_name=stripped))
+        elif isinstance(author, dict):
+            shaped.append(PublicationAuthor.model_validate(author))
+    return shaped
 
 
 def search_cache_key(

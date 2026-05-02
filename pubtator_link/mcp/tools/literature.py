@@ -50,7 +50,7 @@ def register_literature_tools(mcp: FastMCP) -> None:
         entity_ids: list[str] | None = None,
         guideline_boost: bool = False,
         coverage: SearchCoverageMode = "preflight",
-        metadata: SearchMetadataMode = "none",
+        metadata: SearchMetadataMode = "basic",
     ) -> dict[str, Any]:
         """Use this when a user needs PubMed literature search through PubTator3. Use short biomedical queries, optional sort such as 'score desc' or 'date desc', flat publication/year filters, raw filters JSON, optional section filters, and coverage='preflight' when source coverage should be visible before indexing. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
 

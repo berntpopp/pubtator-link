@@ -233,7 +233,7 @@ async def search_literature_impl(
     guideline_boost: bool = False,
     coverage: SearchCoverageMode = "none",
     preflight_service: SearchCoveragePreflight | None = None,
-    metadata: SearchMetadataMode = "none",
+    metadata: SearchMetadataMode = "basic",
     metadata_service: PublicationMetadataService | None = None,
 ) -> dict[str, Any]:
     normalized_text = combined_search_text(text, entity_ids)

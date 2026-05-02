@@ -43,7 +43,7 @@ def test_shaped_search_response_can_merge_basic_metadata() -> None:
     )
 
     result = shaped.results[0]
-    assert result.authors[0]["display_name"] == "Kavrul Kayaalp GK"
+    assert result.authors[0].display_name == "Kavrul Kayaalp GK"
     assert result.journal == "Rheumatology International"
     assert result.pub_year == 2022
     assert result.pub_date == "2022 Jan"
@@ -132,8 +132,36 @@ def test_shaped_search_response_partial_metadata_preserves_existing_values() -> 
 
     result = shaped.results[0]
     assert result.journal == "Search Journal"
-    assert result.authors == ["Search Author"]
+    assert [author.display_name for author in result.authors] == ["Search Author"]
     assert result.doi == "10.1000/search"
+
+
+def test_search_result_authors_are_publication_author_shape() -> None:
+    shaped = shaped_search_response(
+        raw={
+            "total": 1,
+            "results": [
+                {
+                    "pmid": "1",
+                    "title": "T",
+                    "authors": [{"last_name": "Smith", "initials": "J"}],
+                }
+            ],
+        },
+        query="MEFV",
+        page=1,
+        sort=None,
+        filters=None,
+        sections=None,
+        response_mode="standard",
+        include_citations="none",
+        text_hl_format="plain",
+        limit=None,
+        guideline_boost=False,
+    )
+
+    assert shaped.results[0].authors[0].last_name == "Smith"
+    assert shaped.results[0].authors[0].initials == "J"
 
 
 def test_shaped_search_response_metadata_does_not_overwrite_search_values() -> None:
@@ -178,7 +206,7 @@ def test_shaped_search_response_metadata_does_not_overwrite_search_values() -> N
 
     result = shaped.results[0]
     assert result.journal == "Search Journal"
-    assert result.authors == ["Search Author"]
+    assert [author.display_name for author in result.authors] == ["Search Author"]
     assert result.pub_date == "2021 Dec"
     assert result.doi == "10.1000/search"
     assert result.pmcid == "PMCSEARCH"
