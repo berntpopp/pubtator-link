@@ -7,12 +7,6 @@ from pubtator_link.models.workflow_help import (
     WorkflowTask,
 )
 
-RESEARCH_USE_NOTICE = (
-    "Research and biomedical literature exploration use only; not for diagnosis, "
-    "treatment, triage, patient management, or clinical decision support. Do not "
-    "submit identifiable patient data to public demo instances."
-)
-
 
 class WorkflowHelpService:
     """Return compact in-band workflow guidance for LLM consumers."""
@@ -155,6 +149,5 @@ def _response(
         tool_sequence=[step.tool_name for step in steps],
         _meta={
             "next_commands": [step.tool_name for step in steps[:3]],
-            "notice": RESEARCH_USE_NOTICE,
         },
     )

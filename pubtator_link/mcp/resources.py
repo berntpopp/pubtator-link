@@ -478,7 +478,6 @@ def get_capabilities_resource() -> dict[str, Any]:
             ],
         },
         "workflow_help": get_workflow_help_resource(),
-        "notice": RESEARCH_USE_NOTICE,
     }
 
 

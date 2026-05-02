@@ -384,6 +384,18 @@ def test_tool_descriptions_do_not_repeat_long_research_notice() -> None:
     assert repeated == []
 
 
+def test_default_mcp_context_surfaces_research_notice_only_in_instructions() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp()
+    needle = "not for diagnosis"
+
+    assert (mcp.instructions or "").count(needle) == 1
+    assert all(needle not in (tool.description or "") for tool in mcp._tool_manager._tools.values())
+    assert all(needle not in prompt.fn() for prompt in mcp._prompt_manager._prompts.values())
+    assert needle not in str(mcp._resource_manager._resources["pubtator://workflow-help"].fn())
+
+
 def test_common_mcp_tools_are_flat_and_unversioned() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
