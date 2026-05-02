@@ -133,7 +133,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             },
             "pubtator.lookup_mesh": {
                 "query": "familial Mediterranean fever",
-                "max_results": 5,
+                "limit": 5,
             },
             "pubtator.lookup_citation": {
                 "citations": ["Biochem Med (Zagreb). 2024;34(1):010501"],
@@ -144,7 +144,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             "pubtator.find_related_articles": {
                 "pmids": ["40234174"],
                 "mode": "related",
-                "max_results": 20,
+                "limit": 20,
             },
             "pubtator.get_publication_passages": {
                 "pmids": ["40234174"],

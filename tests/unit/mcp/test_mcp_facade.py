@@ -125,6 +125,10 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
     assert "pubtator.lookup_mesh" in capabilities["tool_groups"]["discovery"]
     assert capabilities["output_cheatsheet"]["discovery_candidate_pmids"] == "candidate_pmids"
     assert capabilities["output_cheatsheet"]["handoff_next_commands"] == "_meta.next_commands"
+    assert "limit" in capabilities["sample_calls"]["pubtator.lookup_mesh"]
+    assert "max_results" not in capabilities["sample_calls"]["pubtator.lookup_mesh"]
+    assert "limit" in capabilities["sample_calls"]["pubtator.find_related_articles"]
+    assert "max_results" not in capabilities["sample_calls"]["pubtator.find_related_articles"]
 
 
 def test_capabilities_document_new_budget_and_stable_citation_fields() -> None:
