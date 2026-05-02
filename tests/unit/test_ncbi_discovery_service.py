@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import httpx
 import pytest
 
 from pubtator_link.models.discovery import (
@@ -12,7 +13,17 @@ from pubtator_link.models.discovery import (
     RelatedArticleMode,
     RelatedArticleRecord,
 )
-from pubtator_link.services.ncbi_discovery import DiscoveryService
+from pubtator_link.services.ncbi_discovery import DiscoveryService, NcbiDiscoveryClient
+
+
+class MockTransport:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self.payload = payload
+        self.requests: list[httpx.Request] = []
+
+    async def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        return httpx.Response(200, json=self.payload, request=request)
 
 
 class FakeDiscoveryClient:
@@ -75,6 +86,35 @@ async def test_convert_article_ids_adds_candidates_and_next_commands() -> None:
     assert response.candidate_pmids == ["123"]
     assert response.unresolved == ["bad"]
     assert response.meta.next_commands[0]["tool"] == "pubtator.stage_research_session"
+
+
+@pytest.mark.asyncio
+async def test_ncbi_client_parses_id_conversion_json() -> None:
+    transport = MockTransport(
+        {
+            "records": [
+                {"pmid": "123", "pmcid": "PMC123", "doi": "10.1000/example"},
+                {"requested-id": "bad", "status": "error"},
+            ]
+        }
+    )
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = NcbiDiscoveryClient(http_client=http_client)
+
+    records = await client.convert_article_ids(["PMC123", "bad"], "auto")
+
+    assert [record.input_id for record in records] == ["PMC123", "bad"]
+    assert records[0].status == "resolved"
+    assert records[0].pmid == "123"
+    assert records[0].pmcid == "PMC123"
+    assert records[0].doi == "10.1000/example"
+    assert records[1].status == "unresolved"
+    assert records[1].reason == "not_found"
+    assert transport.requests[0].url.path.endswith("/idconv/v1.0/")
+    assert transport.requests[0].url.params["ids"] == "PMC123,bad"
+    assert transport.requests[0].url.params["format"] == "json"
+    assert transport.requests[0].url.params["tool"] == "pubtator-link"
+    await client.close()
 
 
 @pytest.mark.asyncio

@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Protocol
 
 import httpx
-from httpx._types import QueryParamTypes
 
 from pubtator_link.api.retry import RetryPolicy, call_with_retries
 from pubtator_link.models.discovery import (
@@ -26,6 +25,7 @@ from pubtator_link.models.discovery import (
 NCBI_EUTILS_BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 NCBI_EUTILS_SOURCE_URL = "https://www.ncbi.nlm.nih.gov/books/NBK25501/"
 NCBI_MESH_SOURCE_URL = "https://www.ncbi.nlm.nih.gov/mesh/"
+QueryParams = Mapping[str, str]
 
 
 class NcbiDiscoveryClientProtocol(Protocol):
@@ -68,7 +68,7 @@ class NcbiDiscoveryClient:
         if self._owns_client:
             await self._client.aclose()
 
-    async def _get(self, path: str, params: QueryParamTypes) -> httpx.Response:
+    async def _get(self, path: str, params: QueryParams) -> httpx.Response:
         url = f"{self.base_url}/{path.lstrip('/')}"
         response, _metadata = await call_with_retries(
             lambda: self._client.get(url, params=params),
@@ -82,7 +82,48 @@ class NcbiDiscoveryClient:
         ids: Sequence[str],
         source: ArticleIdKind,
     ) -> list[ArticleIdConversionRecord]:
-        raise NotImplementedError
+        response = await self._get(
+            "idconv/v1.0/",
+            {"ids": ",".join(ids), "format": "json", "tool": "pubtator-link"},
+        )
+        payload = response.json()
+        records_payload = payload.get("records", []) if isinstance(payload, dict) else []
+
+        records_by_requested_id: dict[str, ArticleIdConversionRecord] = {}
+        for item in records_payload:
+            if not isinstance(item, dict):
+                continue
+
+            pmid = _optional_str(item.get("pmid"))
+            pmcid = _optional_str(item.get("pmcid"))
+            doi = _optional_str(item.get("doi"))
+            requested_id = _optional_str(item.get("requested-id")) or pmcid or pmid or doi
+            if requested_id is None:
+                continue
+
+            resolved = pmid is not None or pmcid is not None or doi is not None
+            records_by_requested_id[requested_id] = ArticleIdConversionRecord(
+                input_id=requested_id,
+                input_kind=source,
+                status="resolved" if resolved else "unresolved",
+                pmid=pmid,
+                pmcid=pmcid,
+                doi=doi,
+                reason=None if resolved else "not_found",
+            )
+
+        return [
+            records_by_requested_id.get(
+                requested,
+                ArticleIdConversionRecord(
+                    input_id=requested,
+                    input_kind=source,
+                    status="unresolved",
+                    reason="not_found",
+                ),
+            )
+            for requested in ids
+        ]
 
     async def lookup_mesh(self, query: str, limit: int, exact: bool) -> list[MeshDescriptor]:
         raise NotImplementedError
@@ -182,6 +223,12 @@ def _dedupe(values: Iterable[str]) -> list[str]:
             seen.add(value)
             deduped.append(value)
     return deduped
+
+
+def _optional_str(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)
 
 
 def _candidate_meta(candidate_pmids: list[str]) -> DiscoveryMeta:
