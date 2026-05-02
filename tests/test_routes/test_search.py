@@ -429,6 +429,49 @@ class TestSearchRoutes:
         data = response.json()
         assert data["preflight_error_reason"] == "timeout"
         assert data["preflight_error_code"] == "coverage_preflight_timeout"
+        assert data["preflight_error"] == {
+            "code": "coverage_preflight_timeout",
+            "reason": "timeout",
+            "retryable": True,
+            "message": "Coverage preflight timed out; retrying may succeed.",
+        }
+
+    @patch.object(PubTator3Client, "search_publications")
+    def test_search_preflight_internal_error_is_marked_non_retryable(
+        self, mock_search, test_client
+    ):
+        """Test coverage preflight internal errors tell clients not to retry blindly."""
+        from pubtator_link.api.routes.dependencies import get_source_preflight_service
+
+        class FakePreflight:
+            async def preflight_pmids(self, pmids: list[str]):
+                raise RuntimeError("unexpected parser state")
+
+        async def fake_source_preflight_service() -> FakePreflight:
+            return FakePreflight()
+
+        mock_search.return_value = {
+            "results": [{"pmid": "39540697", "title": "FMF in Childhood"}],
+            "count": 1,
+            "total_pages": 1,
+            "page_size": 10,
+        }
+        test_client.app.dependency_overrides[get_source_preflight_service] = (
+            fake_source_preflight_service
+        )
+
+        try:
+            response = test_client.get(
+                "/api/search/",
+                params={"text": "FMF", "coverage": "preflight"},
+            )
+        finally:
+            test_client.app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["preflight_error_code"] == "coverage_preflight_internal_error"
+        assert data["preflight_error"]["retryable"] is False
 
     @patch.object(PubTator3Client, "search_publications")
     def test_search_publications_can_enrich_basic_metadata(self, mock_search, test_client):

@@ -275,6 +275,22 @@ class StageResearchSessionResponse(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict, alias="_meta")
 
 
+class ReviewQuickstartResponse(BaseModel):
+    """One-shot search, stage/index, inspect handoff for casual review sessions."""
+
+    success: bool = True
+    review_id: str
+    session_id: str
+    topic: str
+    selected_pmids: list[str] = Field(default_factory=list)
+    coverage_summary: dict[str, int] = Field(default_factory=dict)
+    preparation_status: PreparationStatus
+    indexed_totals: "ReviewIndexTotals"
+    ready_to_retrieve: bool = False
+    next_commands: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class ResearchSessionStatusResponse(BaseModel):
     success: bool = True
     manifest: ResearchSessionManifest

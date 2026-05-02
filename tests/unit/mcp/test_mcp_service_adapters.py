@@ -381,6 +381,59 @@ async def test_stage_research_session_impl_serializes_meta_alias() -> None:
 
 
 @pytest.mark.asyncio
+async def test_review_quickstart_adapter_returns_retrieval_handoff() -> None:
+    from pubtator_link.mcp.service_adapters import review_quickstart_impl
+    from pubtator_link.models.review_rerag import (
+        InspectReviewIndexResponse,
+        PreparationStatus,
+        ResearchSessionManifest,
+        ReviewIndexTotals,
+        StageResearchSessionResponse,
+    )
+
+    class StageService:
+        async def stage(self, *, review_id, request):
+            assert review_id.startswith("quickstart-")
+            assert request.query == "MEFV colchicine"
+            assert request.max_candidates == 8
+            return StageResearchSessionResponse(
+                manifest=ResearchSessionManifest(
+                    session_id="session-1",
+                    review_id=review_id,
+                    query=request.query,
+                    coverage_summary={"abstract_only": 1},
+                    preparation_status=PreparationStatus(complete=1),
+                ),
+                meta={"next_commands": ["pubtator.retrieve_review_context_batch"]},
+            )
+
+    class ContextService:
+        async def inspect_review_index(self, review_id, request):
+            assert request.session_id == "session-1"
+            return InspectReviewIndexResponse(
+                review_id=review_id,
+                preparation_status=PreparationStatus(complete=1),
+                sources=[],
+                totals=ReviewIndexTotals(pmid_count=1, source_count=1, passage_count=3),
+                failed_sources=[],
+                coverage_summary={"abstract_only": 1},
+            )
+
+    result = await review_quickstart_impl(
+        stage_service=StageService(),
+        context_service=ContextService(),
+        topic="MEFV colchicine",
+        n_pmids=8,
+    )
+
+    assert result["ready_to_retrieve"] is True
+    assert result["review_id"].startswith("quickstart-")
+    assert result["session_id"] == "session-1"
+    assert result["coverage_summary"] == {"abstract_only": 1}
+    assert result["next_commands"][0] == "pubtator.retrieve_review_context_batch"
+
+
+@pytest.mark.asyncio
 async def test_index_review_evidence_adapter_returns_lifecycle_guidance() -> None:
     from pubtator_link.mcp.service_adapters import index_review_evidence_impl
     from pubtator_link.models.review_rerag import PreparationStatus

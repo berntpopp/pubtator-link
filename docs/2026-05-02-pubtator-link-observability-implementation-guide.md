@@ -22,6 +22,8 @@ The foundation pieces from PR-1 through PR-3 and the review RAG reliability/LLM 
 | Resolver audit trace controls | Shipped | Review retrieval tools hide resolver attempts by default and expose `include_resolver_trace` for audit/debug workflows. |
 | Batch response schema | Shipped | Compact/diagnostics batch retrieval can omit empty `results`, and the advertised output schema permits that lean response. |
 | Prepare-mode compatibility | Shipped | `index_review_evidence` no longer advertises `prepare_mode`, but accepts cached legacy `prepare_mode="selected"` calls. |
+| Coverage preflight retry hints | Shipped | Search responses include structured `preflight_error` with `retryable`; `coverage_preflight_internal_error` is non-retryable. |
+| Review quickstart handoff | Shipped | `pubtator.review_quickstart(topic, n_pmids=8)` searches, stages/indexes, inspects, and returns a retrieval handoff. |
 | OpenTelemetry traces | Not shipped | Still a follow-up; this guide keeps the trace plan as future work. |
 | Broader MCP-native UX notices | Partial | Degraded-mode notices are shipped; zero-result "call X first" notices and richer fallback notices remain follow-up work. |
 

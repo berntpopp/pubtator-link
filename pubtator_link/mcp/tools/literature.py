@@ -55,7 +55,7 @@ def register_literature_tools(mcp: FastMCP) -> None:
         coverage: SearchCoverageMode = "preflight",
         metadata: SearchMetadataMode = "basic",
     ) -> dict[str, Any]:
-        """Use this when a user needs PubMed literature search through PubTator3. Use short biomedical queries, optional sort such as 'score desc' or 'date desc', flat publication/year filters, raw filters JSON, optional section filters, and coverage='preflight' when source coverage should be visible before indexing."""
+        """Use this when a user needs PubMed literature search through PubTator3. Use short biomedical queries, optional sort such as 'score desc' or 'date desc', flat publication/year filters, raw filters JSON, optional section filters, and coverage='preflight' when source coverage should be visible before indexing. If preflight_error_code is coverage_preflight_internal_error, retryable=false means do not retry blindly; continue with search results or inspect diagnostics."""
 
         async def call() -> dict[str, Any]:
             preflight_service = (

@@ -32,6 +32,7 @@ from pubtator_link.mcp.service_adapters import (
     preflight_review_sources_impl,
     retrieve_review_context_batch_impl,
     retrieve_review_context_impl,
+    review_quickstart_impl,
     stage_research_session_impl,
 )
 from pubtator_link.models.review_rerag import (
@@ -51,6 +52,7 @@ from pubtator_link.models.review_rerag import (
     ReviewBatchResponseMode,
     ReviewIndexSummaryResponse,
     ReviewPassageLookupResponse,
+    ReviewQuickstartResponse,
     ReviewTableMode,
     SampleSectionPolicy,
     StageResearchSessionResponse,
@@ -244,6 +246,38 @@ def register_review_tools(mcp: FastMCP) -> None:
             call,
             pmids=pmids or [],
         )
+
+    @mcp.tool(
+        name="pubtator.review_quickstart",
+        title="Review Quickstart",
+        output_schema=ReviewQuickstartResponse.model_json_schema(),
+        annotations=REVIEW_WRITE_ANNOTATIONS,
+    )
+    async def review_quickstart(
+        topic: Annotated[str, Field(min_length=1)],
+        n_pmids: Annotated[int, Field(ge=1, le=20)] = 8,
+        review_id: Annotated[str | None, Field(min_length=1)] = None,
+        session_id: Annotated[str | None, Field(min_length=1)] = None,
+        wait_until_ready: bool = False,
+        timeout_ms: Annotated[int, Field(ge=0, le=120_000)] = 0,
+    ) -> dict[str, Any]:
+        """Use this one-shot entry point for casual review setup: search topic, stage/index up to n_pmids, inspect coverage, and return review_id/session_id for retrieve_review_context_batch."""
+
+        async def call() -> dict[str, Any]:
+            stage_service = await get_research_session_service()
+            context_service = await get_review_context_service()
+            return await review_quickstart_impl(
+                stage_service=stage_service,
+                context_service=context_service,
+                topic=topic,
+                n_pmids=n_pmids,
+                review_id=review_id,
+                session_id=session_id,
+                wait_until_ready=wait_until_ready,
+                timeout_ms=timeout_ms,
+            )
+
+        return await run_mcp_tool("pubtator.review_quickstart", call)
 
     @mcp.tool(
         name="pubtator.get_research_session_status",

@@ -19,6 +19,7 @@ def get_capabilities_resource() -> dict[str, Any]:
         "endpoint": "/mcp",
         "tools": [
             "pubtator.workflow_help",
+            "pubtator.review_quickstart",
             "pubtator.search_literature",
             "pubtator.search_guidelines",
             "pubtator.convert_article_ids",
@@ -65,6 +66,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             ],
             "indexing": [
                 "pubtator.preflight_review_sources",
+                "pubtator.review_quickstart",
                 "pubtator.stage_research_session",
                 "pubtator.index_review_evidence",
                 "pubtator.inspect_review_index",
@@ -133,6 +135,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             "pubtator.index_review_evidence",
             "pubtator.inspect_review_index",
             "pubtator.retrieve_review_context_batch",
+            "pubtator.review_quickstart",
             "pubtator.diagnostics",
         ],
         "advanced_tools": [
@@ -163,6 +166,12 @@ def get_capabilities_resource() -> dict[str, Any]:
             "metadata": "none",
             "metadata_modes": ["none", "basic", "full"],
             "guideline_tool": "pubtator.search_guidelines",
+            "coverage_preflight_errors": {
+                "coverage_preflight_timeout": {"retryable": True},
+                "coverage_preflight_upstream_unavailable": {"retryable": True},
+                "coverage_preflight_converter_failed": {"retryable": False},
+                "coverage_preflight_internal_error": {"retryable": False},
+            },
         },
         "review_id_semantics": {
             "scope": "durable caller-provided namespace for one review corpus",
@@ -197,6 +206,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             ],
             "review_grounding": [
                 "pubtator.preflight_review_sources",
+                "pubtator.review_quickstart",
                 "pubtator.stage_research_session",
                 "pubtator.get_research_session_status",
                 "pubtator.list_research_sessions",
@@ -312,6 +322,10 @@ def get_capabilities_resource() -> dict[str, Any]:
             "pubtator.workflow_help": {
                 "task": "clinical_genetics_review",
             },
+            "pubtator.review_quickstart": {
+                "topic": "MEFV colchicine familial Mediterranean fever guideline",
+                "n_pmids": 8,
+            },
             "pubtator.preflight_review_sources": {
                 "pmids": ["40234174"],
             },
@@ -363,6 +377,8 @@ def get_capabilities_resource() -> dict[str, Any]:
             "publication_metadata": "metadata[]",
             "discovery_candidate_pmids": "candidate_pmids",
             "handoff_next_commands": "_meta.next_commands",
+            "quickstart_review_id": "review_id",
+            "quickstart_ready": "ready_to_retrieve",
             "index_snapshot_date": "index_snapshot_date",
             "corpus_snapshot_date": "corpus_snapshot_date",
             "budget": "budget",
@@ -431,6 +447,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             },
             "tools": [
                 "pubtator.index_review_evidence",
+                "pubtator.review_quickstart",
                 "pubtator.stage_research_session",
                 "pubtator.get_research_session_status",
                 "pubtator.list_research_sessions",
@@ -455,6 +472,8 @@ def get_capabilities_resource() -> dict[str, Any]:
             },
             "workflow": [
                 "preflight candidate PMIDs to estimate source coverage",
+                "for casual sessions, call review_quickstart to search, stage/index, inspect, "
+                "and return a review_id/session_id handoff",
                 "feed discovery candidate PMIDs into stage_research_session for screening",
                 "stage live research sessions from a query or PMID list before retrieval",
                 "pass curated discovery candidate PMIDs to index_review_evidence for durable retrieval",

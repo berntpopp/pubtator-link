@@ -22,6 +22,8 @@ The reliability/ergonomics follow-up is also complete in source:
 - `index_review_evidence` accepts legacy cached `prepare_mode="selected"` calls while keeping the argument hidden from the current public schema.
 - Search and entity discovery return better guideline ranking reasons and bounded synonyms.
 - MCP capabilities now expose tool categories and a diagnostics-first recovery workflow.
+- Search coverage preflight failures expose `preflight_error.retryable`; `coverage_preflight_internal_error` is non-retryable, so models should continue with returned PMIDs or narrow preflight instead of retrying the same broad search.
+- `pubtator.review_quickstart(topic, n_pmids=8)` is the low-coordination entry point for casual sessions: it searches, stages/indexes, inspects coverage, and returns `review_id`/`session_id` for batch retrieval.
 
 Latest verification:
 

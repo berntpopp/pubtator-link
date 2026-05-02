@@ -21,6 +21,16 @@ class WorkflowHelpService:
     def _clinical_or_literature_review(self, task: WorkflowTask) -> WorkflowHelpResponse:
         steps = [
             WorkflowStep(
+                order=0,
+                tool_name="pubtator.review_quickstart",
+                purpose=(
+                    "For casual sessions, search, stage/index, inspect coverage, and get a "
+                    "review_id/session_id handoff before batch retrieval."
+                ),
+                required=False,
+                key_args={"n_pmids": 8},
+            ),
+            WorkflowStep(
                 order=1,
                 tool_name="pubtator.search_biomedical_entities",
                 purpose="Resolve canonical entity IDs for genes, diseases, chemicals, and variants.",

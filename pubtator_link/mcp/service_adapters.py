@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import re
 from typing import Any, Literal, cast
 
 from pubtator_link.api.client import PubTator3Client
@@ -32,6 +34,7 @@ from pubtator_link.models.review_rerag import (
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
     ReviewBatchResponseMode,
+    ReviewQuickstartResponse,
     ReviewTableMode,
     SampleSectionPolicy,
     StageResearchSessionRequest,
@@ -589,6 +592,74 @@ async def stage_research_session_impl(
     except TypeError:
         result = response.model_dump()
     return cast(dict[str, Any], result)
+
+
+async def review_quickstart_impl(
+    *,
+    stage_service: Any,
+    context_service: ReviewContextService,
+    topic: str,
+    n_pmids: int = 8,
+    review_id: str | None = None,
+    session_id: str | None = None,
+    wait_until_ready: bool = False,
+    timeout_ms: int = 0,
+) -> dict[str, Any]:
+    normalized_topic = topic.strip()
+    selected_review_id = review_id or _quickstart_review_id(normalized_topic)
+    staged = await stage_service.stage(
+        review_id=selected_review_id,
+        request=StageResearchSessionRequest(
+            session_id=session_id,
+            query=normalized_topic,
+            max_candidates=n_pmids,
+            stage_full_text=True,
+        ),
+    )
+    manifest = staged.manifest
+    inspect_response = await context_service.inspect_review_index(
+        selected_review_id,
+        InspectReviewIndexRequest(session_id=manifest.session_id),
+    )
+    preparation_status = inspect_response.preparation_status
+    ready_to_retrieve = (
+        inspect_response.totals.passage_count > 0
+        or preparation_status.complete > 0
+        or preparation_status.partial > 0
+    )
+    warnings: list[str] = []
+    if wait_until_ready and not ready_to_retrieve:
+        warnings.append(
+            "quickstart queued sources but no passages are ready yet; poll inspect_review_index"
+        )
+    if timeout_ms and not ready_to_retrieve:
+        warnings.append("quickstart does not block on indexing; use inspect_review_index to poll")
+    response = ReviewQuickstartResponse(
+        review_id=selected_review_id,
+        session_id=manifest.session_id,
+        topic=normalized_topic,
+        selected_pmids=[candidate.pmid for candidate in manifest.candidates],
+        coverage_summary=inspect_response.coverage_summary or manifest.coverage_summary,
+        preparation_status=preparation_status,
+        indexed_totals=inspect_response.totals,
+        ready_to_retrieve=ready_to_retrieve,
+        next_commands=[
+            "pubtator.retrieve_review_context_batch"
+            if ready_to_retrieve
+            else "pubtator.inspect_review_index",
+            "pubtator.retrieve_review_context_batch",
+        ],
+        warnings=warnings,
+    )
+    return response.model_dump(mode="json")
+
+
+def _quickstart_review_id(topic: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", topic.lower()).strip("-")[:48]
+    if not slug:
+        slug = "review"
+    digest = hashlib.sha256(topic.encode("utf-8")).hexdigest()[:8]
+    return f"quickstart-{slug}-{digest}"
 
 
 async def get_research_session_status_impl(

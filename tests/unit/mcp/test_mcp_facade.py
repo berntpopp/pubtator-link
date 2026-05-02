@@ -6,6 +6,7 @@ EXPECTED_PUBLIC_TOOL_NAMES = {
     "pubtator.workflow_help",
     "pubtator.get_server_capabilities",
     "pubtator.search_literature",
+    "pubtator.review_quickstart",
     "pubtator.convert_article_ids",
     "pubtator.lookup_mesh",
     "pubtator.lookup_citation",
@@ -146,6 +147,21 @@ def test_search_literature_schema_defaults_to_nlm_citations_for_metadata() -> No
 
     assert schema["properties"]["metadata"]["default"] == "basic"
     assert schema["properties"]["include_citations"]["default"] == "nlm"
+    assert "coverage_preflight_internal_error" in tool.description
+    assert "retryable=false" in tool.description
+
+
+def test_review_quickstart_schema_is_flat_and_returns_retrieval_handoff() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp()._tool_manager._tools["pubtator.review_quickstart"]
+    schema = tool.parameters
+    output_schema = _tool_output_schema(tool)
+
+    assert "topic" in schema["properties"]
+    assert schema["properties"]["n_pmids"]["default"] == 8
+    assert output_schema["properties"]["ready_to_retrieve"]
+    assert output_schema["properties"]["next_commands"]
 
 
 def test_index_review_evidence_schema_does_not_expose_prepare_mode() -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, Protocol, cast
 
-from pubtator_link.models.responses import SearchResponse
+from pubtator_link.models.responses import CoveragePreflightError, SearchResponse
 from pubtator_link.models.review_rerag import SourceCoverageHint
 
 SearchCoverageMode = Literal["none", "preflight"]
@@ -34,6 +34,7 @@ async def attach_preflight_coverage(
         response.preflight_failure_reason = reason
         response.preflight_error_reason = reason
         response.preflight_error_code = f"coverage_preflight_{reason}"
+        response.preflight_error = _preflight_error(reason)
         return
 
     hints_by_pmid = {hint.pmid: hint.model_dump(mode="json") for hint in hints}
@@ -62,6 +63,23 @@ def _preflight_error_reason(exc: Exception) -> str:
     if isinstance(exc, ValueError):
         return "converter_failed"
     return "internal_error"
+
+
+def _preflight_error(reason: str) -> CoveragePreflightError:
+    code = f"coverage_preflight_{reason}"
+    retryable = reason in {"timeout", "upstream_unavailable"}
+    messages = {
+        "timeout": "Coverage preflight timed out; retrying may succeed.",
+        "upstream_unavailable": "Coverage preflight upstream was unavailable; retrying may succeed.",
+        "converter_failed": "Coverage preflight identifier conversion failed; revise identifiers before retrying.",
+        "internal_error": "Coverage preflight hit an internal error; do not retry blindly.",
+    }
+    return CoveragePreflightError(
+        code=code,
+        reason=reason,
+        retryable=retryable,
+        message=messages.get(reason, "Coverage preflight failed."),
+    )
 
 
 def _preflight_confidence(expected_coverage: str, coverage_reason: str) -> str:

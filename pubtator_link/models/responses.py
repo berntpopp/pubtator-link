@@ -212,6 +212,15 @@ class SearchResult(BaseModel):
         return authors
 
 
+class CoveragePreflightError(BaseModel):
+    """Structured non-fatal coverage preflight failure."""
+
+    code: str
+    reason: str
+    retryable: bool
+    message: str
+
+
 class SearchResponse(BaseResponse):
     """Response model for search."""
 
@@ -243,6 +252,9 @@ class SearchResponse(BaseResponse):
     )
     preflight_error_code: str | None = Field(
         default=None, description="Stable coverage preflight failure code"
+    )
+    preflight_error: CoveragePreflightError | None = Field(
+        default=None, description="Structured coverage preflight failure and retry guidance"
     )
 
 
