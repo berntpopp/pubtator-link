@@ -175,6 +175,7 @@ async def test_get_review_passages_by_id_adapter_calls_service() -> None:
             self,
             review_id: str,
             passage_ids: list[str],
+            session_id: str | None,
             max_chars_per_passage: int,
         ) -> ReviewPassageLookupResponse:
             return ReviewPassageLookupResponse(
@@ -206,6 +207,7 @@ async def test_get_neighboring_review_passages_adapter_calls_service() -> None:
             before: int,
             after: int,
             same_section: bool,
+            session_id: str | None,
             max_chars_per_passage: int,
         ) -> ReviewPassageLookupResponse:
             return ReviewPassageLookupResponse(
@@ -234,9 +236,12 @@ async def test_export_review_audit_bundle_adapter_returns_bundle() -> None:
     )
 
     class FakeService:
-        async def export_bundle(self, review_id: str) -> ReviewAuditBundle:
+        async def export_bundle(
+            self, review_id: str, *, session_id: str | None = None
+        ) -> ReviewAuditBundle:
             return ReviewAuditBundle(
                 review_id=review_id,
+                session_id=session_id,
                 generated_at="2026-05-01T10:00:00+00:00",
                 preparation_status=PreparationStatus(complete=1),
                 totals=ReviewIndexTotals(),
@@ -356,17 +361,23 @@ async def test_index_review_evidence_adapter_returns_lifecycle_guidance() -> Non
     from pubtator_link.models.review_rerag import PreparationStatus
 
     class FakeRepository:
-        async def preparation_status(self, review_id):
+        async def preparation_job_statuses(self, review_id, source_ids):
+            return {
+                "PMID:40234175": "complete",
+                "URL:https://example.org/already-prepared.pdf": "complete",
+            }
+
+        async def preparation_status(self, review_id, *, session_id=None):
             return PreparationStatus(queued=1, complete=2)
 
     class FakeQueue:
         repository = FakeRepository()
 
         async def enqueue_pmid(self, review_id, pmid):
-            return pmid == "40234174"
+            return "newly_queued" if pmid == "40234174" else "already_indexed"
 
         async def enqueue_curated_url(self, review_id, url):
-            return False
+            return "already_indexed"
 
     result = await index_review_evidence_impl(
         queue=FakeQueue(),
@@ -380,7 +391,7 @@ async def test_index_review_evidence_adapter_returns_lifecycle_guidance() -> Non
     assert set(result) >= {"success", "review_id", "preparation_status"}
     assert result["retry_after_ms"] == 3000
     assert result["index_snapshot_date"] is not None
-    assert "already_prepared" in result["lifecycle_note"]
+    assert "already indexed sources are no-ops" in result["lifecycle_note"]
     assert "inspect_review_index" in result["lifecycle_note"]
 
 

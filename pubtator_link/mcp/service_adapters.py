@@ -27,7 +27,6 @@ from pubtator_link.models.review_rerag import (
     IndexReviewEvidenceRequest,
     InspectReviewIndexRequest,
     McpReviewAuditBundleResponse,
-    PreparationStatus,
     PrepareMode,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
@@ -45,9 +44,9 @@ from pubtator_link.services.publication_service import PublicationService
 from pubtator_link.services.review_audit import ReviewAuditService
 from pubtator_link.services.review_context_service import ReviewContextService
 from pubtator_link.services.review_evidence_certainty import ReviewEvidenceCertaintyService
+from pubtator_link.services.review_indexing import ReviewIndexingService
 from pubtator_link.services.review_index_lifecycle import ReviewIndexLifecycleService
 from pubtator_link.services.review_preparation_queue import ReviewPreparationQueue
-from pubtator_link.services.review_state import index_snapshot_date, retry_after_ms_for_status
 from pubtator_link.services.search_coverage import (
     SearchCoverageMode,
     SearchCoveragePreflight,
@@ -467,48 +466,25 @@ async def index_review_evidence_impl(
     pmids: list[str] | None = None,
     curated_urls: list[str] | None = None,
     prepare_mode: PrepareMode = "selected",
+    session_id: str | None = None,
+    wait_for_completion: bool = False,
+    wait_for_status: Literal["complete", "complete_or_partial", "terminal"] | None = None,
+    timeout_ms: int = 0,
+    dry_run: bool = False,
 ) -> dict[str, Any]:
     api_request = IndexReviewEvidenceRequest(
         pmids=pmids or [],
         curated_urls=curated_urls or [],
         prepare_mode=prepare_mode,
+        session_id=session_id,
+        wait_for_completion=wait_for_completion,
+        wait_for_status=wait_for_status,
+        timeout_ms=timeout_ms,
+        dry_run=dry_run,
     )
-    queued = 0
-    already_prepared = 0
-    for pmid in api_request.pmids:
-        if await queue.enqueue_pmid(review_id, pmid):
-            queued += 1
-        else:
-            already_prepared += 1
-    for url in api_request.curated_urls:
-        if await queue.enqueue_curated_url(review_id, url):
-            queued += 1
-        else:
-            already_prepared += 1
-    status = _preparation_status_model(await queue.repository.preparation_status(review_id))
-    response = {
-        "success": True,
-        "review_id": review_id,
-        "queued": queued,
-        "already_prepared": already_prepared,
-        "preparation_status": status.model_dump(),
-        "retry_after_ms": retry_after_ms_for_status(status),
-        "index_snapshot_date": index_snapshot_date(),
-        "lifecycle_note": (
-            "Repeated calls with the same review_id and already prepared PMIDs are no-ops "
-            "counted as already_prepared; new PMIDs are enqueued for the same review_id. "
-            "Call pubtator.inspect_review_index for source coverage, failed sources, and "
-            "passage counts before retrieval."
-        ),
-    }
-    return response
-
-
-def _preparation_status_model(status: PreparationStatus | dict[str, int]) -> PreparationStatus:
-    if isinstance(status, PreparationStatus):
-        return status
-    return PreparationStatus(**status)
-
+    service = ReviewIndexingService(repository=queue.repository, queue=queue)
+    response = await service.index_review_evidence(review_id, api_request)
+    return response.model_dump()
 
 async def preflight_review_sources_impl(
     *,
@@ -582,6 +558,7 @@ async def inspect_review_index_impl(
     service: ReviewContextService,
     review_id: str,
     pmids: list[str] | None = None,
+    session_id: str | None = None,
     include_passage_samples: bool = False,
     sample_per_pmid: int = 2,
     min_sample_chars: int = 80,
@@ -590,6 +567,7 @@ async def inspect_review_index_impl(
     response = await service.inspect_review_index(
         review_id=review_id,
         request=InspectReviewIndexRequest(
+            session_id=session_id,
             pmids=pmids or [],
             include_passage_samples=include_passage_samples,
             sample_per_pmid=sample_per_pmid,
@@ -605,11 +583,13 @@ async def get_review_passages_by_id_impl(
     service: ReviewContextService,
     review_id: str,
     passage_ids: list[str],
+    session_id: str | None = None,
     max_chars_per_passage: int = 2200,
 ) -> dict[str, Any]:
     response = await service.get_passages_by_id(
         review_id=review_id,
         passage_ids=passage_ids,
+        session_id=session_id,
         max_chars_per_passage=max_chars_per_passage,
     )
     return response.model_dump()
@@ -620,6 +600,7 @@ async def get_neighboring_review_passages_impl(
     service: ReviewContextService,
     review_id: str,
     passage_id: str,
+    session_id: str | None = None,
     before: int = 1,
     after: int = 1,
     same_section: bool = True,
@@ -631,6 +612,7 @@ async def get_neighboring_review_passages_impl(
         before=before,
         after=after,
         same_section=same_section,
+        session_id=session_id,
         max_chars_per_passage=max_chars_per_passage,
     )
     return response.model_dump()
@@ -640,8 +622,9 @@ async def export_review_audit_bundle_impl(
     *,
     service: ReviewAuditService,
     review_id: str,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
-    bundle = await service.export_bundle(review_id)
+    bundle = await service.export_bundle(review_id, session_id=session_id)
     return McpReviewAuditBundleResponse(audit_bundle=bundle).model_dump(mode="json")
 
 
@@ -650,6 +633,7 @@ async def retrieve_review_context_impl(
     service: ReviewContextService,
     review_id: str,
     question: str,
+    session_id: str | None = None,
     pmids: list[str] | None = None,
     entity_ids: list[str] | None = None,
     sections: list[str] | None = None,
@@ -666,6 +650,7 @@ async def retrieve_review_context_impl(
         review_id=review_id,
         request=RetrieveReviewContextRequest(
             question=question,
+            session_id=session_id,
             pmids=pmids or [],
             entity_ids=entity_ids or [],
             sections=sections or [],
@@ -687,6 +672,7 @@ async def retrieve_review_context_batch_impl(
     service: ReviewContextService,
     review_id: str,
     queries: list[str],
+    session_id: str | None = None,
     pmids: list[str] | None = None,
     entity_ids: list[str] | None = None,
     sections: list[str] | None = None,
@@ -710,6 +696,7 @@ async def retrieve_review_context_batch_impl(
         review_id=review_id,
         request=RetrieveReviewContextBatchRequest(
             queries=queries,
+            session_id=session_id,
             pmids=pmids or [],
             entity_ids=entity_ids or [],
             sections=sections or [],

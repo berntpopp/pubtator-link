@@ -21,10 +21,14 @@ from pubtator_link.services.review_state import index_snapshot_date
 
 
 class ReviewAuditRepository(Protocol):
-    async def preparation_status(self, review_id: str) -> PreparationStatus | dict[str, int]:
+    async def preparation_status(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> PreparationStatus | dict[str, int]:
         """Return preparation status for a review."""
 
-    async def review_index_totals(self, review_id: str) -> ReviewIndexTotals:
+    async def review_index_totals(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> ReviewIndexTotals:
         """Return index totals for a review."""
 
     async def list_review_sources(
@@ -34,13 +38,18 @@ class ReviewAuditRepository(Protocol):
         *,
         include_passage_samples: bool = False,
         sample_per_pmid: int = 0,
+        session_id: str | None = None,
     ) -> list[ReviewSourceSummary]:
         """Return indexed source summaries."""
 
-    async def list_review_failed_sources(self, review_id: str) -> list[FailedSourceSummary]:
+    async def list_review_failed_sources(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> list[FailedSourceSummary]:
         """Return failed source summaries."""
 
-    async def list_review_passage_ids(self, review_id: str) -> list[str]:
+    async def list_review_passage_ids(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> list[str]:
         """Return stable passage IDs for a review."""
 
     async def list_review_audit_events(self, review_id: str) -> list[Mapping[str, Any]]:
@@ -57,19 +66,28 @@ class ReviewAuditService:
     def __init__(self, repository: ReviewAuditRepository) -> None:
         self.repository = repository
 
-    async def export_bundle(self, review_id: str) -> ReviewAuditBundle:
-        preparation_status = await self.repository.preparation_status(review_id)
+    async def export_bundle(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> ReviewAuditBundle:
+        preparation_status = await self.repository.preparation_status(
+            review_id, session_id=session_id
+        )
         if not isinstance(preparation_status, PreparationStatus):
             preparation_status = PreparationStatus(**preparation_status)
-        totals = await self.repository.review_index_totals(review_id)
+        totals = await self.repository.review_index_totals(review_id, session_id=session_id)
         sources = await self.repository.list_review_sources(
             review_id,
             pmids=None,
             include_passage_samples=False,
             sample_per_pmid=0,
+            session_id=session_id,
         )
-        failed_sources = await self.repository.list_review_failed_sources(review_id)
-        passage_ids = await self.repository.list_review_passage_ids(review_id)
+        failed_sources = await self.repository.list_review_failed_sources(
+            review_id, session_id=session_id
+        )
+        passage_ids = await self.repository.list_review_passage_ids(
+            review_id, session_id=session_id
+        )
         events = await self.repository.list_review_audit_events(review_id)
         evidence_certainty = await self.repository.list_evidence_certainty(review_id)
         research_sessions = await self.repository.list_research_sessions(review_id)
@@ -82,6 +100,7 @@ class ReviewAuditService:
             resolver_attempts.extend(failed_source.resolver_attempts)
         return ReviewAuditBundle(
             review_id=review_id,
+            session_id=session_id,
             generated_at=datetime.now(UTC).isoformat(),
             preparation_status=preparation_status,
             totals=totals,

@@ -81,6 +81,6 @@ def test_index_review_evidence_mcp_request_rejects_unknown_prepare_mode() -> Non
 def test_index_review_evidence_mcp_schema_does_not_advertise_candidate_fast() -> None:
     mcp = create_pubtator_mcp()
     schema = mcp._tool_manager._tools["pubtator.index_review_evidence"].parameters
-    prepare_mode_schema = schema["properties"]["prepare_mode"]
 
-    assert "candidate_fast" not in str(prepare_mode_schema)
+    assert "prepare_mode" not in schema["properties"]
+    assert "candidate_fast" not in str(schema)

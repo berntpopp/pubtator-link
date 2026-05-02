@@ -12,8 +12,8 @@ from pubtator_link.models.review_rerag import (
     PreparationEnqueueResult,
     PreparationStatus,
 )
-from pubtator_link.services.review_context_service import index_snapshot_date
 from pubtator_link.services.review_preparation_queue import ReviewPreparationQueue
+from pubtator_link.services.review_state import index_snapshot_date, retry_after_ms_for_status
 
 
 class ReviewIndexingRepository(Protocol):
@@ -66,7 +66,7 @@ class ReviewIndexingService:
         statuses = await self.repository.preparation_job_statuses(
             review_id, [source_id for source_id, _, _ in sources]
         )
-        counters = _counters_from_statuses(statuses)
+        counters = _counters_from_statuses(statuses) if request.dry_run else _empty_counters()
 
         if not request.dry_run:
             for source_id, source_type, value in sources:
@@ -104,7 +104,7 @@ class ReviewIndexingService:
             queued=queued,
             already_prepared=already_prepared,
             preparation_status=status,
-            retry_after_ms=1000 if timed_out or status.queued or status.running else None,
+            retry_after_ms=1000 if timed_out else retry_after_ms_for_status(status),
             index_snapshot_date=index_snapshot_date(),
             dry_run=request.dry_run,
             waited_ms=waited_ms,

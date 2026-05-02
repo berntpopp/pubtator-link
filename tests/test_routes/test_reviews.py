@@ -280,7 +280,8 @@ async def test_evidence_certainty_routes_store_and_return_records() -> None:
 async def test_index_review_evidence_returns_queue_status() -> None:
     app = UnifiedServerManager().create_app()
     queue = AsyncMock()
-    queue.enqueue_pmid.return_value = True
+    queue.enqueue_pmid.return_value = "newly_queued"
+    queue.repository.preparation_job_statuses.return_value = {}
     queue.repository.preparation_status.return_value = PreparationStatus(queued=1)
     app.dependency_overrides[get_review_queue] = lambda: queue
 
@@ -396,7 +397,7 @@ async def test_export_review_audit_bundle_route_returns_audit_bundle() -> None:
     data = response.json()
     assert data["review_id"] == "rev_123"
     assert data["index_snapshot_date"] == "2026-05-02"
-    service.export_bundle.assert_awaited_once_with("rev_123")
+    service.export_bundle.assert_awaited_once_with("rev_123", session_id=None)
 
 
 @pytest.mark.asyncio

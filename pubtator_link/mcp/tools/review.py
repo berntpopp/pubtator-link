@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastmcp import FastMCP
 from pydantic import Field
@@ -45,7 +45,6 @@ from pubtator_link.models.review_rerag import (
     ListReviewIndexesResponse,
     McpReviewAuditBundleResponse,
     PreflightReviewSourcesResponse,
-    PrepareMode,
     ResearchSessionStatusResponse,
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextResponse,
@@ -281,9 +280,13 @@ def register_review_tools(mcp: FastMCP) -> None:
         review_id: Annotated[str, Field(min_length=1)],
         pmids: list[str] | None = None,
         curated_urls: list[str] | None = None,
-        prepare_mode: PrepareMode = "selected",
+        session_id: str | None = None,
+        wait_for_completion: bool = False,
+        wait_for_status: Literal["complete", "complete_or_partial", "terminal"] | None = None,
+        timeout_ms: int = 0,
+        dry_run: bool = False,
     ) -> dict[str, Any]:
-        """Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs. Call this before retrieve_review_context, then inspect until preparation_status shows complete, partial, or failed. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs. Call this before retrieve_review_context, use session_id to scope staged research sessions, set wait_for_completion for small corpora, and inspect preparation_status before retrieval."""
 
         async def call() -> dict[str, Any]:
             queue = await get_review_queue()
@@ -292,7 +295,11 @@ def register_review_tools(mcp: FastMCP) -> None:
                 review_id=review_id,
                 pmids=pmids,
                 curated_urls=curated_urls,
-                prepare_mode=prepare_mode,
+                session_id=session_id,
+                wait_for_completion=wait_for_completion,
+                wait_for_status=wait_for_status,
+                timeout_ms=timeout_ms,
+                dry_run=dry_run,
             )
 
         return await run_mcp_tool(
@@ -309,6 +316,7 @@ def register_review_tools(mcp: FastMCP) -> None:
     )
     async def inspect_review_index(
         review_id: str,
+        session_id: str | None = None,
         pmids: list[str] | None = None,
         include_passage_samples: bool = False,
         sample_per_pmid: int = 2,
@@ -322,6 +330,7 @@ def register_review_tools(mcp: FastMCP) -> None:
             return await inspect_review_index_impl(
                 service=service,
                 review_id=review_id,
+                session_id=session_id,
                 pmids=pmids,
                 include_passage_samples=include_passage_samples,
                 sample_per_pmid=sample_per_pmid,
@@ -340,6 +349,7 @@ def register_review_tools(mcp: FastMCP) -> None:
     async def get_review_passages_by_id(
         review_id: str,
         passage_ids: list[str],
+        session_id: str | None = None,
         max_chars_per_passage: int = 2200,
     ) -> dict[str, Any]:
         """Use this to retrieve exact prepared review passages by stable passage IDs from prior context packs or audit bundles. This only reads the review index and does not call upstream APIs. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
@@ -350,6 +360,7 @@ def register_review_tools(mcp: FastMCP) -> None:
                 service=service,
                 review_id=review_id,
                 passage_ids=passage_ids,
+                session_id=session_id,
                 max_chars_per_passage=max_chars_per_passage,
             )
 
@@ -364,6 +375,7 @@ def register_review_tools(mcp: FastMCP) -> None:
     async def get_neighboring_review_passages(
         review_id: str,
         passage_id: str,
+        session_id: str | None = None,
         before: int = 1,
         after: int = 1,
         same_section: bool = True,
@@ -377,6 +389,7 @@ def register_review_tools(mcp: FastMCP) -> None:
                 service=service,
                 review_id=review_id,
                 passage_id=passage_id,
+                session_id=session_id,
                 before=before,
                 after=after,
                 same_section=same_section,
@@ -391,12 +404,19 @@ def register_review_tools(mcp: FastMCP) -> None:
         output_schema=McpReviewAuditBundleResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
     )
-    async def export_review_audit_bundle(review_id: str) -> dict[str, Any]:
+    async def export_review_audit_bundle(
+        review_id: str,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
         """Use this to export review preparation status, source coverage, resolver attempts, retrieval runs, passage IDs, and stable citation keys for scientific auditability. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_audit_service()
-            return await export_review_audit_bundle_impl(service=service, review_id=review_id)
+            return await export_review_audit_bundle_impl(
+                service=service,
+                review_id=review_id,
+                session_id=session_id,
+            )
 
         return await run_mcp_tool("pubtator.export_review_audit_bundle", call)
 
@@ -409,6 +429,7 @@ def register_review_tools(mcp: FastMCP) -> None:
     async def retrieve_review_context(
         review_id: str,
         question: str,
+        session_id: str | None = None,
         pmids: list[str] | None = None,
         entity_ids: list[str] | None = None,
         sections: list[str] | None = None,
@@ -429,6 +450,7 @@ def register_review_tools(mcp: FastMCP) -> None:
                 service=service,
                 review_id=review_id,
                 question=question,
+                session_id=session_id,
                 pmids=pmids,
                 entity_ids=entity_ids,
                 sections=sections,
@@ -453,6 +475,7 @@ def register_review_tools(mcp: FastMCP) -> None:
     async def retrieve_review_context_batch(
         review_id: str,
         queries: list[str],
+        session_id: str | None = None,
         pmids: list[str] | None = None,
         entity_ids: list[str] | None = None,
         sections: list[str] | None = None,
@@ -480,6 +503,7 @@ def register_review_tools(mcp: FastMCP) -> None:
                 service=service,
                 review_id=review_id,
                 queries=queries,
+                session_id=session_id,
                 pmids=pmids,
                 entity_ids=entity_ids,
                 sections=sections,

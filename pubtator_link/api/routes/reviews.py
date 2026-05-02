@@ -30,7 +30,7 @@ from ...models.review_rerag import (
     StageResearchSessionResponse,
     UpsertEvidenceCertaintyRequest,
 )
-from ...services.review_state import index_snapshot_date, retry_after_ms_for_status
+from ...services.review_indexing import ReviewIndexingService
 from .dependencies import (
     ResearchSessionServiceDep,
     ReviewAuditServiceDep,
@@ -225,27 +225,8 @@ async def index_review_evidence(
     request: IndexReviewEvidenceRequest,
     queue: ReviewQueueDep,
 ) -> IndexReviewEvidenceResponse:
-    queued = 0
-    already_prepared = 0
-    for pmid in request.pmids:
-        if await queue.enqueue_pmid(review_id, pmid):
-            queued += 1
-        else:
-            already_prepared += 1
-    for url in request.curated_urls:
-        if await queue.enqueue_curated_url(review_id, url):
-            queued += 1
-        else:
-            already_prepared += 1
-    status = await queue.repository.preparation_status(review_id)
-    return IndexReviewEvidenceResponse(
-        review_id=review_id,
-        queued=queued,
-        already_prepared=already_prepared,
-        preparation_status=status,
-        retry_after_ms=retry_after_ms_for_status(status),
-        index_snapshot_date=index_snapshot_date(),
-    )
+    service = ReviewIndexingService(repository=queue.repository, queue=queue)
+    return await service.index_review_evidence(review_id, request)
 
 
 @router.get(
@@ -259,6 +240,7 @@ async def inspect_review_index(
     review_id: str,
     service: ReviewContextServiceDep,
     pmids: str | None = None,
+    session_id: str | None = None,
     include_passage_samples: bool = False,
     sample_per_pmid: int = Query(default=2, ge=0, le=10),
     min_sample_chars: int = Query(default=80, ge=0, le=1000),
@@ -268,6 +250,7 @@ async def inspect_review_index(
     return await service.inspect_review_index(
         review_id=review_id,
         request=InspectReviewIndexRequest(
+            session_id=session_id,
             pmids=pmid_list,
             include_passage_samples=include_passage_samples,
             sample_per_pmid=sample_per_pmid,
@@ -287,8 +270,9 @@ async def inspect_review_index(
 async def export_review_audit_bundle(
     review_id: str,
     service: ReviewAuditServiceDep,
+    session_id: str | None = None,
 ) -> ReviewAuditBundle:
-    return await service.export_bundle(review_id)
+    return await service.export_bundle(review_id, session_id=session_id)
 
 
 @router.post(
@@ -321,6 +305,7 @@ async def get_review_passages_by_id(
     return await service.get_passages_by_id(
         review_id=review_id,
         passage_ids=request.passage_ids,
+        session_id=request.session_id,
         max_chars_per_passage=request.max_chars_per_passage,
     )
 
@@ -343,6 +328,7 @@ async def get_neighboring_review_passages(
         before=request.before,
         after=request.after,
         same_section=request.same_section,
+        session_id=request.session_id,
         max_chars_per_passage=request.max_chars_per_passage,
     )
 
