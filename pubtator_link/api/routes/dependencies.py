@@ -26,11 +26,11 @@ from ...config import review_rerag_config
 from ...logging_config import configure_logging
 from ...models.review_rerag import CoverageReason, CoverageTier
 from ...repositories.review_rerag import PostgresReviewReragRepository
+from ...services.clinvar import ClinVarService
 from ...services.corpus_suggestion import CorpusSuggestionService
 from ...services.diagnostics import DiagnosticsService
 from ...services.europe_pmc import EuropePmcClient
 from ...services.full_text_preparation import FullTextPreparationService
-from ...services.clinvar import ClinVarService
 from ...services.ncbi_discovery import DiscoveryService, NcbiDiscoveryClient
 from ...services.publication_metadata import (
     NcbiPublicationMetadataClient,

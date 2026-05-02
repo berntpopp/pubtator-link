@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from pubtator_link.models.review_rerag import (
-    ContextPassage,
     ContextPack,
+    ContextPassage,
     PreparationStatus,
     RetrieveReviewContextResponse,
 )

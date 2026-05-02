@@ -22,7 +22,6 @@ from pubtator_link.models.responses import (
     TextAnnotationResultResponse,
     TextAnnotationSubmitResponse,
 )
-from pubtator_link.models.variants import VariantEvidenceRequest, VariantEvidenceSource
 from pubtator_link.models.review_rerag import (
     BudgetStrategy,
     IndexReviewEvidenceRequest,
@@ -37,6 +36,7 @@ from pubtator_link.models.review_rerag import (
     StageResearchSessionRequest,
     UpsertEvidenceCertaintyRequest,
 )
+from pubtator_link.models.variants import VariantEvidenceRequest, VariantEvidenceSource
 from pubtator_link.services.corpus_suggestion import CorpusSuggestionService
 from pubtator_link.services.entity_matching import matched_terms_from_match_text
 from pubtator_link.services.publication_metadata import PublicationMetadataService

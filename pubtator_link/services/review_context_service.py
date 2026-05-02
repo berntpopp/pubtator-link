@@ -5,7 +5,6 @@ from collections.abc import Sequence
 from typing import Any, Protocol
 
 from pubtator_link.models.publication_metadata import PublicationMetadataRequest
-
 from pubtator_link.models.review_rerag import (
     ContextPack,
     ContextPassage,
