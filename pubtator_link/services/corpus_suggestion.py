@@ -177,14 +177,17 @@ def _role_for(
     candidate_title = (metadata.title if metadata else None) or title or ""
     title_lower = candidate_title.lower()
     publication_types = {
-        item.lower()
-        for item in (metadata.publication_types if metadata is not None else [])
+        item.lower() for item in (metadata.publication_types if metadata is not None else [])
     }
-    if publication_types & {
-        "practice guideline",
-        "guideline",
-        "consensus development conference",
-    } or "recommendation" in title_lower:
+    if (
+        publication_types
+        & {
+            "practice guideline",
+            "guideline",
+            "consensus development conference",
+        }
+        or "recommendation" in title_lower
+    ):
         return "guideline"
     if "systematic review" in publication_types or "systematic review" in title_lower:
         return "systematic_review"

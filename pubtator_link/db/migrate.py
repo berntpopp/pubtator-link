@@ -69,7 +69,10 @@ def required_review_schema_items() -> RequiredSchemaItems:
 def migration_files() -> list[tuple[str, str]]:
     """Return bundled SQL migrations in lexical version order."""
     package = resources.files(MIGRATIONS_PACKAGE)
-    files = sorted(path for path in package.iterdir() if path.name.endswith(".sql"))
+    files = sorted(
+        (path for path in package.iterdir() if path.name.endswith(".sql")),
+        key=lambda path: path.name,
+    )
     return [(path.name.removesuffix(".sql"), path.read_text()) for path in files]
 
 

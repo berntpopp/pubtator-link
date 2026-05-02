@@ -508,17 +508,17 @@ async def test_list_review_sources_aggregates_jobs_attempts_passages_and_samples
                     "doi": "10.1000/example",
                 }
             ],
-                sample_passages=[
-                    ReviewPassageSample(
-                        passage_id="p1",
-                        section="abstract",
-                        text="Indexed passage.",
-                        char_count=16,
-                    )
-                ],
-                sample_warning="Only short sample passages were available for this PMID.",
-            )
-        ]
+            sample_passages=[
+                ReviewPassageSample(
+                    passage_id="p1",
+                    section="abstract",
+                    text="Indexed passage.",
+                    char_count=16,
+                )
+            ],
+            sample_warning="Only short sample passages were available for this PMID.",
+        )
+    ]
     summary_sql, summary_args = connection.executed[0]
     sample_sql, sample_args = connection.executed[1]
     assert "review_preparation_jobs" in summary_sql

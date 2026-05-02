@@ -69,8 +69,9 @@ async def test_corpus_suggestion_service_deduplicates_and_assigns_roles() -> Non
     )
 
     response = await service.suggest(
-        CorpusSuggestionRequest(question="FMF MEFV VUS colchicine", max_pmids=2)
-        .model_copy(update={"entity_ids": ["@GENE_MEFV"]})
+        CorpusSuggestionRequest(question="FMF MEFV VUS colchicine", max_pmids=2).model_copy(
+            update={"entity_ids": ["@GENE_MEFV"]}
+        )
     )
 
     assert response.candidate_pmids == ["26802180", "33726481"]

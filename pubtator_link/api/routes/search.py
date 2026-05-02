@@ -459,20 +459,23 @@ async def search_publications(
             pmids = [pmid for pmid in dict.fromkeys(pmids) if pmid]
             if pmids:
                 include_metadata_citations: IncludeCitations = (
-                    "both" if metadata == "full" and include_citations == "none" else include_citations
+                    "both"
+                    if metadata == "full" and include_citations == "none"
+                    else include_citations
                 )
                 metadata_response = await publication_metadata_service.get_metadata(
                     PublicationMetadataRequest(
                         pmids=pmids,
                         include_mesh=metadata == "full",
                         include_publication_types=True,
-                        include_citations=include_metadata_citations if metadata == "full" else "none",
+                        include_citations=include_metadata_citations
+                        if metadata == "full"
+                        else "none",
                         include_coverage=False,
                     )
                 )
                 metadata_by_pmid = {
-                    item.pmid: item.model_dump()
-                    for item in metadata_response.metadata
+                    item.pmid: item.model_dump() for item in metadata_response.metadata
                 }
 
         response = shaped_search_response(

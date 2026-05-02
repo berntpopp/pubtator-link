@@ -214,7 +214,7 @@ class SourcePreflightService:
                             pmid=pmid,
                             pmcid=pmcid,
                             doi=doi,
-                        )
+                        ),
                     ],
                 )
         except TimeoutError:

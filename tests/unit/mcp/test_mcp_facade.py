@@ -120,7 +120,9 @@ def test_mcp_masks_unhandled_error_details() -> None:
 
 def test_capabilities_resource_advertises_grounding_workflows() -> None:
     from pubtator_link.mcp.resources import get_capabilities_resource
+    from pubtator_link.models.corpus_suggestion import CorpusSuggestionRequest
     from pubtator_link.models.discovery import MeshLookupRequest, RelatedArticlesRequest
+    from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 
     capabilities = get_capabilities_resource()
     sample_calls = capabilities["sample_calls"]
@@ -144,6 +146,10 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
     assert capabilities["output_cheatsheet"]["handoff_next_commands"] == "_meta.next_commands"
     assert "pubtator.workflow_help" in capabilities["tools"]
     assert "pubtator.workflow_help" in capabilities["tool_groups"]["workflow"]
+    assert "pubtator.get_publication_metadata" in capabilities["tools"]
+    assert "pubtator.suggest_corpus" in capabilities["tool_groups"]["discovery"]
+    assert capabilities["search_defaults"]["metadata_modes"] == ["none", "basic", "full"]
+    assert sample_calls["pubtator.search_literature"]["metadata"] == "basic"
     assert len(capabilities["workflow_help"]["fallbacks"]) == 2
     assert "limit" in sample_calls["pubtator.lookup_mesh"]
     assert "max_results" not in sample_calls["pubtator.lookup_mesh"]
@@ -151,6 +157,8 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
     assert "max_results" not in sample_calls["pubtator.find_related_articles"]
     MeshLookupRequest(**sample_calls["pubtator.lookup_mesh"])
     RelatedArticlesRequest(**sample_calls["pubtator.find_related_articles"])
+    CorpusSuggestionRequest(**sample_calls["pubtator.suggest_corpus"])
+    PublicationMetadataRequest(**sample_calls["pubtator.get_publication_metadata"])
 
 
 def test_capabilities_document_new_budget_and_stable_citation_fields() -> None:
@@ -161,6 +169,10 @@ def test_capabilities_document_new_budget_and_stable_citation_fields() -> None:
     assert "prompt_injection" in capabilities
     assert "scarcity_first" in str(capabilities)
     assert "stable_citation_key" in str(capabilities)
+    assert capabilities["output_cheatsheet"]["index_snapshot_date"] == "index_snapshot_date"
+    assert capabilities["review_rerag"]["snapshot_dates"]["index_snapshot_date"] == (
+        "review index state snapshot date"
+    )
     assert capabilities["review_rerag"]["europe_pmc_fallback"] == {
         "enabled": False,
         "default": "disabled",

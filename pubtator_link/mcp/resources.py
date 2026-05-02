@@ -57,11 +57,14 @@ def get_capabilities_resource() -> dict[str, Any]:
         "recommended_workflows": [
             "Call pubtator.workflow_help for the canonical task-specific sequence.",
             "search -> preflight -> index -> inspect -> retrieve for review-grounded answers",
+            "Use pubtator.get_publication_metadata when citation-grade PMID metadata is needed.",
             "If review indexing is unavailable, call pubtator.diagnostics and fall back "
             "to pubtator.get_publication_passages with the same PMIDs.",
             "Discovery tools can normalize MeSH terms, resolve citations or article IDs, "
             "and expand seed PMIDs before staging or indexing candidate PMIDs.",
             "Use pubtator.suggest_corpus to turn a research question into a compact candidate PMID corpus.",
+            "Use search_literature(metadata='basic') for compact citation fields during candidate screening.",
+            "Review index responses expose index_snapshot_date for stable audit provenance.",
             "For live research sessions, call `pubtator.stage_research_session` with a "
             "review ID and query or PMID list, then poll "
             "`pubtator.get_research_session_status` before retrieving review context.",
@@ -114,6 +117,8 @@ def get_capabilities_resource() -> dict[str, Any]:
             "include_citations": "none",
             "text_hl_format": "plain",
             "coverage": "preflight",
+            "metadata": "none",
+            "metadata_modes": ["none", "basic", "full"],
             "guideline_tool": "pubtator.search_guidelines",
         },
         "review_id_semantics": {
@@ -199,6 +204,7 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "include_citations": "none",
                 "text_hl_format": "plain",
                 "coverage": "preflight",
+                "metadata": "basic",
             },
             "pubtator.search_guidelines": {
                 "text": "MEFV familial Mediterranean fever EULAR recommendations",
@@ -224,6 +230,11 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "max_pmids": 8,
             },
             "pubtator.diagnostics": {},
+            "pubtator.get_publication_metadata": {
+                "pmids": ["40234174", "26802180"],
+                "include_citations": "none",
+                "include_coverage": True,
+            },
             "pubtator.get_publication_passages": {
                 "pmids": ["40234174"],
                 "mode": "compact_passages",
@@ -290,8 +301,12 @@ def get_capabilities_resource() -> dict[str, Any]:
             "citation_map": "merged_context_pack.citation_map",
             "stable_citation_key": "merged_context_pack.passages[].stable_citation_key",
             "stable_citation_map": "merged_context_pack.stable_citation_map",
+            "search_metadata": "results[].authors, results[].journal, results[].doi",
+            "publication_metadata": "metadata[]",
             "discovery_candidate_pmids": "candidate_pmids",
             "handoff_next_commands": "_meta.next_commands",
+            "index_snapshot_date": "index_snapshot_date",
+            "corpus_snapshot_date": "corpus_snapshot_date",
             "budget": "budget",
         },
         "budgeting_defaults": {
@@ -330,6 +345,10 @@ def get_capabilities_resource() -> dict[str, Any]:
             ],
             "prompt": "review_rerag_workflow",
             "scope": "research-use review-scoped evidence preparation and retrieval",
+            "snapshot_dates": {
+                "index_snapshot_date": "review index state snapshot date",
+                "corpus_snapshot_date": "retrieval corpus snapshot date",
+            },
             "workflow": [
                 "preflight candidate PMIDs to estimate source coverage",
                 "feed discovery candidate PMIDs into stage_research_session for screening",

@@ -317,10 +317,7 @@ async def _search_metadata_by_pmid(
             include_coverage=False,
         )
     )
-    return {
-        item.pmid: item.model_dump()
-        for item in response.metadata
-    }
+    return {item.pmid: item.model_dump() for item in response.metadata}
 
 
 async def fetch_pmc_annotations_impl(

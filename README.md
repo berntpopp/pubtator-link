@@ -200,16 +200,19 @@ For hosted deployments, configure remote MCP clients with `https://your-domain.e
 
 | Tool | Use When |
 |------|----------|
-| `pubtator.search_literature` | Search PubMed literature through PubTator3 |
+| `pubtator.workflow_help` | Get canonical workflow steps, fallbacks, and tool sequences |
+| `pubtator.search_literature` | Search PubMed literature through PubTator3; use `metadata="basic"` or `"full"` when citation fields are needed |
 | `pubtator.search_guidelines` | Search guideline, recommendation, consensus, and systematic review papers |
 | `pubtator.diagnostics` | Check MCP subsystem readiness and recovery hints |
 | `pubtator.convert_article_ids` | Read-only research-use article ID conversion; returns candidate PMIDs for staging/indexing |
 | `pubtator.lookup_mesh` | Read-only research-use MeSH vocabulary lookup before search |
 | `pubtator.lookup_citation` | Read-only research-use citation-to-PMID lookup; returns candidate PMIDs |
 | `pubtator.find_related_articles` | Read-only research-use related/cited/reference article expansion; returns candidate PMIDs |
+| `pubtator.suggest_corpus` | Suggest a compact, role-labeled candidate PMID corpus from a research question |
+| `pubtator.get_publication_metadata` | Fetch citation-grade PMID metadata, publication types, MeSH terms, and coverage hints |
 | `pubtator.get_publication_passages` | Fetch compact citable passages for PubMed IDs |
 | `pubtator.estimate_publication_context` | Estimate compact publication context before fetching |
-| `pubtator.inspect_review_index` | Inspect indexed PMIDs, sections, counts, and failures |
+| `pubtator.inspect_review_index` | Inspect indexed PMIDs, sections, counts, failures, and useful samples with `min_sample_chars=80` |
 | `pubtator.retrieve_review_context` | Retrieve compact context from prepared review passages |
 | `pubtator.retrieve_review_context_batch` | Try multiple review retrieval queries and merge context |
 | `pubtator.stage_research_session` | Stage query or PMID candidates with coverage hints and queued review preparation |
@@ -234,9 +237,18 @@ passage packs are intentionally needed.
 
 Search defaults are compact for LLM use: `response_mode="compact"`,
 `include_citations="none"`, `text_hl_format="plain"`, and MCP coverage
-preflight enabled. Ask for `include_citations="nlm"` or `"bibtex"` only for the
-final source list, and use `pubtator.search_guidelines` when a guideline or
-consensus source should be boosted.
+preflight enabled. Use `metadata="basic"` on `pubtator.search_literature` when
+the result list needs authors, DOI, publication types, or journal fields, and
+reserve `metadata="full"` for citation-finalization passes. Ask for
+`include_citations="nlm"` or `"bibtex"` only for the final source list, and use
+`pubtator.search_guidelines` when a guideline or consensus source should be
+boosted.
+
+For reproducible review setup, call `pubtator.workflow_help`, use
+`pubtator.suggest_corpus(question, max_pmids)` or
+`pubtator.search_literature(metadata="basic")` to build candidates, then index
+and inspect with `pubtator.inspect_review_index(min_sample_chars=80)` before
+retrieval.
 
 `review_id` is a durable caller-provided namespace for one review corpus.
 Reusing it appends new PMIDs and treats already prepared PMIDs as no-ops. Use a
