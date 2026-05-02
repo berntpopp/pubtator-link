@@ -577,6 +577,30 @@ async def test_search_literature_adapter_maps_client_results() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_entities_derives_matched_terms_from_match_text() -> None:
+    from pubtator_link.mcp.service_adapters import search_biomedical_entities_impl
+
+    class FakeClient:
+        async def autocomplete_entity(self, query: str, concept: str | None, limit: int):
+            return [
+                {
+                    "_id": "@DISEASE_FMF",
+                    "name": "Familial Mediterranean Fever",
+                    "biotype": "Disease",
+                    "match": "Matched on synonyms <m>FMF, periodic fever</m>",
+                }
+            ]
+
+    result = await search_biomedical_entities_impl(
+        client=FakeClient(),
+        query="FMF",
+        concept="Disease",
+    )
+
+    assert result["matches"][0]["matched_terms"] == ["FMF", "periodic fever"]
+
+
+@pytest.mark.asyncio
 async def test_search_literature_adapter_maps_flat_sections() -> None:
     from pubtator_link.mcp.service_adapters import search_literature_impl
 

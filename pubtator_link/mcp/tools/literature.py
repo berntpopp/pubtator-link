@@ -13,7 +13,7 @@ from pubtator_link.mcp.service_adapters import (
     search_biomedical_entities_impl,
     search_literature_impl,
 )
-from pubtator_link.models.responses import SearchResponse
+from pubtator_link.models.responses import EntityAutocompleteResponse, SearchResponse
 from pubtator_link.services.search_shaping import (
     IncludeCitations,
     SearchResponseMode,
@@ -112,6 +112,7 @@ def register_literature_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         name="pubtator.search_biomedical_entities",
         title="Search Biomedical Entities",
+        output_schema=EntityAutocompleteResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def search_biomedical_entities(

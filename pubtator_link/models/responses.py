@@ -80,6 +80,10 @@ class EntityMatch(BaseModel):
     type: str = Field(..., description="Entity type")  # biotype from API
     score: float | None = Field(default=None, description="Match score")
     synonyms: list[str] = Field(default_factory=list, description="Entity synonyms")
+    matched_terms: list[str] = Field(
+        default_factory=list,
+        description="Terms derived from upstream match metadata",
+    )
 
     # Additional fields from actual API response
     db_id: str | None = Field(default=None, description="Database ID")

@@ -33,6 +33,7 @@ from pubtator_link.models.review_rerag import (
     StageResearchSessionRequest,
     UpsertEvidenceCertaintyRequest,
 )
+from pubtator_link.services.entity_matching import matched_terms_from_match_text
 from pubtator_link.services.publication_passage_service import PublicationPassageService
 from pubtator_link.services.publication_service import PublicationService
 from pubtator_link.services.review_audit import ReviewAuditService
@@ -71,6 +72,7 @@ async def search_biomedical_entities_impl(
             type=item.get("biotype", concept or "Unknown"),
             score=item.get("score"),
             synonyms=item.get("synonyms", []),
+            matched_terms=matched_terms_from_match_text(item.get("match")),
             db_id=item.get("db_id"),
             db=item.get("db"),
             match=item.get("match"),
