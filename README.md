@@ -200,12 +200,6 @@ For hosted deployments, configure remote MCP clients with `https://your-domain.e
 
 | Tool | Use When |
 |------|----------|
-| `pubtator.search_literature_v2` | Flat-argument PubMed/PubTator literature search |
-| `pubtator.get_publication_passages_v2` | Flat-argument compact citable passages for PubMed IDs |
-| `pubtator.search_biomedical_entities_v2` | Flat-argument canonical PubTator biomedical entity lookup |
-| `pubtator.inspect_review_index_v2` | Flat-argument review index/source coverage inspection |
-| `pubtator.retrieve_review_context_v2` | Flat-argument compact citable review context retrieval |
-| `pubtator.retrieve_review_context_batch_v2` | Flat-argument batch review retrieval with compact/default diagnostics |
 | `pubtator.search_literature` | Search PubMed literature through PubTator3 |
 | `pubtator.convert_article_ids` | Read-only research-use article ID conversion; returns candidate PMIDs for staging/indexing |
 | `pubtator.lookup_mesh` | Read-only research-use MeSH vocabulary lookup before search |
@@ -229,7 +223,7 @@ For hosted deployments, configure remote MCP clients with `https://your-domain.e
 
 ### Context-Safe Review Retrieval
 
-Prefer `pubtator.retrieve_review_context_batch_v2` for LLM clients. It uses
+Prefer `pubtator.retrieve_review_context_batch` for LLM clients. It uses
 flat arguments and defaults to `response_mode="compact"`, returning merged
 citable passages plus per-query summaries. Use `response_mode="diagnostics"` to
 refine queries without passage text, `response_mode="merged_only"` for the

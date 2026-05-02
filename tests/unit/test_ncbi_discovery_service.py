@@ -97,6 +97,11 @@ async def test_convert_article_ids_adds_candidates_and_next_commands() -> None:
     assert response.candidate_pmids == ["123"]
     assert response.unresolved == ["bad"]
     assert response.meta.next_commands[0]["tool"] == "pubtator.stage_research_session"
+    assert response.meta.next_commands[0]["arguments"] == {"pmids": ["123"]}
+    assert response.meta.next_commands[1] == {
+        "tool": "pubtator.index_review_evidence",
+        "arguments": {"pmids": ["123"], "prepare_mode": "selected"},
+    }
 
 
 @pytest.mark.asyncio
@@ -316,6 +321,11 @@ async def test_lookup_citation_deduplicates_candidate_pmids() -> None:
     response = await service.lookup_citation(["citation 1", "citation 2", "missing"])
 
     assert response.candidate_pmids == ["123"]
+    assert response.meta.next_commands[0]["arguments"] == {"pmids": ["123"]}
+    assert response.meta.next_commands[1]["arguments"] == {
+        "pmids": ["123"],
+        "prepare_mode": "selected",
+    }
 
 
 @pytest.mark.asyncio
@@ -325,7 +335,11 @@ async def test_find_related_articles_deduplicates_candidates() -> None:
     response = await service.find_related_articles(["123", "999"])
 
     assert response.candidate_pmids == ["456", "789"]
-    assert response.meta.next_commands[0]["arguments"] == {"candidate_pmids": ["456", "789"]}
+    assert response.meta.next_commands[0]["arguments"] == {"pmids": ["456", "789"]}
+    assert response.meta.next_commands[1]["arguments"] == {
+        "pmids": ["456", "789"],
+        "prepare_mode": "selected",
+    }
     assert response.unresolved == ["999"]
 
 

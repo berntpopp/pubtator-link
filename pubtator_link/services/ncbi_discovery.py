@@ -428,7 +428,7 @@ def _candidate_meta(candidate_pmids: list[str]) -> DiscoveryMeta:
         next_commands = [
             {
                 "tool": "pubtator.stage_research_session",
-                "arguments": {"candidate_pmids": candidate_pmids},
+                "arguments": {"pmids": candidate_pmids},
             },
             {
                 "tool": "pubtator.index_review_evidence",

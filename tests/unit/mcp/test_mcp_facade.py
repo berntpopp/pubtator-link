@@ -123,7 +123,8 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
     )
     assert "pubtator.inspect_review_index" in capabilities["tool_groups"]["review_grounding"]
     assert "pubtator.lookup_mesh" in capabilities["tool_groups"]["discovery"]
-    assert "candidate_pmids" in repr(capabilities["output_cheatsheet"])
+    assert capabilities["output_cheatsheet"]["discovery_candidate_pmids"] == "candidate_pmids"
+    assert capabilities["output_cheatsheet"]["handoff_next_commands"] == "_meta.next_commands"
 
 
 def test_capabilities_document_new_budget_and_stable_citation_fields() -> None:

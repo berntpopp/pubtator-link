@@ -62,7 +62,8 @@ def get_capabilities_resource() -> dict[str, Any]:
             "Use pubtator.lookup_citation when a user provides formatted references.",
             "Use pubtator.convert_article_ids when a user provides DOI, PMCID, or mixed article IDs.",
             "Use pubtator.find_related_articles to expand from seed PMIDs.",
-            "Pass candidate_pmids to pubtator.stage_research_session before indexing large corpora.",
+            "Pass discovery candidate_pmids as pmids to pubtator.stage_research_session "
+            "before indexing large corpora.",
         ],
         "tool_groups": {
             "literature_search": [
