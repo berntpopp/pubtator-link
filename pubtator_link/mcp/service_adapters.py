@@ -11,6 +11,7 @@ from pubtator_link.models.publication_passages import (
     PublicationContextEstimateRequest,
     PublicationPassageMode,
     PublicationPassageRequest,
+    Verbosity,
 )
 from pubtator_link.models.responses import (
     AnnotationEntity,
@@ -132,6 +133,8 @@ async def get_publication_passages_impl(
     max_chars: int = 12000,
     include_tables: bool = True,
     include_references: bool = False,
+    dry_run: bool = False,
+    verbosity: Verbosity = "standard",
 ) -> dict[str, Any]:
     response = await service.get_passages(
         PublicationPassageRequest(
@@ -143,6 +146,8 @@ async def get_publication_passages_impl(
             max_chars=max_chars,
             include_tables=include_tables,
             include_references=include_references,
+            dry_run=dry_run,
+            verbosity=verbosity,
         )
     )
     return response.model_dump()

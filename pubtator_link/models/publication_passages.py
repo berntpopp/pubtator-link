@@ -8,6 +8,7 @@ from pubtator_link.services.degradation import DegradedMode
 
 PublicationPassageMode = Literal["abstracts", "compact_passages", "section_text"]
 PublicationCoverage = Literal["full_text", "abstract_only", "title_only", "unknown"]
+Verbosity = Literal["lean", "standard", "full"]
 PassageDropReasonCode = Literal[
     "char_budget_exceeded",
     "section_filtered",
@@ -30,6 +31,8 @@ class PublicationPassageRequest(BaseModel):
     max_chars: int = Field(default=12000, ge=1000, le=50000)
     include_tables: bool = True
     include_references: bool = False
+    dry_run: bool = False
+    verbosity: Verbosity = "standard"
 
 
 class PublicationContextEstimateRequest(BaseModel):
@@ -100,6 +103,7 @@ class PublicationPassageResponse(BaseModel):
     corpus_snapshot_date: str | None = None
     source_versions: dict[str, str] = Field(default_factory=dict)
     degraded_mode: DegradedMode | None = None
+    dry_run: bool = False
 
 
 class PublicationContextEstimateResponse(PublicationContextEstimate):

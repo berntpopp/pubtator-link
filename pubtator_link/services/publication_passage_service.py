@@ -97,9 +97,10 @@ class PublicationPassageService:
                 warnings=["Publication export failed"],
                 cache_key=_publication_passage_cache_key(request),
                 corpus_snapshot_date=corpus_snapshot_date(),
-                source_versions={"pubtator3": "live"},
-                degraded_mode=degraded_mode_from_coverage(coverage_by_pmid),
-            )
+            source_versions={"pubtator3": "live"},
+            degraded_mode=degraded_mode_from_coverage(coverage_by_pmid),
+            dry_run=request.dry_run,
+        )
 
         passages, dropped = self._compact_export(
             export_data=export_data,
@@ -110,6 +111,28 @@ class PublicationPassageService:
             include_references=request.include_references,
             max_passages_per_pmid=request.max_passages_per_pmid,
         )
+        if request.dry_run:
+            estimate = self._estimate_from_passages(passages, request.pmids, request.mode)
+            coverage_by_pmid, coverage_reason_by_pmid, failed_pmids, warnings = (
+                self._coverage_summary(passages, request)
+            )
+            return PublicationPassageResponse(
+                success=True,
+                pmids=request.pmids,
+                mode=request.mode,
+                passages=[],
+                dropped=dropped,
+                context_estimate=estimate,
+                coverage_by_pmid=coverage_by_pmid,
+                coverage_reason_by_pmid=coverage_reason_by_pmid,
+                failed_pmids=failed_pmids,
+                warnings=warnings,
+                cache_key=_publication_passage_cache_key(request),
+                corpus_snapshot_date=corpus_snapshot_date(),
+                source_versions={"pubtator3": "live"},
+                degraded_mode=degraded_mode_from_coverage(coverage_by_pmid),
+                dry_run=True,
+            )
         passages, budget_drops = self._apply_char_budget(passages, request.max_chars)
         dropped.extend(budget_drops)
         estimate = self._estimate_from_passages(passages, request.pmids, request.mode)

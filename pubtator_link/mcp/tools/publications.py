@@ -19,7 +19,7 @@ from pubtator_link.mcp.service_adapters import (
     get_publication_metadata_impl,
     get_publication_passages_impl,
 )
-from pubtator_link.models.publication_passages import PublicationPassageMode
+from pubtator_link.models.publication_passages import PublicationPassageMode, Verbosity
 
 
 def register_publication_tools(mcp: FastMCP) -> None:
@@ -60,6 +60,8 @@ def register_publication_tools(mcp: FastMCP) -> None:
         max_chars: int = 12000,
         include_tables: bool = True,
         include_references: bool = False,
+        dry_run: bool = False,
+        verbosity: Verbosity = "standard",
     ) -> dict[str, Any]:
         """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. Prefer this over raw annotation export for routine grounding."""
 
@@ -75,6 +77,8 @@ def register_publication_tools(mcp: FastMCP) -> None:
                 max_chars=max_chars,
                 include_tables=include_tables,
                 include_references=include_references,
+                dry_run=dry_run,
+                verbosity=verbosity,
             )
 
         return await run_mcp_tool("pubtator.get_publication_passages", call, pmids=pmids)

@@ -119,6 +119,16 @@ def test_mcp_masks_unhandled_error_details() -> None:
     assert mcp._mask_error_details is True
 
 
+def test_get_publication_passages_schema_exposes_dry_run_and_verbosity() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp()._tool_manager._tools["pubtator.get_publication_passages"]
+    schema = tool.parameters
+
+    assert schema["properties"]["dry_run"]["default"] is False
+    assert set(schema["properties"]["verbosity"]["enum"]) == {"lean", "standard", "full"}
+
+
 def test_capabilities_resource_advertises_grounding_workflows() -> None:
     from pubtator_link.mcp.resources import get_capabilities_resource
     from pubtator_link.models.corpus_suggestion import CorpusSuggestionRequest

@@ -1257,6 +1257,46 @@ async def test_publication_passages_adapter_builds_request_from_flat_args() -> N
 
 
 @pytest.mark.asyncio
+async def test_get_publication_passages_adapter_passes_dry_run_and_verbosity() -> None:
+    from pubtator_link.mcp.service_adapters import get_publication_passages_impl
+    from pubtator_link.models.publication_passages import (
+        PublicationContextEstimate,
+        PublicationPassageResponse,
+    )
+
+    class RecordingPublicationPassageService:
+        request = None
+
+        async def get_passages(self, request):
+            self.request = request
+            return PublicationPassageResponse(
+                pmids=request.pmids,
+                mode=request.mode,
+                passages=[],
+                dropped=[],
+                context_estimate=PublicationContextEstimate(
+                    estimated_passages=0,
+                    estimated_chars=0,
+                    sections_by_pmid={"111": []},
+                    recommended_mode="compact_passages",
+                    warning=None,
+                ),
+            )
+
+    service = RecordingPublicationPassageService()
+
+    await get_publication_passages_impl(
+        service=service,
+        pmids=["111"],
+        dry_run=True,
+        verbosity="lean",
+    )
+
+    assert service.request.dry_run is True
+    assert service.request.verbosity == "lean"
+
+
+@pytest.mark.asyncio
 async def test_pmc_adapter_returns_publication_export_shape() -> None:
     from pubtator_link.mcp.service_adapters import fetch_pmc_annotations_impl
 

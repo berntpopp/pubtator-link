@@ -245,6 +245,20 @@ async def test_get_passages_sets_degraded_mode_for_abstract_only_response() -> N
 
 
 @pytest.mark.asyncio
+async def test_get_passages_dry_run_returns_estimate_without_text() -> None:
+    service = PublicationPassageService(FakePublicationService())
+
+    response = await service.get_passages(
+        PublicationPassageRequest(pmids=["111"], dry_run=True, full=True)
+    )
+
+    assert response.dry_run is True
+    assert response.passages == []
+    assert response.context_estimate.estimated_passages > 0
+    assert response.context_estimate.estimated_chars > 0
+
+
+@pytest.mark.asyncio
 async def test_publication_passages_reports_failed_pmids() -> None:
     class EmptyPublicationService:
         async def export_publications_list(self, pmids, format, full):
