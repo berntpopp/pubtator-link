@@ -874,6 +874,30 @@ async def test_batch_diagnostics_mode_returns_no_passage_text() -> None:
 
 
 @pytest.mark.asyncio
+async def test_batch_dry_run_returns_diagnostics_without_passage_text() -> None:
+    repository = FakeReviewContextRepository(
+        [_passage("p1", pmid="111", text="colchicine evidence", lexical_rank=9.0)]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["colchicine response"],
+            dry_run=True,
+            response_mode="diagnostics",
+        ),
+    )
+
+    assert response.response_mode == "diagnostics"
+    assert response.merged_context_pack.passages == []
+    assert response.query_summaries[0].candidate_count == 1
+    assert response.query_summaries[0].returned_count == 1
+    assert response.cache_key is not None
+    assert response.corpus_snapshot_date is not None
+
+
+@pytest.mark.asyncio
 async def test_batch_context_pack_includes_stable_citation_map() -> None:
     repository = FakeReviewContextRepository(
         [

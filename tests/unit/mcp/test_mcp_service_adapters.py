@@ -390,12 +390,14 @@ async def test_retrieve_review_context_batch_adapter_builds_request_from_flat_ar
         max_chars=8000,
         max_response_chars=12000,
         include_tables=False,
+        dry_run=True,
     )
 
     assert service.review_id == "rev"
     assert service.request.response_mode == "diagnostics"
     assert service.request.max_response_chars == 12000
     assert service.request.include_tables is False
+    assert service.request.dry_run is True
     assert result["response_mode"] == "diagnostics"
 
 

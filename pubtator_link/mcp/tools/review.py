@@ -450,8 +450,9 @@ def register_review_tools(mcp: FastMCP) -> None:
         table_mode: ReviewTableMode = "preview",
         allow_truncated_passages: bool = True,
         max_chars_per_passage: int = 2200,
+        dry_run: bool = False,
     ) -> dict[str, Any]:
-        """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode uses query_fair budgeting: merged passages plus per-query summaries, a fair first-pass budget across queries before overflow, and next_steps for zero-result queries. Opt into source_fair or scarcity_first to give each PMID/source first-pass representation before overflow. Use diagnostics for query refinement and full only when per-query passage text is needed. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode uses query_fair budgeting: merged passages plus per-query summaries, a fair first-pass budget across queries before overflow, and next_steps for zero-result queries. Use dry_run to get diagnostics and predicted hit counts without returning passage text. Opt into source_fair or scarcity_first to give each PMID/source first-pass representation before overflow. Use diagnostics for query refinement and full only when per-query passage text is needed. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         async def call() -> dict[str, Any]:
             service = await get_review_context_service()
             return await retrieve_review_context_batch_impl(
@@ -475,6 +476,7 @@ def register_review_tools(mcp: FastMCP) -> None:
                 table_mode=table_mode,
                 allow_truncated_passages=allow_truncated_passages,
                 max_chars_per_passage=max_chars_per_passage,
+                dry_run=dry_run,
             )
 
         return await run_mcp_tool(

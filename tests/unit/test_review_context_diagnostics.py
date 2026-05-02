@@ -40,3 +40,15 @@ def test_query_summary_marks_unindexed_review() -> None:
 
     assert summary.zero_result_reason == "review_not_indexed"
     assert summary.next_steps == ["index_review_evidence", "inspect_review_index"]
+
+
+def test_zero_result_reason_includes_coverage_abstract_only() -> None:
+    from pubtator_link.models.review_rerag import QueryDiagnosticsSummary
+
+    summary = QueryDiagnosticsSummary(
+        query="dose table",
+        query_tokens=["dose", "table"],
+        zero_result_reason="coverage_abstract_only",
+    )
+
+    assert summary.zero_result_reason == "coverage_abstract_only"

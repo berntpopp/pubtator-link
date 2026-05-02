@@ -21,6 +21,7 @@ from pubtator_link.models.review_rerag import (
     ReviewSourceSummary,
     SourceCoverage,
 )
+from pubtator_link.services.provenance import corpus_snapshot_date, stable_cache_key
 from pubtator_link.services.review_context.batch_budgeting import merge_batch_context
 from pubtator_link.services.review_context.diagnostics import (
     build_diagnostics,
@@ -207,11 +208,41 @@ class ReviewContextService:
         coverage_by_source = {}
         if request.budget_strategy != "query_fair":
             coverage_by_source = await self._source_coverage_by_key(review_id)
+        merge_request = (
+            request.model_copy(update={"response_mode": "compact"}) if request.dry_run else request
+        )
         merged = merge_batch_context(
-            request=request,
+            request=merge_request,
             query_results=query_results,
             coverage_by_source=coverage_by_source,
         )
+        if request.dry_run:
+            dry_run_budget = context_budget(
+                max_chars=request.max_chars,
+                text_chars=0,
+                dropped_count=0,
+            )
+            return RetrieveReviewContextBatchResponse(
+                review_id=review_id,
+                response_mode="diagnostics",
+                results=[],
+                query_summaries=merged.query_summaries,
+                source_budget_summaries=merged.source_budget_summaries,
+                merged_context_pack=ContextPack(
+                    question="\n".join(request.queries),
+                    passages=[],
+                    citation_map={},
+                    total_chars=0,
+                    estimated_tokens=0,
+                    budget=dry_run_budget,
+                    dropped=[],
+                ),
+                preparation_status=await self._preparation_status(review_id),
+                budget=dry_run_budget,
+                cache_key=_review_batch_cache_key(review_id, request),
+                corpus_snapshot_date=corpus_snapshot_date(),
+                source_versions={"review_index": "live"},
+            )
         record_audit_event = getattr(self.repository, "record_review_audit_event", None)
         if record_audit_event is not None:
             await record_audit_event(
@@ -245,6 +276,9 @@ class ReviewContextService:
             ),
             preparation_status=await self._preparation_status(review_id),
             budget=budget,
+            cache_key=_review_batch_cache_key(review_id, request),
+            corpus_snapshot_date=corpus_snapshot_date(),
+            source_versions={"review_index": "live"},
         )
 
     async def inspect_review_index(
@@ -364,3 +398,16 @@ class ReviewContextService:
         if isinstance(status, PreparationStatus):
             return status
         return PreparationStatus(**status)
+
+
+def _review_batch_cache_key(
+    review_id: str,
+    request: RetrieveReviewContextBatchRequest,
+) -> str:
+    return stable_cache_key(
+        "review_context_batch",
+        {
+            "review_id": review_id,
+            "request": request.model_dump(mode="json"),
+        },
+    )

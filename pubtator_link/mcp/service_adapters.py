@@ -587,6 +587,7 @@ async def retrieve_review_context_batch_impl(
     table_mode: ReviewTableMode = "preview",
     allow_truncated_passages: bool = True,
     max_chars_per_passage: int = 2200,
+    dry_run: bool = False,
 ) -> dict[str, Any]:
     response = await service.retrieve_context_batch(
         review_id=review_id,
@@ -609,6 +610,7 @@ async def retrieve_review_context_batch_impl(
             table_mode=table_mode,
             allow_truncated_passages=allow_truncated_passages,
             max_chars_per_passage=max_chars_per_passage,
+            dry_run=dry_run,
         ),
     )
     return response.model_dump()

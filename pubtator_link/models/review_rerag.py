@@ -32,9 +32,11 @@ BudgetStrategy = Literal["query_fair", "source_fair", "scarcity_first"]
 EvidenceCertaintyLabel = Literal["high", "moderate", "low", "very_low", "not_rated"]
 ZeroResultReason = Literal[
     "review_not_indexed",
+    "no_pmids_indexed",
     "no_candidate_matches",
     "filters_excluded_all_candidates",
     "all_candidates_over_budget",
+    "coverage_abstract_only",
     "preparation_failed",
 ]
 SourceKind = Literal[
@@ -441,6 +443,7 @@ class RetrieveReviewContextBatchRequest(BaseModel):
     table_mode: ReviewTableMode = "preview"
     allow_truncated_passages: bool = True
     max_chars_per_passage: int = Field(default=2200, ge=300, le=10000)
+    dry_run: bool = False
 
 
 class RetrieveReviewContextBatchResponse(BaseModel):
@@ -455,6 +458,9 @@ class RetrieveReviewContextBatchResponse(BaseModel):
     query_summaries: list[QueryDiagnosticsSummary] = Field(default_factory=list)
     source_budget_summaries: list[SourceBudgetSummary] = Field(default_factory=list)
     budget: ContextBudget | None = None
+    cache_key: str | None = None
+    corpus_snapshot_date: str | None = None
+    source_versions: dict[str, str] = Field(default_factory=dict)
 
 
 class ReviewPassageSample(BaseModel):
