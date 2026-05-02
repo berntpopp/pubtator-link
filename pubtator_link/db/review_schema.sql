@@ -101,6 +101,45 @@ create table if not exists review_audit_events (
 create index if not exists review_audit_events_review_id_idx
     on review_audit_events(review_id, created_at);
 
+create table if not exists review_research_sessions (
+    session_id text not null,
+    review_id text not null references reviews(review_id),
+    query text,
+    status text not null default 'active',
+    request jsonb not null default '{}'::jsonb,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    primary key(review_id, session_id)
+);
+
+create index if not exists review_research_sessions_review_id_idx
+    on review_research_sessions(review_id, updated_at);
+
+create table if not exists review_research_session_candidates (
+    review_id text not null,
+    session_id text not null,
+    pmid text not null,
+    rank integer,
+    title text,
+    status text not null,
+    decision_reason text not null,
+    coverage_hint jsonb,
+    source_id text,
+    error text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    primary key(review_id, session_id, pmid),
+    unique(review_id, session_id, pmid),
+    foreign key(review_id, session_id)
+        references review_research_sessions(review_id, session_id)
+);
+
+create index if not exists review_research_session_candidates_session_idx
+    on review_research_session_candidates(review_id, session_id, rank, pmid);
+
+create unique index if not exists review_research_session_candidates_unique_pmid_idx
+    on review_research_session_candidates(review_id, session_id, pmid);
+
 create table if not exists review_evidence_certainty (
     certainty_id uuid primary key,
     review_id text not null references reviews(review_id),

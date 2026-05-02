@@ -44,6 +44,14 @@ def test_schema_defines_review_audit_events_table() -> None:
     assert "review_audit_events_review_id_idx" in SCHEMA
 
 
+def test_schema_defines_research_session_tables() -> None:
+    assert "create table if not exists review_research_sessions" in SCHEMA
+    assert "create table if not exists review_research_session_candidates" in SCHEMA
+    assert "review_research_sessions_review_id_idx" in SCHEMA
+    assert "review_research_session_candidates_session_idx" in SCHEMA
+    assert "unique(review_id, session_id, pmid)" in SCHEMA
+
+
 def test_schema_tracks_review_inventory_timestamps() -> None:
     assert "updated_at timestamptz not null default now()" in SCHEMA
     assert "reviews_updated_at_idx" in SCHEMA

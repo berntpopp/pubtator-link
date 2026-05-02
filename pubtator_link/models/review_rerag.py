@@ -4,7 +4,7 @@ import hashlib
 import math
 import re
 from enum import StrEnum
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -45,6 +45,29 @@ SourceKind = Literal[
     "curated_html",
     "docling_pdf",
     "pubtator_abstract",
+]
+ResearchSessionStatus = Literal["active", "complete", "partial", "failed"]
+ResearchSessionCandidateStatus = Literal[
+    "candidate",
+    "preflighted",
+    "queued",
+    "abstract_ready",
+    "full_text_ready",
+    "abstract_only",
+    "metadata_only",
+    "failed",
+    "skipped",
+]
+ResearchSessionDecisionReason = Literal[
+    "selected_by_rank",
+    "explicit_pmid",
+    "duplicate",
+    "over_candidate_limit",
+    "coverage_unknown",
+    "metadata_only",
+    "preflight_failed",
+    "already_indexed",
+    "queue_rejected",
 ]
 
 
@@ -159,6 +182,75 @@ class PreflightReviewSourcesResponse(BaseModel):
 
     success: bool = True
     coverage_hints: list[SourceCoverageHint]
+
+
+class StageResearchSessionRequest(BaseModel):
+    """Request to stage a transparent research session."""
+
+    session_id: str | None = Field(default=None, min_length=1)
+    query: str | None = Field(default=None, min_length=1)
+    pmids: list[str] = Field(default_factory=list)
+    page: int = Field(default=1, ge=1, le=1000)
+    sort: str | None = None
+    filters: str | None = None
+    publication_types: list[str] = Field(default_factory=list)
+    year_min: int | None = Field(default=None, ge=1800, le=2030)
+    year_max: int | None = Field(default=None, ge=1800, le=2030)
+    sections: list[str] = Field(default_factory=list)
+    max_candidates: int = Field(default=20, ge=1, le=100)
+    stage_full_text: bool = True
+
+    @model_validator(mode="after")
+    def require_query_or_pmids(self) -> Self:
+        if not self.query and not self.pmids:
+            raise ValueError("query or pmids is required")
+        return self
+
+
+class ResearchSessionCandidate(BaseModel):
+    """One PMID candidate in a staged research session."""
+
+    pmid: str
+    rank: int | None = Field(default=None, ge=1)
+    title: str | None = None
+    status: ResearchSessionCandidateStatus = "candidate"
+    decision_reason: ResearchSessionDecisionReason = "selected_by_rank"
+    coverage_hint: SourceCoverageHint | None = None
+    source_id: str | None = None
+    error: str | None = None
+
+
+class ResearchSessionManifest(BaseModel):
+    """Transparent manifest for one research session."""
+
+    session_id: str
+    review_id: str
+    query: str | None = None
+    status: ResearchSessionStatus = "active"
+    candidates: list[ResearchSessionCandidate] = Field(default_factory=list)
+    candidate_count: int = Field(default=0, ge=0)
+    queued_count: int = Field(default=0, ge=0)
+    skipped_count: int = Field(default=0, ge=0)
+    coverage_summary: dict[str, int] = Field(default_factory=dict)
+    preparation_status: PreparationStatus | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class StageResearchSessionResponse(BaseModel):
+    success: bool = True
+    manifest: ResearchSessionManifest
+    meta: dict[str, Any] = Field(default_factory=dict, serialization_alias="_meta")
+
+
+class ResearchSessionStatusResponse(BaseModel):
+    success: bool = True
+    manifest: ResearchSessionManifest
+
+
+class ListResearchSessionsResponse(BaseModel):
+    success: bool = True
+    sessions: list[ResearchSessionManifest] = Field(default_factory=list)
 
 
 class RetrieveReviewContextRequest(BaseModel):

@@ -12,6 +12,7 @@ from pubtator_link.models.review_rerag import (
     McpReviewAuditBundleResponse,
     PreparationStatus,
     QueryDiagnosticsSummary,
+    ResearchSessionCandidate,
     ResolverAttemptSummary,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
@@ -19,6 +20,7 @@ from pubtator_link.models.review_rerag import (
     ReviewIndexInventoryItem,
     ReviewIndexTotals,
     SourceCoverageHint,
+    StageResearchSessionRequest,
     UpsertEvidenceCertaintyRequest,
     coverage_to_evidence_tier,
     normalize_section,
@@ -34,6 +36,37 @@ def test_index_request_rejects_screened_mode() -> None:
 def test_index_review_evidence_rejects_candidate_fast_prepare_mode() -> None:
     with pytest.raises(ValidationError):
         IndexReviewEvidenceRequest(pmids=["40234174"], prepare_mode="candidate_fast")
+
+
+def test_stage_research_session_request_accepts_query_and_limits() -> None:
+    request = StageResearchSessionRequest(
+        query="familial mediterranean fever colchicine guideline",
+        max_candidates=12,
+        stage_full_text=True,
+    )
+
+    assert request.query == "familial mediterranean fever colchicine guideline"
+    assert request.pmids == []
+    assert request.max_candidates == 12
+    assert request.stage_full_text is True
+
+
+def test_stage_research_session_request_requires_query_or_pmids() -> None:
+    with pytest.raises(ValidationError):
+        StageResearchSessionRequest()
+
+
+def test_research_session_candidate_records_decision_and_status() -> None:
+    candidate = ResearchSessionCandidate(
+        pmid="37747561",
+        rank=1,
+        status="queued",
+        decision_reason="selected_by_rank",
+    )
+
+    assert candidate.pmid == "37747561"
+    assert candidate.status == "queued"
+    assert candidate.decision_reason == "selected_by_rank"
 
 
 def test_context_request_defaults_are_poc_values() -> None:
