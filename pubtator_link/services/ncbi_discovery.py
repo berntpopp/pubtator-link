@@ -6,7 +6,6 @@ from collections.abc import Iterable, Mapping, Sequence
 from typing import Protocol
 
 import httpx
-from httpx._types import PrimitiveData, QueryParamTypes
 
 from pubtator_link.api.retry import RetryPolicy, call_with_retries
 from pubtator_link.models.discovery import (
@@ -27,7 +26,18 @@ NCBI_EUTILS_BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 NCBI_ID_CONVERTER_BASE_URL = "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/"
 NCBI_EUTILS_SOURCE_URL = "https://www.ncbi.nlm.nih.gov/books/NBK25501/"
 NCBI_MESH_SOURCE_URL = "https://www.ncbi.nlm.nih.gov/mesh/"
-QueryParams = QueryParamTypes
+QueryParamValue = str | int | float | bool | None
+QueryParams = (
+    Mapping[str, QueryParamValue | Sequence[QueryParamValue]]
+    | list[tuple[str, QueryParamValue]]
+    | tuple[
+        tuple[str, QueryParamValue],
+        ...,
+    ]
+    | str
+    | bytes
+    | None
+)
 
 
 class NcbiDiscoveryClientProtocol(Protocol):
@@ -240,7 +250,7 @@ class NcbiDiscoveryClient:
             "cited_by": "pubmed_pubmed_citedin",
             "references": "pubmed_pubmed_refs",
         }
-        params: list[tuple[str, PrimitiveData]] = [
+        params: list[tuple[str, QueryParamValue]] = [
             ("dbfrom", "pubmed"),
             ("db", "pubmed"),
             *(("id", pmid) for pmid in pmids),
