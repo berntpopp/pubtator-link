@@ -71,6 +71,34 @@ async def test_mesh_route_returns_descriptors() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mesh_route_rejects_limit_below_minimum_without_calling_service() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.lookup_mesh.return_value = MeshLookupResponse(query="FMF")
+    app.dependency_overrides[get_discovery_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/discovery/mesh", params={"query": "FMF", "limit": 0})
+
+    assert response.status_code == 422
+    service.lookup_mesh.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_mesh_route_rejects_empty_query_without_calling_service() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.lookup_mesh.return_value = MeshLookupResponse(query="")
+    app.dependency_overrides[get_discovery_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/discovery/mesh", params={"query": "", "limit": 5})
+
+    assert response.status_code == 422
+    service.lookup_mesh.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_lookup_citations_route_returns_matched_status() -> None:
     app = UnifiedServerManager().create_app()
     service = AsyncMock()

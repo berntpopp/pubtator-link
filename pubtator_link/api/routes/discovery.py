@@ -1,6 +1,8 @@
 """Discovery routes for research-use literature candidate expansion."""
 
-from fastapi import APIRouter
+from typing import Annotated
+
+from fastapi import APIRouter, Query
 
 from ...models.discovery import (
     ArticleIdConversionRequest,
@@ -35,8 +37,8 @@ async def convert_article_ids(
 @handle_api_errors
 async def lookup_mesh(
     service: DiscoveryServiceDep,
-    query: str,
-    limit: int = 10,
+    query: Annotated[str, Query(min_length=1, max_length=500)],
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
     exact: bool = False,
 ) -> MeshLookupResponse:
     return await service.lookup_mesh(query=query, limit=limit, exact=exact)
