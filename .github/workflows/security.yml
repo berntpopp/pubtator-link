@@ -19,6 +19,7 @@ jobs:
   codeql:
     name: CodeQL
     runs-on: ubuntu-latest
+    if: ${{ !github.event.repository.private }}
     permissions:
       actions: read
       contents: read

@@ -191,6 +191,7 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
     codeql_job = security["jobs"]["codeql"]
     dependency_review_job = security["jobs"]["dependency-review"]
     assert codeql_job["name"] == "CodeQL"
+    assert codeql_job["if"] == "${{ !github.event.repository.private }}"
     assert codeql_job["permissions"] == {
         "actions": "read",
         "contents": "read",
