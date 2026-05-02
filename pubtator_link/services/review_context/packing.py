@@ -9,6 +9,7 @@ from pubtator_link.models.review_rerag import (
     ContextDropReason,
     ContextPassage,
     GroundingConfidence,
+    GroundingConfidenceLevel,
     PassageQuote,
     RetrieveReviewContextRequest,
     ReviewPassageRow,
@@ -246,7 +247,7 @@ def grounding_confidence_from_row(
             - truncation_penalty,
         ),
     )
-    level = "unknown"
+    level: GroundingConfidenceLevel = "unknown"
     if score >= 0.75:
         level = "high"
     elif score >= 0.45:

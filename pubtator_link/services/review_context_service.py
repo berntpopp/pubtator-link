@@ -219,9 +219,7 @@ class ReviewContextService:
         return response.model_copy(
             update={
                 "recovery": recovery,
-                "context_pack": response.context_pack.model_copy(
-                    update={"recovery": recovery}
-                ),
+                "context_pack": response.context_pack.model_copy(update={"recovery": recovery}),
             }
         )
 
@@ -293,8 +291,7 @@ class ReviewContextService:
             (
                 hint
                 for hint in (
-                    recovery_from_query_summary(summary)
-                    for summary in merged.query_summaries
+                    recovery_from_query_summary(summary) for summary in merged.query_summaries
                 )
                 if hint is not None
             ),

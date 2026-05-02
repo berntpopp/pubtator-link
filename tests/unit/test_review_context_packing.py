@@ -91,10 +91,10 @@ def test_context_passage_quote_offsets_use_returned_and_original_text() -> None:
         index=1,
         row=row,
         request=RetrieveReviewContextRequest(
-                question="MEFV colchicine",
-                max_chars_per_passage=300,
-            ),
-        )
+            question="MEFV colchicine",
+            max_chars_per_passage=300,
+        ),
+    )
 
     assert passage.quote is not None
     assert "MEFV variants respond to colchicine" in passage.quote.text
