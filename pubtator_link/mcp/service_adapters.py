@@ -7,6 +7,10 @@ from typing import Any, Literal, cast
 from pubtator_link.api.client import PubTator3Client
 from pubtator_link.api.search_filters import merge_search_filters
 from pubtator_link.config import text_processing_config
+from pubtator_link.mcp.input_normalization import (
+    attach_normalization_meta,
+    normalize_retrieve_review_context_batch_args,
+)
 from pubtator_link.models.corpus_suggestion import CorpusSuggestionRequest
 from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 from pubtator_link.models.publication_passages import (
@@ -838,59 +842,105 @@ async def retrieve_review_context_batch_impl(
     *,
     service: ReviewContextService,
     review_id: str,
-    queries: list[str],
+    queries: list[str] | str,
+    query: str | None = None,
+    question: str | None = None,
     session_id: str | None = None,
     pmids: list[str] | None = None,
     entity_ids: list[str] | None = None,
     sections: list[str] | None = None,
-    response_mode: ReviewBatchResponseMode = "compact",
+    response_mode: ReviewBatchResponseMode | str = "compact",
     max_passages_per_query: int = 8,
-    max_total_passages: int = 20,
+    max_total_passages: int | None = None,
+    limit: int | None = None,
+    size: int | None = None,
     max_chars: int = 12000,
     max_response_chars: int = 24000,
     deduplicate_passages: bool = True,
-    budget_strategy: BudgetStrategy = "query_fair",
+    budget_strategy: BudgetStrategy | str = "query_fair",
     min_passages_per_source: int = 1,
     min_passages_per_pmid: int = 0,
-    prioritize_pmids: list[str] | None = None,
+    prioritize_pmids: list[str] | str | None = None,
     include_diagnostics: bool = True,
     include_tables: bool = False,
     include_references: bool = False,
-    table_mode: ReviewTableMode = "preview",
+    table_mode: ReviewTableMode | str = "preview",
     allow_truncated_passages: bool = True,
     max_chars_per_passage: int = 2200,
     dry_run: bool = False,
     include_resolver_trace: bool = False,
 ) -> dict[str, Any]:
+    args: dict[str, Any] = {
+        "review_id": review_id,
+        "queries": queries,
+        "query": query,
+        "question": question,
+        "session_id": session_id,
+        "pmids": pmids,
+        "entity_ids": entity_ids,
+        "sections": sections,
+        "response_mode": response_mode,
+        "max_passages_per_query": max_passages_per_query,
+        "max_total_passages": max_total_passages,
+        "limit": limit,
+        "size": size,
+        "max_chars": max_chars,
+        "max_response_chars": max_response_chars,
+        "deduplicate_passages": deduplicate_passages,
+        "budget_strategy": budget_strategy,
+        "min_passages_per_source": min_passages_per_source,
+        "min_passages_per_pmid": min_passages_per_pmid,
+        "prioritize_pmids": prioritize_pmids,
+        "include_diagnostics": include_diagnostics,
+        "include_tables": include_tables,
+        "include_references": include_references,
+        "table_mode": table_mode,
+        "allow_truncated_passages": allow_truncated_passages,
+        "max_chars_per_passage": max_chars_per_passage,
+        "dry_run": dry_run,
+    }
+    args = {key: value for key, value in args.items() if value is not None}
+    normalized_args, normalization_warnings = normalize_retrieve_review_context_batch_args(args)
+    request_args = {
+        "queries": normalized_args["queries"],
+        "session_id": normalized_args.get("session_id"),
+        "pmids": normalized_args.get("pmids") or [],
+        "entity_ids": normalized_args.get("entity_ids") or [],
+        "sections": normalized_args.get("sections") or [],
+        "response_mode": normalized_args["response_mode"],
+        "max_passages_per_query": normalized_args["max_passages_per_query"],
+        "max_total_passages": normalized_args.get("max_total_passages", 20),
+        "max_chars": normalized_args["max_chars"],
+        "max_response_chars": normalized_args["max_response_chars"],
+        "deduplicate_passages": normalized_args["deduplicate_passages"],
+        "budget_strategy": normalized_args["budget_strategy"],
+        "min_passages_per_source": normalized_args["min_passages_per_source"],
+        "min_passages_per_pmid": normalized_args["min_passages_per_pmid"],
+        "prioritize_pmids": normalized_args.get("prioritize_pmids") or [],
+        "include_diagnostics": normalized_args["include_diagnostics"],
+        "include_tables": normalized_args["include_tables"],
+        "include_references": normalized_args["include_references"],
+        "table_mode": normalized_args["table_mode"],
+        "allow_truncated_passages": normalized_args["allow_truncated_passages"],
+        "max_chars_per_passage": normalized_args["max_chars_per_passage"],
+        "dry_run": normalized_args["dry_run"],
+    }
+    if request_args["response_mode"] == "quotes":
+        validated_request = RetrieveReviewContextBatchRequest(
+            **{**request_args, "response_mode": "compact"}
+        )
+        # Task 4 stages the quotes mode before the shared model enum is widened.
+        request = validated_request.model_copy(update={"response_mode": "quotes"})
+    else:
+        request = RetrieveReviewContextBatchRequest(**request_args)
     response = await service.retrieve_context_batch(
         review_id=review_id,
-        request=RetrieveReviewContextBatchRequest(
-            queries=queries,
-            session_id=session_id,
-            pmids=pmids or [],
-            entity_ids=entity_ids or [],
-            sections=sections or [],
-            response_mode=response_mode,
-            max_passages_per_query=max_passages_per_query,
-            max_total_passages=max_total_passages,
-            max_chars=max_chars,
-            max_response_chars=max_response_chars,
-            deduplicate_passages=deduplicate_passages,
-            budget_strategy=budget_strategy,
-            min_passages_per_source=min_passages_per_source,
-            min_passages_per_pmid=min_passages_per_pmid,
-            prioritize_pmids=prioritize_pmids or [],
-            include_diagnostics=include_diagnostics,
-            include_tables=include_tables,
-            include_references=include_references,
-            table_mode=table_mode,
-            allow_truncated_passages=allow_truncated_passages,
-            max_chars_per_passage=max_chars_per_passage,
-            dry_run=dry_run,
-        ),
+        request=request,
     )
     result = response.model_dump()
-    return result if include_resolver_trace else _strip_resolver_trace(result)
+    if not include_resolver_trace:
+        result = _strip_resolver_trace(result)
+    return attach_normalization_meta(result, normalization_warnings)
 
 
 async def list_review_indexes_impl(

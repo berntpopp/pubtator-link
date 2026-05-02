@@ -181,6 +181,32 @@ async def test_mcp_error_wrapper_raises_tool_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mcp_error_wrapper_preserves_input_normalization_details() -> None:
+    from pubtator_link.mcp.errors import run_mcp_tool
+    from pubtator_link.mcp.input_normalization import InputNormalizationError
+
+    field_errors = [
+        {
+            "field": "max_total_passages",
+            "message": "Ambiguous arguments: provide only one of max_total_passages, limit.",
+        }
+    ]
+    recovery_hint = "Use either max_total_passages or limit, not both."
+
+    async def failing() -> dict[str, object]:
+        raise InputNormalizationError(field_errors=field_errors, recovery_hint=recovery_hint)
+
+    with pytest.raises(ToolError) as exc_info:
+        await run_mcp_tool("pubtator.retrieve_review_context_batch", failing)
+
+    payload = json.loads(str(exc_info.value))
+    assert payload["error_code"] == "validation_failed"
+    assert payload["field_errors"] == field_errors
+    assert payload["recovery_hint"] == recovery_hint
+    assert payload["message"] == "Invalid MCP arguments."
+
+
+@pytest.mark.asyncio
 async def test_mcp_tool_wrapper_preserves_json_tool_error_code_in_recent_errors_and_metrics(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

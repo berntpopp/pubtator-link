@@ -656,6 +656,87 @@ async def test_retrieve_review_context_batch_adapter_omits_resolver_trace_by_def
 
 
 @pytest.mark.asyncio
+async def test_retrieve_review_context_batch_adapter_normalizes_llm_input_mistakes() -> None:
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        PreparationStatus,
+        RetrieveReviewContextBatchResponse,
+    )
+
+    captured_request = None
+
+    class Service:
+        async def retrieve_context_batch(self, review_id, request):
+            nonlocal captured_request
+            captured_request = request
+            return RetrieveReviewContextBatchResponse(
+                review_id=review_id,
+                response_mode="compact",
+                results=[],
+                merged_context_pack=ContextPack(question="", passages=[], citation_map={}),
+                preparation_status=PreparationStatus(),
+            )
+
+    result = await retrieve_review_context_batch_impl(
+        service=Service(),
+        review_id="r1",
+        queries="MEFV",
+        response_mode="Quotes",
+        limit=3,
+    )
+
+    assert result["_meta"]["normalized_arguments"]
+    assert captured_request.queries == ["MEFV"]
+    assert captured_request.response_mode == "quotes"
+    assert captured_request.max_total_passages == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("alias", ["limit", "size"])
+async def test_retrieve_review_context_batch_adapter_rejects_ambiguous_limit_alias(
+    alias: str,
+) -> None:
+    from pubtator_link.mcp.input_normalization import InputNormalizationError
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
+
+    class Service:
+        async def retrieve_context_batch(self, review_id, request):
+            raise AssertionError("service should not be called for ambiguous arguments")
+
+    with pytest.raises(InputNormalizationError) as error:
+        await retrieve_review_context_batch_impl(
+            service=Service(),
+            review_id="r1",
+            queries=["MEFV"],
+            max_total_passages=5,
+            **{alias: 3},
+        )
+
+    assert error.value.field_errors[0]["field"] == "max_total_passages"
+
+
+@pytest.mark.asyncio
+async def test_retrieve_review_context_batch_adapter_validates_quotes_numeric_bounds() -> None:
+    from pydantic import ValidationError
+
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
+
+    class Service:
+        async def retrieve_context_batch(self, review_id, request):
+            raise AssertionError("service should not be called for invalid arguments")
+
+    with pytest.raises(ValidationError):
+        await retrieve_review_context_batch_impl(
+            service=Service(),
+            review_id="r1",
+            queries=["MEFV"],
+            response_mode="Quotes",
+            max_total_passages=999,
+        )
+
+
+@pytest.mark.asyncio
 async def test_list_review_indexes_adapter_calls_lifecycle_service() -> None:
     from pubtator_link.mcp.service_adapters import list_review_indexes_impl
     from pubtator_link.models.review_rerag import ListReviewIndexesResponse

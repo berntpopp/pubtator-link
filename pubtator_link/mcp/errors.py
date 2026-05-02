@@ -12,6 +12,7 @@ import asyncpg
 import httpx
 from fastmcp.exceptions import ToolError
 
+from pubtator_link.mcp.input_normalization import InputNormalizationError
 from pubtator_link.observability.metrics import record_mcp_tool_call
 from pubtator_link.services.degradation import DegradedMode
 from pubtator_link.services.mcp_diagnostics import bounded_diagnostics_snapshot
@@ -38,6 +39,7 @@ class McpErrorContext:
 def sanitize_error_message(message: str) -> str:
     """Map raw backend messages to safe, LLM-actionable summaries."""
     safe_messages = {
+        "Invalid MCP arguments.",
         "Review database schema is not current.",
         "Review database operation failed.",
         "The upstream service timed out.",
@@ -148,7 +150,9 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> ToolError:
     payload = {
         "success": False,
         "error_code": error_code_for_exception(exc),
-        "message": sanitize_error_message(str(exc)),
+        "message": "Invalid MCP arguments."
+        if isinstance(exc, InputNormalizationError)
+        else sanitize_error_message(str(exc)),
         "retryable": False,
         "fallback_tool": fallback_tool,
         "fallback_args": fallback_args,
@@ -158,6 +162,9 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> ToolError:
             "unsafe_for_clinical_use": True,
         },
     }
+    if isinstance(exc, InputNormalizationError):
+        payload["field_errors"] = exc.field_errors
+        payload["recovery_hint"] = exc.recovery_hint
     if context.degraded_mode is not None:
         payload["degraded_mode"] = context.degraded_mode
     diagnostics_snapshot = bounded_diagnostics_snapshot(context.diagnostics_snapshot)
