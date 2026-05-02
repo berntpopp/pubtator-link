@@ -171,6 +171,11 @@ class IndexReviewEvidenceRequest(BaseModel):
     pmids: list[str] = Field(default_factory=list)
     curated_urls: list[str] = Field(default_factory=list)
     prepare_mode: PrepareMode = "selected"
+    session_id: str | None = Field(default=None, min_length=1)
+    wait_for_completion: bool = False
+    wait_for_status: Literal["complete", "complete_or_partial", "terminal"] | None = None
+    timeout_ms: int = Field(default=0, ge=0, le=120_000)
+    dry_run: bool = False
 
 
 class IndexReviewEvidenceResponse(BaseModel):
@@ -184,6 +189,16 @@ class IndexReviewEvidenceResponse(BaseModel):
     retry_after_ms: int | None = None
     index_snapshot_date: str | None = None
     lifecycle_note: str | None = None
+    dry_run: bool = False
+    waited_ms: int = 0
+    timed_out: bool = False
+    estimated_queue_position: int | None = None
+    estimated_source_count: int = 0
+    already_indexed: int = 0
+    already_queued: int = 0
+    already_running: int = 0
+    newly_queued: int = 0
+    previously_failed_requeued: int = 0
 
 
 class PreflightReviewSourcesRequest(BaseModel):

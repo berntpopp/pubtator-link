@@ -85,8 +85,15 @@ class ReviewReragRepository(Protocol):
     async def mark_running_jobs_failed_on_startup(self) -> int:
         """Mark orphaned running jobs as failed and return the affected count."""
 
-    async def preparation_status(self, review_id: str) -> PreparationStatus:
+    async def preparation_status(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> PreparationStatus:
         """Return aggregate preparation status counts for a review."""
+
+    async def preparation_job_statuses(
+        self, review_id: str, source_ids: Sequence[str]
+    ) -> dict[str, str]:
+        """Return current durable job statuses for source IDs."""
 
     async def link_review_session_source(
         self, review_id: str, session_id: str, source_id: str
@@ -446,9 +453,30 @@ class PostgresReviewReragRepository:
             )
         return _parse_execute_count(result)
 
-    async def preparation_status(self, review_id: str) -> PreparationStatus:
+    async def preparation_status(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> PreparationStatus:
         async with self._acquire() as connection:
-            return await self._preparation_status_on_connection(connection, review_id)
+            return await self._preparation_status_on_connection(
+                connection, review_id, session_id=session_id
+            )
+
+    async def preparation_job_statuses(
+        self, review_id: str, source_ids: Sequence[str]
+    ) -> dict[str, str]:
+        if not source_ids:
+            return {}
+        async with self._acquire() as connection:
+            rows = await connection.fetch(
+                """
+                select source_id, status
+                from review_preparation_jobs
+                where review_id = $1 and source_id = any($2::text[])
+                """,
+                review_id,
+                list(source_ids),
+            )
+        return {str(row["source_id"]): str(row["status"]) for row in rows}
 
     async def link_review_session_source(
         self, review_id: str, session_id: str, source_id: str
@@ -1752,7 +1780,11 @@ class PostgresReviewReragRepository:
         return [passage_id for passage_id in passage_ids if passage_id not in existing_ids]
 
     async def _preparation_status_on_connection(
-        self, connection: Any, review_id: str
+        self,
+        connection: Any,
+        review_id: str,
+        *,
+        session_id: str | None = None,
     ) -> PreparationStatus:
         row = await connection.fetchrow(
             """
@@ -1764,8 +1796,19 @@ class PostgresReviewReragRepository:
                 coalesce(sum((status = 'failed')::int), 0)::int as failed
             from review_preparation_jobs
             where review_id = $1
+              and (
+                  $2::text is null
+                  or exists (
+                      select 1
+                      from review_session_sources rss
+                      where rss.review_id = review_preparation_jobs.review_id
+                        and rss.session_id = $2
+                        and rss.source_id = review_preparation_jobs.source_id
+                  )
+              )
             """,
             review_id,
+            session_id,
         )
         return _preparation_status_from_row(row)
 
