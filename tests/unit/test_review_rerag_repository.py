@@ -880,12 +880,14 @@ async def test_delete_review_index_deletes_children_before_review() -> None:
 
     assert deleted is False
     statements = [sql.lower() for sql, _args in connection.executed]
-    assert "delete from review_audit_events" in statements[0]
-    assert "delete from review_evidence_certainty" in statements[1]
-    assert "delete from full_text_retrieval_attempts" in statements[2]
-    assert "delete from review_passages" in statements[3]
-    assert "delete from review_preparation_jobs" in statements[4]
-    assert "delete from reviews" in statements[5]
+    assert "delete from review_research_session_candidates" in statements[0]
+    assert "delete from review_research_sessions" in statements[1]
+    assert "delete from review_audit_events" in statements[2]
+    assert "delete from review_evidence_certainty" in statements[3]
+    assert "delete from full_text_retrieval_attempts" in statements[4]
+    assert "delete from review_passages" in statements[5]
+    assert "delete from review_preparation_jobs" in statements[6]
+    assert "delete from reviews" in statements[7]
 
 
 @pytest.mark.asyncio

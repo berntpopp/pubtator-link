@@ -1079,6 +1079,17 @@ class PostgresReviewReragRepository:
     async def delete_review_index(self, review_id: str) -> bool:
         async with self._pool.acquire() as connection, connection.transaction():
             await connection.execute(
+                """
+                delete from review_research_session_candidates
+                where review_id = $1
+                """,
+                review_id,
+            )
+            await connection.execute(
+                "delete from review_research_sessions where review_id = $1",
+                review_id,
+            )
+            await connection.execute(
                 "delete from review_audit_events where review_id = $1", review_id
             )
             await connection.execute(
