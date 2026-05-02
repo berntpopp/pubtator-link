@@ -31,11 +31,11 @@ def register_metadata(mcp: FastMCP) -> None:
         title="Get PubTator-Link Capabilities",
         annotations=READ_ONLY_CLOSED_WORLD,
     )
-    async def get_server_capabilities() -> dict[str, Any]:
+    async def get_server_capabilities(details: list[str] | None = None) -> dict[str, Any]:
         """Use this when a client needs supported tools, transports, formats, and limitations."""
 
         async def call() -> dict[str, Any]:
-            return get_capabilities_resource()
+            return get_capabilities_resource(details=details)
 
         return await run_mcp_tool("pubtator.get_server_capabilities", call)
 

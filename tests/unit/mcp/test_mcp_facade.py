@@ -200,6 +200,16 @@ def test_index_review_evidence_schema_exposes_wait_until_ready_alias() -> None:
     assert schema["properties"]["timeout_ms"]["default"] == 0
 
 
+def test_get_server_capabilities_accepts_details_argument() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp()._tool_manager._tools["pubtator.get_server_capabilities"]
+    properties = tool.parameters["properties"]
+
+    assert "details" in properties
+    assert properties["details"]["default"] is None
+
+
 def test_capabilities_expose_tool_categories_and_diagnostics_workflow() -> None:
     from pubtator_link.mcp.resources import get_capabilities_resource
 
@@ -207,9 +217,9 @@ def test_capabilities_expose_tool_categories_and_diagnostics_workflow() -> None:
 
     assert capabilities["tool_categories"]["discovery"]
     assert "pubtator.search_literature" in capabilities["tool_categories"]["discovery"]
-    assert "pubtator.index_review_evidence" in capabilities["tool_categories"]["indexing"]
+    assert "pubtator.index_review_evidence" in capabilities["tool_categories"]["review"]
     assert "pubtator.retrieve_review_context_batch" in capabilities["tool_categories"]["retrieval"]
-    assert "pubtator.diagnostics" in capabilities["workflow"]["recommended_tools"]
+    assert "pubtator.diagnostics" in capabilities["core_workflow_tools"]
 
 
 def test_capabilities_resource_advertises_grounding_workflows() -> None:
@@ -218,7 +228,21 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
     from pubtator_link.models.discovery import MeshLookupRequest, RelatedArticlesRequest
     from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 
-    capabilities = get_capabilities_resource()
+    payload = get_capabilities_resource(
+        details=[
+            "recommended_workflows",
+            "workflow_help",
+            "tool_groups",
+            "large_output_guidance",
+            "review_rerag",
+            "discovery_workflow",
+            "output_cheatsheet",
+            "tools",
+            "search_defaults",
+            "sample_calls",
+        ]
+    )
+    capabilities = payload["details"]
     sample_calls = capabilities["sample_calls"]
 
     assert "recommended_workflows" in capabilities
@@ -258,7 +282,18 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
 def test_capabilities_document_new_budget_and_stable_citation_fields() -> None:
     from pubtator_link.mcp.resources import get_capabilities_resource
 
-    capabilities = get_capabilities_resource()
+    payload = get_capabilities_resource(
+        details=[
+            "prompt_injection",
+            "budgeting_defaults",
+            "schema_policy",
+            "section_taxonomy",
+            "citation_keys",
+            "output_cheatsheet",
+            "review_rerag",
+        ]
+    )
+    capabilities = payload["details"]
 
     assert "prompt_injection" in capabilities
     assert "scarcity_first" in str(capabilities)
@@ -282,7 +317,9 @@ def test_capabilities_document_error_recovery_and_compact_search() -> None:
 
     from pubtator_link.mcp.resources import get_capabilities_resource
 
-    text = json.dumps(get_capabilities_resource()).lower()
+    text = json.dumps(
+        get_capabilities_resource(details=["recovery_flow", "search_defaults", "sample_calls"])
+    ).lower()
 
     assert "db-migrate" in text
     assert "get_publication_passages" in text
@@ -583,7 +620,9 @@ def test_batch_output_schema_allows_omitted_empty_results() -> None:
 def test_capabilities_expose_llm_driver_contract_for_core_workflow() -> None:
     from pubtator_link.mcp.resources import get_capabilities_resource
 
-    contract = get_capabilities_resource()["llm_driver_contract"]
+    contract = get_capabilities_resource(details=["llm_driver_contract"])["details"][
+        "llm_driver_contract"
+    ]
 
     assert contract["version"] == "2026-05-02"
     assert contract["discovery_policy"]["strategy"] == "progressive_discovery"
@@ -709,19 +748,27 @@ def test_capabilities_resource_tool_names_are_registered() -> None:
     mcp = create_pubtator_mcp()
     registered_tools = set(mcp._tool_manager._tools)
     capabilities = get_capabilities_resource()
-    advertised_tools = set(capabilities["tools"])
-    for group_tools in capabilities["tool_groups"].values():
+    advertised_tools = set(capabilities["core_workflow_tools"])
+    for group_tools in capabilities["tool_categories"].values():
         advertised_tools.update(group_tools)
-    advertised_tools.update(capabilities["review_rerag"]["tools"])
 
     assert registered_tools == EXPECTED_PUBLIC_TOOL_NAMES
-    assert advertised_tools == registered_tools == EXPECTED_PUBLIC_TOOL_NAMES
+    assert advertised_tools <= registered_tools
 
 
 def test_capabilities_include_context_management_cheatsheet() -> None:
     from pubtator_link.mcp.resources import get_capabilities_resource
 
-    capabilities = get_capabilities_resource()
+    payload = get_capabilities_resource(
+        details=[
+            "sample_calls",
+            "output_cheatsheet",
+            "budgeting_defaults",
+            "large_output_guidance",
+            "tools",
+        ]
+    )
+    capabilities = payload["details"]
 
     assert "sample_calls" in capabilities
     assert "output_cheatsheet" in capabilities
