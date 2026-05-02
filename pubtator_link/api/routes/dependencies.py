@@ -26,6 +26,7 @@ from ...config import review_rerag_config
 from ...logging_config import configure_logging
 from ...models.review_rerag import CoverageReason, CoverageTier
 from ...repositories.review_rerag import PostgresReviewReragRepository
+from ...services.corpus_suggestion import CorpusSuggestionService
 from ...services.diagnostics import DiagnosticsService
 from ...services.europe_pmc import EuropePmcClient
 from ...services.full_text_preparation import FullTextPreparationService
@@ -66,6 +67,7 @@ _review_index_lifecycle_service: ReviewIndexLifecycleService | None = None
 _source_preflight_service: SourcePreflightService | None = None
 _research_session_service: ResearchSessionService | None = None
 _diagnostics_service: DiagnosticsService | None = None
+_corpus_suggestion_service: CorpusSuggestionService | None = None
 
 
 @dataclass
@@ -92,6 +94,7 @@ class AppResources:
     research_session_service: ResearchSessionService | None = None
     schema_diagnostics: ReviewSchemaDiagnostics | None = None
     diagnostics_service: DiagnosticsService | None = None
+    corpus_suggestion_service: CorpusSuggestionService | None = None
 
 
 _app_resources_context: ContextVar[AppResources | None] = ContextVar(
@@ -370,6 +373,37 @@ async def get_diagnostics_service() -> DiagnosticsService:
     if _diagnostics_service is None:
         _diagnostics_service = _build_diagnostics_service(None)
     return _diagnostics_service
+
+
+async def get_corpus_suggestion_service() -> CorpusSuggestionService:
+    """Get deterministic corpus suggestion service."""
+    global _corpus_suggestion_service
+    resources = current_app_resources()
+    if resources is not None:
+        if resources.corpus_suggestion_service is None:
+            resources.corpus_suggestion_service = CorpusSuggestionService(
+                search_client=_CorpusSuggestionSearchClient(resources.api_client),
+                metadata_service=await get_publication_metadata_service(),
+                source_preflight_service=await get_source_preflight_service(),
+            )
+        return resources.corpus_suggestion_service
+    if _corpus_suggestion_service is None:
+        _corpus_suggestion_service = CorpusSuggestionService(
+            search_client=_CorpusSuggestionSearchClient(await get_api_client()),
+            metadata_service=await get_publication_metadata_service(),
+            source_preflight_service=await get_source_preflight_service(),
+        )
+    return _corpus_suggestion_service
+
+
+class _CorpusSuggestionSearchClient:
+    def __init__(self, client: PubTator3Client) -> None:
+        self.client = client
+
+    async def search(self, query: str, *, limit: int, sort: str | None) -> dict[str, Any]:
+        raw = await self.client.search_publications(text=query, page=1, sort=sort)
+        results = list(raw.get("results", []))
+        return {**raw, "results": results[:limit]}
 
 
 def _build_diagnostics_service(resources: AppResources | None) -> DiagnosticsService:
@@ -700,6 +734,9 @@ PublicationPassageServiceDep = Annotated[
 PublicationMetadataServiceDep = Annotated[
     PublicationMetadataService, Depends(get_publication_metadata_service)
 ]
+CorpusSuggestionServiceDep = Annotated[
+    CorpusSuggestionService, Depends(get_corpus_suggestion_service)
+]
 DiscoveryServiceDep = Annotated[DiscoveryService, Depends(get_discovery_service)]
 ReviewQueueDep = Annotated[ReviewPreparationQueue, Depends(get_review_queue)]
 ReviewContextServiceDep = Annotated[ReviewContextService, Depends(get_review_context_service)]
@@ -843,6 +880,7 @@ async def cleanup_dependencies() -> None:
     global _review_evidence_certainty_service
     global _review_index_lifecycle_service
     global _research_session_service
+    global _corpus_suggestion_service
 
     if _api_client:
         api_client = _api_client
@@ -872,6 +910,7 @@ async def cleanup_dependencies() -> None:
     _review_evidence_certainty_service = None
     _review_index_lifecycle_service = None
     _research_session_service = None
+    _corpus_suggestion_service = None
     _discovery_service = None
     _publication_passage_service = None
     _publication_metadata_service = None
