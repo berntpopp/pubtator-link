@@ -16,6 +16,7 @@ classification.
 
 - Accept a gene plus HGVS/cDNA/protein/common variant expression.
 - Normalize or search variant identifiers where supported.
+- Add HPO/Phenotype grounding for clinical-genetics query construction.
 - Return source-attributed variant records from public databases.
 - Return PubTator/LitVar-style literature evidence for the specific variant.
 - Surface uncertainty, conflicts, provenance, and source dates.
@@ -37,6 +38,8 @@ classification.
 Existing useful pieces:
 
 - `search_biomedical_entities` supports `Variant` concept search.
+- `search_biomedical_entities` does not currently expose `Phenotype`/HPO as a
+  concept.
 - `search_literature` can search variant text and PubTator entity IDs.
 - Citation metadata and audit bundles now support source-grounded reports.
 
@@ -75,6 +78,15 @@ Input:
 
 Only `gene` plus one variant expression is required. `condition` narrows results
 but must not be required.
+
+Also expand entity grounding:
+
+```text
+search_biomedical_entities(concept="Phenotype")
+```
+
+Phenotype results should prefer HPO identifiers when available and should be
+usable as `entity_ids` or query expansion inputs for literature search.
 
 Output:
 
@@ -143,6 +155,11 @@ Use PubTator for literature:
 - fallback text query: `(<gene>) AND (<variant aliases>)`,
 - attach metadata with existing `PublicationMetadataService`.
 
+Add HPO/Phenotype support in the same phase only if it can reuse existing
+entity-search infrastructure or a small deterministic HPO lookup. If HPO needs a
+new dependency or downloaded ontology data, split it into a separate task inside
+the same implementation plan.
+
 ### Phase 2: Optional Domain Sources
 
 Evaluate separately:
@@ -193,4 +210,3 @@ Required tests:
   https://www.ncbi.nlm.nih.gov/clinvar/docs/help/
 - ClinVar file/API primer:
   https://www.ncbi.nlm.nih.gov/clinvar/docs/ftp_primer/
-

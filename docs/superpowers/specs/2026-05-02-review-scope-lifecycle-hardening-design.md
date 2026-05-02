@@ -23,9 +23,11 @@ hard correctness and audit-risk issue.
   retrieval, and audit export.
 - Guarantee that session-scoped retrieval cannot return PMIDs outside that
   session.
+- Let callers wait for a chosen indexing status without modeling polling loops.
 - Make duplicate source enqueue semantics durable, not just in-memory.
 - Add `wait_for_completion` with bounded timeout to `index_review_evidence`.
 - Add `dry_run` to `index_review_evidence`.
+- Remove or deprecate the dead public `prepare_mode` argument.
 - Keep public hosted MCP non-destructive.
 
 ## Non-Goals
@@ -93,6 +95,7 @@ Add fields:
 {
   "session_id": "fmf-phase-1",
   "wait_for_completion": true,
+  "wait_for_status": "complete_or_partial",
   "timeout_ms": 30000,
   "dry_run": false
 }
@@ -119,10 +122,32 @@ Semantics:
   enqueue or mutate.
 - `wait_for_completion=true` waits until all requested sources for the selected
   scope are terminal or timeout expires.
+- `wait_for_status` is more explicit and should be preferred over
+  `wait_for_completion` once added. Allowed values:
+  - `complete`: all requested sources are complete,
+  - `complete_or_partial`: all requested sources are terminal and at least one
+    source produced usable passages,
+  - `terminal`: all requested sources are complete, partial, or failed.
 - `timeout_ms` default is conservative, e.g. `0`/no wait unless
   `wait_for_completion=true`; max should be bounded, e.g. 120 seconds.
 - If timeout expires, return current status with `timed_out=true` and
   `retry_after_ms`.
+
+### Retrieval Preparation Status
+
+Add to `retrieve_review_context` and `retrieve_review_context_batch` responses:
+
+```json
+{
+  "prepared_pmids": ["33454820"],
+  "still_preparing_pmids": ["37298536"],
+  "failed_pmids": ["40562663"]
+}
+```
+
+These lists should be scoped by `review_id` and optional `session_id`. They let
+LLM consumers reason about partial retrieval results without re-querying the
+index or inferring state from dropped passages.
 
 ## Data Model
 
@@ -159,6 +184,29 @@ when explicitly linked.
 Completed/partial sources should not be requeued by default. A later explicit
 `force_reindex` option can be designed separately if needed.
 
+## `prepare_mode` Cleanup
+
+`prepare_mode` is currently a public const-like argument with only `"selected"`.
+It costs schema tokens and implies unavailable modes.
+
+Plan:
+
+1. Stop advertising `prepare_mode` in MCP tool descriptions and sample calls.
+2. Keep accepting `prepare_mode="selected"` temporarily for compatibility.
+3. Add structured capability metadata marking it deprecated:
+
+```json
+{
+  "name": "prepare_mode",
+  "status": "deprecated",
+  "replacement": "omit",
+  "removal_after": "next_minor"
+}
+```
+
+4. Remove the argument from public schemas in a later compatibility cleanup, or
+   only keep it on REST if needed for older clients.
+
 ## Error Handling
 
 - Unknown `session_id`: `session_not_found`.
@@ -189,4 +237,3 @@ Update workflow help:
 Tool descriptions should be functional and short. The global research-use notice
 belongs once in server instructions/capabilities, not repeated in every tool
 description.
-
