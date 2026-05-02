@@ -140,6 +140,23 @@ create index if not exists review_research_session_candidates_session_idx
 create unique index if not exists review_research_session_candidates_unique_pmid_idx
     on review_research_session_candidates(review_id, session_id, pmid);
 
+create table if not exists review_session_sources (
+    review_id text not null,
+    session_id text not null,
+    source_id text not null,
+    created_at timestamptz not null default now(),
+    primary key(review_id, session_id, source_id),
+    foreign key(review_id, session_id)
+        references review_research_sessions(review_id, session_id)
+        on delete cascade,
+    foreign key(review_id, source_id)
+        references review_preparation_jobs(review_id, source_id)
+        on delete cascade
+);
+
+create index if not exists review_session_sources_source_idx
+    on review_session_sources(review_id, source_id);
+
 create table if not exists review_evidence_certainty (
     certainty_id uuid primary key,
     review_id text not null references reviews(review_id),

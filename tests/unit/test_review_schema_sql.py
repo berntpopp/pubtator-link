@@ -52,6 +52,16 @@ def test_schema_defines_research_session_tables() -> None:
     assert "unique(review_id, session_id, pmid)" in SCHEMA
 
 
+def test_schema_defines_review_session_source_links() -> None:
+    migration = Path("pubtator_link/db/migrations/0002_review_schema_drift_repair.sql").read_text()
+
+    for sql in (SCHEMA, migration):
+        assert "create table if not exists review_session_sources" in sql
+        assert "primary key(review_id, session_id, source_id)" in sql
+        assert "references review_research_sessions(review_id, session_id)" in sql
+        assert "references review_preparation_jobs(review_id, source_id)" in sql
+
+
 def test_schema_tracks_review_inventory_timestamps() -> None:
     assert "updated_at timestamptz not null default now()" in SCHEMA
     assert "reviews_updated_at_idx" in SCHEMA
