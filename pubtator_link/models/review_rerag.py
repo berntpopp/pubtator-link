@@ -14,8 +14,10 @@ AttemptStatus = Literal["success", "not_available", "blocked", "failed"]
 ReviewBatchResponseMode = Literal["compact", "merged_only", "full", "diagnostics"]
 ReviewTableMode = Literal["off", "preview", "full"]
 SourceCoverage = Literal["title_only", "abstract_only", "full_text", "curated_url", "unknown"]
+CoverageTier = SourceCoverage
 CoverageReason = Literal[
     "full_text_available",
+    "pmc_oa_bioc",
     "abstract_fallback_used",
     "title_only_metadata",
     "no_pmcid",
