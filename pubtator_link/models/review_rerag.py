@@ -22,6 +22,13 @@ ReviewBatchResponseMode = Literal["compact", "merged_only", "full", "diagnostics
 ReviewTableMode = Literal["off", "preview", "full"]
 SourceCoverage = Literal["title_only", "abstract_only", "full_text", "curated_url", "unknown"]
 CoverageTier = SourceCoverage
+GroundingConfidenceLevel = Literal["high", "moderate", "low", "unknown"]
+CoverageExpectationConfidence = Literal["high", "moderate", "low", "unknown"]
+CoverageResolutionStage = Literal[
+    "preflight_resolver_chain",
+    "indexer_resolver_chain",
+    "not_resolved",
+]
 SampleSectionPolicy = Literal["evidence_first", "original_order"]
 CoverageReason = Literal[
     "full_text_available",
@@ -133,6 +140,9 @@ class SourceCoverageHint(BaseModel):
     pmc_fallback_available: bool = False
     notes: list[str] = Field(default_factory=list)
     resolver_attempts: list[ResolverAttemptSummary] = Field(default_factory=list)
+    expected_coverage_after_index: SourceCoverage = "unknown"
+    expected_coverage_confidence: CoverageExpectationConfidence = "unknown"
+    coverage_resolution_stage: CoverageResolutionStage = "not_resolved"
 
 
 def coverage_to_evidence_tier(coverage: SourceCoverage, source_kind: str) -> EvidenceTier:
@@ -352,6 +362,66 @@ class ContextDropReason(BaseModel):
     char_count: int | None = None
 
 
+class RecoverySuggestedFilters(BaseModel):
+    """Bounded filters an LLM can apply on a follow-up retrieval call."""
+
+    sections: list[str] = Field(default_factory=list)
+    pmids: list[str] = Field(default_factory=list)
+
+
+class RecoveryBudgetAdvice(BaseModel):
+    """Bounded context-budget adjustments for recovery."""
+
+    increase_max_chars_to: int | None = Field(default=None, ge=500)
+    increase_max_response_chars_to: int | None = Field(default=None, ge=2000)
+    lower_max_passages_per_query_to: int | None = Field(default=None, ge=1)
+
+
+class RecoveryHint(BaseModel):
+    """Top-level deterministic recovery guidance for LLM drivers."""
+
+    reason: str
+    message: str
+    next_steps: list[str] = Field(default_factory=list)
+    suggested_queries: list[str] = Field(default_factory=list)
+    suggested_filters: RecoverySuggestedFilters | None = None
+    budget_advice: RecoveryBudgetAdvice | None = None
+
+
+class SourceDroppedSummary(BaseModel):
+    """Structured accounting for passages dropped from a compact response."""
+
+    total_dropped: int = Field(default=0, ge=0)
+    visible_dropped: int = Field(default=0, ge=0)
+    truncated_count: int = Field(default=0, ge=0)
+    by_reason: dict[str, int] = Field(default_factory=dict)
+    suggested_filters: RecoverySuggestedFilters | None = None
+    budget_advice: RecoveryBudgetAdvice | None = None
+
+
+class PassageQuote(BaseModel):
+    """Citation-ready quote with returned-text and original-passage offsets."""
+
+    text: str
+    returned_start_offset: int = Field(ge=0)
+    returned_end_offset: int = Field(ge=0)
+    passage_start_char: int = Field(ge=0)
+    passage_end_char: int = Field(ge=0)
+    offset_basis: Literal["returned_text_and_original_passage"] = (
+        "returned_text_and_original_passage"
+    )
+
+
+class GroundingConfidence(BaseModel):
+    """Deterministic source-grounding confidence, not clinical certainty."""
+
+    level: GroundingConfidenceLevel = "unknown"
+    score: float = Field(default=0.0, ge=0.0, le=1.0)
+    factors: dict[str, float] = Field(default_factory=dict)
+    match_mode: Literal["strict", "relaxed", "strict_and_relaxed"] = "strict_and_relaxed"
+    explanation: str
+
+
 class PassageScore(BaseModel):
     """Transparent score features for a selected review passage."""
 
@@ -382,6 +452,8 @@ class ContextPassage(BaseModel):
     end_char: int | None = None
     boundary: str | None = None
     score: PassageScore | None = None
+    quote: PassageQuote | None = None
+    confidence_for_grounding: GroundingConfidence | None = None
 
     @model_validator(mode="after")
     def fill_stable_citation_key(self) -> Self:
@@ -402,7 +474,8 @@ class ContextPack(BaseModel):
     estimated_tokens: int = 0
     budget: ContextBudget | None = None
     dropped: list[ContextDropReason] = Field(default_factory=list)
-    dropped_summary: dict[str, int] = Field(default_factory=dict)
+    dropped_summary: SourceDroppedSummary | dict[str, int] = Field(default_factory=dict)
+    recovery: RecoveryHint | None = None
 
     @model_validator(mode="after")
     def fill_stable_citation_map(self) -> Self:
@@ -428,6 +501,7 @@ class RetrieveReviewContextResponse(BaseModel):
     prepared_pmids: list[str] = Field(default_factory=list)
     still_preparing_pmids: list[str] = Field(default_factory=list)
     failed_pmids: list[str] = Field(default_factory=list)
+    recovery: RecoveryHint | None = None
 
 
 class RetrieveReviewDiagnostics(BaseModel):
@@ -531,6 +605,7 @@ class RetrieveReviewContextBatchResponse(BaseModel):
     prepared_pmids: list[str] = Field(default_factory=list)
     still_preparing_pmids: list[str] = Field(default_factory=list)
     failed_pmids: list[str] = Field(default_factory=list)
+    recovery: RecoveryHint | None = None
 
     @model_serializer(mode="wrap")
     def omit_empty_results_for_compact(self, handler: Any) -> dict[str, Any]:
@@ -575,6 +650,29 @@ class ReviewPassageLookupResponse(BaseModel):
     review_id: str
     passages: list[ContextPassage]
     not_found: list[str] = Field(default_factory=list)
+
+
+class ReviewAuditTrailItem(BaseModel):
+    """One copy-ready selected passage audit item."""
+
+    pmid: str | None = None
+    pmcid: str | None = None
+    passage_id: str
+    stable_citation_key: str
+    section: str
+    quote: str
+    char_count: int = Field(ge=0)
+
+
+class ReviewAuditTrailResponse(BaseModel):
+    """Thin audit trail for selected passage IDs used in an answer."""
+
+    success: bool = True
+    review_id: str
+    session_id: str | None = None
+    items: list[ReviewAuditTrailItem] = Field(default_factory=list)
+    not_found: list[str] = Field(default_factory=list)
+    audit_block: str = ""
 
 
 class ReviewSearchRun(BaseModel):

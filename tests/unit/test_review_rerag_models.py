@@ -7,18 +7,26 @@ from pubtator_link.models.review_rerag import (
     ContextPassage,
     EvidenceCertaintyRecord,
     EvidenceTier,
+    GroundingConfidence,
     IndexReviewEvidenceRequest,
     ListReviewIndexesResponse,
     McpReviewAuditBundleResponse,
+    PassageQuote,
     PreparationStatus,
     QueryDiagnosticsSummary,
+    RecoveryBudgetAdvice,
+    RecoveryHint,
+    RecoverySuggestedFilters,
+    ReviewAuditTrailItem,
     ResearchSessionCandidate,
     ResearchSessionManifest,
     ResolverAttemptSummary,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
     ReviewAuditBundle,
+    ReviewAuditTrailResponse,
     ReviewIndexInventoryItem,
+    SourceDroppedSummary,
     ReviewIndexTotals,
     SourceCoverageHint,
     StageResearchSessionRequest,
@@ -28,6 +36,120 @@ from pubtator_link.models.review_rerag import (
     normalize_section,
     passage_id_for_pmid,
 )
+
+
+def test_recovery_hint_serializes_bounded_filters_and_budget_advice() -> None:
+    hint = RecoveryHint(
+        reason="all_candidates_over_budget",
+        message="Candidates matched but were excluded by response budget.",
+        next_steps=["increase_budget", "filter_sections"],
+        suggested_queries=["mefv colchicine"],
+        suggested_filters=RecoverySuggestedFilters(
+            sections=["abstract", "results"],
+            pmids=["40234174"],
+        ),
+        budget_advice=RecoveryBudgetAdvice(
+            increase_max_chars_to=18000,
+            increase_max_response_chars_to=36000,
+            lower_max_passages_per_query_to=4,
+        ),
+    )
+
+    dumped = hint.model_dump(mode="json")
+
+    assert dumped["reason"] == "all_candidates_over_budget"
+    assert dumped["suggested_filters"]["sections"] == ["abstract", "results"]
+    assert dumped["budget_advice"]["increase_max_chars_to"] == 18000
+
+
+def test_context_passage_serializes_quote_and_grounding_confidence() -> None:
+    passage = ContextPassage(
+        citation_key="S1",
+        passage_id="PMID:1:abstract:0",
+        section="abstract",
+        text="MEFV variants respond to colchicine in this cohort.",
+        quote=PassageQuote(
+            text="MEFV variants respond to colchicine",
+            returned_start_offset=0,
+            returned_end_offset=35,
+            passage_start_char=10,
+            passage_end_char=45,
+        ),
+        confidence_for_grounding=GroundingConfidence(
+            level="high",
+            score=0.84,
+            factors={"lexical_match": 0.9, "section_weight": 0.8},
+            match_mode="strict_and_relaxed",
+            explanation="High lexical match in an abstract passage.",
+        ),
+    )
+
+    dumped = passage.model_dump(mode="json")
+
+    assert dumped["quote"]["passage_start_char"] == 10
+    assert dumped["confidence_for_grounding"]["level"] == "high"
+    assert dumped["stable_citation_key"].startswith("c_")
+
+
+def test_context_pack_accepts_structured_dropped_summary_and_recovery() -> None:
+    pack = ContextPack(
+        question="MEFV colchicine",
+        passages=[],
+        citation_map={},
+        dropped_summary=SourceDroppedSummary(
+            total_dropped=3,
+            visible_dropped=3,
+            by_reason={"char_budget_exceeded": 3},
+            suggested_filters=RecoverySuggestedFilters(sections=["abstract"]),
+        ),
+        recovery=RecoveryHint(
+            reason="all_candidates_over_budget",
+            message="Candidates matched but were excluded by response budget.",
+            next_steps=["increase_budget"],
+        ),
+    )
+
+    dumped = pack.model_dump(mode="json")
+
+    assert dumped["dropped_summary"]["by_reason"] == {"char_budget_exceeded": 3}
+    assert dumped["recovery"]["next_steps"] == ["increase_budget"]
+
+
+def test_source_coverage_hint_includes_after_index_expectation() -> None:
+    hint = SourceCoverageHint(
+        pmid="40234174",
+        expected_coverage="unknown",
+        expected_coverage_after_index="abstract_only",
+        expected_coverage_confidence="moderate",
+        coverage_resolution_stage="preflight_resolver_chain",
+    )
+
+    dumped = hint.model_dump(mode="json")
+
+    assert dumped["expected_coverage_after_index"] == "abstract_only"
+    assert dumped["expected_coverage_confidence"] == "moderate"
+
+
+def test_review_audit_trail_response_serializes_copy_ready_block() -> None:
+    response = ReviewAuditTrailResponse(
+        review_id="rev-1",
+        items=[
+            ReviewAuditTrailItem(
+                pmid="40234174",
+                passage_id="PMID:40234174:abstract:0",
+                stable_citation_key="c_abc123",
+                section="abstract",
+                quote="MEFV variants respond to colchicine.",
+                char_count=35,
+            )
+        ],
+        audit_block="- c_abc123 PMID 40234174 PMID:40234174:abstract:0 abstract: MEFV variants respond to colchicine.",
+    )
+
+    dumped = response.model_dump(mode="json")
+
+    assert dumped["items"][0]["stable_citation_key"] == "c_abc123"
+    assert dumped["audit_block"].startswith("- c_abc123 PMID 40234174")
 
 
 def test_index_request_rejects_screened_mode() -> None:
