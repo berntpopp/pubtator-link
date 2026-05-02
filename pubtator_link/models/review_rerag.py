@@ -6,7 +6,7 @@ import re
 from enum import StrEnum
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 PrepareMode = Literal["selected"]
 JobStatus = Literal["queued", "running", "complete", "partial", "failed"]
@@ -238,9 +238,11 @@ class ResearchSessionManifest(BaseModel):
 
 
 class StageResearchSessionResponse(BaseModel):
+    model_config = ConfigDict(serialize_by_alias=True, validate_by_name=True)
+
     success: bool = True
     manifest: ResearchSessionManifest
-    meta: dict[str, Any] = Field(default_factory=dict, serialization_alias="_meta")
+    meta: dict[str, Any] = Field(default_factory=dict, alias="_meta")
 
 
 class ResearchSessionStatusResponse(BaseModel):

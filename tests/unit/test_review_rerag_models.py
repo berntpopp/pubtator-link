@@ -13,6 +13,7 @@ from pubtator_link.models.review_rerag import (
     PreparationStatus,
     QueryDiagnosticsSummary,
     ResearchSessionCandidate,
+    ResearchSessionManifest,
     ResolverAttemptSummary,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
@@ -21,6 +22,7 @@ from pubtator_link.models.review_rerag import (
     ReviewIndexTotals,
     SourceCoverageHint,
     StageResearchSessionRequest,
+    StageResearchSessionResponse,
     UpsertEvidenceCertaintyRequest,
     coverage_to_evidence_tier,
     normalize_section,
@@ -67,6 +69,18 @@ def test_research_session_candidate_records_decision_and_status() -> None:
     assert candidate.pmid == "37747561"
     assert candidate.status == "queued"
     assert candidate.decision_reason == "selected_by_rank"
+
+
+def test_stage_research_session_response_serializes_meta_alias_by_default() -> None:
+    response = StageResearchSessionResponse(
+        manifest=ResearchSessionManifest(session_id="session-1", review_id="review-1"),
+        meta={"request_id": "req-1"},
+    )
+
+    dumped = response.model_dump(mode="json")
+
+    assert dumped["_meta"] == {"request_id": "req-1"}
+    assert "meta" not in dumped
 
 
 def test_context_request_defaults_are_poc_values() -> None:
