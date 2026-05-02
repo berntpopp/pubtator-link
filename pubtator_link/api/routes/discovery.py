@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from ...models.discovery import (
     ArticleIdConversionRequest,
@@ -27,6 +27,8 @@ async def convert_article_ids(
     request: ArticleIdConversionRequest,
     service: DiscoveryServiceDep,
 ) -> ArticleIdConversionResponse:
+    if request.target is not None:
+        raise HTTPException(status_code=400, detail="target filtering is not supported yet")
     return await service.convert_article_ids(ids=request.ids, source=request.source)
 
 

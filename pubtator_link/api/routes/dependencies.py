@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Annotated, Any
 
 import asyncpg
+import httpx
 from fastapi import Depends, HTTPException, Request
 from structlog.typing import FilteringBoundLogger
 
@@ -584,6 +585,12 @@ def handle_api_errors(func: Callable[..., Any]) -> Callable[..., Any]:
         except ValueError as e:
             # Client-side validation errors
             raise HTTPException(status_code=400, detail=str(e)) from e
+        except httpx.HTTPStatusError as e:
+            # Upstream service returned an HTTP error response
+            raise HTTPException(status_code=502, detail="Upstream service error") from e
+        except httpx.RequestError as e:
+            # Upstream service transport failures
+            raise HTTPException(status_code=503, detail="Service temporarily unavailable") from e
         except ConnectionError as e:
             # Network/connection errors
             raise HTTPException(status_code=503, detail="Service temporarily unavailable") from e
@@ -683,6 +690,7 @@ def validate_limit(limit: int, max_limit: int = 100) -> int:
 async def cleanup_dependencies() -> None:
     """Cleanup function for graceful shutdown."""
     global _api_client, _publication_passage_service, _publication_service, _logger
+    global _discovery_service, _ncbi_discovery_client
     global _review_context_service, _review_pool, _review_queue, _review_repository
     global _review_evidence_certainty_service
     global _review_index_lifecycle_service
@@ -692,6 +700,11 @@ async def cleanup_dependencies() -> None:
         api_client = _api_client
         _api_client = None
         await api_client.close()
+
+    if _ncbi_discovery_client:
+        ncbi_discovery_client = _ncbi_discovery_client
+        _ncbi_discovery_client = None
+        await ncbi_discovery_client.close()
 
     if _review_queue:
         await _review_queue.stop()
@@ -706,6 +719,7 @@ async def cleanup_dependencies() -> None:
     _review_evidence_certainty_service = None
     _review_index_lifecycle_service = None
     _research_session_service = None
+    _discovery_service = None
     _publication_passage_service = None
     _publication_service = None
     _logger = None

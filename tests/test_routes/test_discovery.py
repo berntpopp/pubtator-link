@@ -1,9 +1,11 @@
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from pubtator_link.api.routes.dependencies import get_discovery_service
+from pubtator_link.api.routes import dependencies
+from pubtator_link.api.routes.dependencies import cleanup_dependencies, get_discovery_service
 from pubtator_link.models.discovery import (
     ArticleIdConversionRecord,
     ArticleIdConversionResponse,
@@ -45,6 +47,59 @@ async def test_convert_article_ids_route_returns_candidates() -> None:
     assert response.status_code == 200
     assert response.json()["candidate_pmids"] == ["123"]
     service.convert_article_ids.assert_awaited_once_with(ids=["PMC123"], source="auto")
+
+
+@pytest.mark.asyncio
+async def test_convert_article_ids_route_rejects_target_filtering() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.convert_article_ids.return_value = ArticleIdConversionResponse(records=[])
+    app.dependency_overrides[get_discovery_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/discovery/convert-article-ids",
+            json={"ids": ["PMC123"], "source": "auto", "target": ["pmid"]},
+        )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "target filtering is not supported yet"
+    service.convert_article_ids.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_discovery_route_maps_request_errors_to_503() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    request = httpx.Request("GET", "https://eutils.ncbi.nlm.nih.gov/")
+    service.lookup_mesh.side_effect = httpx.RequestError("network failed", request=request)
+    app.dependency_overrides[get_discovery_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/discovery/mesh", params={"query": "FMF"})
+
+    assert response.status_code == 503
+    service.lookup_mesh.assert_awaited_once_with(query="FMF", limit=10, exact=False)
+
+
+@pytest.mark.asyncio
+async def test_discovery_route_maps_upstream_status_errors_to_502() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    request = httpx.Request("GET", "https://eutils.ncbi.nlm.nih.gov/")
+    upstream_response = httpx.Response(429, request=request)
+    service.lookup_mesh.side_effect = httpx.HTTPStatusError(
+        "upstream throttled",
+        request=request,
+        response=upstream_response,
+    )
+    app.dependency_overrides[get_discovery_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/discovery/mesh", params={"query": "FMF"})
+
+    assert response.status_code == 502
+    service.lookup_mesh.assert_awaited_once_with(query="FMF", limit=10, exact=False)
 
 
 @pytest.mark.asyncio
@@ -157,3 +212,28 @@ async def test_related_articles_route_returns_candidate_pmids() -> None:
         mode="similar",
         limit=20,
     )
+
+
+@pytest.mark.asyncio
+async def test_cleanup_dependencies_closes_fallback_discovery_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeDiscoveryClient:
+        def __init__(self) -> None:
+            self.closed = False
+
+        async def close(self) -> None:
+            self.closed = True
+
+    client = FakeDiscoveryClient()
+    monkeypatch.setattr(dependencies, "_ncbi_discovery_client", client)
+    monkeypatch.setattr(dependencies, "_discovery_service", object())
+    monkeypatch.setattr(dependencies, "_api_client", None)
+    monkeypatch.setattr(dependencies, "_review_queue", None)
+    monkeypatch.setattr(dependencies, "_review_pool", None)
+
+    await cleanup_dependencies()
+
+    assert client.closed is True
+    assert dependencies._ncbi_discovery_client is None
+    assert dependencies._discovery_service is None
