@@ -5,9 +5,11 @@ from uuid import uuid4
 
 from pubtator_link.models.responses import SearchResponse
 from pubtator_link.models.review_rerag import (
+    ListResearchSessionsResponse,
     ResearchSessionCandidate,
     ResearchSessionCandidateStatus,
     ResearchSessionDecisionReason,
+    ResearchSessionStatusResponse,
     StageResearchSessionRequest,
     StageResearchSessionResponse,
 )
@@ -146,6 +148,17 @@ class ResearchSessionService:
                 "unsafe_for_clinical_use": True,
             },
         )
+
+    async def get_status(self, *, review_id: str, session_id: str) -> ResearchSessionStatusResponse:
+        manifest = await self.repository.get_research_session(review_id, session_id)
+        if manifest is None:
+            raise LookupError(f"Research session not found: {session_id}")
+        manifest.preparation_status = await self.queue.repository.preparation_status(review_id)
+        return ResearchSessionStatusResponse(manifest=manifest)
+
+    async def list_sessions(self, *, review_id: str) -> ListResearchSessionsResponse:
+        sessions = await self.repository.list_research_sessions(review_id)
+        return ListResearchSessionsResponse(sessions=sessions)
 
     async def _candidate_pmids(
         self, request: StageResearchSessionRequest

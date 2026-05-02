@@ -11,9 +11,11 @@ from ...models.review_rerag import (
     InspectReviewIndexRequest,
     InspectReviewIndexResponse,
     ListEvidenceCertaintyResponse,
+    ListResearchSessionsResponse,
     ListReviewIndexesResponse,
     PreflightReviewSourcesRequest,
     PreflightReviewSourcesResponse,
+    ResearchSessionStatusResponse,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextRequest,
@@ -23,9 +25,12 @@ from ...models.review_rerag import (
     ReviewNeighboringPassagesRequest,
     ReviewPassageLookupRequest,
     ReviewPassageLookupResponse,
+    StageResearchSessionRequest,
+    StageResearchSessionResponse,
     UpsertEvidenceCertaintyRequest,
 )
 from .dependencies import (
+    ResearchSessionServiceDep,
     ReviewAuditServiceDep,
     ReviewContextServiceDep,
     ReviewEvidenceCertaintyServiceDep,
@@ -157,6 +162,53 @@ async def preflight_review_sources(
 ) -> PreflightReviewSourcesResponse:
     hints = await service.preflight_pmids(request.pmids)
     return PreflightReviewSourcesResponse(coverage_hints=hints)
+
+
+@router.post(
+    "/{review_id}/sessions/stage",
+    response_model=StageResearchSessionResponse,
+    operation_id="stage_research_session",
+    summary="Stage a transparent research session",
+)
+@handle_api_errors
+async def stage_research_session(
+    review_id: str,
+    request: StageResearchSessionRequest,
+    service: ResearchSessionServiceDep,
+) -> StageResearchSessionResponse:
+    return await service.stage(review_id=review_id, request=request)
+
+
+@router.get(
+    "/{review_id}/sessions/{session_id}",
+    response_model=ResearchSessionStatusResponse,
+    operation_id="get_research_session_status",
+    summary="Get staged research session status",
+)
+@handle_api_errors
+async def get_research_session_status(
+    review_id: str,
+    session_id: str,
+    service: ResearchSessionServiceDep,
+) -> ResearchSessionStatusResponse:
+    try:
+        return await service.get_status(review_id=review_id, session_id=session_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{review_id}/sessions",
+    response_model=ListResearchSessionsResponse,
+    operation_id="list_research_sessions",
+    summary="List staged research sessions",
+)
+@handle_api_errors
+async def list_research_sessions(
+    review_id: str,
+    service: ResearchSessionServiceDep,
+) -> ListResearchSessionsResponse:
+    return await service.list_sessions(review_id=review_id)
 
 
 @router.post(

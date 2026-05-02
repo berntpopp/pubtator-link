@@ -11,6 +11,10 @@ import asyncpg
 from fastapi import Depends, HTTPException, Request
 from structlog.typing import FilteringBoundLogger
 
+from pubtator_link.api.search_filters import merge_search_filters
+from pubtator_link.models.responses import SearchResponse, SearchResult
+from pubtator_link.models.review_rerag import StageResearchSessionRequest
+
 from ...api.client import PubTator3Client
 from ...config import review_rerag_config
 from ...logging_config import configure_logging
@@ -19,6 +23,7 @@ from ...services.europe_pmc import EuropePmcClient
 from ...services.full_text_preparation import FullTextPreparationService
 from ...services.publication_passage_service import PublicationPassageService
 from ...services.publication_service import PublicationService
+from ...services.research_session import ResearchSessionSearchProvider, ResearchSessionService
 from ...services.review_audit import ReviewAuditService
 from ...services.review_context_service import ReviewContextService
 from ...services.review_evidence_certainty import ReviewEvidenceCertaintyService
@@ -42,6 +47,7 @@ _review_audit_service: ReviewAuditService | None = None
 _review_evidence_certainty_service: ReviewEvidenceCertaintyService | None = None
 _review_index_lifecycle_service: ReviewIndexLifecycleService | None = None
 _source_preflight_service: SourcePreflightService | None = None
+_research_session_service: ResearchSessionService | None = None
 
 
 @dataclass
@@ -61,6 +67,7 @@ class AppResources:
     review_evidence_certainty_service: ReviewEvidenceCertaintyService | None = None
     review_index_lifecycle_service: ReviewIndexLifecycleService | None = None
     source_preflight_service: SourcePreflightService | None = None
+    research_session_service: ResearchSessionService | None = None
 
 
 _app_resources_context: ContextVar[AppResources | None] = ContextVar(
@@ -422,6 +429,91 @@ async def get_review_evidence_certainty_service() -> ReviewEvidenceCertaintyServ
     return _review_evidence_certainty_service
 
 
+async def get_research_session_service() -> ResearchSessionService:
+    """Get transparent research session staging service."""
+    global _research_session_service
+    resources = current_app_resources()
+    if resources is not None:
+        if resources.research_session_service is None:
+            if resources.review_repository is None or resources.review_queue is None:
+                raise RuntimeError("PUBTATOR_LINK_DATABASE_URL is required for review re-RAG")
+            resources.research_session_service = ResearchSessionService(
+                repository=resources.review_repository,
+                search_provider=_RouteSearchProvider(resources.api_client),
+                preflight_service=resources.source_preflight_service,
+                queue=resources.review_queue,
+            )
+        return resources.research_session_service
+    if _research_session_service is None:
+        _research_session_service = ResearchSessionService(
+            repository=await get_review_repository(),
+            search_provider=_RouteSearchProvider(await get_api_client()),
+            preflight_service=await get_source_preflight_service(),
+            queue=await get_review_queue(),
+        )
+    return _research_session_service
+
+
+class _RouteSearchProvider(ResearchSessionSearchProvider):
+    def __init__(self, client: PubTator3Client) -> None:
+        self.client = client
+
+    async def search(self, request: StageResearchSessionRequest) -> SearchResponse:
+        raw = await self.client.search_publications(
+            text=request.query or "",
+            page=request.page,
+            sort=request.sort,
+            filters=merge_search_filters(
+                filters=request.filters,
+                publication_types=request.publication_types,
+                year_min=request.year_min,
+                year_max=request.year_max,
+            ),
+            sections=",".join(request.sections) if request.sections else None,
+        )
+        results = [
+            SearchResult(
+                pmid=item.get("pmid", ""),
+                title=item.get("title", ""),
+                abstract=item.get("abstract"),
+                authors=item.get("authors", []),
+                journal=item.get("journal"),
+                pub_date=item.get("pub_date")
+                or item.get("meta_date_publication")
+                or item.get("date"),
+                annotations=item.get("annotations", []),
+                score=item.get("score"),
+                pmcid=item.get("pmcid"),
+                doi=item.get("doi"),
+                date=item.get("date"),
+                text_hl=item.get("text_hl"),
+                citations=item.get("citations"),
+                volume=item.get("volume") or item.get("meta_volume"),
+                issue=item.get("issue") or item.get("meta_issue"),
+                pages=item.get("pages") or item.get("meta_pages"),
+                publication_types=item.get("publication_types", []),
+            )
+            for item in raw.get("results", [])
+        ]
+        total_results = int(raw.get("count", raw.get("total", 0)))
+        per_page = int(raw.get("page_size", raw.get("per_page", 20)))
+        return SearchResponse(
+            success=True,
+            query=request.query or "",
+            results=results,
+            total_results=total_results,
+            page=request.page,
+            per_page=per_page,
+            total_pages=int(
+                raw.get(
+                    "total_pages",
+                    (total_results + per_page - 1) // per_page if per_page else 0,
+                )
+            ),
+            sort_order=request.sort,
+        )
+
+
 # Type aliases for dependency injection
 LoggerDep = Annotated[FilteringBoundLogger, Depends(get_logger)]
 ClientDep = Annotated[PubTator3Client, Depends(get_api_client)]
@@ -441,6 +533,10 @@ ReviewIndexLifecycleServiceDep = Annotated[
     Depends(get_review_index_lifecycle_service),
 ]
 SourcePreflightServiceDep = Annotated[SourcePreflightService, Depends(get_source_preflight_service)]
+ResearchSessionServiceDep = Annotated[
+    ResearchSessionService,
+    Depends(get_research_session_service),
+]
 
 
 def handle_api_errors(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -558,6 +654,7 @@ async def cleanup_dependencies() -> None:
     global _review_context_service, _review_pool, _review_queue, _review_repository
     global _review_evidence_certainty_service
     global _review_index_lifecycle_service
+    global _research_session_service
 
     if _api_client:
         api_client = _api_client
@@ -576,6 +673,7 @@ async def cleanup_dependencies() -> None:
     _review_context_service = None
     _review_evidence_certainty_service = None
     _review_index_lifecycle_service = None
+    _research_session_service = None
     _publication_passage_service = None
     _publication_service = None
     _logger = None

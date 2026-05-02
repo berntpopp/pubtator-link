@@ -33,6 +33,13 @@ from pubtator_link.models.review_rerag import (
 from pubtator_link.server_manager import UnifiedServerManager
 
 
+def test_stage_research_session_route_is_registered(app) -> None:
+    route_paths = {route.path for route in app.routes}
+    assert "/api/reviews/{review_id}/sessions/stage" in route_paths
+    assert "/api/reviews/{review_id}/sessions/{session_id}" in route_paths
+    assert "/api/reviews/{review_id}/sessions" in route_paths
+
+
 @pytest.mark.asyncio
 async def test_preflight_review_sources_returns_coverage_hints() -> None:
     app = UnifiedServerManager().create_app()
