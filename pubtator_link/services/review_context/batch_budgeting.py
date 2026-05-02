@@ -46,6 +46,7 @@ def merge_batch_context(
     merged_passages: list[ContextPassage] = []
     dropped: list[ContextDropReason] = []
     seen_passage_ids: set[str] = set()
+    passage_by_id: dict[str, ContextPassage] = {}
     handled_passages: set[tuple[int, int]] = set()
     returned_counts: list[int] = []
     dropped_counts: list[int] = []
@@ -131,9 +132,12 @@ def merge_batch_context(
                     "citation_key": f"S{len(merged_passages) + 1}",
                     "stable_citation_key": passage.stable_citation_key,
                     "char_count": len(passage.text),
+                    "matched_queries": [request.queries[query_index]],
+                    "matched_query_indices": [query_index],
                 }
             )
         )
+        passage_by_id[passage.passage_id] = merged_passages[-1]
         passage_len = len(passage.text)
         total_chars += passage_len
         query_chars[query_index] += passage_len
@@ -143,6 +147,15 @@ def merge_batch_context(
         pmid_summary = ensure_pmid_summary(passage.pmid)
         if pmid_summary is not None:
             pmid_summary.passages_returned += 1
+
+    def add_duplicate_match(query_index: int, passage: ContextPassage) -> None:
+        merged_passage = passage_by_id.get(passage.passage_id)
+        if merged_passage is None:
+            return
+        if query_index not in merged_passage.matched_query_indices:
+            merged_passage.matched_query_indices.append(query_index)
+            merged_passage.matched_queries.append(request.queries[query_index])
+            returned_counts[query_index] += 1
 
     def try_merge_passage(
         query_index: int,
@@ -164,7 +177,7 @@ def merge_batch_context(
             return False
         handled_passages.add(handled_key)
         if request.deduplicate_passages and passage.passage_id in seen_passage_ids:
-            drop_passage(query_index, passage, "duplicate_passage", source_key=source_key)
+            add_duplicate_match(query_index, passage)
             return True
         if len(merged_passages) >= request.max_total_passages:
             drop_passage(

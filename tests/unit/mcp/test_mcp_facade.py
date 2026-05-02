@@ -536,7 +536,7 @@ def test_review_context_schema_defaults_are_stable() -> None:
     batch_schema = tools["pubtator.retrieve_review_context_batch"].parameters["properties"]
     assert batch_schema["response_mode"]["default"] == "compact"
     assert batch_schema["budget_strategy"]["default"] == "query_fair"
-    assert batch_schema["include_diagnostics"]["default"] is True
+    assert batch_schema["include_diagnostics"]["default"] is False
     assert batch_schema["table_mode"]["default"] == "preview"
 
 

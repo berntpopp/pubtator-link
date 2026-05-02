@@ -3,10 +3,14 @@ from __future__ import annotations
 from pubtator_link.models.review_rerag import (
     ContextPack,
     ContextPassage,
+    PmidStatusSummary,
     PreparationStatus,
+    QueryDiagnosticsSummary,
+    RetrieveReviewBatchDiagnostics,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextResponse,
+    SourceBudgetSummary,
 )
 from pubtator_link.services.review_context.batch_budgeting import merge_batch_context
 
@@ -55,7 +59,9 @@ def test_merge_batch_context_deduplicates_passages() -> None:
     )
 
     assert [passage.passage_id for passage in merged.passages] == ["p1"]
-    assert merged.dropped[0].reason == "duplicate_passage"
+    assert merged.passages[0].matched_queries == ["q1", "q2"]
+    assert all(drop.reason != "duplicate_passage" for drop in merged.dropped)
+    assert merged.dropped_summary.by_reason.get("duplicate_passage", 0) == 0
 
 
 def test_compact_batch_response_omits_empty_results_when_merged_pack_is_primary() -> None:
@@ -70,6 +76,57 @@ def test_compact_batch_response_omits_empty_results_when_merged_pack_is_primary(
 
     assert "merged_context_pack" in dumped
     assert "results" not in dumped
+
+
+def test_compact_batch_response_omits_diagnostics_when_not_requested() -> None:
+    response = RetrieveReviewContextBatchResponse(
+        review_id="r1",
+        response_mode="compact",
+        include_diagnostics=False,
+        results=[],
+        merged_context_pack=ContextPack(question="q1", passages=[], citation_map={}),
+        preparation_status=PreparationStatus(),
+        query_summaries=[],
+        source_budget_summaries=[],
+        pmid_status_summary=[],
+    )
+
+    dumped = response.model_dump(exclude_none=True, exclude_defaults=True)
+
+    assert "query_summaries" not in dumped
+    assert "source_budget_summaries" not in dumped
+    assert "pmid_status_summary" not in dumped
+    assert "diagnostics" not in dumped
+
+
+def test_compact_batch_response_collapses_requested_diagnostics() -> None:
+    query_summary = QueryDiagnosticsSummary(query="q1", query_tokens=["q1"])
+    source_summary = SourceBudgetSummary(source_id="source-1")
+    pmid_summary = PmidStatusSummary(pmid="1")
+    response = RetrieveReviewContextBatchResponse(
+        review_id="r1",
+        response_mode="compact",
+        include_diagnostics=True,
+        diagnostics=RetrieveReviewBatchDiagnostics(
+            query_summaries=[query_summary],
+            source_budget_summaries=[source_summary],
+            pmid_status_summary=[pmid_summary],
+        ),
+        results=[],
+        merged_context_pack=ContextPack(question="q1", passages=[], citation_map={}),
+        preparation_status=PreparationStatus(),
+        query_summaries=[query_summary],
+        source_budget_summaries=[source_summary],
+        pmid_status_summary=[pmid_summary],
+    )
+
+    dumped = response.model_dump(exclude_none=True, exclude_defaults=True)
+
+    assert "diagnostics" in dumped
+    assert dumped["diagnostics"]["query_summaries"][0]["query"] == "q1"
+    assert "query_summaries" not in dumped
+    assert "source_budget_summaries" not in dumped
+    assert "pmid_status_summary" not in dumped
 
 
 def test_merge_batch_context_source_fair_represents_sources_before_overflow() -> None:

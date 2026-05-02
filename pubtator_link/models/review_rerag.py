@@ -457,6 +457,8 @@ class ContextPassage(BaseModel):
     score: PassageScore | None = None
     quote: PassageQuote | None = None
     confidence_for_grounding: GroundingConfidence | None = None
+    matched_queries: list[str] = Field(default_factory=list)
+    matched_query_indices: list[int] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def fill_stable_citation_key(self) -> Self:
@@ -561,6 +563,15 @@ class PmidStatusSummary(BaseModel):
     prioritized: bool = False
 
 
+class RetrieveReviewBatchDiagnostics(BaseModel):
+    """Collapsed diagnostics for batch review context retrieval."""
+
+    query_summaries: list[QueryDiagnosticsSummary] = Field(default_factory=list)
+    source_budget_summaries: list[SourceBudgetSummary] = Field(default_factory=list)
+    pmid_status_summary: list[PmidStatusSummary] = Field(default_factory=list)
+    dropped_summary: SourceDroppedSummary | dict[str, int] = Field(default_factory=dict)
+
+
 class RetrieveReviewContextBatchRequest(BaseModel):
     """Request for multiple review-scoped context retrieval queries."""
 
@@ -578,7 +589,7 @@ class RetrieveReviewContextBatchRequest(BaseModel):
     min_passages_per_source: int = Field(default=1, ge=1, le=10)
     min_passages_per_pmid: int = Field(default=0, ge=0, le=10)
     prioritize_pmids: list[str] = Field(default_factory=list)
-    include_diagnostics: bool = True
+    include_diagnostics: bool = False
     response_mode: ReviewBatchResponseMode = "compact"
     include_tables: bool = False
     include_references: bool = False
@@ -597,6 +608,8 @@ class RetrieveReviewContextBatchResponse(BaseModel):
     merged_context_pack: ContextPack
     preparation_status: PreparationStatus
     response_mode: ReviewBatchResponseMode = "compact"
+    include_diagnostics: bool = False
+    diagnostics: RetrieveReviewBatchDiagnostics | None = None
     query_summaries: list[QueryDiagnosticsSummary] = Field(default_factory=list)
     source_budget_summaries: list[SourceBudgetSummary] = Field(default_factory=list)
     pmid_status_summary: list[PmidStatusSummary] = Field(default_factory=list)
@@ -615,6 +628,14 @@ class RetrieveReviewContextBatchResponse(BaseModel):
         data = cast(dict[str, Any], handler(self))
         if self.response_mode in {"compact", "merged_only", "diagnostics"} and not self.results:
             data.pop("results", None)
+        if self.response_mode in {"compact", "merged_only"} or (
+            not self.include_diagnostics and self.response_mode != "diagnostics"
+        ):
+            data.pop("query_summaries", None)
+            data.pop("source_budget_summaries", None)
+            data.pop("pmid_status_summary", None)
+        if not self.include_diagnostics and self.response_mode != "diagnostics":
+            data.pop("diagnostics", None)
         return data
 
 

@@ -12,6 +12,7 @@ from pubtator_link.models.review_rerag import (
     InspectReviewIndexRequest,
     InspectReviewIndexResponse,
     PreparationStatus,
+    RetrieveReviewBatchDiagnostics,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextRequest,
@@ -287,6 +288,19 @@ class ReviewContextService:
             query_results=query_results,
             coverage_by_source=coverage_by_source,
         )
+        include_batch_diagnostics = (
+            request.include_diagnostics or request.response_mode == "diagnostics"
+        )
+        diagnostics = (
+            RetrieveReviewBatchDiagnostics(
+                query_summaries=merged.query_summaries,
+                source_budget_summaries=merged.source_budget_summaries,
+                pmid_status_summary=merged.pmid_status_summary,
+                dropped_summary=merged.dropped_summary,
+            )
+            if include_batch_diagnostics
+            else None
+        )
         recovery = next(
             (
                 hint
@@ -306,9 +320,12 @@ class ReviewContextService:
             return RetrieveReviewContextBatchResponse(
                 review_id=review_id,
                 response_mode="diagnostics",
+                include_diagnostics=include_batch_diagnostics,
+                diagnostics=diagnostics,
                 results=[],
                 query_summaries=merged.query_summaries,
                 source_budget_summaries=merged.source_budget_summaries,
+                pmid_status_summary=merged.pmid_status_summary,
                 merged_context_pack=ContextPack(
                     question="\n".join(request.queries),
                     passages=[],
@@ -356,6 +373,8 @@ class ReviewContextService:
         return RetrieveReviewContextBatchResponse(
             review_id=review_id,
             response_mode=request.response_mode,
+            include_diagnostics=include_batch_diagnostics,
+            diagnostics=diagnostics,
             results=results,
             query_summaries=merged.query_summaries,
             source_budget_summaries=merged.source_budget_summaries,

@@ -601,7 +601,7 @@ def register_review_tools(mcp: FastMCP) -> None:
         min_passages_per_source: int = 1,
         min_passages_per_pmid: int = 0,
         prioritize_pmids: list[str] | None = None,
-        include_diagnostics: bool = True,
+        include_diagnostics: bool = False,
         include_tables: bool = False,
         include_references: bool = False,
         table_mode: ReviewTableMode = "preview",

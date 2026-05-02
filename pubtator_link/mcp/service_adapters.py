@@ -861,7 +861,7 @@ async def retrieve_review_context_batch_impl(
     min_passages_per_source: int = 1,
     min_passages_per_pmid: int = 0,
     prioritize_pmids: list[str] | str | None = None,
-    include_diagnostics: bool = True,
+    include_diagnostics: bool = False,
     include_tables: bool = False,
     include_references: bool = False,
     table_mode: ReviewTableMode | str = "preview",
