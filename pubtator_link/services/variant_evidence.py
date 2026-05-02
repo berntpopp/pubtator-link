@@ -57,9 +57,7 @@ class VariantEvidenceService:
                 warnings.append("ClinVar unavailable; returning PubTator literature evidence only.")
 
         normalized_variants = [record.normalized_variant() for record in clinvar_records]
-        source_classifications = [
-            record.source_classification() for record in clinvar_records
-        ]
+        source_classifications = [record.source_classification() for record in clinvar_records]
 
         literature: list[VariantLiteratureEvidence] = []
         if "pubtator" in request.sources and request.max_literature_pmids > 0:
@@ -83,23 +81,15 @@ class VariantEvidenceService:
             dict.fromkeys(
                 [
                     *variant_terms,
-                    *[
-                        hgvs
-                        for record in clinvar_records
-                        for hgvs in record.hgvs
-                    ],
-                    *[
-                        record.preferred_name
-                        for record in clinvar_records
-                        if record.preferred_name
-                    ],
+                    *[hgvs for record in clinvar_records for hgvs in record.hgvs],
+                    *[record.preferred_name for record in clinvar_records if record.preferred_name],
                 ]
             )
         )
         term_query = " OR ".join(f'"{term}"' for term in expanded_terms if term)
         query = f"{request.gene} AND ({term_query})" if term_query else request.gene
         if request.condition:
-            query = f"({query}) AND \"{request.condition}\""
+            query = f'({query}) AND "{request.condition}"'
         raw = await self.pubtator_client.search_publications(
             text=query,
             page=1,

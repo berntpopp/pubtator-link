@@ -202,7 +202,9 @@ def merge_batch_context(
         if request.min_passages_per_pmid:
             returned_by_pmid: dict[str, int] = defaultdict(int)
 
-            def pmid_floor_sort_key(candidate: tuple[int, int, ContextPassage]) -> tuple[int, int, int]:
+            def pmid_floor_sort_key(
+                candidate: tuple[int, int, ContextPassage],
+            ) -> tuple[int, int, int]:
                 query_index, passage_index, passage = candidate
                 priority_index = (
                     request.prioritize_pmids.index(passage.pmid)

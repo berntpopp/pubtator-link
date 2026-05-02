@@ -106,9 +106,7 @@ def shaped_search_result(
         title=item.get("title", ""),
         abstract=item.get("abstract") if response_mode in {"standard", "full"} else None,
         authors=(
-            _shape_authors(item.get("authors", []))
-            if response_mode in {"standard", "full"}
-            else []
+            _shape_authors(item.get("authors", [])) if response_mode in {"standard", "full"} else []
         ),
         journal=item.get("journal"),
         pub_date=item.get("pub_date") or item.get("meta_date_publication") or item.get("date"),

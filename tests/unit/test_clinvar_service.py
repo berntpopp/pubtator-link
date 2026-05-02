@@ -39,8 +39,7 @@ async def test_clinvar_query_construction_uses_gene_and_variant() -> None:
     )
 
     assert (
-        client.esearch_terms[0]
-        == 'MEFV[gene] AND "c.2177T>C" AND "familial Mediterranean fever"'
+        client.esearch_terms[0] == 'MEFV[gene] AND "c.2177T>C" AND "familial Mediterranean fever"'
     )
 
 

@@ -70,8 +70,7 @@ async def search_biomedical_entities_impl(
     client: PubTator3Client,
     query: str,
     concept: (
-        Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine", "Phenotype"]
-        | None
+        Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine", "Phenotype"] | None
     ) = None,
     limit: int = 10,
 ) -> dict[str, Any]:

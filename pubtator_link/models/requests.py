@@ -227,8 +227,7 @@ class EntityAutocompleteRequest(BaseModel):
 
     query: str = Field(..., description="Search query for entity", min_length=1, max_length=500)
     concept: (
-        Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine", "Phenotype"]
-        | None
+        Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine", "Phenotype"] | None
     ) = Field(default=None, description="Filter by bioconcept type")
     limit: int = Field(default=10, description="Maximum number of results", ge=1, le=100)
 
@@ -279,8 +278,7 @@ class RelationsRequest(BaseModel):
         | None
     ) = Field(default=None, description="Relation type filter")
     e2: (
-        Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine", "Phenotype"]
-        | None
+        Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine", "Phenotype"] | None
     ) = Field(default=None, description="Target entity type filter")
 
     @field_validator("e1")

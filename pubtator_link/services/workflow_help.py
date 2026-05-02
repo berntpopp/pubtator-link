@@ -153,5 +153,8 @@ def _response(
         steps=steps,
         fallbacks=fallbacks,
         tool_sequence=[step.tool_name for step in steps],
-        _meta={"next_commands": [step.tool_name for step in steps[:3]], "notice": RESEARCH_USE_NOTICE},
+        _meta={
+            "next_commands": [step.tool_name for step in steps[:3]],
+            "notice": RESEARCH_USE_NOTICE,
+        },
     )

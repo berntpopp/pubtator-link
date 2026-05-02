@@ -16,9 +16,7 @@ class VariantEvidenceRequest(BaseModel):
     variant: str | None = Field(default=None, min_length=1)
     protein: str | None = Field(default=None, min_length=1)
     condition: str | None = Field(default=None, min_length=1)
-    sources: list[VariantEvidenceSource] = Field(
-        default_factory=lambda: ["clinvar", "pubtator"]
-    )
+    sources: list[VariantEvidenceSource] = Field(default_factory=lambda: ["clinvar", "pubtator"])
     max_literature_pmids: int = Field(default=20, ge=0, le=100)
     include_citations: bool = True
 

@@ -86,8 +86,7 @@ class ClinVarService:
         )
         search_response.raise_for_status()
         id_list = [
-            str(item)
-            for item in search_response.json().get("esearchresult", {}).get("idlist", [])
+            str(item) for item in search_response.json().get("esearchresult", {}).get("idlist", [])
         ]
         if not id_list:
             return []

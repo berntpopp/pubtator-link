@@ -74,6 +74,8 @@ def test_high_drop_nonzero_query_summary_has_next_steps() -> None:
         diagnostics=None,
     )
 
-    summary = query_summary(query="MEFV colchicine", result=result, returned_count=1, dropped_count=9)
+    summary = query_summary(
+        query="MEFV colchicine", result=result, returned_count=1, dropped_count=9
+    )
 
     assert summary.next_steps == ["increase_budget", "narrow_query", "inspect_review_index"]
