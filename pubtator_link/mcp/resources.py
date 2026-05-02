@@ -22,6 +22,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             "pubtator.lookup_mesh",
             "pubtator.lookup_citation",
             "pubtator.find_related_articles",
+            "pubtator.diagnostics",
             "pubtator.get_publication_passages",
             "pubtator.estimate_publication_context",
             "pubtator.fetch_publication_annotations",
@@ -74,6 +75,9 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "pubtator.lookup_mesh",
                 "pubtator.lookup_citation",
                 "pubtator.find_related_articles",
+            ],
+            "diagnostics": [
+                "pubtator.diagnostics",
             ],
             "publication_grounding": [
                 "pubtator.get_publication_passages",
@@ -146,6 +150,7 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "mode": "similar",
                 "limit": 20,
             },
+            "pubtator.diagnostics": {},
             "pubtator.get_publication_passages": {
                 "pmids": ["40234174"],
                 "mode": "compact_passages",

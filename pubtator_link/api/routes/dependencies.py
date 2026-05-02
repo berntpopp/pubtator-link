@@ -26,6 +26,7 @@ from ...config import review_rerag_config
 from ...logging_config import configure_logging
 from ...repositories.review_rerag import PostgresReviewReragRepository
 from ...services.europe_pmc import EuropePmcClient
+from ...services.diagnostics import DiagnosticsService
 from ...services.full_text_preparation import FullTextPreparationService
 from ...services.ncbi_discovery import DiscoveryService, NcbiDiscoveryClient
 from ...services.publication_passage_service import PublicationPassageService
@@ -57,6 +58,7 @@ _review_evidence_certainty_service: ReviewEvidenceCertaintyService | None = None
 _review_index_lifecycle_service: ReviewIndexLifecycleService | None = None
 _source_preflight_service: SourcePreflightService | None = None
 _research_session_service: ResearchSessionService | None = None
+_diagnostics_service: DiagnosticsService | None = None
 
 
 @dataclass
@@ -80,6 +82,7 @@ class AppResources:
     source_preflight_service: SourcePreflightService | None = None
     research_session_service: ResearchSessionService | None = None
     schema_diagnostics: ReviewSchemaDiagnostics | None = None
+    diagnostics_service: DiagnosticsService | None = None
 
 
 _app_resources_context: ContextVar[AppResources | None] = ContextVar(
@@ -192,6 +195,15 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
                 config=review_rerag_config,
             )
 
+        async def inspect_schema_for_diagnostics() -> ReviewSchemaDiagnostics:
+            return await inspect_review_schema(review_rerag_config.database_url)
+
+        diagnostics_service = DiagnosticsService(
+            inspect_schema=inspect_schema_for_diagnostics,
+            review_queue_available=lambda: review_queue is not None,
+            europe_pmc_enabled=lambda: europe_pmc_client is not None,
+        )
+
         return AppResources(
             logger=logger,
             api_client=api_client,
@@ -209,6 +221,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             review_evidence_certainty_service=review_evidence_certainty_service,
             review_index_lifecycle_service=review_index_lifecycle_service,
             schema_diagnostics=schema_diagnostics,
+            diagnostics_service=diagnostics_service,
         )
     except Exception:
         if review_queue is not None:
@@ -297,6 +310,36 @@ async def get_discovery_service() -> DiscoveryService:
             _ncbi_discovery_client = NcbiDiscoveryClient()
         _discovery_service = DiscoveryService(_ncbi_discovery_client)
     return _discovery_service
+
+
+async def get_diagnostics_service() -> DiagnosticsService:
+    """Get subsystem diagnostics service."""
+    global _diagnostics_service
+    resources = current_app_resources()
+    if resources is not None:
+        if resources.diagnostics_service is None:
+            resources.diagnostics_service = _build_diagnostics_service(resources)
+        return resources.diagnostics_service
+    if _diagnostics_service is None:
+        _diagnostics_service = _build_diagnostics_service(None)
+    return _diagnostics_service
+
+
+def _build_diagnostics_service(resources: AppResources | None) -> DiagnosticsService:
+    async def inspect_schema_for_diagnostics() -> ReviewSchemaDiagnostics:
+        return await inspect_review_schema(review_rerag_config.database_url)
+
+    return DiagnosticsService(
+        inspect_schema=inspect_schema_for_diagnostics,
+        review_queue_available=lambda: (
+            resources.review_queue is not None if resources is not None else _review_queue is not None
+        ),
+        europe_pmc_enabled=lambda: (
+            resources.europe_pmc_client is not None
+            if resources is not None
+            else getattr(review_rerag_config, "enable_europe_pmc_fallback", False)
+        ),
+    )
 
 
 async def get_review_pool() -> asyncpg.Pool:

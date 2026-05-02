@@ -9,6 +9,7 @@ EXPECTED_PUBLIC_TOOL_NAMES = {
     "pubtator.lookup_mesh",
     "pubtator.lookup_citation",
     "pubtator.find_related_articles",
+    "pubtator.diagnostics",
     "pubtator.fetch_publication_annotations",
     "pubtator.get_publication_passages",
     "pubtator.estimate_publication_context",
@@ -168,6 +169,14 @@ def test_curated_facade_registers_pubtator_tools() -> None:
     assert "pubtator.clear_api_cache" not in tool_names
     assert "pubtator.delete_review_index" not in tool_names
     assert "pubtator.delete_evidence_certainty" not in tool_names
+
+
+def test_diagnostics_tool_is_registered() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp()
+
+    assert "pubtator.diagnostics" in mcp._tool_manager._tools
 
 
 def test_research_session_tools_are_registered(mcp_tool_names) -> None:

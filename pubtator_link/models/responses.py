@@ -30,6 +30,14 @@ class HealthResponse(BaseModel):
     uptime: float | None = Field(default=None, description="Uptime in seconds")
 
 
+class DiagnosticsResponse(BaseResponse):
+    """Subsystem diagnostics for MCP and readiness recovery."""
+
+    status: str = Field(..., description="ready, degraded, or not_ready")
+    subsystems: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    recovery: list[str] = Field(default_factory=list)
+
+
 class PublicationAnnotation(BaseModel):
     """Publication annotation model."""
 
