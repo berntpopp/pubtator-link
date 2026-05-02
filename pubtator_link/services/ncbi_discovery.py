@@ -137,7 +137,66 @@ class NcbiDiscoveryClient:
         ]
 
     async def lookup_mesh(self, query: str, limit: int, exact: bool) -> list[MeshDescriptor]:
-        raise NotImplementedError
+        term = f'"{query}"[MeSH Terms]' if exact else query
+        search_response = await self._get(
+            "esearch.fcgi",
+            {
+                "db": "mesh",
+                "term": term,
+                "retmode": "json",
+                "retmax": str(limit),
+                "tool": "pubtator-link",
+            },
+        )
+        search_payload = search_response.json()
+        if not isinstance(search_payload, dict):
+            return []
+
+        esearch_result = search_payload.get("esearchresult")
+        idlist_payload = (
+            esearch_result.get("idlist", []) if isinstance(esearch_result, dict) else []
+        )
+        idlist = [str(mesh_id) for mesh_id in idlist_payload]
+        if not idlist:
+            return []
+
+        summary_payload = search_payload
+        if "result" not in summary_payload:
+            summary_response = await self._get(
+                "esummary.fcgi",
+                {
+                    "db": "mesh",
+                    "id": ",".join(idlist),
+                    "retmode": "json",
+                    "tool": "pubtator-link",
+                },
+            )
+            summary_json = summary_response.json()
+            summary_payload = summary_json if isinstance(summary_json, dict) else {}
+
+        result_payload = summary_payload.get("result")
+        results = result_payload if isinstance(result_payload, dict) else {}
+        descriptors: list[MeshDescriptor] = []
+        for mesh_id in idlist:
+            item = results.get(mesh_id)
+            if not isinstance(item, dict):
+                continue
+
+            uid = _optional_str(item.get("uid")) or mesh_id
+            mesh_terms = _string_list(item.get("ds_meshterms"))
+            name = mesh_terms[0] if mesh_terms else _optional_str(item.get("title")) or uid
+            descriptors.append(
+                MeshDescriptor(
+                    ui=_optional_str(item.get("ds_meshui")) or uid,
+                    name=name,
+                    scope_note=_optional_str(item.get("ds_scopenote")),
+                    entry_terms=_string_list(item.get("ds_idxlinks")),
+                    tree_numbers=_string_list(item.get("ds_tree")),
+                    search_terms=[f"{name}[MeSH Terms]"],
+                )
+            )
+
+        return descriptors
 
     async def lookup_citations(self, citations: Sequence[str]) -> list[CitationLookupRecord]:
         raise NotImplementedError
@@ -240,6 +299,14 @@ def _optional_str(value: object) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _string_list(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list | tuple):
+        return [str(item) for item in value]
+    return [str(value)]
 
 
 def _candidate_meta(candidate_pmids: list[str]) -> DiscoveryMeta:

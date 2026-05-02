@@ -157,6 +157,44 @@ async def test_lookup_mesh_returns_search_next_command() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ncbi_client_parses_mesh_lookup_json() -> None:
+    transport = MockTransport(
+        {
+            "esearchresult": {"idlist": ["68050505"]},
+            "result": {
+                "68050505": {
+                    "uid": "68050505",
+                    "ds_meshterms": ["Familial Mediterranean Fever"],
+                    "ds_scopenote": "An autoinflammatory disease.",
+                    "ds_idxlinks": ["FMF"],
+                    "ds_meshui": "D005505",
+                    "ds_tree": ["C16.320.565"],
+                }
+            },
+        }
+    )
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = NcbiDiscoveryClient(http_client=http_client)
+
+    descriptors = await client.lookup_mesh("FMF", limit=5, exact=False)
+
+    assert len(descriptors) == 1
+    assert descriptors[0].ui == "D005505"
+    assert descriptors[0].name == "Familial Mediterranean Fever"
+    assert descriptors[0].scope_note == "An autoinflammatory disease."
+    assert descriptors[0].entry_terms == ["FMF"]
+    assert descriptors[0].tree_numbers == ["C16.320.565"]
+    assert descriptors[0].search_terms == ["Familial Mediterranean Fever[MeSH Terms]"]
+    assert transport.requests[0].url.path.endswith("/esearch.fcgi")
+    assert transport.requests[0].url.params["db"] == "mesh"
+    assert transport.requests[0].url.params["term"] == "FMF"
+    assert transport.requests[0].url.params["retmode"] == "json"
+    assert transport.requests[0].url.params["retmax"] == "5"
+    assert transport.requests[0].url.params["tool"] == "pubtator-link"
+    await client.close()
+
+
+@pytest.mark.asyncio
 async def test_lookup_citation_deduplicates_candidate_pmids() -> None:
     service = DiscoveryService(FakeDiscoveryClient())
 
