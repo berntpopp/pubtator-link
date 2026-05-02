@@ -28,6 +28,15 @@ def test_repair_migration_adds_reviews_updated_at_without_dropping_data() -> Non
     assert "truncate" not in sql.lower()
 
 
+def test_base_migration_repairs_reviews_updated_at_before_indexing() -> None:
+    sql = Path("pubtator_link/db/migrations/0001_review_schema_base.sql").read_text().lower()
+
+    repair_position = sql.index("alter table reviews add column if not exists updated_at")
+    index_position = sql.index("create index if not exists reviews_updated_at_idx")
+
+    assert repair_position < index_position
+
+
 def test_required_schema_items_include_review_tables_and_columns() -> None:
     required = required_review_schema_items()
 

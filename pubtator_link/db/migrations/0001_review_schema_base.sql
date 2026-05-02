@@ -4,6 +4,14 @@ create table if not exists reviews (
     updated_at timestamptz not null default now()
 );
 
+alter table reviews add column if not exists updated_at timestamptz;
+
+update reviews set updated_at = coalesce(updated_at, created_at, now())
+where updated_at is null;
+
+alter table reviews alter column updated_at set default now();
+alter table reviews alter column updated_at set not null;
+
 create index if not exists reviews_updated_at_idx
     on reviews(updated_at);
 
