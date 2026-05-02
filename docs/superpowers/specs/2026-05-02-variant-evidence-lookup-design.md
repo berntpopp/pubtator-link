@@ -40,6 +40,10 @@ Existing useful pieces:
 - `search_biomedical_entities` supports `Variant` concept search.
 - `search_biomedical_entities` does not currently expose `Phenotype`/HPO as a
   concept.
+- `pubtator.find_entity_relations` can expose relation evidence for grounded
+  genes, diseases, chemicals, variants, and phenotype-like entities, but
+  workflow help and capabilities do not yet make it prominent in variant
+  evidence workflows.
 - `search_literature` can search variant text and PubTator entity IDs.
 - Citation metadata and audit bundles now support source-grounded reports.
 
@@ -87,6 +91,10 @@ search_biomedical_entities(concept="Phenotype")
 
 Phenotype results should prefer HPO identifiers when available and should be
 usable as `entity_ids` or query expansion inputs for literature search.
+When entity grounding returns a useful gene, variant, or phenotype entity ID,
+workflow help should recommend `pubtator.find_entity_relations` before broad
+literature search so callers can discover source-attributed relation types and
+PMID candidates without relying only on free text.
 
 Output:
 

@@ -58,6 +58,17 @@ Gaps:
 - `next_steps` only appears for zero-result queries, not high-drop queries.
 - Repeated research-use text in every tool description wastes schema/context.
 
+Documentation gaps to close in this slice:
+
+- `stable_citation_key` must be documented as stable across repeated retrieval
+  calls and review index snapshots for the same source passage identity. It is
+  not a display citation number; consumers should use it as a durable join key
+  and use `stable_citation_map` for render-time numbering.
+- Section taxonomy must be documented as lowercase canonical names across search
+  filters, review passage metadata, diagnostics, and examples. Inputs should be
+  normalized before storage or matching so mixed-case upstream labels do not
+  fragment retrieval.
+
 ## Public Surface
 
 ### Metadata defaults
@@ -275,6 +286,11 @@ screening and coverage='preflight' before indexing.
 Do not append the full "Research use only; not for diagnosis..." sentence to
 every tool schema. This keeps safety policy visible while reducing repeated MCP
 context tokens.
+
+Capabilities and workflow help should promote `pubtator.find_entity_relations`
+as an optional evidence-discovery step after `pubtator.search_biomedical_entities`
+and before literature search when relation types can sharpen the query or
+candidate PMID selection.
 
 ## Structured Schema Guidance
 

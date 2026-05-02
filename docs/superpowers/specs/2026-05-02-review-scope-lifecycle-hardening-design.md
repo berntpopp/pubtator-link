@@ -237,3 +237,15 @@ Update workflow help:
 Tool descriptions should be functional and short. The global research-use notice
 belongs once in server instructions/capabilities, not repeated in every tool
 description.
+
+Capabilities and workflow help should also promote
+`pubtator.find_entity_relations` as the follow-on tool after entity grounding
+when the caller needs PubTator relation evidence before choosing search terms or
+candidate PMIDs. Keep it in the discovery/entities group and include a concise
+sample call keyed by `entity_id` and `relation_type`.
+
+Section names used for retrieval filters, indexed passage metadata, available
+section diagnostics, and workflow examples should use lowercase canonical
+section names. Normalize incoming section labels before storage/querying so
+values such as `Abstract`, `RESULTS`, and `Methods & Results` cannot create
+parallel taxonomy entries or missed session-scoped retrieval matches.
