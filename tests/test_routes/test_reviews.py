@@ -4,6 +4,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from pubtator_link.api.routes.dependencies import (
+    get_research_session_service,
     get_review_audit_service,
     get_review_context_service,
     get_review_evidence_certainty_service,
@@ -17,9 +18,12 @@ from pubtator_link.models.review_rerag import (
     EvidenceCertaintyResponse,
     InspectReviewIndexResponse,
     ListEvidenceCertaintyResponse,
+    ListResearchSessionsResponse,
     ListReviewIndexesResponse,
     PreparationStatus,
     QueryDiagnosticsSummary,
+    ResearchSessionManifest,
+    ResearchSessionStatusResponse,
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextResponse,
     ReviewAuditBundle,
@@ -29,6 +33,7 @@ from pubtator_link.models.review_rerag import (
     ReviewPassageLookupResponse,
     ReviewSourceSummary,
     SourceCoverageHint,
+    StageResearchSessionResponse,
 )
 from pubtator_link.server_manager import UnifiedServerManager
 
@@ -38,6 +43,111 @@ def test_stage_research_session_route_is_registered(app) -> None:
     assert "/api/reviews/{review_id}/sessions/stage" in route_paths
     assert "/api/reviews/{review_id}/sessions/{session_id}" in route_paths
     assert "/api/reviews/{review_id}/sessions" in route_paths
+
+
+@pytest.mark.asyncio
+async def test_stage_research_session_route_calls_service_and_serializes_meta() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    manifest = ResearchSessionManifest(
+        review_id="review-1",
+        session_id="session-1",
+        query="FMF",
+        preparation_status=PreparationStatus(queued=1),
+    )
+    service.stage.return_value = StageResearchSessionResponse(
+        manifest=manifest,
+        _meta={"next_commands": ["pubtator.get_research_session_status"]},
+    )
+    app.dependency_overrides[get_research_session_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/reviews/review-1/sessions/stage",
+            json={"query": "FMF", "max_candidates": 1},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["manifest"]["session_id"] == "session-1"
+    assert data["manifest"]["preparation_status"]["queued"] == 1
+    assert data["_meta"]["next_commands"] == ["pubtator.get_research_session_status"]
+    service.stage.assert_awaited_once()
+    call_kwargs = service.stage.await_args.kwargs
+    assert call_kwargs["review_id"] == "review-1"
+    assert call_kwargs["request"].query == "FMF"
+    assert call_kwargs["request"].max_candidates == 1
+
+
+@pytest.mark.asyncio
+async def test_get_research_session_status_route_calls_service() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.get_status.return_value = ResearchSessionStatusResponse(
+        manifest=ResearchSessionManifest(
+            review_id="review-1",
+            session_id="session-1",
+            query="FMF",
+            preparation_status=PreparationStatus(complete=1),
+        )
+    )
+    app.dependency_overrides[get_research_session_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/reviews/review-1/sessions/session-1")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["manifest"]["session_id"] == "session-1"
+    assert data["manifest"]["preparation_status"]["complete"] == 1
+    service.get_status.assert_awaited_once_with(
+        review_id="review-1",
+        session_id="session-1",
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_research_sessions_route_calls_service() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.list_sessions.return_value = ListResearchSessionsResponse(
+        sessions=[
+            ResearchSessionManifest(
+                review_id="review-1",
+                session_id="session-1",
+                query="FMF",
+                preparation_status=PreparationStatus(running=1),
+            )
+        ]
+    )
+    app.dependency_overrides[get_research_session_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/reviews/review-1/sessions")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["sessions"][0]["session_id"] == "session-1"
+    assert data["sessions"][0]["preparation_status"]["running"] == 1
+    service.list_sessions.assert_awaited_once_with(review_id="review-1")
+
+
+@pytest.mark.asyncio
+async def test_get_research_session_status_route_maps_lookup_error_to_404() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.get_status.side_effect = LookupError("Research session not found: missing")
+    app.dependency_overrides[get_research_session_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/reviews/review-1/sessions/missing")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Research session not found: missing"
+    service.get_status.assert_awaited_once_with(
+        review_id="review-1",
+        session_id="missing",
+    )
 
 
 @pytest.mark.asyncio
