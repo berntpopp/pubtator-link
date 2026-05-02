@@ -234,7 +234,60 @@ class NcbiDiscoveryClient:
         mode: RelatedArticleMode,
         limit: int,
     ) -> list[RelatedArticleRecord]:
-        raise NotImplementedError
+        linknames: dict[RelatedArticleMode, str] = {
+            "similar": "pubmed_pubmed",
+            "cited_by": "pubmed_pubmed_citedin",
+            "references": "pubmed_pubmed_refs",
+        }
+        response = await self._get(
+            "elink.fcgi",
+            {
+                "dbfrom": "pubmed",
+                "db": "pubmed",
+                "id": ",".join(pmids),
+                "linkname": linknames[mode],
+                "retmode": "json",
+                "tool": "pubtator-link",
+            },
+        )
+        payload = response.json()
+        linksets = payload.get("linksets", []) if isinstance(payload, dict) else []
+
+        records: list[RelatedArticleRecord] = []
+        for linkset in linksets:
+            if not isinstance(linkset, dict):
+                continue
+
+            ids = linkset.get("ids")
+            source_pmid = str(ids[0]) if isinstance(ids, list | tuple) and ids else None
+            if source_pmid is None:
+                continue
+
+            emitted_for_source = 0
+            linksetdbs = linkset.get("linksetdbs", [])
+            if not isinstance(linksetdbs, list | tuple):
+                continue
+
+            for linksetdb in linksetdbs:
+                if emitted_for_source >= limit or not isinstance(linksetdb, dict):
+                    continue
+
+                links = linksetdb.get("links", [])
+                if not isinstance(links, list | tuple):
+                    continue
+
+                remaining = limit - emitted_for_source
+                for linked_pmid in links[:remaining]:
+                    records.append(
+                        RelatedArticleRecord(
+                            source_pmid=source_pmid,
+                            pmid=str(linked_pmid),
+                            relation=mode,
+                        )
+                    )
+                    emitted_for_source += 1
+
+        return records
 
 
 class DiscoveryService:

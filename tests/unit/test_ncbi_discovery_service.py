@@ -327,3 +327,31 @@ async def test_find_related_articles_deduplicates_candidates() -> None:
     assert response.candidate_pmids == ["456", "789"]
     assert response.meta.next_commands[0]["arguments"] == {"candidate_pmids": ["456", "789"]}
     assert response.unresolved == ["999"]
+
+
+@pytest.mark.asyncio
+async def test_ncbi_client_parses_related_article_links() -> None:
+    payload = {
+        "linksets": [
+            {
+                "ids": ["123"],
+                "linksetdbs": [{"linkname": "pubmed_pubmed", "links": ["456", "789"]}],
+            }
+        ]
+    }
+    transport = MockTransport(payload)
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = NcbiDiscoveryClient(http_client=http_client)
+
+    records = await client.find_related_articles(["123"], "similar", 10)
+
+    assert [record.pmid for record in records] == ["456", "789"]
+    assert all(record.source_pmid == "123" for record in records)
+    assert transport.requests[0].url.path.endswith("/elink.fcgi")
+    assert transport.requests[0].url.params["dbfrom"] == "pubmed"
+    assert transport.requests[0].url.params["db"] == "pubmed"
+    assert transport.requests[0].url.params["id"] == "123"
+    assert transport.requests[0].url.params["linkname"] == "pubmed_pubmed"
+    assert transport.requests[0].url.params["retmode"] == "json"
+    assert transport.requests[0].url.params["tool"] == "pubtator-link"
+    await client.close()
