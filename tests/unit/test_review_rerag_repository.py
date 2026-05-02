@@ -163,6 +163,94 @@ async def test_repository_round_trips_research_session() -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_research_sessions_groups_candidates_with_bounded_queries() -> None:
+    connection = FakeConnection()
+    connection.fetched_row_batches = [
+        [
+            {
+                "review_id": "review-1",
+                "session_id": "session-new",
+                "query": "new query",
+                "status": "active",
+                "created_at": "2026-05-02T00:00:00Z",
+                "updated_at": "2026-05-02T00:03:00Z",
+            },
+            {
+                "review_id": "review-1",
+                "session_id": "session-old",
+                "query": "old query",
+                "status": "complete",
+                "created_at": "2026-05-02T00:00:00Z",
+                "updated_at": "2026-05-02T00:01:00Z",
+            },
+        ],
+        [
+            {
+                "session_id": "session-new",
+                "pmid": "37747561",
+                "rank": 1,
+                "title": "Full text candidate",
+                "status": "queued",
+                "decision_reason": "selected_by_rank",
+                "coverage_hint": {
+                    "pmid": "37747561",
+                    "expected_coverage": "full_text",
+                    "coverage_reason": "full_text_available",
+                    "pmc_fallback_available": True,
+                    "resolver_attempts": [],
+                },
+                "source_id": "PMID:37747561",
+                "error": None,
+            },
+            {
+                "session_id": "session-new",
+                "pmid": "111",
+                "rank": 2,
+                "title": "Skipped candidate",
+                "status": "skipped",
+                "decision_reason": "over_candidate_limit",
+                "coverage_hint": None,
+                "source_id": "PMID:111",
+                "error": None,
+            },
+            {
+                "session_id": "session-old",
+                "pmid": "222",
+                "rank": 1,
+                "title": "Abstract candidate",
+                "status": "abstract_only",
+                "decision_reason": "selected_by_rank",
+                "coverage_hint": {
+                    "pmid": "222",
+                    "expected_coverage": "abstract_only",
+                    "coverage_reason": "abstract_fallback_used",
+                    "pmc_fallback_available": False,
+                    "resolver_attempts": [],
+                },
+                "source_id": "PMID:222",
+                "error": None,
+            },
+        ],
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    sessions = await repository.list_research_sessions("review-1")
+
+    assert [session.session_id for session in sessions] == ["session-new", "session-old"]
+    assert sessions[0].candidate_count == 2
+    assert sessions[0].queued_count == 1
+    assert sessions[0].skipped_count == 1
+    assert [candidate.pmid for candidate in sessions[0].candidates] == ["37747561", "111"]
+    assert sessions[0].coverage_summary == {"full_text": 1, "unknown": 1}
+    assert sessions[1].candidate_count == 1
+    assert sessions[1].coverage_summary == {"abstract_only": 1}
+    assert len(connection.executed) == 2
+    assert all("from review_research_sessions" not in sql for sql, _args in connection.executed[1:])
+    assert connection.executed[0][1] == ("review-1",)
+    assert connection.executed[1][1] == ("review-1",)
+
+
+@pytest.mark.asyncio
 async def test_upsert_passages_uses_executemany() -> None:
     connection = FakeConnection()
     repository = PostgresReviewReragRepository(FakePool(connection))

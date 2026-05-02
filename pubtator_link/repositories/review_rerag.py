@@ -1247,14 +1247,41 @@ class PostgresReviewReragRepository:
                 """,
                 review_id,
             )
+            if not sessions:
+                return []
+            candidate_rows = await connection.fetch(
+                """
+                select session_id, pmid, rank, title, status, decision_reason, coverage_hint,
+                       source_id, error
+                from review_research_session_candidates
+                where review_id = $1
+                order by session_id, rank nulls last, pmid
+                """,
+                review_id,
+            )
+        candidates_by_session_id: dict[str, list[ResearchSessionCandidate]] = {}
+        for row in candidate_rows:
+            candidates_by_session_id.setdefault(row["session_id"], []).append(
+                _research_session_candidate_from_row(row)
+            )
         manifests: list[ResearchSessionManifest] = []
         for session in sessions:
-            manifest = await self.get_research_session(
-                session["review_id"],
-                session["session_id"],
+            candidates = candidates_by_session_id.get(session["session_id"], [])
+            manifests.append(
+                ResearchSessionManifest(
+                    review_id=session["review_id"],
+                    session_id=session["session_id"],
+                    query=session["query"],
+                    status=session["status"],
+                    candidates=candidates,
+                    candidate_count=len(candidates),
+                    queued_count=sum(1 for item in candidates if item.status == "queued"),
+                    skipped_count=sum(1 for item in candidates if item.status == "skipped"),
+                    coverage_summary=_coverage_summary(candidates),
+                    created_at=session["created_at"],
+                    updated_at=session["updated_at"],
+                )
             )
-            if manifest is not None:
-                manifests.append(manifest)
         return manifests
 
     async def upsert_evidence_certainty(
