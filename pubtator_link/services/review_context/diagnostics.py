@@ -15,13 +15,17 @@ from pubtator_link.models.review_rerag import (
 
 
 class DiagnosticsRepository(Protocol):
-    async def available_sections(self, review_id: str) -> list[str]:
+    async def available_sections(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> list[str]:
         """Return indexed section names for diagnostics."""
 
-    async def indexed_pmids(self, review_id: str) -> list[str]:
+    async def indexed_pmids(self, review_id: str, *, session_id: str | None = None) -> list[str]:
         """Return indexed PMIDs for diagnostics."""
 
-    async def list_review_failed_sources(self, review_id: str) -> list[FailedSourceSummary]:
+    async def list_review_failed_sources(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> list[FailedSourceSummary]:
         """Return failed source summaries for diagnostics."""
 
 
@@ -81,9 +85,13 @@ async def build_diagnostics(
     selected_count: int,
 ) -> RetrieveReviewDiagnostics:
     query_tokens_value = query_tokens(request.question)
-    available_sections = await repository.available_sections(review_id)
-    indexed_pmids = await repository.indexed_pmids(review_id)
-    failed_sources = await repository.list_review_failed_sources(review_id)
+    available_sections = await repository.available_sections(
+        review_id, session_id=request.session_id
+    )
+    indexed_pmids = await repository.indexed_pmids(review_id, session_id=request.session_id)
+    failed_sources = await repository.list_review_failed_sources(
+        review_id, session_id=request.session_id
+    )
     section_label = ", ".join(available_sections) if available_sections else "none"
     message = (
         f"No passages selected. Review {review_id} has {len(indexed_pmids)} indexed PMIDs "

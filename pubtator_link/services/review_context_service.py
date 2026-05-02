@@ -51,12 +51,18 @@ class ReviewContextRepository(Protocol):
         entity_ids: Sequence[str] | None = None,
         pmids: Sequence[str] | None = None,
         sections: Sequence[str] | None = None,
+        session_id: str | None = None,
         limit: int = 8,
     ) -> list[ReviewPassageRow]:
         """Return candidate passages for a review-scoped retrieval request."""
 
-    async def preparation_status(self, review_id: str) -> PreparationStatus | dict[str, int]:
+    async def preparation_status(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> PreparationStatus | dict[str, int]:
         """Return preparation status counts for a review."""
+
+    async def research_session_exists(self, review_id: str, session_id: str) -> bool:
+        """Return whether a research session exists."""
 
     async def list_review_sources(
         self,
@@ -67,25 +73,34 @@ class ReviewContextRepository(Protocol):
         sample_per_pmid: int = 2,
         min_sample_chars: int = 80,
         sample_section_policy: SampleSectionPolicy = "evidence_first",
+        session_id: str | None = None,
     ) -> list[ReviewSourceSummary]:
         """Return index source summaries for a review."""
 
-    async def list_review_failed_sources(self, review_id: str) -> list[FailedSourceSummary]:
+    async def list_review_failed_sources(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> list[FailedSourceSummary]:
         """Return failed source summaries for a review."""
 
-    async def review_index_totals(self, review_id: str) -> ReviewIndexTotals:
+    async def review_index_totals(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> ReviewIndexTotals:
         """Return aggregate index totals for a review."""
 
-    async def available_sections(self, review_id: str) -> list[str]:
+    async def available_sections(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> list[str]:
         """Return indexed section names for diagnostics."""
 
-    async def indexed_pmids(self, review_id: str) -> list[str]:
+    async def indexed_pmids(self, review_id: str, *, session_id: str | None = None) -> list[str]:
         """Return indexed PMIDs for diagnostics."""
 
     async def get_passages_by_id(
         self,
         review_id: str,
         passage_ids: Sequence[str],
+        *,
+        session_id: str | None = None,
     ) -> list[ReviewPassageRow]:
         """Return review passages in the requested passage ID order."""
 
@@ -96,6 +111,8 @@ class ReviewContextRepository(Protocol):
         before: int,
         after: int,
         same_section: bool,
+        *,
+        session_id: str | None = None,
     ) -> list[ReviewPassageRow]:
         """Return passages around an anchor passage."""
 
@@ -118,12 +135,14 @@ class ReviewContextService:
         request: RetrieveReviewContextRequest,
     ) -> RetrieveReviewContextResponse:
         """Build a citable context pack for a review question."""
+        await self._ensure_session_exists(review_id, request.session_id)
         candidates = await self.repository.search_passages(
             review_id,
             request.question,
             entity_ids=request.entity_ids,
             pmids=request.pmids,
             sections=request.sections,
+            session_id=request.session_id,
             limit=80,
         )
         sorted_candidates = sorted(candidates, key=rerank_key)
@@ -150,6 +169,10 @@ class ReviewContextService:
                 candidate_count=len(candidates),
                 selected_count=len(selected),
             )
+        prepared_pmids, still_preparing_pmids, failed_pmids = await self._preparation_pmids(
+            review_id,
+            session_id=request.session_id,
+        )
         return RetrieveReviewContextResponse(
             review_id=review_id,
             context_pack=ContextPack(
@@ -161,9 +184,14 @@ class ReviewContextService:
                 budget=budget,
                 dropped=dropped,
             ),
-            preparation_status=await self._preparation_status(review_id),
+            preparation_status=await self._preparation_status(
+                review_id, session_id=request.session_id
+            ),
             index_snapshot_date=index_snapshot_date(),
             diagnostics=diagnostics,
+            prepared_pmids=prepared_pmids,
+            still_preparing_pmids=still_preparing_pmids,
+            failed_pmids=failed_pmids,
         )
 
     async def retrieve_context_batch(
@@ -172,6 +200,7 @@ class ReviewContextService:
         request: RetrieveReviewContextBatchRequest,
     ) -> RetrieveReviewContextBatchResponse:
         """Retrieve multiple query variants and merge selected passages."""
+        await self._ensure_session_exists(review_id, request.session_id)
         results: list[RetrieveReviewContextResponse] = []
         query_results: list[RetrieveReviewContextResponse] = []
 
@@ -186,6 +215,7 @@ class ReviewContextService:
                     review_id,
                     RetrieveReviewContextRequest(
                         question=query,
+                        session_id=request.session_id,
                         pmids=request.pmids,
                         entity_ids=request.entity_ids,
                         sections=request.sections,
@@ -212,7 +242,9 @@ class ReviewContextService:
 
         coverage_by_source = {}
         if request.budget_strategy != "query_fair":
-            coverage_by_source = await self._source_coverage_by_key(review_id)
+            coverage_by_source = await self._source_coverage_by_key(
+                review_id, session_id=request.session_id
+            )
         merge_request = (
             request.model_copy(update={"response_mode": "compact"}) if request.dry_run else request
         )
@@ -242,12 +274,17 @@ class ReviewContextService:
                     budget=dry_run_budget,
                     dropped=[],
                 ),
-                preparation_status=await self._preparation_status(review_id),
+                preparation_status=await self._preparation_status(
+                    review_id, session_id=request.session_id
+                ),
                 budget=dry_run_budget,
                 cache_key=_review_batch_cache_key(review_id, request),
                 corpus_snapshot_date=corpus_snapshot_date(),
                 index_snapshot_date=index_snapshot_date(),
                 source_versions={"review_index": "live"},
+                prepared_pmids=[],
+                still_preparing_pmids=[],
+                failed_pmids=[],
             )
         record_audit_event = getattr(self.repository, "record_review_audit_event", None)
         if record_audit_event is not None:
@@ -265,6 +302,10 @@ class ReviewContextService:
             text_chars=merged.budget_text_chars,
             dropped_count=len(merged.dropped),
         )
+        prepared_pmids, still_preparing_pmids, failed_pmids = await self._preparation_pmids(
+            review_id,
+            session_id=request.session_id,
+        )
         return RetrieveReviewContextBatchResponse(
             review_id=review_id,
             response_mode=request.response_mode,
@@ -280,12 +321,17 @@ class ReviewContextService:
                 budget=budget,
                 dropped=merged.dropped,
             ),
-            preparation_status=await self._preparation_status(review_id),
+            preparation_status=await self._preparation_status(
+                review_id, session_id=request.session_id
+            ),
             budget=budget,
             cache_key=_review_batch_cache_key(review_id, request),
             corpus_snapshot_date=corpus_snapshot_date(),
             index_snapshot_date=index_snapshot_date(),
             source_versions={"review_index": "live"},
+            prepared_pmids=prepared_pmids,
+            still_preparing_pmids=still_preparing_pmids,
+            failed_pmids=failed_pmids,
         )
 
     async def inspect_review_index(
@@ -294,7 +340,10 @@ class ReviewContextService:
         request: InspectReviewIndexRequest,
     ) -> InspectReviewIndexResponse:
         """Inspect prepared sources, aggregate counts, and failed sources."""
-        preparation_status = await self._preparation_status(review_id)
+        await self._ensure_session_exists(review_id, request.session_id)
+        preparation_status = await self._preparation_status(
+            review_id, session_id=request.session_id
+        )
         sources = await self.repository.list_review_sources(
             review_id,
             request.pmids,
@@ -302,9 +351,14 @@ class ReviewContextService:
             sample_per_pmid=request.sample_per_pmid,
             min_sample_chars=request.min_sample_chars,
             sample_section_policy=request.sample_section_policy,
+            session_id=request.session_id,
         )
-        totals = await self.repository.review_index_totals(review_id)
-        failed_sources = await self.repository.list_review_failed_sources(review_id)
+        totals = await self.repository.review_index_totals(
+            review_id, session_id=request.session_id
+        )
+        failed_sources = await self.repository.list_review_failed_sources(
+            review_id, session_id=request.session_id
+        )
         return InspectReviewIndexResponse(
             review_id=review_id,
             preparation_status=preparation_status,
@@ -319,9 +373,13 @@ class ReviewContextService:
         *,
         review_id: str,
         passage_ids: list[str],
+        session_id: str | None = None,
         max_chars_per_passage: int = 2200,
     ) -> ReviewPassageLookupResponse:
-        rows = await self.repository.get_passages_by_id(review_id, passage_ids)
+        await self._ensure_session_exists(review_id, session_id)
+        rows = await self.repository.get_passages_by_id(
+            review_id, passage_ids, session_id=session_id
+        )
         found_ids = {row.passage_id for row in rows}
         passages = self._context_passages_from_rows(
             rows,
@@ -342,14 +400,17 @@ class ReviewContextService:
         before: int = 1,
         after: int = 1,
         same_section: bool = True,
+        session_id: str | None = None,
         max_chars_per_passage: int = 2200,
     ) -> ReviewPassageLookupResponse:
+        await self._ensure_session_exists(review_id, session_id)
         rows = await self.repository.neighboring_passages(
             review_id,
             passage_id=passage_id,
             before=before,
             after=after,
             same_section=same_section,
+            session_id=session_id,
         )
         passages = self._context_passages_from_rows(
             rows,
@@ -381,12 +442,15 @@ class ReviewContextService:
             for index, row in enumerate(rows, start=1)
         ]
 
-    async def _source_coverage_by_key(self, review_id: str) -> dict[str, SourceCoverage]:
+    async def _source_coverage_by_key(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> dict[str, SourceCoverage]:
         sources = await self.repository.list_review_sources(
             review_id,
             pmids=None,
             include_passage_samples=False,
             sample_per_pmid=0,
+            session_id=session_id,
         )
         coverage_by_key: dict[str, SourceCoverage] = {}
         for source in sources:
@@ -403,11 +467,50 @@ class ReviewContextService:
                     coverage_by_key[source_key] = source.coverage
         return coverage_by_key
 
-    async def _preparation_status(self, review_id: str) -> PreparationStatus:
-        status = await self.repository.preparation_status(review_id)
+    async def _preparation_status(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> PreparationStatus:
+        status = await self.repository.preparation_status(review_id, session_id=session_id)
         if isinstance(status, PreparationStatus):
             return status
         return PreparationStatus(**status)
+
+    async def _ensure_session_exists(self, review_id: str, session_id: str | None) -> None:
+        if session_id is None:
+            return
+        exists = await self.repository.research_session_exists(review_id, session_id)
+        if not exists:
+            raise ValueError("session_not_found")
+
+    async def _preparation_pmids(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> tuple[list[str], list[str], list[str]]:
+        sources = await self.repository.list_review_sources(
+            review_id,
+            pmids=None,
+            include_passage_samples=False,
+            sample_per_pmid=0,
+            session_id=session_id,
+        )
+        failed_sources = await self.repository.list_review_failed_sources(
+            review_id, session_id=session_id
+        )
+        prepared = sorted(
+            {
+                source.pmid
+                for source in sources
+                if source.pmid is not None and source.job_status in {"complete", "partial"}
+            }
+        )
+        still_preparing = sorted(
+            {
+                source.pmid
+                for source in sources
+                if source.pmid is not None and source.job_status in {"queued", "running"}
+            }
+        )
+        failed = sorted({source.pmid for source in failed_sources if source.pmid is not None})
+        return prepared, still_preparing, failed
 
 
 def _review_batch_cache_key(

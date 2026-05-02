@@ -289,6 +289,7 @@ class RetrieveReviewContextRequest(BaseModel):
     """Request for a fresh review-scoped context pack."""
 
     question: str = Field(..., min_length=1)
+    session_id: str | None = Field(default=None, min_length=1)
     pmids: list[str] = Field(default_factory=list)
     entity_ids: list[str] = Field(default_factory=list)
     sections: list[str] = Field(default_factory=list)
@@ -405,6 +406,9 @@ class RetrieveReviewContextResponse(BaseModel):
     preparation_status: PreparationStatus
     index_snapshot_date: str | None = None
     diagnostics: "RetrieveReviewDiagnostics | None" = None
+    prepared_pmids: list[str] = Field(default_factory=list)
+    still_preparing_pmids: list[str] = Field(default_factory=list)
+    failed_pmids: list[str] = Field(default_factory=list)
 
 
 class RetrieveReviewDiagnostics(BaseModel):
@@ -455,6 +459,7 @@ class RetrieveReviewContextBatchRequest(BaseModel):
     """Request for multiple review-scoped context retrieval queries."""
 
     queries: list[str] = Field(min_length=1, max_length=10)
+    session_id: str | None = Field(default=None, min_length=1)
     pmids: list[str] = Field(default_factory=list)
     entity_ids: list[str] = Field(default_factory=list)
     sections: list[str] = Field(default_factory=list)
@@ -491,6 +496,9 @@ class RetrieveReviewContextBatchResponse(BaseModel):
     corpus_snapshot_date: str | None = None
     index_snapshot_date: str | None = None
     source_versions: dict[str, str] = Field(default_factory=dict)
+    prepared_pmids: list[str] = Field(default_factory=list)
+    still_preparing_pmids: list[str] = Field(default_factory=list)
+    failed_pmids: list[str] = Field(default_factory=list)
 
 
 class ReviewPassageSample(BaseModel):
@@ -506,6 +514,7 @@ class ReviewPassageLookupRequest(BaseModel):
     """Request exact review passages by stable passage ID."""
 
     passage_ids: list[str] = Field(min_length=1)
+    session_id: str | None = Field(default=None, min_length=1)
     max_chars_per_passage: int = Field(default=2200, ge=300, le=10000)
 
 
@@ -513,6 +522,7 @@ class ReviewNeighboringPassagesRequest(BaseModel):
     """Request neighboring review passages around a stable passage ID."""
 
     passage_id: str = Field(min_length=1)
+    session_id: str | None = Field(default=None, min_length=1)
     before: int = Field(default=1, ge=0, le=20)
     after: int = Field(default=1, ge=0, le=20)
     same_section: bool = True
@@ -545,6 +555,7 @@ class ReviewRetrievalRun(BaseModel):
 class ReviewAuditBundle(BaseModel):
     success: bool = True
     review_id: str
+    session_id: str | None = None
     generated_at: str
     preparation_status: PreparationStatus
     totals: "ReviewIndexTotals"
@@ -707,6 +718,7 @@ class ReviewIndexTotals(BaseModel):
 class InspectReviewIndexRequest(BaseModel):
     """Request to inspect review-scoped index contents."""
 
+    session_id: str | None = Field(default=None, min_length=1)
     pmids: list[str] = Field(default_factory=list)
     include_passage_samples: bool = False
     sample_per_pmid: int = Field(default=2, ge=0, le=10)

@@ -32,6 +32,10 @@ class FakeReviewContextRepository:
         self.inspect_calls: list[dict[str, object]] = []
         self.available_sections_value: list[str] = []
         self.indexed_pmids_value: list[str] = []
+        self.session_exists = True
+
+    async def research_session_exists(self, review_id: str, session_id: str) -> bool:
+        return self.session_exists
 
     async def search_passages(
         self,
@@ -41,6 +45,7 @@ class FakeReviewContextRepository:
         entity_ids: Sequence[str] | None = None,
         pmids: Sequence[str] | None = None,
         sections: Sequence[str] | None = None,
+        session_id: str | None = None,
         limit: int = 8,
     ) -> list[ReviewPassageRow]:
         self.search_calls.append(
@@ -50,12 +55,15 @@ class FakeReviewContextRepository:
                 "entity_ids": entity_ids,
                 "pmids": pmids,
                 "sections": sections,
+                "session_id": session_id,
                 "limit": limit,
             }
         )
         return self.passages
 
-    async def preparation_status(self, review_id: str) -> dict[str, int]:
+    async def preparation_status(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> dict[str, int]:
         return self.preparation_status_value
 
     async def list_review_sources(
@@ -67,6 +75,7 @@ class FakeReviewContextRepository:
         sample_per_pmid: int = 2,
         min_sample_chars: int = 80,
         sample_section_policy: str = "evidence_first",
+        session_id: str | None = None,
     ) -> list[ReviewSourceSummary]:
         self.inspect_calls.append(
             {
@@ -77,6 +86,7 @@ class FakeReviewContextRepository:
                 "sample_per_pmid": sample_per_pmid,
                 "min_sample_chars": min_sample_chars,
                 "sample_section_policy": sample_section_policy,
+                "session_id": session_id,
             }
         )
         if self.source_summaries:
@@ -99,24 +109,40 @@ class FakeReviewContextRepository:
             for pmid in seen_pmids
         ]
 
-    async def list_review_failed_sources(self, review_id: str) -> list[FailedSourceSummary]:
-        self.inspect_calls.append({"method": "list_review_failed_sources", "review_id": review_id})
+    async def list_review_failed_sources(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> list[FailedSourceSummary]:
+        self.inspect_calls.append(
+            {
+                "method": "list_review_failed_sources",
+                "review_id": review_id,
+                "session_id": session_id,
+            }
+        )
         return self.failed_source_summaries
 
-    async def review_index_totals(self, review_id: str) -> ReviewIndexTotals:
-        self.inspect_calls.append({"method": "review_index_totals", "review_id": review_id})
+    async def review_index_totals(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> ReviewIndexTotals:
+        self.inspect_calls.append(
+            {"method": "review_index_totals", "review_id": review_id, "session_id": session_id}
+        )
         return self.index_totals
 
-    async def available_sections(self, review_id: str) -> list[str]:
+    async def available_sections(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> list[str]:
         return self.available_sections_value
 
-    async def indexed_pmids(self, review_id: str) -> list[str]:
+    async def indexed_pmids(self, review_id: str, *, session_id: str | None = None) -> list[str]:
         return self.indexed_pmids_value
 
     async def get_passages_by_id(
         self,
         review_id: str,
         passage_ids: Sequence[str],
+        *,
+        session_id: str | None = None,
     ) -> list[ReviewPassageRow]:
         by_id = {passage.passage_id: passage for passage in self.passages}
         return [by_id[passage_id] for passage_id in passage_ids if passage_id in by_id]
@@ -128,6 +154,8 @@ class FakeReviewContextRepository:
         before: int,
         after: int,
         same_section: bool,
+        *,
+        session_id: str | None = None,
     ) -> list[ReviewPassageRow]:
         by_id = {passage.passage_id: passage for passage in self.passages}
         anchor = by_id.get(passage_id)
@@ -160,6 +188,7 @@ class QueryMappedReviewContextRepository(FakeReviewContextRepository):
         entity_ids: Sequence[str] | None = None,
         pmids: Sequence[str] | None = None,
         sections: Sequence[str] | None = None,
+        session_id: str | None = None,
         limit: int = 8,
     ) -> list[ReviewPassageRow]:
         self.search_calls.append(
@@ -169,6 +198,7 @@ class QueryMappedReviewContextRepository(FakeReviewContextRepository):
                 "entity_ids": entity_ids,
                 "pmids": pmids,
                 "sections": sections,
+                "session_id": session_id,
                 "limit": limit,
             }
         )
@@ -183,6 +213,7 @@ class QueryMappedReviewContextRepository(FakeReviewContextRepository):
         sample_per_pmid: int = 2,
         min_sample_chars: int = 80,
         sample_section_policy: str = "evidence_first",
+        session_id: str | None = None,
     ) -> list[ReviewSourceSummary]:
         self.inspect_calls.append(
             {
@@ -193,6 +224,7 @@ class QueryMappedReviewContextRepository(FakeReviewContextRepository):
                 "sample_per_pmid": sample_per_pmid,
                 "min_sample_chars": min_sample_chars,
                 "sample_section_policy": sample_section_policy,
+                "session_id": session_id,
             }
         )
         if self.source_summaries:
@@ -238,6 +270,7 @@ class BlockingQueryRepository(QueryMappedReviewContextRepository):
         entity_ids: Sequence[str] | None = None,
         pmids: Sequence[str] | None = None,
         sections: Sequence[str] | None = None,
+        session_id: str | None = None,
         limit: int = 8,
     ) -> list[ReviewPassageRow]:
         self.started_queries.append(query)
@@ -250,6 +283,7 @@ class BlockingQueryRepository(QueryMappedReviewContextRepository):
             entity_ids=entity_ids,
             pmids=pmids,
             sections=sections,
+            session_id=session_id,
             limit=limit,
         )
 
@@ -274,6 +308,60 @@ def _passage(
         pmid=pmid,
         lexical_rank=lexical_rank,
     )
+
+
+@pytest.mark.asyncio
+async def test_retrieve_context_rejects_unknown_session() -> None:
+    repository = FakeReviewContextRepository([])
+    repository.session_exists = False
+    service = ReviewContextService(repository)
+
+    with pytest.raises(ValueError, match="session_not_found"):
+        await service.retrieve_context(
+            "review-1",
+            RetrieveReviewContextRequest(question="MEFV", session_id="missing"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_retrieve_context_passes_session_and_status_lists() -> None:
+    repository = FakeReviewContextRepository(
+        [_passage("p1", pmid="111", text="session passage")],
+        preparation_status={"complete": 1},
+    )
+    repository.source_summaries = [
+        ReviewSourceSummary(
+            source_id="PMID:111",
+            pmid="111",
+            source_kind="pubtator_full_bioc",
+            job_status="complete",
+        ),
+        ReviewSourceSummary(
+            source_id="PMID:222",
+            pmid="222",
+            source_kind="pubtator_full_bioc",
+            job_status="queued",
+        ),
+    ]
+    repository.failed_source_summaries = [
+        FailedSourceSummary(
+            source_id="PMID:333",
+            pmid="333",
+            source_kind="pubtator_full_bioc",
+            job_status="failed",
+        )
+    ]
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context(
+        "review-1",
+        RetrieveReviewContextRequest(question="MEFV", session_id="session-1"),
+    )
+
+    assert repository.search_calls[0]["session_id"] == "session-1"
+    assert response.prepared_pmids == ["111"]
+    assert response.still_preparing_pmids == ["222"]
+    assert response.failed_pmids == ["333"]
 
 
 @pytest.mark.asyncio
@@ -313,6 +401,7 @@ async def test_retrieve_context_packs_deterministic_diverse_context() -> None:
             "entity_ids": ["MESH:D003106"],
             "pmids": [],
             "sections": [],
+            "session_id": None,
             "limit": 80,
         }
     ]
@@ -556,9 +645,10 @@ async def test_inspect_review_index_returns_sources_totals_and_failures() -> Non
             "sample_per_pmid": 1,
             "min_sample_chars": 90,
             "sample_section_policy": "original_order",
+            "session_id": None,
         },
-        {"method": "review_index_totals", "review_id": "review-1"},
-        {"method": "list_review_failed_sources", "review_id": "review-1"},
+        {"method": "review_index_totals", "review_id": "review-1", "session_id": None},
+        {"method": "list_review_failed_sources", "review_id": "review-1", "session_id": None},
     ]
 
 
