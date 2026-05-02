@@ -12,6 +12,7 @@ EXPECTED_PUBLIC_TOOL_NAMES = {
     "pubtator.diagnostics",
     "pubtator.search_guidelines",
     "pubtator.fetch_publication_annotations",
+    "pubtator.get_publication_metadata",
     "pubtator.get_publication_passages",
     "pubtator.estimate_publication_context",
     "pubtator.fetch_pmc_annotations",

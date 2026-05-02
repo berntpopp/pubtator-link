@@ -24,6 +24,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             "pubtator.lookup_citation",
             "pubtator.find_related_articles",
             "pubtator.diagnostics",
+            "pubtator.get_publication_metadata",
             "pubtator.get_publication_passages",
             "pubtator.estimate_publication_context",
             "pubtator.fetch_publication_annotations",
@@ -128,6 +129,7 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "pubtator.diagnostics",
             ],
             "publication_grounding": [
+                "pubtator.get_publication_metadata",
                 "pubtator.get_publication_passages",
                 "pubtator.estimate_publication_context",
                 "pubtator.fetch_publication_annotations",

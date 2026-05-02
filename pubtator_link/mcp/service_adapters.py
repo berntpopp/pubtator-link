@@ -5,6 +5,7 @@ from typing import Any, Literal, cast
 from pubtator_link.api.client import PubTator3Client
 from pubtator_link.api.search_filters import merge_search_filters
 from pubtator_link.config import text_processing_config
+from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 from pubtator_link.models.publication_passages import (
     PublicationContextEstimateRequest,
     PublicationPassageMode,
@@ -34,6 +35,7 @@ from pubtator_link.models.review_rerag import (
     UpsertEvidenceCertaintyRequest,
 )
 from pubtator_link.services.entity_matching import matched_terms_from_match_text
+from pubtator_link.services.publication_metadata import PublicationMetadataService
 from pubtator_link.services.publication_passage_service import PublicationPassageService
 from pubtator_link.services.publication_service import PublicationService
 from pubtator_link.services.review_audit import ReviewAuditService
@@ -135,6 +137,27 @@ async def get_publication_passages_impl(
         )
     )
     return response.model_dump()
+
+
+async def get_publication_metadata_impl(
+    *,
+    service: PublicationMetadataService,
+    pmids: list[str],
+    include_mesh: bool = True,
+    include_publication_types: bool = True,
+    include_citations: Literal["none", "nlm", "bibtex", "both"] = "both",
+    include_coverage: bool = True,
+) -> dict[str, Any]:
+    response = await service.get_metadata(
+        PublicationMetadataRequest(
+            pmids=pmids,
+            include_mesh=include_mesh,
+            include_publication_types=include_publication_types,
+            include_citations=include_citations,
+            include_coverage=include_coverage,
+        )
+    )
+    return response.model_dump(by_alias=True)
 
 
 async def estimate_publication_context_impl(

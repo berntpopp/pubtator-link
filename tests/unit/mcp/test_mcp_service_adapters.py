@@ -83,6 +83,34 @@ async def test_publication_passages_adapter_calls_service() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_publication_metadata_impl_returns_typed_payload() -> None:
+    from pubtator_link.mcp import service_adapters
+    from pubtator_link.models.publication_metadata import PublicationMetadataResponse
+
+    class FakeService:
+        async def get_metadata(self, request):
+            assert request.pmids == ["33454820"]
+            return PublicationMetadataResponse(
+                success=True,
+                metadata=[],
+                failed_pmids={},
+                _meta={"next_commands": []},
+            )
+
+    result = await service_adapters.get_publication_metadata_impl(
+        service=FakeService(),
+        pmids=["33454820"],
+        include_mesh=True,
+        include_publication_types=True,
+        include_citations="both",
+        include_coverage=True,
+    )
+
+    assert result["success"] is True
+    assert result["metadata"] == []
+
+
+@pytest.mark.asyncio
 async def test_preflight_review_sources_adapter_returns_hints() -> None:
     from pubtator_link.mcp.service_adapters import preflight_review_sources_impl
     from pubtator_link.models.review_rerag import SourceCoverageHint

@@ -6,13 +6,17 @@ from fastmcp import FastMCP
 from pydantic import Field
 
 from pubtator_link.api.client import PubTator3Client
-from pubtator_link.api.routes.dependencies import get_publication_passage_service
+from pubtator_link.api.routes.dependencies import (
+    get_publication_metadata_service,
+    get_publication_passage_service,
+)
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.service_adapters import (
     estimate_publication_context_impl,
     fetch_pmc_annotations_impl,
     fetch_publication_annotations_impl,
+    get_publication_metadata_impl,
     get_publication_passages_impl,
 )
 from pubtator_link.models.publication_passages import PublicationPassageMode
@@ -76,6 +80,33 @@ def register_publication_tools(mcp: FastMCP) -> None:
             )
 
         return await run_mcp_tool("pubtator.get_publication_passages", call, pmids=pmids)
+
+    @mcp.tool(
+        name="pubtator.get_publication_metadata",
+        title="Get Publication Metadata",
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def get_publication_metadata(
+        pmids: Annotated[list[str], Field(min_length=1, max_length=100)],
+        include_mesh: bool = True,
+        include_publication_types: bool = True,
+        include_citations: Literal["none", "nlm", "bibtex", "both"] = "both",
+        include_coverage: bool = True,
+    ) -> dict[str, Any]:
+        """Return citation-grade metadata for known PMIDs, including authors, journal, year, DOI, publication types, MeSH headings, and citation strings. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+
+        async def call() -> dict[str, Any]:
+            service = await get_publication_metadata_service()
+            return await get_publication_metadata_impl(
+                service=service,
+                pmids=pmids,
+                include_mesh=include_mesh,
+                include_publication_types=include_publication_types,
+                include_citations=include_citations,
+                include_coverage=include_coverage,
+            )
+
+        return await run_mcp_tool("pubtator.get_publication_metadata", call, pmids=pmids)
 
     @mcp.tool(
         name="pubtator.estimate_publication_context",
