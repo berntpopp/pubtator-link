@@ -17,6 +17,7 @@ from pubtator_link.models.review_rerag import (
     ReviewSourceSummary,
     stable_citation_key_for_passage,
 )
+from pubtator_link.services.review_state import index_snapshot_date
 
 
 class ReviewAuditRepository(Protocol):
@@ -97,6 +98,7 @@ class ReviewAuditService:
                 passage_id: stable_citation_key_for_passage(passage_id)
                 for passage_id in passage_ids
             },
+            index_snapshot_date=index_snapshot_date(),
         )
 
     @staticmethod

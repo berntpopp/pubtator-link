@@ -152,6 +152,7 @@ async def test_inspect_review_index_adapter_calls_service() -> None:
                 sources=[],
                 totals=ReviewIndexTotals(),
                 failed_sources=[],
+                index_snapshot_date="2026-05-02",
             )
 
     result = await inspect_review_index_impl(
@@ -161,6 +162,7 @@ async def test_inspect_review_index_adapter_calls_service() -> None:
 
     assert result["success"] is True
     assert result["review_id"] == "rev_123"
+    assert result["index_snapshot_date"] is not None
 
 
 @pytest.mark.asyncio
@@ -244,6 +246,7 @@ async def test_export_review_audit_bundle_adapter_returns_bundle() -> None:
                 resolver_attempts=[],
                 passage_ids=[],
                 stable_citation_keys={},
+                index_snapshot_date="2026-05-02",
             )
 
     result = await export_review_audit_bundle_impl(
@@ -254,6 +257,7 @@ async def test_export_review_audit_bundle_adapter_returns_bundle() -> None:
     assert set(result) == {"success", "audit_bundle"}
     assert result["success"] is True
     assert result["audit_bundle"]["review_id"] == "rev_123"
+    assert result["audit_bundle"]["index_snapshot_date"] is not None
 
 
 async def test_stage_research_session_impl_calls_service() -> None:
@@ -345,7 +349,8 @@ async def test_index_review_evidence_adapter_returns_lifecycle_guidance() -> Non
     assert result["queued"] == 1
     assert result["already_prepared"] == 2
     assert set(result) >= {"success", "review_id", "preparation_status"}
-    assert result["retry_after_ms"] == 5000
+    assert result["retry_after_ms"] == 3000
+    assert result["index_snapshot_date"] is not None
     assert "already_prepared" in result["lifecycle_note"]
     assert "inspect_review_index" in result["lifecycle_note"]
 
@@ -370,6 +375,7 @@ async def test_retrieve_review_context_batch_adapter_calls_service() -> None:
                     citation_map={},
                 ),
                 preparation_status=PreparationStatus(complete=1),
+                index_snapshot_date="2026-05-02",
             )
 
     result = await retrieve_review_context_batch_impl(
@@ -382,6 +388,7 @@ async def test_retrieve_review_context_batch_adapter_calls_service() -> None:
     assert result["review_id"] == "rev_123"
     assert set(result) >= {"success", "review_id", "merged_context_pack"}
     assert result["merged_context_pack"]["question"] == "colchicine children"
+    assert result["index_snapshot_date"] is not None
 
 
 @pytest.mark.asyncio
@@ -406,6 +413,7 @@ async def test_retrieve_review_context_batch_adapter_builds_request_from_flat_ar
                 results=[],
                 merged_context_pack=ContextPack(question="", passages=[], citation_map={}),
                 preparation_status=PreparationStatus(),
+                index_snapshot_date="2026-05-02",
             )
 
     service = RecordingService()
@@ -427,6 +435,7 @@ async def test_retrieve_review_context_batch_adapter_builds_request_from_flat_ar
     assert service.request.include_tables is False
     assert service.request.dry_run is True
     assert result["response_mode"] == "diagnostics"
+    assert result["index_snapshot_date"] is not None
 
 
 @pytest.mark.asyncio
@@ -517,6 +526,7 @@ async def test_retrieve_review_context_adapter_builds_request_from_flat_args() -
                     citation_map={},
                 ),
                 preparation_status=PreparationStatus(),
+                index_snapshot_date="2026-05-02",
             )
 
     service = RecordingService()
@@ -533,6 +543,7 @@ async def test_retrieve_review_context_adapter_builds_request_from_flat_args() -
     assert service.request.pmids == ["40234174"]
     assert service.request.include_tables is True
     assert result["context_pack"]["question"] == "MEFV colchicine"
+    assert result["index_snapshot_date"] is not None
 
 
 @pytest.mark.asyncio
@@ -557,6 +568,7 @@ async def test_inspect_review_index_adapter_builds_request_from_flat_args() -> N
                 sources=[],
                 totals=ReviewIndexTotals(),
                 failed_sources=[],
+                index_snapshot_date="2026-05-02",
             )
 
     service = RecordingService()
@@ -573,6 +585,7 @@ async def test_inspect_review_index_adapter_builds_request_from_flat_args() -> N
     assert service.request.pmids == ["40234174"]
     assert service.request.sample_per_pmid == 3
     assert result["review_id"] == "rev"
+    assert result["index_snapshot_date"] is not None
 
 
 @pytest.mark.asyncio

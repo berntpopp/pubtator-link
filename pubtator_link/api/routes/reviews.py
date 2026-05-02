@@ -29,6 +29,7 @@ from ...models.review_rerag import (
     StageResearchSessionResponse,
     UpsertEvidenceCertaintyRequest,
 )
+from ...services.review_state import index_snapshot_date, retry_after_ms_for_status
 from .dependencies import (
     ResearchSessionServiceDep,
     ReviewAuditServiceDep,
@@ -241,6 +242,8 @@ async def index_review_evidence(
         queued=queued,
         already_prepared=already_prepared,
         preparation_status=status,
+        retry_after_ms=retry_after_ms_for_status(status),
+        index_snapshot_date=index_snapshot_date(),
     )
 
 

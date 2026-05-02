@@ -26,6 +26,7 @@ from pubtator_link.models.review_rerag import (
     IndexReviewEvidenceRequest,
     InspectReviewIndexRequest,
     McpReviewAuditBundleResponse,
+    PreparationStatus,
     PrepareMode,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
@@ -43,6 +44,7 @@ from pubtator_link.services.review_context_service import ReviewContextService
 from pubtator_link.services.review_evidence_certainty import ReviewEvidenceCertaintyService
 from pubtator_link.services.review_index_lifecycle import ReviewIndexLifecycleService
 from pubtator_link.services.review_preparation_queue import ReviewPreparationQueue
+from pubtator_link.services.review_state import index_snapshot_date, retry_after_ms_for_status
 from pubtator_link.services.search_coverage import (
     SearchCoverageMode,
     SearchCoveragePreflight,
@@ -460,14 +462,15 @@ async def index_review_evidence_impl(
             queued += 1
         else:
             already_prepared += 1
-    status = await queue.repository.preparation_status(review_id)
+    status = _preparation_status_model(await queue.repository.preparation_status(review_id))
     response = {
         "success": True,
         "review_id": review_id,
         "queued": queued,
         "already_prepared": already_prepared,
         "preparation_status": status.model_dump(),
-        "retry_after_ms": 5000 if status.queued or status.running else None,
+        "retry_after_ms": retry_after_ms_for_status(status),
+        "index_snapshot_date": index_snapshot_date(),
         "lifecycle_note": (
             "Repeated calls with the same review_id and already prepared PMIDs are no-ops "
             "counted as already_prepared; new PMIDs are enqueued for the same review_id. "
@@ -476,6 +479,12 @@ async def index_review_evidence_impl(
         ),
     }
     return response
+
+
+def _preparation_status_model(status: PreparationStatus | dict[str, int]) -> PreparationStatus:
+    if isinstance(status, PreparationStatus):
+        return status
+    return PreparationStatus(**status)
 
 
 async def preflight_review_sources_impl(

@@ -36,6 +36,7 @@ from pubtator_link.services.review_context.ranking import (
     SOURCE_COVERAGE_SCARCITY_PRIORITY,
     rerank_key,
 )
+from pubtator_link.services.review_state import index_snapshot_date
 
 
 class ReviewContextRepository(Protocol):
@@ -158,6 +159,7 @@ class ReviewContextService:
                 dropped=dropped,
             ),
             preparation_status=await self._preparation_status(review_id),
+            index_snapshot_date=index_snapshot_date(),
             diagnostics=diagnostics,
         )
 
@@ -241,6 +243,7 @@ class ReviewContextService:
                 budget=dry_run_budget,
                 cache_key=_review_batch_cache_key(review_id, request),
                 corpus_snapshot_date=corpus_snapshot_date(),
+                index_snapshot_date=index_snapshot_date(),
                 source_versions={"review_index": "live"},
             )
         record_audit_event = getattr(self.repository, "record_review_audit_event", None)
@@ -278,6 +281,7 @@ class ReviewContextService:
             budget=budget,
             cache_key=_review_batch_cache_key(review_id, request),
             corpus_snapshot_date=corpus_snapshot_date(),
+            index_snapshot_date=index_snapshot_date(),
             source_versions={"review_index": "live"},
         )
 
@@ -302,6 +306,7 @@ class ReviewContextService:
             sources=sources,
             totals=totals,
             failed_sources=failed_sources,
+            index_snapshot_date=index_snapshot_date(),
         )
 
     async def get_passages_by_id(

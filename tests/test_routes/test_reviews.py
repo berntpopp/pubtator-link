@@ -294,6 +294,8 @@ async def test_index_review_evidence_returns_queue_status() -> None:
     data = response.json()
     assert data["review_id"] == "rev_123"
     assert data["queued"] == 1
+    assert data["retry_after_ms"] == 3000
+    assert data["index_snapshot_date"] is not None
 
 
 @pytest.mark.asyncio
@@ -308,6 +310,7 @@ async def test_retrieve_review_context_returns_pack() -> None:
             citation_map={},
         ),
         preparation_status=PreparationStatus(complete=1),
+        index_snapshot_date="2026-05-02",
     )
     app.dependency_overrides[get_review_context_service] = lambda: service
 
@@ -318,7 +321,9 @@ async def test_retrieve_review_context_returns_pack() -> None:
         )
 
     assert response.status_code == 200
-    assert response.json()["preparation_status"]["complete"] == 1
+    data = response.json()
+    assert data["preparation_status"]["complete"] == 1
+    assert data["index_snapshot_date"] == "2026-05-02"
 
 
 @pytest.mark.asyncio
@@ -380,6 +385,7 @@ async def test_export_review_audit_bundle_route_returns_audit_bundle() -> None:
         resolver_attempts=[],
         passage_ids=[],
         stable_citation_keys={},
+        index_snapshot_date="2026-05-02",
     )
     app.dependency_overrides[get_review_audit_service] = lambda: service
 
@@ -387,7 +393,9 @@ async def test_export_review_audit_bundle_route_returns_audit_bundle() -> None:
         response = await client.get("/api/reviews/rev_123/audit-bundle")
 
     assert response.status_code == 200
-    assert response.json()["review_id"] == "rev_123"
+    data = response.json()
+    assert data["review_id"] == "rev_123"
+    assert data["index_snapshot_date"] == "2026-05-02"
     service.export_bundle.assert_awaited_once_with("rev_123")
 
 
@@ -422,6 +430,7 @@ async def test_inspect_review_index_returns_sources_and_failures() -> None:
             failed_source_count=1,
         ),
         failed_sources=[],
+        index_snapshot_date="2026-05-02",
     )
     app.dependency_overrides[get_review_context_service] = lambda: service
 
@@ -440,6 +449,7 @@ async def test_inspect_review_index_returns_sources_and_failures() -> None:
     assert data["sources"][0]["doi"] == "10.1000/example"
     assert data["sources"][0]["pmc_fallback_available"] is True
     assert data["sources"][0]["resolver_attempts"] == []
+    assert data["index_snapshot_date"] == "2026-05-02"
     service.inspect_review_index.assert_awaited_once()
 
 
@@ -466,6 +476,7 @@ async def test_retrieve_review_context_batch_returns_merged_context() -> None:
             citation_map={},
         ),
         preparation_status=PreparationStatus(complete=1),
+        index_snapshot_date="2026-05-02",
     )
     app.dependency_overrides[get_review_context_service] = lambda: service
 
@@ -476,8 +487,10 @@ async def test_retrieve_review_context_batch_returns_merged_context() -> None:
         )
 
     assert response.status_code == 200
-    assert response.json()["review_id"] == "rev_123"
-    assert "merged_context_pack" in response.json()
+    data = response.json()
+    assert data["review_id"] == "rev_123"
+    assert "merged_context_pack" in data
+    assert data["index_snapshot_date"] == "2026-05-02"
 
 
 @pytest.mark.asyncio

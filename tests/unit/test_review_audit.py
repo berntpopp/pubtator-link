@@ -106,3 +106,4 @@ async def test_review_audit_bundle_exports_sources_attempts_events_and_citation_
     assert bundle.research_sessions[0].session_id == "session-1"
     assert bundle.passage_ids == ["PMID:1:title:0", "PMID:1:abstract:1"]
     assert bundle.stable_citation_keys["PMID:1:title:0"].startswith("c_")
+    assert bundle.index_snapshot_date is not None
