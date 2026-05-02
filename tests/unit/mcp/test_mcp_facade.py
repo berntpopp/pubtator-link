@@ -305,6 +305,7 @@ def test_common_mcp_tools_are_flat_and_unversioned() -> None:
     assert search_schema["properties"]["limit"]["default"] == 5
     assert "entity_ids" in search_schema["properties"]
     assert "guideline_boost" in search_schema["properties"]
+    assert search_schema["properties"]["coverage"]["default"] == "preflight"
 
 
 def test_review_context_schema_defaults_are_stable() -> None:

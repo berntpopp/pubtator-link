@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from ...models.requests import SearchRequest, SearchSection, SearchSortOrder
 from ...models.responses import SearchResponse
+from ...services.search_coverage import SearchCoverageMode, attach_preflight_coverage
 from ...services.search_shaping import (
     IncludeCitations,
     SearchResponseMode,
@@ -17,6 +18,7 @@ from ...services.search_shaping import (
 from ..search_filters import merge_search_filters
 from .dependencies import (
     ClientDep,
+    SourcePreflightServiceDep,
     handle_api_errors,
     validate_page_number,
 )
@@ -91,6 +93,7 @@ router = APIRouter(prefix="/api/search", tags=["Search"])
 @handle_api_errors
 async def search_publications(
     client: ClientDep,
+    source_preflight_service: SourcePreflightServiceDep,
     text: str = Query(
         description="Search query (free text, entity ID, or relation query)",
         min_length=1,
@@ -307,6 +310,10 @@ async def search_publications(
         bool,
         Query(description="Rerank current page to prioritize guideline/consensus records"),
     ] = False,
+    coverage: Annotated[
+        SearchCoverageMode,
+        Query(description="Coverage hints to attach to search hits: none or preflight"),
+    ] = "none",
 ) -> SearchResponse:
     """Search biomedical literature with advanced filtering and section targeting.
 
@@ -431,7 +438,7 @@ async def search_publications(
             sections=(",".join([s.value for s in request.sections]) if request.sections else None),
         )
 
-        return shaped_search_response(
+        response = shaped_search_response(
             raw=result,
             query=request.text,
             page=validated_page,
@@ -444,6 +451,9 @@ async def search_publications(
             limit=limit,
             guideline_boost=guideline_boost,
         )
+        if coverage == "preflight":
+            await attach_preflight_coverage(response, source_preflight_service)
+        return response
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

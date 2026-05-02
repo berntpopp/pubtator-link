@@ -352,6 +352,47 @@ class TestSearchRoutes:
         assert item["citations"]["nlm"].endswith("39596913")
 
     @patch.object(PubTator3Client, "search_publications")
+    def test_search_publications_can_attach_preflight_coverage(self, mock_search, test_client):
+        """Test route can add source coverage hints to search results."""
+        from pubtator_link.api.routes.dependencies import get_source_preflight_service
+        from pubtator_link.models.review_rerag import SourceCoverageHint
+
+        class FakePreflight:
+            async def preflight_pmids(self, pmids: list[str]) -> list[SourceCoverageHint]:
+                return [
+                    SourceCoverageHint(
+                        pmid=pmids[0],
+                        expected_coverage="abstract_only",
+                        coverage_reason="no_pmcid",
+                    )
+                ]
+
+        async def fake_source_preflight_service() -> FakePreflight:
+            return FakePreflight()
+
+        mock_search.return_value = {
+            "results": [{"pmid": "39540697", "title": "FMF in Childhood"}],
+            "count": 1,
+            "total_pages": 1,
+            "page_size": 10,
+        }
+        test_client.app.dependency_overrides[get_source_preflight_service] = (
+            fake_source_preflight_service
+        )
+
+        try:
+            response = test_client.get(
+                "/api/search/",
+                params={"text": "FMF", "coverage": "preflight"},
+            )
+        finally:
+            test_client.app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["results"][0]["coverage_hint"]["expected_coverage"] == "abstract_only"
+
+    @patch.object(PubTator3Client, "search_publications")
     def test_search_publications_merges_flat_filters(self, mock_search, test_client):
         """Test route merges raw JSON filters with flat filter query params."""
         mock_search.return_value = {"results": [], "count": 0, "total_pages": 0, "page_size": 10}

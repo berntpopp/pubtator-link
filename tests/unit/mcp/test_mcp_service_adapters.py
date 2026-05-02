@@ -577,6 +577,40 @@ async def test_search_literature_adapter_maps_client_results() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_literature_attaches_preflight_coverage() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+    from pubtator_link.models.review_rerag import SourceCoverageHint
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "results": [{"pmid": "39540697", "title": "FMF in Childhood"}],
+                "count": 1,
+                "total_pages": 1,
+                "page_size": 10,
+            }
+
+    class FakePreflight:
+        async def preflight_pmids(self, pmids: list[str]) -> list[SourceCoverageHint]:
+            return [
+                SourceCoverageHint(
+                    pmid="39540697",
+                    expected_coverage="abstract_only",
+                    coverage_reason="no_pmcid",
+                )
+            ]
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="FMF",
+        coverage="preflight",
+        preflight_service=FakePreflight(),
+    )
+
+    assert result["results"][0]["coverage_hint"]["expected_coverage"] == "abstract_only"
+
+
+@pytest.mark.asyncio
 async def test_search_entities_derives_matched_terms_from_match_text() -> None:
     from pubtator_link.mcp.service_adapters import search_biomedical_entities_impl
 

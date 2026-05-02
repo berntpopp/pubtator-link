@@ -41,6 +41,11 @@ from pubtator_link.services.review_context_service import ReviewContextService
 from pubtator_link.services.review_evidence_certainty import ReviewEvidenceCertaintyService
 from pubtator_link.services.review_index_lifecycle import ReviewIndexLifecycleService
 from pubtator_link.services.review_preparation_queue import ReviewPreparationQueue
+from pubtator_link.services.search_coverage import (
+    SearchCoverageMode,
+    SearchCoveragePreflight,
+    attach_preflight_coverage,
+)
 from pubtator_link.services.search_shaping import (
     IncludeCitations,
     SearchResponseMode,
@@ -174,6 +179,8 @@ async def search_literature_impl(
     limit: int | None = 5,
     entity_ids: list[str] | None = None,
     guideline_boost: bool = False,
+    coverage: SearchCoverageMode = "none",
+    preflight_service: SearchCoveragePreflight | None = None,
 ) -> dict[str, Any]:
     normalized_text = combined_search_text(text, entity_ids)
     merged_filters = merge_search_filters(
@@ -202,6 +209,8 @@ async def search_literature_impl(
         limit=limit,
         guideline_boost=guideline_boost,
     )
+    if coverage == "preflight" and preflight_service is not None:
+        await attach_preflight_coverage(response, preflight_service)
     return response.model_dump()
 
 
