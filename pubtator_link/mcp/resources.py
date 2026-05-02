@@ -143,7 +143,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             },
             "pubtator.find_related_articles": {
                 "pmids": ["40234174"],
-                "mode": "related",
+                "mode": "similar",
                 "limit": 20,
             },
             "pubtator.get_publication_passages": {

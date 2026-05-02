@@ -105,9 +105,11 @@ def test_mcp_instructions_warn_retrieved_text_is_data() -> None:
 
 
 def test_capabilities_resource_advertises_grounding_workflows() -> None:
+    from pubtator_link.models.discovery import MeshLookupRequest, RelatedArticlesRequest
     from pubtator_link.mcp.resources import get_capabilities_resource
 
     capabilities = get_capabilities_resource()
+    sample_calls = capabilities["sample_calls"]
 
     assert "recommended_workflows" in capabilities
     assert "tool_groups" in capabilities
@@ -125,10 +127,12 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
     assert "pubtator.lookup_mesh" in capabilities["tool_groups"]["discovery"]
     assert capabilities["output_cheatsheet"]["discovery_candidate_pmids"] == "candidate_pmids"
     assert capabilities["output_cheatsheet"]["handoff_next_commands"] == "_meta.next_commands"
-    assert "limit" in capabilities["sample_calls"]["pubtator.lookup_mesh"]
-    assert "max_results" not in capabilities["sample_calls"]["pubtator.lookup_mesh"]
-    assert "limit" in capabilities["sample_calls"]["pubtator.find_related_articles"]
-    assert "max_results" not in capabilities["sample_calls"]["pubtator.find_related_articles"]
+    assert "limit" in sample_calls["pubtator.lookup_mesh"]
+    assert "max_results" not in sample_calls["pubtator.lookup_mesh"]
+    assert "limit" in sample_calls["pubtator.find_related_articles"]
+    assert "max_results" not in sample_calls["pubtator.find_related_articles"]
+    MeshLookupRequest(**sample_calls["pubtator.lookup_mesh"])
+    RelatedArticlesRequest(**sample_calls["pubtator.find_related_articles"])
 
 
 def test_capabilities_document_new_budget_and_stable_citation_fields() -> None:
