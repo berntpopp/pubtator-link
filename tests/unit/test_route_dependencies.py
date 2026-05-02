@@ -197,6 +197,80 @@ async def test_create_app_resources_builds_review_resources_with_database(
 
 
 @pytest.mark.asyncio
+async def test_create_app_resources_runs_migrations_before_review_services(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    client = CloseableClient()
+    pool = CloseablePool()
+    queue = StoppableQueue()
+
+    async def apply_migrations(database_url: str | None = None) -> list[str]:
+        calls.append(f"migrate:{database_url}")
+        return ["0002_review_schema_drift_repair"]
+
+    async def inspect_review_schema(database_url: str | None = None) -> object:
+        calls.append(f"inspect:{database_url}")
+        return SimpleNamespace(
+            connected=True,
+            current=True,
+            missing_tables=[],
+            missing_columns=[],
+            applied_versions=[
+                "0001_review_schema_base",
+                "0002_review_schema_drift_repair",
+            ],
+        )
+
+    async def create_pool(**kwargs: Any) -> CloseablePool:
+        calls.append("pool")
+        return pool
+
+    monkeypatch.setattr(dependencies, "PubTator3Client", lambda logger=None: client)
+    monkeypatch.setattr(
+        dependencies, "PublicationService", lambda client, logger=None: ("pub", client, logger)
+    )
+    monkeypatch.setattr(
+        dependencies,
+        "PublicationPassageService",
+        lambda publication_service: ("passages", publication_service),
+    )
+    monkeypatch.setattr(dependencies, "apply_migrations", apply_migrations)
+    monkeypatch.setattr(dependencies, "inspect_review_schema", inspect_review_schema)
+    monkeypatch.setattr(dependencies.asyncpg, "create_pool", create_pool)
+    monkeypatch.setattr(
+        dependencies,
+        "review_rerag_config",
+        SimpleNamespace(
+            database_url="postgresql://user:pass@localhost:5434/pubtator_link",
+            prep_concurrency=2,
+            preflight_concurrency=3,
+            auto_migrate=True,
+            require_schema_current=False,
+        ),
+    )
+    monkeypatch.setattr(dependencies, "PostgresReviewReragRepository", lambda pool: ("repo", pool))
+    monkeypatch.setattr(dependencies, "_build_full_text_preparation", lambda **kwargs: object())
+    monkeypatch.setattr(
+        dependencies,
+        "ReviewPreparationQueue",
+        lambda config, repository, preparation, logger: queue,
+    )
+    monkeypatch.setattr(
+        dependencies, "ReviewContextService", lambda repository: ("context", repository)
+    )
+
+    resources = await dependencies.create_app_resources(logger=object())
+
+    assert calls[:3] == [
+        "migrate:postgresql://user:pass@localhost:5434/pubtator_link",
+        "inspect:postgresql://user:pass@localhost:5434/pubtator_link",
+        "pool",
+    ]
+    assert resources.review_pool is pool
+
+
+@pytest.mark.asyncio
 async def test_create_app_resources_closes_partial_resources_when_review_setup_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

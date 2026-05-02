@@ -13,6 +13,11 @@ from fastapi import Depends, HTTPException, Request
 from structlog.typing import FilteringBoundLogger
 
 from pubtator_link.api.search_filters import merge_search_filters
+from pubtator_link.db.migrate import (
+    ReviewSchemaDiagnostics,
+    apply_migrations,
+    inspect_review_schema,
+)
 from pubtator_link.models.responses import SearchResponse, SearchResult
 from pubtator_link.models.review_rerag import StageResearchSessionRequest
 
@@ -74,6 +79,7 @@ class AppResources:
     review_index_lifecycle_service: ReviewIndexLifecycleService | None = None
     source_preflight_service: SourcePreflightService | None = None
     research_session_service: ResearchSessionService | None = None
+    schema_diagnostics: ReviewSchemaDiagnostics | None = None
 
 
 _app_resources_context: ContextVar[AppResources | None] = ContextVar(
@@ -125,6 +131,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
     review_audit_service: ReviewAuditService | None = None
     review_evidence_certainty_service: ReviewEvidenceCertaintyService | None = None
     review_index_lifecycle_service: ReviewIndexLifecycleService | None = None
+    schema_diagnostics: ReviewSchemaDiagnostics | None = None
 
     try:
         api_client = PubTator3Client(logger=logger)
@@ -150,6 +157,17 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
         review_context_service: ReviewContextService | None = None
 
         if review_rerag_config.database_url is not None:
+            if getattr(review_rerag_config, "auto_migrate", False):
+                await apply_migrations(review_rerag_config.database_url)
+            schema_diagnostics = await inspect_review_schema(review_rerag_config.database_url)
+            if (
+                getattr(review_rerag_config, "require_schema_current", False)
+                and not schema_diagnostics.current
+            ):
+                missing = ", ".join(
+                    [*schema_diagnostics.missing_tables, *schema_diagnostics.missing_columns]
+                )
+                raise RuntimeError(f"Review database schema is not current: {missing}")
             review_pool = await asyncpg.create_pool(**review_pool_kwargs())
             review_repository = PostgresReviewReragRepository(review_pool)
             preparation = _build_full_text_preparation(
@@ -190,6 +208,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             review_audit_service=review_audit_service,
             review_evidence_certainty_service=review_evidence_certainty_service,
             review_index_lifecycle_service=review_index_lifecycle_service,
+            schema_diagnostics=schema_diagnostics,
         )
     except Exception:
         if review_queue is not None:

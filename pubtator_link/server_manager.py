@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from dataclasses import asdict, is_dataclass
 from uuid import uuid4
 
 import uvicorn
@@ -57,6 +58,9 @@ class UnifiedServerManager:
         try:
             self.resources = await create_app_resources(logger=self.logger)
             app.state.pubtator_resources = self.resources
+            app.state.pubtator_schema_diagnostics = _schema_diagnostics_payload(
+                self.resources.schema_diagnostics
+            )
 
             if self.resources.review_queue is not None:
                 await self.resources.review_queue.start()
@@ -71,6 +75,8 @@ class UnifiedServerManager:
                 self.resources = None
             if hasattr(app.state, "pubtator_resources"):
                 delattr(app.state, "pubtator_resources")
+            if hasattr(app.state, "pubtator_schema_diagnostics"):
+                delattr(app.state, "pubtator_schema_diagnostics")
             self.logger.info("Server shutdown complete")
 
     def create_app(self, *, include_mcp: bool = False) -> FastAPI:
@@ -136,21 +142,44 @@ class UnifiedServerManager:
         async def ready(request: Request) -> dict[str, object]:
             """Readiness check endpoint."""
             resources = getattr(request.app.state, "pubtator_resources", None)
+            schema_diagnostics = getattr(request.app.state, "pubtator_schema_diagnostics", None)
+            schema_diagnostics = _schema_diagnostics_payload(schema_diagnostics)
             database_status = "not_configured"
-            if review_rerag_config.database_url is not None:
+            schema_current: bool | None = None
+            if schema_diagnostics is not None:
+                schema_current = bool(schema_diagnostics.get("current", False))
+                database_status = "ready" if schema_current else "schema_outdated"
+                if not bool(schema_diagnostics.get("connected", False)):
+                    database_status = "unavailable"
+            elif review_rerag_config.database_url is not None:
                 database_status = "ready"
                 if resources is None or resources.review_pool is None:
                     database_status = "unavailable"
 
-            status = "ready" if database_status != "unavailable" else "not_ready"
+            status = (
+                "ready"
+                if database_status not in {"unavailable", "schema_outdated"}
+                else "not_ready"
+            )
+            database_dependency: dict[str, object] = {
+                "status": database_status,
+                "schema_current": schema_current,
+            }
+            if schema_diagnostics is not None:
+                database_dependency.update(
+                    {
+                        "missing_tables": schema_diagnostics.get("missing_tables", []),
+                        "missing_columns": schema_diagnostics.get("missing_columns", []),
+                        "applied_versions": schema_diagnostics.get("applied_versions", []),
+                        "error": schema_diagnostics.get("error"),
+                    }
+                )
             return {
                 "status": status,
                 "version": "1.0.0",
                 "transport": settings.transport,
                 "dependencies": {
-                    "database": {
-                        "status": database_status,
-                    }
+                    "database": database_dependency
                 },
             }
 
@@ -328,3 +357,13 @@ class UnifiedServerManager:
 # Global app instance for WSGI compatibility (used by Gunicorn)
 _manager = UnifiedServerManager()
 app = _manager.create_app(include_mcp=settings.transport == "unified")
+
+
+def _schema_diagnostics_payload(value: object) -> dict[str, object] | None:
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return value
+    if is_dataclass(value):
+        return asdict(value)
+    return None

@@ -45,6 +45,23 @@ class TestHealthAndRoot:
         assert data["version"] == "1.0.0"
         assert data["dependencies"]["database"]["status"] == "not_configured"
 
+    def test_ready_reports_schema_not_current(self, test_client):
+        test_client.app.state.pubtator_schema_diagnostics = {
+            "connected": True,
+            "current": False,
+            "missing_tables": [],
+            "missing_columns": ["reviews.updated_at"],
+            "applied_versions": ["0001_review_schema_base"],
+        }
+
+        response = test_client.get("/ready")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "not_ready"
+        assert body["dependencies"]["database"]["schema_current"] is False
+        assert "reviews.updated_at" in body["dependencies"]["database"]["missing_columns"]
+
     def test_readiness_endpoint_content_type(self, test_client):
         response = test_client.get("/ready")
 

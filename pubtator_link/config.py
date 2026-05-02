@@ -66,6 +66,14 @@ class ServerSettings(BaseSettings):
 
     # Review-scoped re-RAG POC
     database_url: str | None = Field(default=None, description="PostgreSQL database URL")
+    auto_migrate: bool = Field(
+        default=False,
+        description="Apply bundled PostgreSQL migrations automatically during startup",
+    )
+    require_schema_current: bool = Field(
+        default=False,
+        description="Fail startup when review PostgreSQL schema is not current",
+    )
     review_prep_concurrency: int = Field(
         default=2, ge=1, le=8, description="Concurrent review evidence preparation jobs"
     )
@@ -220,6 +228,8 @@ class ReviewReragConfig:
     """Review-scoped re-RAG POC configuration."""
 
     database_url: str | None
+    auto_migrate: bool
+    require_schema_current: bool
     prep_concurrency: int
     document_timeout_seconds: int
     source_timeout_seconds: int
@@ -242,6 +252,8 @@ class ReviewReragConfig:
     def from_settings(cls, server_settings: ServerSettings) -> "ReviewReragConfig":
         return cls(
             database_url=server_settings.database_url,
+            auto_migrate=server_settings.auto_migrate,
+            require_schema_current=server_settings.require_schema_current,
             prep_concurrency=server_settings.review_prep_concurrency,
             document_timeout_seconds=server_settings.review_prep_document_timeout_seconds,
             source_timeout_seconds=server_settings.review_prep_source_timeout_seconds,
