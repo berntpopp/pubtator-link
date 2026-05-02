@@ -138,6 +138,16 @@ def test_review_retrieval_schema_hides_resolver_trace_by_default() -> None:
     assert schema["properties"]["include_resolver_trace"]["default"] is False
 
 
+def test_search_literature_schema_defaults_to_nlm_citations_for_metadata() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp()._tool_manager._tools["pubtator.search_literature"]
+    schema = tool.parameters
+
+    assert schema["properties"]["metadata"]["default"] == "basic"
+    assert schema["properties"]["include_citations"]["default"] == "nlm"
+
+
 def test_capabilities_resource_advertises_grounding_workflows() -> None:
     from pubtator_link.mcp.resources import get_capabilities_resource
     from pubtator_link.models.corpus_suggestion import CorpusSuggestionRequest
@@ -383,7 +393,7 @@ def test_common_mcp_tools_are_flat_and_unversioned() -> None:
     assert "year_min" in search_schema["properties"]
     assert "year_max" in search_schema["properties"]
     assert search_schema["properties"]["response_mode"]["default"] == "compact"
-    assert search_schema["properties"]["include_citations"]["default"] == "none"
+    assert search_schema["properties"]["include_citations"]["default"] == "nlm"
     assert search_schema["properties"]["text_hl_format"]["default"] == "plain"
     assert search_schema["properties"]["limit"]["default"] == 5
     assert "entity_ids" in search_schema["properties"]

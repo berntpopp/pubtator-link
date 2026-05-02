@@ -462,6 +462,7 @@ After both: the same 4-call burst usually completes with 1–2 actual upstream r
 
 ## 7. References
 
+- Status: reliability/ergonomics follow-up is tracked by `docs/superpowers/plans/2026-05-02-review-rag-reliability-and-llm-ergonomics-implementation.md`.
 - Stress test scripts (reproducible, runnable):
   - `/tmp/stress_concurrency.py` — per-call vs. shared client × N=1/4/16/64
   - `/tmp/stress_ratelimiter.py` — current vs. fixed token-bucket

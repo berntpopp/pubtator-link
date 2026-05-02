@@ -227,6 +227,17 @@ def test_branch_protection_docs_define_required_checks() -> None:
     assert "Security / Dependency review" in docs
 
 
+def test_active_docs_do_not_advertise_v2_or_prepare_mode_examples() -> None:
+    active_paths = [
+        Path("docs/MCP_CONNECTION_GUIDE.md"),
+        Path("pubtator_link/mcp/resources.py"),
+    ]
+    joined = "\n".join(path.read_text() for path in active_paths)
+
+    assert "search_literature_v2" not in joined
+    assert '"prepare_mode": "selected"' not in joined
+
+
 def test_branch_protection_policy_file_exists_and_parses() -> None:
     policy_path = Path("docs/development/branch-protection.json")
 

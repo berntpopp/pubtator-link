@@ -473,6 +473,7 @@ If you're on a single VM and want zero-vendor: a [Grafana + Prometheus + Loki + 
 
 When all four PRs are merged, you should be able to perform the following exercises in production within 60 seconds each:
 
+- Status: reliability/ergonomics follow-up is tracked by `docs/superpowers/plans/2026-05-02-review-rag-reliability-and-llm-ergonomics-implementation.md`.
 - [x] Find lifecycle log lines for MCP calls by event name and `tool_name`.
 - [x] Expose MCP tool latency histograms for p95 dashboards.
 - [x] Expose MCP tool error counters by `error_code`.

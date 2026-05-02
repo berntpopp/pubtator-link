@@ -69,7 +69,7 @@ Recommended review workflow:
 
 Use `pubtator.fetch_publication_annotations` with `full=true` only when raw BioC is intentionally needed. Compact passage tools are safer for routine grounding. The full research-use limitation is exposed once in `pubtator.get_server_capabilities` and `pubtator://research-use`.
 
-All public MCP tools use flat top-level arguments. The server no longer exposes `_v2` aliases or `{ "request": ... }` wrapper-shaped public tools; if a client still shows them, refresh the client MCP/tool cache and reconnect.
+All public MCP tools use flat top-level arguments. If a client still displays old `_v2` aliases, refresh the MCP/tool cache and reconnect. Current public tools use canonical names only.
 
 Re-calling `pubtator.index_review_evidence` with the same prepared PMIDs is a no-op
 counted as `already_prepared`; new PMIDs are added to the same `review_id`. Use
