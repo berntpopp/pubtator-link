@@ -131,6 +131,9 @@ class SourcePreflightService:
                     return SourceCoverageHint(
                         pmid=pmid,
                         expected_coverage="full_text",
+                        expected_coverage_after_index="full_text",
+                        expected_coverage_confidence="high",
+                        coverage_resolution_stage="preflight_resolver_chain",
                         coverage_reason="pmc_oa_bioc",
                         pmcid=pmcid,
                         doi=doi,
@@ -173,6 +176,9 @@ class SourcePreflightService:
                 return SourceCoverageHint(
                     pmid=pmid,
                     expected_coverage="full_text",
+                    expected_coverage_after_index="full_text",
+                    expected_coverage_confidence="high",
+                    coverage_resolution_stage="preflight_resolver_chain",
                     coverage_reason="full_text_available",
                     pmcid=europe_pmc_result.pmcid or pmcid,
                     doi=europe_pmc_result.doi or doi,
@@ -200,6 +206,9 @@ class SourcePreflightService:
                 return SourceCoverageHint(
                     pmid=pmid,
                     expected_coverage="abstract_only",
+                    expected_coverage_after_index="abstract_only",
+                    expected_coverage_confidence="moderate",
+                    coverage_resolution_stage="preflight_resolver_chain",
                     coverage_reason=coverage_reason,
                     pmcid=pmcid,
                     doi=doi,

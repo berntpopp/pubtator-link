@@ -69,6 +69,39 @@ async def test_preflight_uses_abstract_hint_when_no_pmcid_exists() -> None:
 
 
 @pytest.mark.asyncio
+async def test_preflight_sets_after_index_expectation_for_abstract_fallback() -> None:
+    async def convert(_pmid: str) -> dict[str, str | None]:
+        return {}
+
+    async def abstract_available(_pmid: str) -> bool:
+        return True
+
+    service = SourcePreflightService(
+        id_converter=convert,
+        pubtator_abstract_available=abstract_available,
+    )
+
+    [hint] = await service.preflight_pmids(["40234174"])
+
+    assert hint.expected_coverage == "abstract_only"
+    assert hint.expected_coverage_after_index == "abstract_only"
+    assert hint.expected_coverage_confidence == "moderate"
+    assert hint.coverage_resolution_stage == "preflight_resolver_chain"
+
+
+@pytest.mark.asyncio
+async def test_preflight_marks_unknown_after_index_when_no_resolver_succeeds() -> None:
+    service = SourcePreflightService()
+
+    [hint] = await service.preflight_pmids(["40234174"])
+
+    assert hint.expected_coverage == "unknown"
+    assert hint.expected_coverage_after_index == "unknown"
+    assert hint.expected_coverage_confidence == "unknown"
+    assert hint.coverage_resolution_stage == "not_resolved"
+
+
+@pytest.mark.asyncio
 async def test_preflight_labels_unresolved_conversion_as_best_guess() -> None:
     async def id_converter(_pmid: str) -> dict[str, str]:
         return {"id_resolution_status": "unresolved"}
