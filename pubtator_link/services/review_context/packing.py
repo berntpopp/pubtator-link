@@ -97,6 +97,8 @@ def context_passage_from_row(
         source_kind=row.source_kind,
         char_count=len(text),
         truncated=truncated,
+        tail_preview=_tail_preview(row.text, end_char) if truncated else None,
+        next_window_token=None,
         start_char=start_char,
         end_char=end_char,
         boundary="query_window" if truncated else "full_passage",
@@ -111,6 +113,11 @@ def effective_passage_len(
     if not request.allow_truncated_passages:
         return None
     return request.max_chars_per_passage
+
+
+def _tail_preview(text: str, end_char: int) -> str | None:
+    preview = text[end_char : end_char + 120].strip()
+    return preview or None
 
 
 def is_table_section(section: str) -> bool:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pubtator_link.models.review_rerag import RetrieveReviewContextRequest, ReviewPassageRow
 from pubtator_link.services.review_context.packing import (
     context_budget,
+    context_passage_from_row,
     excerpt_text,
     pack_passages,
 )
@@ -63,3 +64,20 @@ def test_context_budget_estimates_total_chars() -> None:
     assert budget.text_chars == 400
     assert budget.estimated_total_chars > 400
     assert budget.dropped_count == 2
+
+
+def test_truncated_context_passage_includes_tail_preview() -> None:
+    row = _row("p1", rank=1.0, section="abstract", source_kind="pubtator_abstract")
+    row.text = "A" * 500
+    passage = context_passage_from_row(
+        index=1,
+        row=row,
+        request=RetrieveReviewContextRequest(
+            question="MEFV",
+            max_chars_per_passage=300,
+        ),
+    )
+
+    assert passage.truncated is True
+    assert passage.tail_preview == "A" * 120
+    assert passage.next_window_token is None

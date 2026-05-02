@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pubtator_link.models.review_rerag import (
+    ContextPassage,
     ContextPack,
     PreparationStatus,
     RetrieveReviewContextResponse,
@@ -52,3 +53,27 @@ def test_zero_result_reason_includes_coverage_abstract_only() -> None:
     )
 
     assert summary.zero_result_reason == "coverage_abstract_only"
+
+
+def test_high_drop_nonzero_query_summary_has_next_steps() -> None:
+    result = RetrieveReviewContextResponse(
+        review_id="r1",
+        context_pack=ContextPack(
+            question="MEFV",
+            passages=[
+                ContextPassage(
+                    citation_key="S1",
+                    passage_id="p1",
+                    section="abstract",
+                    text="evidence",
+                )
+            ],
+            citation_map={},
+        ),
+        preparation_status=PreparationStatus(complete=1),
+        diagnostics=None,
+    )
+
+    summary = query_summary(query="MEFV colchicine", result=result, returned_count=1, dropped_count=9)
+
+    assert summary.next_steps == ["increase_budget", "narrow_query", "inspect_review_index"]

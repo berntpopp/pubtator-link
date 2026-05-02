@@ -360,6 +360,8 @@ class ContextPassage(BaseModel):
     source_kind: str | None = None
     char_count: int | None = None
     truncated: bool = False
+    tail_preview: str | None = None
+    next_window_token: str | None = None
     start_char: int | None = None
     end_char: int | None = None
     boundary: str | None = None

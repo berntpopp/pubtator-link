@@ -61,6 +61,8 @@ def query_summary(
             next_steps = ["increase_budget", "lower_max_passages_per_query"]
         else:
             next_steps = ["shorten_query", "drop_filters", "inspect_review_index"]
+    elif dropped_count >= returned_count * 3 and dropped_count >= 3:
+        next_steps = ["increase_budget", "narrow_query", "inspect_review_index"]
     return QueryDiagnosticsSummary(
         query=query,
         query_tokens=query_tokens_value,
