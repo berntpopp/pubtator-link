@@ -168,6 +168,28 @@ async def test_lookup_mesh_returns_search_next_command() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ncbi_client_parses_ecitmatch_lines() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/ecitmatch.cgi")
+        assert request.url.params["db"] == "pubmed"
+        assert request.url.params["retmode"] == "text"
+        assert request.url.params["tool"] == "pubtator-link"
+        assert request.url.params["bdata"] == "known\nunknown"
+        text = "Ann Rheum Dis|2024|83|1|Author|Title|39596913|\nUnknown||||||NOT_FOUND|\n"
+        return httpx.Response(200, text=text, request=request)
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    client = NcbiDiscoveryClient(http_client=http_client)
+
+    records = await client.lookup_citations(["known", "unknown"])
+
+    assert records[0].status == "matched"
+    assert records[0].pmid == "39596913"
+    assert records[1].status == "not_found"
+    await client.close()
+
+
+@pytest.mark.asyncio
 async def test_ncbi_client_parses_mesh_lookup_json() -> None:
     transport = MockTransport(
         {

@@ -199,7 +199,34 @@ class NcbiDiscoveryClient:
         return descriptors
 
     async def lookup_citations(self, citations: Sequence[str]) -> list[CitationLookupRecord]:
-        raise NotImplementedError
+        response = await self._get(
+            "ecitmatch.cgi",
+            {
+                "db": "pubmed",
+                "retmode": "text",
+                "bdata": "\n".join(citations),
+                "tool": "pubtator-link",
+            },
+        )
+        lines = [line for line in response.text.splitlines() if line]
+
+        records: list[CitationLookupRecord] = []
+        for index, citation in enumerate(citations):
+            line = lines[index] if index < len(lines) else ""
+            fields = line.split("|") if line else []
+            pmid = fields[-2].strip() if len(fields) >= 2 else ""
+            if pmid and pmid != "NOT_FOUND":
+                records.append(CitationLookupRecord(citation=citation, status="matched", pmid=pmid))
+            else:
+                records.append(
+                    CitationLookupRecord(
+                        citation=citation,
+                        status="not_found",
+                        reason="not_found",
+                    )
+                )
+
+        return records
 
     async def find_related_articles(
         self,
