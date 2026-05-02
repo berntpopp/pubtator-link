@@ -32,6 +32,7 @@ from pubtator_link.models.review_rerag import (
     RetrieveReviewContextRequest,
     ReviewBatchResponseMode,
     ReviewTableMode,
+    StageResearchSessionRequest,
     UpsertEvidenceCertaintyRequest,
 )
 from pubtator_link.services.publication_passage_service import PublicationPassageService
@@ -410,6 +411,47 @@ async def preflight_review_sources_impl(
         "success": True,
         "coverage_hints": [hint.model_dump(mode="json") for hint in hints],
     }
+
+
+async def stage_research_session_impl(
+    *,
+    service: Any,
+    review_id: str,
+    query: str | None = None,
+    pmids: list[str] | None = None,
+    session_id: str | None = None,
+    max_candidates: int = 20,
+    stage_full_text: bool = True,
+) -> dict[str, Any]:
+    response = await service.stage(
+        review_id=review_id,
+        request=StageResearchSessionRequest(
+            session_id=session_id,
+            query=query,
+            pmids=pmids or [],
+            max_candidates=max_candidates,
+            stage_full_text=stage_full_text,
+        ),
+    )
+    try:
+        result = response.model_dump(by_alias=True)
+    except TypeError:
+        result = response.model_dump()
+    return cast(dict[str, Any], result)
+
+
+async def get_research_session_status_impl(
+    *, service: Any, review_id: str, session_id: str
+) -> dict[str, Any]:
+    result = (await service.get_status(review_id=review_id, session_id=session_id)).model_dump(
+        by_alias=True
+    )
+    return cast(dict[str, Any], result)
+
+
+async def list_research_sessions_impl(*, service: Any, review_id: str) -> dict[str, Any]:
+    result = (await service.list_sessions(review_id=review_id)).model_dump(by_alias=True)
+    return cast(dict[str, Any], result)
 
 
 async def inspect_review_index_impl(

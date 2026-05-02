@@ -519,6 +519,7 @@ class ReviewAuditBundle(BaseModel):
     search_runs: list[ReviewSearchRun] = Field(default_factory=list)
     retrieval_runs: list[ReviewRetrievalRun] = Field(default_factory=list)
     evidence_certainty: list["EvidenceCertaintyRecord"] = Field(default_factory=list)
+    research_sessions: list[ResearchSessionManifest] = Field(default_factory=list)
     passage_ids: list[str]
     stable_citation_keys: dict[str, str]
 

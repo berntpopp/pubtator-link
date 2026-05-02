@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 EXPECTED_PUBLIC_TOOL_NAMES = {
     "pubtator.get_server_capabilities",
     "pubtator.search_literature",
@@ -24,6 +26,9 @@ EXPECTED_PUBLIC_TOOL_NAMES = {
     "pubtator.add_evidence_certainty",
     "pubtator.list_evidence_certainty",
     "pubtator.get_evidence_certainty",
+    "pubtator.stage_research_session",
+    "pubtator.get_research_session_status",
+    "pubtator.list_research_sessions",
 }
 
 EXPECTED_RESOURCE_URIS = {
@@ -41,6 +46,14 @@ EXPECTED_PROMPT_NAMES = {
     "review_pubtator_annotations",
     "review_rerag_workflow",
 }
+
+
+@pytest.fixture
+def mcp_tool_names() -> set[str]:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp()
+    return set(mcp._tool_manager._tools)
 
 
 def _tool_output_schema(tool: object) -> dict[str, object]:
@@ -131,6 +144,12 @@ def test_curated_facade_registers_pubtator_tools() -> None:
     assert "pubtator.clear_api_cache" not in tool_names
     assert "pubtator.delete_review_index" not in tool_names
     assert "pubtator.delete_evidence_certainty" not in tool_names
+
+
+def test_research_session_tools_are_registered(mcp_tool_names) -> None:
+    assert "pubtator.stage_research_session" in mcp_tool_names
+    assert "pubtator.get_research_session_status" in mcp_tool_names
+    assert "pubtator.list_research_sessions" in mcp_tool_names
 
 
 def test_common_mcp_tools_are_flat_and_unversioned() -> None:

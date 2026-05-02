@@ -5,6 +5,7 @@ import pytest
 from pubtator_link.models.review_rerag import (
     EvidenceCertaintyRecord,
     PreparationStatus,
+    ResearchSessionManifest,
     ResolverAttemptSummary,
     ReviewIndexTotals,
     ReviewSourceSummary,
@@ -77,6 +78,16 @@ class FakeAuditRepository:
             )
         ]
 
+    async def list_research_sessions(self, review_id: str):
+        return [
+            ResearchSessionManifest(
+                session_id="session-1",
+                review_id=review_id,
+                query="MEFV colchicine",
+                candidate_count=2,
+            )
+        ]
+
 
 @pytest.mark.asyncio
 async def test_review_audit_bundle_exports_sources_attempts_events_and_citation_keys() -> None:
@@ -92,5 +103,6 @@ async def test_review_audit_bundle_exports_sources_attempts_events_and_citation_
     assert bundle.search_runs[0].query == "MEFV colchicine"
     assert bundle.retrieval_runs[0].queries == ["MEFV diagnosis", "colchicine response"]
     assert bundle.evidence_certainty[0].overall_certainty == "low"
+    assert bundle.research_sessions[0].session_id == "session-1"
     assert bundle.passage_ids == ["PMID:1:title:0", "PMID:1:abstract:1"]
     assert bundle.stable_citation_keys["PMID:1:title:0"].startswith("c_")

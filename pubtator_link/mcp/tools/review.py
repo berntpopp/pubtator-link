@@ -6,6 +6,7 @@ from fastmcp import FastMCP
 from pydantic import Field
 
 from pubtator_link.api.routes.dependencies import (
+    get_research_session_service,
     get_review_audit_service,
     get_review_context_service,
     get_review_evidence_certainty_service,
@@ -19,15 +20,18 @@ from pubtator_link.mcp.service_adapters import (
     export_review_audit_bundle_impl,
     get_evidence_certainty_impl,
     get_neighboring_review_passages_impl,
+    get_research_session_status_impl,
     get_review_index_summary_impl,
     get_review_passages_by_id_impl,
     index_review_evidence_impl,
     inspect_review_index_impl,
     list_evidence_certainty_impl,
+    list_research_sessions_impl,
     list_review_indexes_impl,
     preflight_review_sources_impl,
     retrieve_review_context_batch_impl,
     retrieve_review_context_impl,
+    stage_research_session_impl,
 )
 from pubtator_link.models.review_rerag import (
     BudgetStrategy,
@@ -36,16 +40,19 @@ from pubtator_link.models.review_rerag import (
     IndexReviewEvidenceResponse,
     InspectReviewIndexResponse,
     ListEvidenceCertaintyResponse,
+    ListResearchSessionsResponse,
     ListReviewIndexesResponse,
     McpReviewAuditBundleResponse,
     PreflightReviewSourcesResponse,
     PrepareMode,
+    ResearchSessionStatusResponse,
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextResponse,
     ReviewBatchResponseMode,
     ReviewIndexSummaryResponse,
     ReviewPassageLookupResponse,
     ReviewTableMode,
+    StageResearchSessionResponse,
 )
 
 
@@ -155,6 +162,58 @@ def register_review_tools(mcp: FastMCP) -> None:
         """Use this before indexing review evidence to estimate PMID source coverage, PMC fallback availability, and likely full-text versus abstract-only retrieval. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         service = await get_source_preflight_service()
         return await preflight_review_sources_impl(service=service, pmids=pmids)
+
+    @mcp.tool(
+        name="pubtator.stage_research_session",
+        title="Stage Research Session",
+        output_schema=StageResearchSessionResponse.model_json_schema(),
+        annotations=REVIEW_WRITE_ANNOTATIONS,
+    )
+    async def stage_research_session(
+        review_id: str,
+        query: str | None = None,
+        pmids: list[str] | None = None,
+        session_id: str | None = None,
+        max_candidates: int = 20,
+        stage_full_text: bool = True,
+    ) -> dict[str, Any]:
+        """Use this after search planning to stage candidate PMIDs with coverage hints and queued review preparation. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_research_session_service()
+        return await stage_research_session_impl(
+            service=service,
+            review_id=review_id,
+            query=query,
+            pmids=pmids,
+            session_id=session_id,
+            max_candidates=max_candidates,
+            stage_full_text=stage_full_text,
+        )
+
+    @mcp.tool(
+        name="pubtator.get_research_session_status",
+        title="Get Research Session Status",
+        output_schema=ResearchSessionStatusResponse.model_json_schema(),
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def get_research_session_status(review_id: str, session_id: str) -> dict[str, Any]:
+        """Use this to poll staged candidate, coverage, and preparation status for a research session. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_research_session_service()
+        return await get_research_session_status_impl(
+            service=service,
+            review_id=review_id,
+            session_id=session_id,
+        )
+
+    @mcp.tool(
+        name="pubtator.list_research_sessions",
+        title="List Research Sessions",
+        output_schema=ListResearchSessionsResponse.model_json_schema(),
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def list_research_sessions(review_id: str) -> dict[str, Any]:
+        """Use this to list staged research sessions for one review ID. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        service = await get_research_session_service()
+        return await list_research_sessions_impl(service=service, review_id=review_id)
 
     @mcp.tool(
         name="pubtator.index_review_evidence",

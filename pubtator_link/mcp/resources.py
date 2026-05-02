@@ -27,6 +27,9 @@ def get_capabilities_resource() -> dict[str, Any]:
             "pubtator.submit_text_annotation",
             "pubtator.get_text_annotation_results",
             "pubtator.preflight_review_sources",
+            "pubtator.stage_research_session",
+            "pubtator.get_research_session_status",
+            "pubtator.list_research_sessions",
             "pubtator.index_review_evidence",
             "pubtator.inspect_review_index",
             "pubtator.retrieve_review_context",
@@ -43,6 +46,9 @@ def get_capabilities_resource() -> dict[str, Any]:
         ],
         "recommended_workflows": [
             "search -> preflight -> index -> inspect -> retrieve for review-grounded answers",
+            "For live research sessions, call `pubtator.stage_research_session` with a "
+            "review ID and query or PMID list, then poll "
+            "`pubtator.get_research_session_status` before retrieving review context.",
             "publication passages -> context estimate -> compact passage retrieval before raw BioC",
         ],
         "tool_groups": {
@@ -57,6 +63,9 @@ def get_capabilities_resource() -> dict[str, Any]:
             ],
             "review_grounding": [
                 "pubtator.preflight_review_sources",
+                "pubtator.stage_research_session",
+                "pubtator.get_research_session_status",
+                "pubtator.list_research_sessions",
                 "pubtator.index_review_evidence",
                 "pubtator.inspect_review_index",
                 "pubtator.retrieve_review_context",
@@ -121,6 +130,11 @@ def get_capabilities_resource() -> dict[str, Any]:
             "pubtator.preflight_review_sources": {
                 "pmids": ["40234174"],
             },
+            "pubtator.stage_research_session": {
+                "review_id": "fmf-colchicine-guidelines",
+                "query": "MEFV colchicine familial Mediterranean fever guideline",
+                "max_candidates": 20,
+            },
             "pubtator.get_review_passages_by_id": {
                 "review_id": "fmf-colchicine-guidelines",
                 "passage_ids": ["PMID:40234174:abstract:0"],
@@ -179,6 +193,9 @@ def get_capabilities_resource() -> dict[str, Any]:
             },
             "tools": [
                 "pubtator.index_review_evidence",
+                "pubtator.stage_research_session",
+                "pubtator.get_research_session_status",
+                "pubtator.list_research_sessions",
                 "pubtator.preflight_review_sources",
                 "pubtator.inspect_review_index",
                 "pubtator.retrieve_review_context",
@@ -196,6 +213,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             "scope": "research-use review-scoped evidence preparation and retrieval",
             "workflow": [
                 "preflight candidate PMIDs to estimate source coverage",
+                "stage live research sessions from a query or PMID list before retrieval",
                 "index candidate PMIDs or curated URLs for a stable review_id",
                 "inspect the review index before retrieval to check source coverage",
                 "wait for preparation_status to show complete or partial records",

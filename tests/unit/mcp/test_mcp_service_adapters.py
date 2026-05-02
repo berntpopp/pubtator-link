@@ -5,6 +5,8 @@ from typing import ClassVar
 
 import pytest
 
+from pubtator_link.mcp.service_adapters import stage_research_session_impl
+
 
 @pytest.mark.asyncio
 async def test_search_entities_adapter_calls_client() -> None:
@@ -224,6 +226,25 @@ async def test_export_review_audit_bundle_adapter_returns_bundle() -> None:
     assert set(result) == {"success", "audit_bundle"}
     assert result["success"] is True
     assert result["audit_bundle"]["review_id"] == "rev_123"
+
+
+async def test_stage_research_session_impl_calls_service() -> None:
+    class Service:
+        async def stage(self, *, review_id, request):
+            assert review_id == "review-1"
+            assert request.query == "FMF"
+            return type("Response", (), {"model_dump": lambda self: {"success": True}})()
+
+    result = await stage_research_session_impl(
+        service=Service(),
+        review_id="review-1",
+        query="FMF",
+        pmids=None,
+        max_candidates=10,
+        stage_full_text=True,
+    )
+
+    assert result == {"success": True}
 
 
 @pytest.mark.asyncio
