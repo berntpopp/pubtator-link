@@ -1,6 +1,6 @@
 """Response models for PubTator-Link API."""
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -136,6 +136,8 @@ class SearchResult(BaseModel):
             mapped["issue"] = mapped["meta_issue"]
         if mapped.get("pages") is None and mapped.get("meta_pages") is not None:
             mapped["pages"] = mapped["meta_pages"]
+        if _coverage_hint_has_no_signal(mapped.get("coverage_hint")):
+            mapped["coverage_hint"] = None
         return mapped
 
     pmid: str = Field(..., description="PubMed ID")
@@ -171,6 +173,15 @@ class SearchResult(BaseModel):
     nlm_citation: str | None = Field(default=None, description="NLM citation")
     bibtex: str | None = Field(default=None, description="BibTeX citation")
     coverage_hint: dict[str, Any] | None = Field(default=None, description="Coverage hint")
+    preflight_coverage_guess: str | None = Field(
+        default=None, description="Compact preflight coverage guess"
+    )
+    preflight_coverage_reason: str | None = Field(
+        default=None, description="Compact preflight coverage reason"
+    )
+    preflight_confidence: Literal["high", "medium", "low"] | None = Field(
+        default=None, description="Confidence of the preflight coverage guess"
+    )
     rank_features: dict[str, Any] | None = Field(default=None, description="Ranking features")
     matched_terms: list[str] = Field(default_factory=list, description="Matched query terms")
 
@@ -186,6 +197,14 @@ class SearchResult(BaseModel):
 class SearchResponse(BaseResponse):
     """Response model for search."""
 
+    @model_validator(mode="after")
+    def populate_preflight_error_code(self) -> "SearchResponse":
+        if self.preflight_failure_reason and not self.preflight_error_reason:
+            self.preflight_error_reason = self.preflight_failure_reason
+        if self.preflight_error_reason and not self.preflight_error_code:
+            self.preflight_error_code = f"coverage_preflight_{self.preflight_error_reason}"
+        return self
+
     query: str = Field(..., description="Original search query")
     results: list[SearchResult] = Field(default_factory=list, description="Search results")
     total_results: int = Field(..., description="Total number of results")
@@ -198,6 +217,35 @@ class SearchResponse(BaseResponse):
         default=None, description="Date when the live corpus was queried"
     )
     source_versions: dict[str, str] = Field(default_factory=dict, description="Source versions")
+    preflight_failure_reason: str | None = Field(
+        default=None, description="Backward-compatible coverage preflight failure reason"
+    )
+    preflight_error_reason: str | None = Field(
+        default=None, description="Stable coverage preflight failure reason"
+    )
+    preflight_error_code: str | None = Field(
+        default=None, description="Stable coverage preflight failure code"
+    )
+
+
+def _coverage_hint_has_no_signal(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    signal_keys = {
+        "pmcid",
+        "doi",
+        "license_or_access_hint",
+        "notes",
+        "resolver_attempts",
+    }
+    if any(value.get(key) for key in signal_keys):
+        return False
+    if value.get("pmc_fallback_available"):
+        return False
+    return (
+        value.get("expected_coverage", "unknown") == "unknown"
+        and value.get("coverage_reason", "unknown") == "unknown"
+    )
 
 
 class RelatedEntity(BaseModel):

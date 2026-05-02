@@ -25,14 +25,63 @@ async def attach_preflight_coverage(
 
     try:
         hints = await preflight_service.preflight_pmids(pmids)
-    except Exception:
+    except Exception as exc:
+        reason = _preflight_error_reason(exc)
         response.message = (
             "Coverage preflight failed; search results returned without coverage hints."
         )
         response.source_versions["coverage_preflight"] = "failed"
+        response.preflight_failure_reason = reason
+        response.preflight_error_reason = reason
+        response.preflight_error_code = f"coverage_preflight_{reason}"
         return
 
     hints_by_pmid = {hint.pmid: hint.model_dump(mode="json") for hint in hints}
     for result in response.results:
-        result.coverage_hint = hints_by_pmid.get(result.pmid)
+        hint = hints_by_pmid.get(result.pmid)
+        if hint is None:
+            continue
+        result.coverage_hint = None if _coverage_hint_has_no_signal(hint) else hint
+        result.preflight_coverage_guess = hint.get("expected_coverage")
+        result.preflight_coverage_reason = hint.get("coverage_reason")
+        result.preflight_confidence = _preflight_confidence(
+            str(hint.get("expected_coverage") or "unknown"),
+            str(hint.get("coverage_reason") or "unknown"),
+        )
     response.source_versions["coverage_preflight"] = "included"
+
+
+def _preflight_error_reason(exc: Exception) -> str:
+    if isinstance(exc, TimeoutError):
+        return "timeout"
+    if isinstance(exc, ConnectionError):
+        return "upstream_unavailable"
+    if isinstance(exc, ValueError):
+        return "converter_failed"
+    return "internal_error"
+
+
+def _preflight_confidence(expected_coverage: str, coverage_reason: str) -> str:
+    if expected_coverage == "full_text":
+        return "high"
+    if expected_coverage == "abstract_only":
+        return "low" if coverage_reason == "pre_resolution_best_guess" else "medium"
+    return "low"
+
+
+def _coverage_hint_has_no_signal(hint: dict[str, object]) -> bool:
+    signal_keys = {
+        "pmcid",
+        "doi",
+        "license_or_access_hint",
+        "notes",
+        "resolver_attempts",
+    }
+    if any(hint.get(key) for key in signal_keys):
+        return False
+    if hint.get("pmc_fallback_available"):
+        return False
+    return (
+        hint.get("expected_coverage", "unknown") == "unknown"
+        and hint.get("coverage_reason", "unknown") == "unknown"
+    )

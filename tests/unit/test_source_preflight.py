@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 
+from pubtator_link.models.responses import SearchResult
 from pubtator_link.services.source_preflight import SourcePreflightService
 
 
@@ -174,3 +175,13 @@ async def test_preflight_limits_concurrent_pmid_probes() -> None:
 
     assert [hint.pmid for hint in hints] == ["1", "2", "3", "4"]
     assert max_in_flight == 2
+
+
+def test_unknown_noninformative_coverage_hint_is_omitted() -> None:
+    result = SearchResult(
+        pmid="1",
+        title="T",
+        coverage_hint={"pmid": "1", "expected_coverage": "unknown", "coverage_reason": "unknown"},
+    )
+
+    assert result.model_dump(exclude_none=True).get("coverage_hint") is None

@@ -391,6 +391,44 @@ class TestSearchRoutes:
         assert response.status_code == 200
         data = response.json()
         assert data["results"][0]["coverage_hint"]["expected_coverage"] == "abstract_only"
+        assert data["results"][0]["preflight_coverage_guess"] == "abstract_only"
+        assert data["results"][0]["preflight_coverage_reason"] == "no_pmcid"
+        assert data["results"][0]["preflight_confidence"] == "medium"
+
+    @patch.object(PubTator3Client, "search_publications")
+    def test_search_preflight_failure_returns_structured_fields(self, mock_search, test_client):
+        """Test coverage preflight failures are structured and non-fatal."""
+        from pubtator_link.api.routes.dependencies import get_source_preflight_service
+
+        class FakePreflight:
+            async def preflight_pmids(self, pmids: list[str]):
+                raise TimeoutError("preflight timed out")
+
+        async def fake_source_preflight_service() -> FakePreflight:
+            return FakePreflight()
+
+        mock_search.return_value = {
+            "results": [{"pmid": "39540697", "title": "FMF in Childhood"}],
+            "count": 1,
+            "total_pages": 1,
+            "page_size": 10,
+        }
+        test_client.app.dependency_overrides[get_source_preflight_service] = (
+            fake_source_preflight_service
+        )
+
+        try:
+            response = test_client.get(
+                "/api/search/",
+                params={"text": "FMF", "coverage": "preflight"},
+            )
+        finally:
+            test_client.app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["preflight_error_reason"] == "timeout"
+        assert data["preflight_error_code"] == "coverage_preflight_timeout"
 
     @patch.object(PubTator3Client, "search_publications")
     def test_search_publications_can_enrich_basic_metadata(self, mock_search, test_client):
