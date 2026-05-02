@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 import time
-from typing import Protocol
+from typing import Any, Protocol
 
 from pubtator_link.models.review_rerag import (
     IndexReviewEvidenceRequest,
@@ -80,9 +80,12 @@ class ReviewIndexingService:
                 raise ValueError("session_not_found")
 
         sources = _source_specs(request)
-        statuses = await self.repository.preparation_job_statuses(
-            review_id, [source_id for source_id, _, _ in sources]
+        source_ids = [source_id for source_id, _, _ in sources]
+        source_preflight_summary, source_preflight_warnings = await _source_preflight_summary(
+            self.repository, review_id, source_ids
         )
+        source_preflight_message = _source_preflight_message(source_preflight_summary)
+        statuses = await self.repository.preparation_job_statuses(review_id, source_ids)
         counters = _counters_from_statuses(statuses) if request.dry_run else _empty_counters()
 
         if not request.dry_run:
@@ -133,6 +136,9 @@ class ReviewIndexingService:
             already_running=counters["already_running"],
             newly_queued=counters["newly_queued"],
             previously_failed_requeued=counters["previously_failed_requeued"],
+            source_preflight_summary=source_preflight_summary,
+            source_preflight_message=source_preflight_message,
+            source_preflight_warnings=source_preflight_warnings,
             lifecycle_note=(
                 "Repeated calls with the same review_id and already indexed sources are no-ops. "
                 "Call inspect_review_index before retrieval to verify source coverage."
@@ -163,6 +169,48 @@ def _nbk_ids(values: list[str]) -> list[str]:
     for value in values:
         ids.extend(match.group(0).upper() for match in NBK_RE.finditer(value))
     return list(dict.fromkeys(ids))
+
+
+async def _source_preflight_summary(
+    repository: ReviewIndexingRepository,
+    review_id: str,
+    source_ids: list[str],
+) -> tuple[dict[str, int], list[str]]:
+    coverage_summary_fn = getattr(repository, "source_coverage_summary", None)
+    if coverage_summary_fn is None:
+        return {}, []
+
+    try:
+        summary: Any = await coverage_summary_fn(review_id, source_ids)
+        if not isinstance(summary, dict):
+            raise ValueError("source coverage summary must be a dict")
+
+        total_sources = int(summary.get("total_sources", len(source_ids)))
+        return (
+            {
+                "total_sources": total_sources,
+                "full_text": int(summary.get("full_text", 0)),
+                "abstract_only": int(summary.get("abstract_only", 0)),
+                "title_only": int(summary.get("title_only", 0)),
+                "failed": int(summary.get("failed", 0)),
+            },
+            [],
+        )
+    except Exception:
+        return {}, ["source_coverage_summary_unavailable"]
+
+
+def _source_preflight_message(summary: dict[str, int]) -> str | None:
+    if not summary:
+        return None
+
+    total_sources = summary["total_sources"]
+    return (
+        f"{summary['full_text']}/{total_sources} sources full_text, "
+        f"{summary['abstract_only']}/{total_sources} abstract_only, "
+        f"{summary['title_only']}/{total_sources} title_only, "
+        f"{summary['failed']}/{total_sources} failed."
+    )
 
 
 def _counters_from_statuses(statuses: dict[str, str]) -> dict[str, int]:

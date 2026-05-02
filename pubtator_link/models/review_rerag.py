@@ -209,6 +209,9 @@ class IndexReviewEvidenceResponse(BaseModel):
     already_running: int = 0
     newly_queued: int = 0
     previously_failed_requeued: int = 0
+    source_preflight_summary: dict[str, int] = Field(default_factory=dict)
+    source_preflight_message: str | None = None
+    source_preflight_warnings: list[str] = Field(default_factory=list)
 
 
 class PreflightReviewSourcesRequest(BaseModel):

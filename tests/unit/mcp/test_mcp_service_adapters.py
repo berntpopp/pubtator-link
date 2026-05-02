@@ -478,6 +478,15 @@ async def test_index_review_evidence_adapter_returns_lifecycle_guidance() -> Non
                 "URL:https://example.org/already-prepared.pdf": "complete",
             }
 
+        async def source_coverage_summary(self, review_id, source_ids):
+            return {
+                "total_sources": 3,
+                "full_text": 1,
+                "abstract_only": 2,
+                "title_only": 0,
+                "failed": 0,
+            }
+
         async def preparation_status(self, review_id, *, session_id=None):
             return PreparationStatus(queued=1, complete=2)
 
@@ -502,6 +511,8 @@ async def test_index_review_evidence_adapter_returns_lifecycle_guidance() -> Non
     assert set(result) >= {"success", "review_id", "preparation_status"}
     assert result["retry_after_ms"] == 3000
     assert result["index_snapshot_date"] is not None
+    assert result["source_preflight_summary"]["abstract_only"] == 2
+    assert "abstract_only" in result["source_preflight_message"]
     assert "already indexed sources are no-ops" in result["lifecycle_note"]
     assert "inspect_review_index" in result["lifecycle_note"]
 

@@ -162,6 +162,31 @@ def test_index_review_evidence_rejects_candidate_fast_prepare_mode() -> None:
         IndexReviewEvidenceRequest(pmids=["40234174"], prepare_mode="candidate_fast")
 
 
+def test_index_review_evidence_response_exposes_source_preflight_summary() -> None:
+    from pubtator_link.models.review_rerag import (
+        IndexReviewEvidenceResponse,
+        PreparationStatus,
+    )
+
+    response = IndexReviewEvidenceResponse(
+        review_id="r1",
+        queued=0,
+        already_prepared=0,
+        preparation_status=PreparationStatus(),
+        source_preflight_summary={
+            "total_sources": 2,
+            "full_text": 1,
+            "abstract_only": 1,
+            "title_only": 0,
+            "failed": 0,
+        },
+        source_preflight_message="1/2 sources full_text, 1/2 abstract_only, 0/2 title_only, 0/2 failed.",
+    )
+
+    assert response.source_preflight_summary["abstract_only"] == 1
+    assert "abstract_only" in response.source_preflight_message
+
+
 def test_stage_research_session_request_accepts_query_and_limits() -> None:
     request = StageResearchSessionRequest(
         query="familial mediterranean fever colchicine guideline",
