@@ -23,6 +23,19 @@ RECENT_MCP_ERROR_LIMIT = 50
 _RECENT_MCP_ERRORS: list[dict[str, Any]] = []
 
 
+def mcp_field_validation_error(
+    *,
+    field: str,
+    reason: str,
+    recovery_hint: str,
+) -> dict[str, Any]:
+    return {
+        "code": "validation_failed",
+        "field_errors": [{"field": field, "reason": reason}],
+        "recovery_hint": recovery_hint,
+    }
+
+
 @dataclass(frozen=True)
 class McpErrorContext:
     """Context used to build an MCP tool execution error."""

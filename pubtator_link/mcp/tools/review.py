@@ -14,7 +14,11 @@ from pubtator_link.api.routes.dependencies import (
     get_review_queue,
     get_source_preflight_service,
 )
-from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD, REVIEW_WRITE_ANNOTATIONS
+from pubtator_link.mcp.annotations import (
+    FILE_EXPORT_ANNOTATIONS,
+    READ_ONLY_OPEN_WORLD,
+    REVIEW_WRITE_ANNOTATIONS,
+)
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.service_adapters import (
     add_evidence_certainty_impl,
@@ -509,11 +513,13 @@ def register_review_tools(mcp: FastMCP) -> None:
         name="pubtator.export_review_audit_bundle",
         title="Export Review Audit Bundle",
         output_schema=McpReviewAuditBundleResponse.model_json_schema(),
-        annotations=READ_ONLY_OPEN_WORLD,
+        annotations=FILE_EXPORT_ANNOTATIONS,
     )
     async def export_review_audit_bundle(
         review_id: str,
         session_id: str | None = None,
+        export_path: str | None = None,
+        fallback_inline: bool = False,
     ) -> dict[str, Any]:
         """Use this to export review preparation status, source coverage, resolver attempts, retrieval runs, passage IDs, and stable citation keys for scientific auditability."""
 
@@ -523,6 +529,8 @@ def register_review_tools(mcp: FastMCP) -> None:
                 service=service,
                 review_id=review_id,
                 session_id=session_id,
+                export_path=export_path,
+                fallback_inline=fallback_inline,
             )
 
         return await run_mcp_tool("pubtator.export_review_audit_bundle", call)

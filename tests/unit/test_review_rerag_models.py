@@ -444,11 +444,32 @@ def test_mcp_review_audit_bundle_response_preserves_existing_wrapper_shape() -> 
         stable_citation_keys={},
     )
 
-    dumped = McpReviewAuditBundleResponse(audit_bundle=bundle).model_dump(mode="json")
+    dumped = McpReviewAuditBundleResponse(audit_bundle=bundle).model_dump(
+        mode="json",
+        exclude_none=True,
+    )
 
     assert set(dumped) == {"success", "audit_bundle"}
     assert dumped["success"] is True
     assert dumped["audit_bundle"]["review_id"] == "review-1"
+
+
+def test_audit_bundle_response_can_report_field_errors() -> None:
+    from pubtator_link.models.review_rerag import McpReviewAuditBundleResponse
+
+    response = McpReviewAuditBundleResponse(
+        success=False,
+        audit_bundle=None,
+        error={
+            "code": "validation_failed",
+            "field_errors": [
+                {"field": "export_path", "reason": "parent directory is not writable"}
+            ],
+            "recovery_hint": "Use fallback_inline=True or choose a writable path.",
+        },
+    )
+
+    assert response.error["field_errors"][0]["field"] == "export_path"
 
 
 def test_review_index_inventory_item_defaults_are_safe() -> None:

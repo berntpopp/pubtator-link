@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import re
+from pathlib import Path
 from typing import Any, Literal, cast
 
 from pubtator_link.api.client import PubTator3Client
 from pubtator_link.api.search_filters import merge_search_filters
 from pubtator_link.config import text_processing_config
+from pubtator_link.mcp.errors import mcp_field_validation_error
 from pubtator_link.mcp.input_normalization import (
     attach_normalization_meta,
     normalize_retrieve_review_context_batch_args,
@@ -75,6 +79,8 @@ from pubtator_link.services.search_shaping import (
     shaped_search_response,
 )
 from pubtator_link.services.source_preflight import SourcePreflightService
+
+INLINE_AUDIT_BUNDLE_MAX_BYTES = 1_000_000
 
 
 def _strip_resolver_trace(result: dict[str, Any]) -> dict[str, Any]:
@@ -792,9 +798,109 @@ async def export_review_audit_bundle_impl(
     service: ReviewAuditService,
     review_id: str,
     session_id: str | None = None,
+    export_path: str | None = None,
+    fallback_inline: bool = False,
 ) -> dict[str, Any]:
     bundle = await service.export_bundle(review_id, session_id=session_id)
-    return McpReviewAuditBundleResponse(audit_bundle=bundle).model_dump(mode="json")
+    bundle_json = bundle.model_dump(mode="json")
+    if export_path is None:
+        return McpReviewAuditBundleResponse(audit_bundle=bundle).model_dump(
+            mode="json",
+            exclude_none=True,
+        )
+
+    output_path = Path(export_path).expanduser()
+    serialized = json.dumps(bundle_json, separators=(",", ":"), sort_keys=True)
+    field_error = _audit_export_path_error(output_path)
+    if field_error is not None:
+        if fallback_inline:
+            return _inline_audit_bundle_or_error(
+                bundle_json,
+                len(serialized.encode("utf-8")),
+                field_error=field_error,
+            )
+        return McpReviewAuditBundleResponse(
+            success=False,
+            error=field_error,
+        ).model_dump(mode="json", exclude_none=True)
+
+    try:
+        with output_path.open("x", encoding="utf-8") as output_file:
+            output_file.write(serialized)
+    except FileExistsError:
+        field_error = _audit_export_path_field_error("export path already exists")
+    except IsADirectoryError:
+        field_error = _audit_export_path_field_error("export path is a directory")
+    except OSError:
+        field_error = _audit_export_path_field_error("parent directory is not writable")
+
+    if field_error is not None:
+        if fallback_inline:
+            return _inline_audit_bundle_or_error(
+                bundle_json,
+                len(serialized.encode("utf-8")),
+                field_error=field_error,
+            )
+        return McpReviewAuditBundleResponse(
+            success=False,
+            error=field_error,
+        ).model_dump(mode="json", exclude_none=True)
+
+    return McpReviewAuditBundleResponse(export_path=str(output_path)).model_dump(
+        mode="json",
+        exclude_none=True,
+    )
+
+
+def _audit_export_path_error(output_path: Path) -> dict[str, Any] | None:
+    if output_path.is_symlink():
+        return _audit_export_path_field_error("export path is a symlink")
+    if output_path.exists():
+        if output_path.is_dir():
+            return _audit_export_path_field_error("export path is a directory")
+        return _audit_export_path_field_error("export path already exists")
+
+    parent = output_path.parent
+    if not parent.exists():
+        return _audit_export_path_field_error("parent directory does not exist")
+    if not parent.is_dir():
+        return _audit_export_path_field_error("parent path is not a directory")
+    if not os.access(parent, os.W_OK):
+        return _audit_export_path_field_error("parent directory is not writable")
+    return None
+
+
+def _audit_export_path_field_error(reason: str) -> dict[str, Any]:
+    return mcp_field_validation_error(
+        field="export_path",
+        reason=reason,
+        recovery_hint="Use fallback_inline=True or choose a writable path.",
+    )
+
+
+def _inline_audit_bundle_or_error(
+    bundle_json: dict[str, Any],
+    serialized_size_bytes: int,
+    *,
+    field_error: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if serialized_size_bytes > INLINE_AUDIT_BUNDLE_MAX_BYTES:
+        error: dict[str, Any] = {
+            "code": "export_unavailable",
+            "recovery_hint": "Choose a writable export_path; the audit bundle is too large for inline JSON.",
+        }
+        if field_error is not None and "field_errors" in field_error:
+            error["field_errors"] = field_error["field_errors"]
+        return McpReviewAuditBundleResponse(
+            success=False,
+            error=error,
+        ).model_dump(mode="json", exclude_none=True)
+    response = McpReviewAuditBundleResponse(inline_bundle=bundle_json).model_dump(
+        mode="json",
+        exclude_none=True,
+    )
+    response["export_path"] = None
+    return response
 
 
 async def retrieve_review_context_impl(

@@ -6,6 +6,31 @@ from typing import ClassVar
 import pytest
 
 from pubtator_link.mcp.service_adapters import stage_research_session_impl
+from pubtator_link.models.review_rerag import (
+    PreparationStatus,
+    ReviewAuditBundle,
+    ReviewIndexTotals,
+)
+
+
+class _FakeReviewAuditBundleService:
+    async def export_bundle(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> ReviewAuditBundle:
+        return ReviewAuditBundle(
+            review_id=review_id,
+            session_id=session_id,
+            generated_at="2026-05-02T00:00:00Z",
+            preparation_status=PreparationStatus(),
+            totals=ReviewIndexTotals(),
+            sources=[],
+            failed_sources=[],
+            coverage_distribution={},
+            resolver_attempts=[],
+            passage_ids=[],
+            stable_citation_keys={},
+            index_snapshot_date="2026-05-02",
+        )
 
 
 @pytest.mark.asyncio
@@ -287,11 +312,6 @@ async def test_get_neighboring_review_passages_adapter_calls_service() -> None:
 @pytest.mark.asyncio
 async def test_export_review_audit_bundle_adapter_returns_bundle() -> None:
     from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
-    from pubtator_link.models.review_rerag import (
-        PreparationStatus,
-        ReviewAuditBundle,
-        ReviewIndexTotals,
-    )
 
     class FakeService:
         async def export_bundle(
@@ -321,6 +341,132 @@ async def test_export_review_audit_bundle_adapter_returns_bundle() -> None:
     assert result["success"] is True
     assert result["audit_bundle"]["review_id"] == "rev_123"
     assert result["audit_bundle"]["index_snapshot_date"] is not None
+
+
+@pytest.mark.asyncio
+async def test_export_review_audit_bundle_adapter_writes_new_file(tmp_path) -> None:
+    from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
+
+    export_path = tmp_path / "audit.json"
+
+    result = await export_review_audit_bundle_impl(
+        service=_FakeReviewAuditBundleService(),
+        review_id="rev_123",
+        export_path=str(export_path),
+    )
+
+    assert result == {"success": True, "export_path": str(export_path)}
+    written = json.loads(export_path.read_text(encoding="utf-8"))
+    assert written["review_id"] == "rev_123"
+
+
+@pytest.mark.asyncio
+async def test_export_review_audit_bundle_adapter_refuses_existing_file(tmp_path) -> None:
+    from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
+
+    export_path = tmp_path / "audit.json"
+    export_path.write_text("do not replace", encoding="utf-8")
+
+    result = await export_review_audit_bundle_impl(
+        service=_FakeReviewAuditBundleService(),
+        review_id="rev_123",
+        export_path=str(export_path),
+    )
+
+    assert result["success"] is False
+    assert result["error"]["field_errors"][0]["field"] == "export_path"
+    assert "already exists" in result["error"]["field_errors"][0]["reason"]
+    assert export_path.read_text(encoding="utf-8") == "do not replace"
+
+
+@pytest.mark.asyncio
+async def test_export_review_audit_bundle_adapter_refuses_directory(tmp_path) -> None:
+    from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
+
+    result = await export_review_audit_bundle_impl(
+        service=_FakeReviewAuditBundleService(),
+        review_id="rev_123",
+        export_path=str(tmp_path),
+    )
+
+    assert result["success"] is False
+    assert result["error"]["field_errors"][0]["field"] == "export_path"
+    assert "directory" in result["error"]["field_errors"][0]["reason"]
+
+
+@pytest.mark.asyncio
+async def test_export_review_audit_bundle_adapter_returns_field_error_without_inline(
+    tmp_path,
+) -> None:
+    from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
+
+    result = await export_review_audit_bundle_impl(
+        service=_FakeReviewAuditBundleService(),
+        review_id="rev_123",
+        export_path=str(tmp_path / "missing" / "audit.json"),
+        fallback_inline=False,
+    )
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "validation_failed"
+    assert result["error"]["field_errors"][0]["field"] == "export_path"
+
+
+@pytest.mark.asyncio
+async def test_export_review_audit_bundle_adapter_returns_inline_fallback() -> None:
+    from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
+    from pubtator_link.models.review_rerag import (
+        PreparationStatus,
+        ReviewAuditBundle,
+        ReviewIndexTotals,
+    )
+
+    class Service:
+        async def export_bundle(self, review_id, session_id=None):
+            return ReviewAuditBundle(
+                review_id=review_id,
+                session_id=session_id,
+                generated_at="2026-05-02T00:00:00Z",
+                preparation_status=PreparationStatus(),
+                totals=ReviewIndexTotals(),
+                sources=[],
+                failed_sources=[],
+                coverage_distribution={},
+                resolver_attempts=[],
+                passage_ids=[],
+                stable_citation_keys={},
+            )
+
+    result = await export_review_audit_bundle_impl(
+        service=Service(),
+        review_id="r1",
+        fallback_inline=True,
+        export_path="/not/writable/audit.json",
+    )
+
+    assert result["success"] is True
+    assert result["inline_bundle"] is not None
+    assert result["export_path"] is None
+
+
+@pytest.mark.asyncio
+async def test_export_review_audit_bundle_oversized_inline_fallback_preserves_field_errors(
+    monkeypatch, tmp_path
+) -> None:
+    from pubtator_link.mcp import service_adapters
+
+    monkeypatch.setattr(service_adapters, "INLINE_AUDIT_BUNDLE_MAX_BYTES", 1)
+
+    result = await service_adapters.export_review_audit_bundle_impl(
+        service=_FakeReviewAuditBundleService(),
+        review_id="rev_123",
+        export_path=str(tmp_path / "missing" / "audit.json"),
+        fallback_inline=True,
+    )
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "export_unavailable"
+    assert result["error"]["field_errors"][0]["field"] == "export_path"
 
 
 async def test_stage_research_session_impl_calls_service() -> None:

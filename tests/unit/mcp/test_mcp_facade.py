@@ -571,6 +571,20 @@ def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
             assert property_name in properties
 
 
+def test_export_review_audit_bundle_exposes_export_options() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp()
+    tool = mcp._tool_manager._tools["pubtator.export_review_audit_bundle"]
+    properties = tool.parameters["properties"]
+    required = set(tool.parameters.get("required", []))
+
+    assert "export_path" in properties
+    assert "fallback_inline" in properties
+    assert "export_path" not in required
+    assert "fallback_inline" not in required
+
+
 def test_high_use_mcp_tools_expose_specific_output_schemas() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
@@ -718,7 +732,7 @@ def test_public_hosted_tools_have_expected_annotations() -> None:
         assert tool.annotations.destructiveHint is False
 
 
-def test_write_capable_mcp_tools_have_expected_annotations() -> None:
+def test_write_capable_mcp_tools_include_audit_export_annotations() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
     mcp = create_pubtator_mcp()
@@ -735,6 +749,12 @@ def test_write_capable_mcp_tools_have_expected_annotations() -> None:
     assert review_index.destructiveHint is False
     assert review_index.idempotentHint is True
     assert review_index.openWorldHint is True
+
+    audit_export = tools["pubtator.export_review_audit_bundle"].annotations
+    assert audit_export.readOnlyHint is False
+    assert audit_export.destructiveHint is False
+    assert audit_export.idempotentHint is False
+    assert audit_export.openWorldHint is True
 
 
 def test_open_world_tools_are_marked_open_world() -> None:
