@@ -10,6 +10,7 @@ from pubtator_link.models.review_rerag import (
     EvidenceCertaintyRecord,
     FailedSourceSummary,
     PreparationStatus,
+    ResearchSessionCandidate,
     ResolverAttemptSummary,
     ReviewIndexInventoryItem,
     ReviewIndexTotals,
@@ -17,6 +18,7 @@ from pubtator_link.models.review_rerag import (
     ReviewPassageSample,
     ReviewSourceSummary,
     SourceCoverage,
+    SourceCoverageHint,
 )
 
 
@@ -212,6 +214,22 @@ def _evidence_certainty_from_row(row: Mapping[str, Any]) -> EvidenceCertaintyRec
         created_by=_get(row, "created_by"),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
+    )
+
+
+def _research_session_candidate_from_row(row: Mapping[str, Any]) -> ResearchSessionCandidate:
+    coverage_hint = row.get("coverage_hint")
+    if isinstance(coverage_hint, str):
+        coverage_hint = json.loads(coverage_hint)
+    return ResearchSessionCandidate(
+        pmid=row["pmid"],
+        rank=row.get("rank"),
+        title=row.get("title"),
+        status=row.get("status", "candidate"),
+        decision_reason=row.get("decision_reason", "selected_by_rank"),
+        coverage_hint=(SourceCoverageHint.model_validate(coverage_hint) if coverage_hint else None),
+        source_id=row.get("source_id"),
+        error=row.get("error"),
     )
 
 

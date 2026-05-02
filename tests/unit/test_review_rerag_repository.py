@@ -7,6 +7,7 @@ import pytest
 from pubtator_link.models.review_rerag import (
     FailedSourceSummary,
     PreparationStatus,
+    ResearchSessionCandidate,
     ReviewIndexInventoryItem,
     ReviewIndexTotals,
     ReviewPassageRow,
@@ -104,6 +105,61 @@ async def test_enqueue_preparation_job_creates_review_and_returns_status() -> No
     assert "on conflict (review_id, source_id)" in upsert_sql.lower()
     assert isinstance(upsert_args[0], UUID)
     assert upsert_args[1:] == ("review-1", "40234174", "pubtator_abstract")
+
+
+@pytest.mark.asyncio
+async def test_repository_round_trips_research_session() -> None:
+    connection = FakeConnection()
+    connection.fetchrow_rows = [
+        {
+            "review_id": "review-1",
+            "session_id": "session-1",
+            "query": "FMF colchicine",
+            "status": "active",
+            "created_at": "2026-05-02T00:00:00Z",
+            "updated_at": "2026-05-02T00:01:00Z",
+        }
+    ]
+    connection.fetched_rows = [
+        {
+            "pmid": "37747561",
+            "rank": 1,
+            "title": None,
+            "status": "queued",
+            "decision_reason": "selected_by_rank",
+            "coverage_hint": None,
+            "source_id": "PMID:37747561",
+            "error": None,
+        }
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    await repository.upsert_research_session(
+        review_id="review-1",
+        session_id="session-1",
+        query="FMF colchicine",
+        status="active",
+        request={"query": "FMF colchicine"},
+    )
+    await repository.upsert_research_session_candidate(
+        review_id="review-1",
+        session_id="session-1",
+        candidate=ResearchSessionCandidate(
+            pmid="37747561",
+            rank=1,
+            status="queued",
+            decision_reason="selected_by_rank",
+            source_id="PMID:37747561",
+        ),
+    )
+
+    manifest = await repository.get_research_session("review-1", "session-1")
+
+    assert manifest is not None
+    assert manifest.review_id == "review-1"
+    assert manifest.session_id == "session-1"
+    assert manifest.candidate_count == 1
+    assert manifest.candidates[0].pmid == "37747561"
 
 
 @pytest.mark.asyncio

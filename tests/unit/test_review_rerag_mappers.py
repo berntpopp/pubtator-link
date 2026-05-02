@@ -9,6 +9,7 @@ from pubtator_link.repositories.review_rerag_mappers import (
     _passage_from_row,
     _preparation_status_from_row,
     _recall_tsquery,
+    _research_session_candidate_from_row,
     _review_inventory_item_from_row,
     _source_summary_from_row,
 )
@@ -171,3 +172,28 @@ def test_evidence_certainty_mapper_preserves_grade_notes() -> None:
     assert record.overall_certainty == "low"
     assert record.risk_of_bias_notes == "Serious"
     assert record.passage_ids == ["PMID:1:abstract:0"]
+
+
+def test_research_session_candidate_mapper_parses_coverage_hint() -> None:
+    row = {
+        "pmid": "37747561",
+        "rank": 1,
+        "title": "Colchicine in familial Mediterranean fever",
+        "status": "queued",
+        "decision_reason": "selected_by_rank",
+        "coverage_hint": {
+            "pmid": "37747561",
+            "expected_coverage": "full_text",
+            "coverage_reason": "full_text_available",
+            "pmc_fallback_available": True,
+            "resolver_attempts": [],
+        },
+        "source_id": "PMID:37747561",
+        "error": None,
+    }
+
+    candidate = _research_session_candidate_from_row(row)
+
+    assert candidate.pmid == "37747561"
+    assert candidate.coverage_hint is not None
+    assert candidate.coverage_hint.expected_coverage == "full_text"
