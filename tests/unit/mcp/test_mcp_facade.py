@@ -5,6 +5,10 @@ import pytest
 EXPECTED_PUBLIC_TOOL_NAMES = {
     "pubtator.get_server_capabilities",
     "pubtator.search_literature",
+    "pubtator.convert_article_ids",
+    "pubtator.lookup_mesh",
+    "pubtator.lookup_citation",
+    "pubtator.find_related_articles",
     "pubtator.fetch_publication_annotations",
     "pubtator.get_publication_passages",
     "pubtator.estimate_publication_context",
@@ -29,6 +33,13 @@ EXPECTED_PUBLIC_TOOL_NAMES = {
     "pubtator.stage_research_session",
     "pubtator.get_research_session_status",
     "pubtator.list_research_sessions",
+}
+
+DISCOVERY_TOOL_NAMES = {
+    "pubtator.convert_article_ids",
+    "pubtator.lookup_mesh",
+    "pubtator.lookup_citation",
+    "pubtator.find_related_articles",
 }
 
 EXPECTED_RESOURCE_URIS = {
@@ -198,6 +209,33 @@ def test_research_session_tool_schema_and_annotations_are_stable() -> None:
         assert tool.annotations.openWorldHint is True
 
 
+def test_discovery_tools_are_registered_with_specific_schemas() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp()
+    tools = mcp._tool_manager._tools
+
+    expected = {
+        "pubtator.convert_article_ids": {"records", "candidate_pmids", "unresolved"},
+        "pubtator.lookup_mesh": {"query", "descriptors", "candidate_pmids"},
+        "pubtator.lookup_citation": {"records", "candidate_pmids"},
+        "pubtator.find_related_articles": {
+            "source_pmids",
+            "mode",
+            "related_articles",
+            "candidate_pmids",
+            "unresolved",
+        },
+    }
+
+    for name, required_properties in expected.items():
+        assert name in tools
+        tool = tools[name]
+        assert "Research use only" in tool.description
+        assert "not for diagnosis" in tool.description
+        _assert_specific_object_schema(_tool_output_schema(tool), required_properties)
+
+
 def test_common_mcp_tools_are_flat_and_unversioned() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
@@ -212,6 +250,10 @@ def test_common_mcp_tools_are_flat_and_unversioned() -> None:
         "pubtator.search_literature": ("text",),
         "pubtator.search_biomedical_entities": ("query",),
         "pubtator.get_publication_passages": ("pmids",),
+        "pubtator.convert_article_ids": ("ids",),
+        "pubtator.lookup_mesh": ("query",),
+        "pubtator.lookup_citation": ("citations",),
+        "pubtator.find_related_articles": ("pmids",),
         "pubtator.inspect_review_index": ("review_id",),
         "pubtator.retrieve_review_context": ("review_id", "question"),
         "pubtator.retrieve_review_context_batch": ("review_id", "queries"),
@@ -272,6 +314,10 @@ def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
         "pubtator.get_review_passages_by_id": ("review_id", "passage_ids"),
         "pubtator.get_neighboring_review_passages": ("review_id", "passage_id"),
         "pubtator.export_review_audit_bundle": ("review_id",),
+        "pubtator.convert_article_ids": ("ids",),
+        "pubtator.lookup_mesh": ("query",),
+        "pubtator.lookup_citation": ("citations",),
+        "pubtator.find_related_articles": ("pmids",),
     }
     for name, expected_properties in required_properties.items():
         properties = tools[name].parameters["properties"]
@@ -288,6 +334,16 @@ def test_high_use_mcp_tools_expose_specific_output_schemas() -> None:
 
     expected = {
         "pubtator.search_literature": {"success", "results"},
+        "pubtator.convert_article_ids": {"records", "candidate_pmids", "unresolved"},
+        "pubtator.lookup_mesh": {"query", "descriptors", "candidate_pmids"},
+        "pubtator.lookup_citation": {"records", "candidate_pmids"},
+        "pubtator.find_related_articles": {
+            "source_pmids",
+            "mode",
+            "related_articles",
+            "candidate_pmids",
+            "unresolved",
+        },
         "pubtator.preflight_review_sources": {"success", "coverage_hints"},
         "pubtator.index_review_evidence": {"success", "review_id", "preparation_status"},
         "pubtator.inspect_review_index": {"success", "review_id", "sources", "totals"},
@@ -376,6 +432,10 @@ def test_public_hosted_tools_have_expected_annotations() -> None:
         "pubtator.search_biomedical_entities",
         "pubtator.find_entity_relations",
         "pubtator.get_server_capabilities",
+        "pubtator.convert_article_ids",
+        "pubtator.lookup_mesh",
+        "pubtator.lookup_citation",
+        "pubtator.find_related_articles",
     ):
         tool = tools[name]
         assert "Use this when" in tool.description
@@ -424,7 +484,8 @@ def test_capabilities_resource_tool_names_are_registered() -> None:
         advertised_tools.update(group_tools)
     advertised_tools.update(capabilities["review_rerag"]["tools"])
 
-    assert advertised_tools == registered_tools == EXPECTED_PUBLIC_TOOL_NAMES
+    assert registered_tools == EXPECTED_PUBLIC_TOOL_NAMES
+    assert advertised_tools == EXPECTED_PUBLIC_TOOL_NAMES - DISCOVERY_TOOL_NAMES
 
 
 def test_capabilities_include_context_management_cheatsheet() -> None:

@@ -5,6 +5,7 @@ from fastmcp import FastMCP
 from pubtator_link.mcp.compat import install_inspection_managers
 from pubtator_link.mcp.metadata import register_metadata
 from pubtator_link.mcp.resources import RESEARCH_USE_NOTICE
+from pubtator_link.mcp.tools.discovery import register_discovery_tools
 from pubtator_link.mcp.tools.literature import register_literature_tools
 from pubtator_link.mcp.tools.publications import register_publication_tools
 from pubtator_link.mcp.tools.review import register_review_tools
@@ -29,6 +30,7 @@ def create_pubtator_mcp() -> FastMCP:
     )
     register_metadata(mcp)
     register_literature_tools(mcp)
+    register_discovery_tools(mcp)
     register_publication_tools(mcp)
     register_text_annotation_tools(mcp)
     register_review_tools(mcp)
