@@ -12,7 +12,7 @@ def test_base_compose_defines_postgres_service() -> None:
     services = compose["services"]
     postgres = services["pubtator-postgres"]
 
-    assert postgres["image"] == "postgres:17-alpine"
+    assert postgres["image"] == "postgres:18-alpine"
     assert postgres["environment"]["POSTGRES_DB"] == "${PUBTATOR_LINK_POSTGRES_DB:-pubtator_link}"
     assert (
         postgres["environment"]["POSTGRES_USER"] == "${PUBTATOR_LINK_POSTGRES_USER:-pubtator_link}"
@@ -20,7 +20,7 @@ def test_base_compose_defines_postgres_service() -> None:
     assert postgres["environment"]["POSTGRES_PASSWORD"] == (
         "${PUBTATOR_LINK_POSTGRES_PASSWORD:-pubtator_link}"  # noqa: S105
     )
-    assert "pubtator_postgres_data:/var/lib/postgresql/data" in postgres["volumes"]
+    assert "pubtator_postgres_data:/var/lib/postgresql" in postgres["volumes"]
     assert (
         "../pubtator_link/db/review_schema.sql:/docker-entrypoint-initdb.d/010-review-schema.sql:ro"
     ) in postgres["volumes"]

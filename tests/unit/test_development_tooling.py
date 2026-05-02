@@ -25,8 +25,8 @@ def _branch_protection_policy() -> dict[str, Any]:
 def test_python_baseline_is_modern_and_consistent() -> None:
     project = _pyproject()["project"]
 
-    assert project["requires-python"] == ">=3.11"
-    assert Path(".python-version").read_text().strip() == "3.11"
+    assert project["requires-python"] == ">=3.12"
+    assert Path(".python-version").read_text().strip() == "3.12"
 
 
 def test_dependency_groups_include_dev_tooling() -> None:
@@ -46,18 +46,18 @@ def test_uv_lock_exists() -> None:
     assert Path("uv.lock").exists()
 
 
-def test_ruff_targets_python_311_and_core_paths() -> None:
+def test_ruff_targets_python_312_and_core_paths() -> None:
     data = _pyproject()
     ruff = data["tool"]["ruff"]
 
-    assert ruff["target-version"] == "py311"
+    assert ruff["target-version"] == "py312"
     assert ruff["line-length"] == 100
 
 
-def test_mypy_targets_python_311() -> None:
+def test_mypy_targets_python_312() -> None:
     mypy = _pyproject()["tool"]["mypy"]
 
-    assert mypy["python_version"] == "3.11"
+    assert mypy["python_version"] == "3.12"
     assert mypy["strict"] is True
 
 
@@ -201,7 +201,7 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
     security_actions = {
         step.get("uses") for job in security["jobs"].values() for step in job["steps"]
     }
-    assert "github/codeql-action/init@v3" in security_actions
+    assert "github/codeql-action/init@v4" in security_actions
     assert "actions/dependency-review-action@v4" in security_actions
 
 

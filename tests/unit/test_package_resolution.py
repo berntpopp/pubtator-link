@@ -10,10 +10,10 @@ def _project_metadata() -> dict[str, object]:
     return tomllib.loads(Path("pyproject.toml").read_text())["project"]
 
 
-def test_project_requires_python_311_or_newer() -> None:
+def test_project_requires_python_312_or_newer() -> None:
     metadata = _project_metadata()
 
-    assert metadata["requires-python"] == ">=3.11"
+    assert metadata["requires-python"] == ">=3.12"
 
 
 def test_modern_mcp_dependencies_are_declared() -> None:
