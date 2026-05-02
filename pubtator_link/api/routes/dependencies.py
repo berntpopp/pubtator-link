@@ -159,17 +159,12 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
         )
         ncbi_discovery_client = NcbiDiscoveryClient()
         discovery_service = DiscoveryService(ncbi_discovery_client)
-        source_preflight_service = SourcePreflightService.from_pubtator_client(
-            api_client,
-            preflight_concurrency=getattr(review_rerag_config, "preflight_concurrency", 3),
-        )
         europe_pmc_client = _build_europe_pmc_client(api_client)
-        if europe_pmc_client is not None:
-            source_preflight_service = SourcePreflightService.from_pubtator_client(
-                api_client,
-                preflight_concurrency=getattr(review_rerag_config, "preflight_concurrency", 3),
-                europe_pmc_client=europe_pmc_client,
-            )
+        source_preflight_service = _build_source_preflight_service(
+            api_client=api_client,
+            discovery_service=discovery_service,
+            europe_pmc_client=europe_pmc_client,
+        )
 
         review_repository: PostgresReviewReragRepository | None = None
         review_context_service: ReviewContextService | None = None
@@ -475,20 +470,53 @@ async def get_source_preflight_service() -> SourcePreflightService:
     resources = current_app_resources()
     if resources is not None:
         if resources.source_preflight_service is None:
-            resources.source_preflight_service = SourcePreflightService.from_pubtator_client(
-                resources.api_client,
-                preflight_concurrency=getattr(review_rerag_config, "preflight_concurrency", 3),
+            resources.source_preflight_service = _build_source_preflight_service(
+                api_client=resources.api_client,
+                discovery_service=await get_discovery_service(),
                 europe_pmc_client=resources.europe_pmc_client,
             )
         return resources.source_preflight_service
     if _source_preflight_service is None:
         client = await get_api_client()
-        _source_preflight_service = SourcePreflightService.from_pubtator_client(
-            client,
-            preflight_concurrency=getattr(review_rerag_config, "preflight_concurrency", 3),
+        _source_preflight_service = _build_source_preflight_service(
+            api_client=client,
+            discovery_service=await get_discovery_service(),
             europe_pmc_client=_build_europe_pmc_client(client),
         )
     return _source_preflight_service
+
+
+def _build_source_preflight_service(
+    *,
+    api_client: PubTator3Client,
+    discovery_service: DiscoveryService,
+    europe_pmc_client: EuropePmcClient | None = None,
+) -> SourcePreflightService:
+    async def id_converter(pmid: str) -> dict[str, str | None]:
+        converted = await discovery_service.convert_article_ids([pmid], source="auto")
+        record = next(
+            (
+                record
+                for record in converted.records
+                if record.input_id == pmid or record.pmid == pmid
+            ),
+            None,
+        )
+        if record is None:
+            return {"id_resolution_status": "unresolved"}
+        return {
+            "pmcid": record.pmcid,
+            "doi": record.doi,
+            "id_resolution_status": record.status,
+            "id_resolution_reason": record.reason,
+        }
+
+    return SourcePreflightService.from_pubtator_client(
+        api_client,
+        id_converter=id_converter,
+        preflight_concurrency=getattr(review_rerag_config, "preflight_concurrency", 3),
+        europe_pmc_client=europe_pmc_client,
+    )
 
 
 def _build_europe_pmc_client(client: PubTator3Client) -> EuropePmcClient | None:

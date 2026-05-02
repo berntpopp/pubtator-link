@@ -5,11 +5,18 @@ from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from pubtator_link.api.client import PubTator3Client
-from pubtator_link.models.review_rerag import ResolverAttemptSummary, SourceCoverageHint
+from pubtator_link.models.review_rerag import (
+    CoverageReason,
+    ResolverAttemptSummary,
+    SourceCoverageHint,
+)
 
 IdConverter = Callable[[str], Awaitable[Mapping[str, str | None]]]
 PmcProbe = Callable[[str], Awaitable[bool]]
 AbstractProbe = Callable[[str], Awaitable[bool]]
+PRE_RESOLUTION_BEST_GUESS_NOTE = (
+    "PMCID conversion failed before coverage resolution; coverage is a pre-resolution best guess."
+)
 
 
 class SourcePreflightService:
@@ -37,6 +44,7 @@ class SourcePreflightService:
         cls,
         client: PubTator3Client,
         *,
+        id_converter: IdConverter | None = None,
         preflight_concurrency: int = 3,
         europe_pmc_client: Any | None = None,
     ) -> SourcePreflightService:
@@ -51,6 +59,7 @@ class SourcePreflightService:
             return bool(documents)
 
         return cls(
+            id_converter=id_converter,
             pmc_bioc_available=pmc_available,
             pubtator_abstract_available=abstract_available,
             preflight_concurrency=preflight_concurrency,
@@ -71,6 +80,7 @@ class SourcePreflightService:
         return [hint for _, hint in sorted(results, key=lambda item: item[0])]
 
     async def _preflight_one_pmid(self, pmid: str) -> SourceCoverageHint:
+        id_resolution_attempts: list[ResolverAttemptSummary] = []
         try:
             metadata = dict(await self._id_converter(pmid))
         except TimeoutError:
@@ -87,29 +97,41 @@ class SourcePreflightService:
                 ],
             )
         except Exception:
-            return SourceCoverageHint(
-                pmid=pmid,
-                coverage_reason="unknown",
-                resolver_attempts=[
-                    ResolverAttemptSummary(
-                        source_kind="pmc_id_converter",
-                        status="failed",
-                        pmid=pmid,
-                        terminal_reason="unknown",
-                    )
-                ],
+            metadata = {}
+            id_resolution_attempts.append(
+                ResolverAttemptSummary(
+                    source_kind="pmc_id_converter",
+                    status="failed",
+                    pmid=pmid,
+                    terminal_reason="unknown",
+                )
             )
 
         pmcid = metadata.get("pmcid")
         doi = metadata.get("doi")
         license_or_access_hint = metadata.get("license_or_access_hint")
+        id_resolution_failed = (
+            not pmcid and metadata.get("id_resolution_status") in {"unresolved", "failed"}
+        ) or bool(id_resolution_attempts)
+        best_guess_notes = [PRE_RESOLUTION_BEST_GUESS_NOTE] if id_resolution_failed else []
+        if id_resolution_failed and not id_resolution_attempts:
+            id_resolution_attempts.append(
+                ResolverAttemptSummary(
+                    source_kind="pmc_id_converter",
+                    status="not_available",
+                    pmid=pmid,
+                    terminal_reason=metadata.get("id_resolution_reason")
+                    or "pre_resolution_best_guess",
+                )
+            )
+
         if pmcid:
             try:
                 if await self._pmc_bioc_available(pmcid):
                     return SourceCoverageHint(
                         pmid=pmid,
                         expected_coverage="full_text",
-                        coverage_reason="full_text_available",
+                        coverage_reason="pmc_oa_bioc",
                         pmcid=pmcid,
                         doi=doi,
                         license_or_access_hint=license_or_access_hint,
@@ -170,15 +192,22 @@ class SourcePreflightService:
 
         try:
             if await self._pubtator_abstract_available(pmid):
+                coverage_reason: CoverageReason = "abstract_fallback_used"
+                if not pmcid:
+                    coverage_reason = (
+                        "pre_resolution_best_guess" if id_resolution_failed else "no_pmcid"
+                    )
                 return SourceCoverageHint(
                     pmid=pmid,
                     expected_coverage="abstract_only",
-                    coverage_reason="no_pmcid" if not pmcid else "abstract_fallback_used",
+                    coverage_reason=coverage_reason,
                     pmcid=pmcid,
                     doi=doi,
                     license_or_access_hint=license_or_access_hint,
                     pmc_fallback_available=False,
+                    notes=best_guess_notes,
                     resolver_attempts=[
+                        *id_resolution_attempts,
                         ResolverAttemptSummary(
                             source_kind="pubtator_abstract",
                             status="success",
@@ -207,12 +236,17 @@ class SourcePreflightService:
                 ],
             )
 
+        final_coverage_reason: CoverageReason = "pmc_not_open_access" if pmcid else "no_pmcid"
+        if not pmcid and id_resolution_failed:
+            final_coverage_reason = "pre_resolution_best_guess"
         return SourceCoverageHint(
             pmid=pmid,
-            coverage_reason="no_pmcid" if not pmcid else "pmc_not_open_access",
+            coverage_reason=final_coverage_reason,
             pmcid=pmcid,
             doi=doi,
             license_or_access_hint=license_or_access_hint,
+            notes=best_guess_notes,
+            resolver_attempts=id_resolution_attempts,
         )
 
     @staticmethod

@@ -41,7 +41,7 @@ async def test_preflight_reports_full_text_when_pmc_bioc_is_available() -> None:
     hints = await service.preflight_pmids(["40234174"])
 
     assert hints[0].expected_coverage == "full_text"
-    assert hints[0].coverage_reason == "full_text_available"
+    assert hints[0].coverage_reason == "pmc_oa_bioc"
     assert hints[0].pmcid == "PMC123"
     assert hints[0].doi == "10.1000/40234174"
     assert hints[0].pmc_fallback_available is True
@@ -65,6 +65,49 @@ async def test_preflight_uses_abstract_hint_when_no_pmcid_exists() -> None:
     assert hints[0].expected_coverage == "abstract_only"
     assert hints[0].coverage_reason == "no_pmcid"
     assert hints[0].pmc_fallback_available is False
+
+
+@pytest.mark.asyncio
+async def test_preflight_labels_unresolved_conversion_as_best_guess() -> None:
+    async def id_converter(_pmid: str) -> dict[str, str]:
+        return {"id_resolution_status": "unresolved"}
+
+    async def pubtator_abstract_available(_pmid: str) -> bool:
+        return True
+
+    service = SourcePreflightService(
+        id_converter=id_converter,
+        pubtator_abstract_available=pubtator_abstract_available,
+    )
+
+    hints = await service.preflight_pmids(["33454820"])
+
+    assert hints[0].expected_coverage == "abstract_only"
+    assert hints[0].coverage_reason == "pre_resolution_best_guess"
+    assert hints[0].notes == [
+        "PMCID conversion failed before coverage resolution; coverage is a pre-resolution best guess."
+    ]
+
+
+@pytest.mark.asyncio
+async def test_preflight_uses_resolved_pmcid_from_id_conversion() -> None:
+    async def id_converter(_pmid: str) -> dict[str, str]:
+        return {"pmcid": "PMC7811395", "id_resolution_status": "resolved"}
+
+    async def pmc_bioc_available(pmcid: str) -> bool:
+        assert pmcid == "PMC7811395"
+        return True
+
+    service = SourcePreflightService(
+        id_converter=id_converter,
+        pmc_bioc_available=pmc_bioc_available,
+    )
+
+    hints = await service.preflight_pmids(["33454820"])
+
+    assert hints[0].pmcid == "PMC7811395"
+    assert hints[0].expected_coverage == "full_text"
+    assert hints[0].coverage_reason == "pmc_oa_bioc"
 
 
 @pytest.mark.asyncio

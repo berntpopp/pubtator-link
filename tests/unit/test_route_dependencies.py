@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 
 from pubtator_link import server_manager
 from pubtator_link.api.routes import dependencies
+from pubtator_link.models.discovery import ArticleIdConversionRecord, ArticleIdConversionResponse
 
 
 class CloseableClient:
@@ -14,6 +15,30 @@ class CloseableClient:
 
     async def close(self) -> None:
         self.closed = True
+
+
+class PreflightClient(CloseableClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.pmc_calls: list[list[str]] = []
+
+    async def export_publications(
+        self,
+        pmids: list[str],
+        *,
+        format: str,
+        full: bool,
+    ) -> dict[str, list[object]]:
+        return {"documents": []}
+
+    async def export_pmc_publications(
+        self,
+        pmcids: list[str],
+        *,
+        format: str,
+    ) -> dict[str, list[object]]:
+        self.pmc_calls.append(pmcids)
+        return {"documents": [{}]}
 
 
 class CloseablePool:
@@ -40,6 +65,30 @@ class FailingStartQueue(StoppableQueue):
     async def start(self) -> None:
         self.started = True
         raise RuntimeError("queue startup failed")
+
+
+class DiscoveryWithConversion:
+    def __init__(self) -> None:
+        self.calls: list[tuple[list[str], str]] = []
+
+    async def convert_article_ids(
+        self,
+        ids: list[str],
+        source: str = "auto",
+    ) -> ArticleIdConversionResponse:
+        self.calls.append((ids, source))
+        return ArticleIdConversionResponse(
+            records=[
+                ArticleIdConversionRecord(
+                    input_id=ids[0],
+                    input_kind="auto",
+                    status="resolved",
+                    pmid=ids[0],
+                    pmcid="PMC7811395",
+                    doi="10.1000/example",
+                )
+            ]
+        )
 
 
 @pytest.mark.asyncio
@@ -374,6 +423,31 @@ async def test_context_bound_resources_are_available_to_existing_dependency_name
         dependencies.reset_app_resources(token)
 
     assert dependencies.current_app_resources() is None
+
+
+@pytest.mark.asyncio
+async def test_source_preflight_dependency_wires_ncbi_id_conversion() -> None:
+    client = PreflightClient()
+    discovery = DiscoveryWithConversion()
+    resources = dependencies.AppResources(
+        logger=object(),
+        api_client=client,
+        publication_service=object(),
+        publication_passage_service=object(),
+        discovery_service=discovery,
+    )
+
+    token = dependencies.bind_app_resources(resources)
+    try:
+        service = await dependencies.get_source_preflight_service()
+        hints = await service.preflight_pmids(["33454820"])
+    finally:
+        dependencies.reset_app_resources(token)
+
+    assert discovery.calls == [(["33454820"], "auto")]
+    assert client.pmc_calls == [["PMC7811395"]]
+    assert hints[0].pmcid == "PMC7811395"
+    assert hints[0].coverage_reason == "pmc_oa_bioc"
 
 
 @pytest.mark.asyncio

@@ -21,6 +21,7 @@ CoverageReason = Literal[
     "abstract_fallback_used",
     "title_only_metadata",
     "no_pmcid",
+    "pre_resolution_best_guess",
     "pmc_not_open_access",
     "license_reuse_unavailable",
     "upstream_timeout",
@@ -122,6 +123,7 @@ class SourceCoverageHint(BaseModel):
     doi: str | None = None
     license_or_access_hint: str | None = None
     pmc_fallback_available: bool = False
+    notes: list[str] = Field(default_factory=list)
     resolver_attempts: list[ResolverAttemptSummary] = Field(default_factory=list)
 
 
