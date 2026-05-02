@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 PublicationPassageMode = Literal["abstracts", "compact_passages", "section_text"]
+PublicationCoverage = Literal["full_text", "abstract_only", "title_only", "unknown"]
 PassageDropReasonCode = Literal[
     "char_budget_exceeded",
     "section_filtered",
@@ -63,6 +64,13 @@ class PassageDropReason(BaseModel):
     message: str | None = None
 
 
+class FailedPublicationPmid(BaseModel):
+    """PMID that could not produce any PubTator passages."""
+
+    pmid: str
+    reason: str
+
+
 class PublicationContextEstimate(BaseModel):
     """Estimated compact context size without raw BioC content."""
 
@@ -82,6 +90,13 @@ class PublicationPassageResponse(BaseModel):
     passages: list[PublicationPassage]
     dropped: list[PassageDropReason] = Field(default_factory=list)
     context_estimate: PublicationContextEstimate
+    coverage_by_pmid: dict[str, PublicationCoverage] = Field(default_factory=dict)
+    coverage_reason_by_pmid: dict[str, str] = Field(default_factory=dict)
+    failed_pmids: list[FailedPublicationPmid] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    cache_key: str | None = None
+    corpus_snapshot_date: str | None = None
+    source_versions: dict[str, str] = Field(default_factory=dict)
 
 
 class PublicationContextEstimateResponse(PublicationContextEstimate):

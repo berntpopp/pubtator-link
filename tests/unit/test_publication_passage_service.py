@@ -196,6 +196,51 @@ async def test_get_publication_passages_accepts_export_response_models() -> None
 
 
 @pytest.mark.asyncio
+async def test_section_text_warns_when_only_abstract_passages_returned() -> None:
+    class AbstractOnlyPublicationService:
+        async def export_publications_list(self, pmids, format, full):
+            return {
+                "documents": [
+                    {
+                        "id": "39540697",
+                        "passages": [
+                            {"infons": {"section_type": "title"}, "text": "FMF in Childhood"},
+                            {"infons": {"section_type": "abstract"}, "text": "FMF is common."},
+                        ],
+                    }
+                ]
+            }
+
+    service = PublicationPassageService(AbstractOnlyPublicationService())
+    response = await service.get_passages(
+        PublicationPassageRequest(
+            pmids=["39540697"],
+            mode="section_text",
+            full=True,
+            max_passages_per_pmid=5,
+        )
+    )
+
+    assert response.coverage_by_pmid["39540697"] == "abstract_only"
+    assert response.failed_pmids == []
+    assert any("No full-text section passages" in warning for warning in response.warnings)
+
+
+@pytest.mark.asyncio
+async def test_publication_passages_reports_failed_pmids() -> None:
+    class EmptyPublicationService:
+        async def export_publications_list(self, pmids, format, full):
+            return {"documents": []}
+
+    service = PublicationPassageService(EmptyPublicationService())
+    response = await service.get_passages(PublicationPassageRequest(pmids=["1"]))
+
+    assert response.coverage_by_pmid["1"] == "unknown"
+    assert response.failed_pmids[0].pmid == "1"
+    assert response.failed_pmids[0].reason == "No PubTator passages found"
+
+
+@pytest.mark.asyncio
 async def test_abstracts_mode_returns_only_title_and_abstract_passages() -> None:
     service = PublicationPassageService(FakePublicationService())
 

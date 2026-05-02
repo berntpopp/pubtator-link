@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import hashlib
 import re
-from datetime import date
 from typing import Any, Literal
 
 from pubtator_link.models.responses import SearchResponse, SearchResult
+from pubtator_link.services.provenance import corpus_snapshot_date, stable_cache_key
 
 SearchResponseMode = Literal["compact", "standard", "full"]
 IncludeCitations = Literal["none", "nlm", "bibtex", "both"]
@@ -82,7 +81,7 @@ def shaped_search_response(
             filters=filters,
             sections=sections,
         ),
-        corpus_snapshot_date=date.today().isoformat(),
+        corpus_snapshot_date=corpus_snapshot_date(),
         source_versions={"pubtator3": "live"},
     )
 
@@ -129,8 +128,16 @@ def search_cache_key(
     filters: str | None,
     sections: list[str] | None,
 ) -> str:
-    raw = "|".join([text, str(page), sort or "", filters or "", ",".join(sections or [])])
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+    return stable_cache_key(
+        "search",
+        {
+            "text": text,
+            "page": page,
+            "sort": sort,
+            "filters": filters,
+            "sections": sections or [],
+        },
+    )
 
 
 def _rerank_guidelines(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
