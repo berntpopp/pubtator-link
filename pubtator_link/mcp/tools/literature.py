@@ -48,6 +48,7 @@ def register_literature_tools(mcp: FastMCP) -> None:
         coverage: SearchCoverageMode = "preflight",
     ) -> dict[str, Any]:
         """Use this when a user needs PubMed literature search through PubTator3. Use short biomedical queries, optional sort such as 'score desc' or 'date desc', flat publication/year filters, raw filters JSON, optional section filters, and coverage='preflight' when source coverage should be visible before indexing. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+
         async def call() -> dict[str, Any]:
             preflight_service = (
                 await get_source_preflight_service() if coverage == "preflight" else None
@@ -92,6 +93,7 @@ def register_literature_tools(mcp: FastMCP) -> None:
         coverage: SearchCoverageMode = "preflight",
     ) -> dict[str, Any]:
         """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. Defaults to source coverage preflight so abstract-only guideline hits are visible before indexing. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+
         async def call() -> dict[str, Any]:
             preflight_service = (
                 await get_source_preflight_service() if coverage == "preflight" else None
@@ -136,6 +138,7 @@ def register_literature_tools(mcp: FastMCP) -> None:
         limit: int = 10,
     ) -> dict[str, Any]:
         """Use this when a user needs canonical PubTator biomedical entity IDs for genes, diseases, chemicals, species, variants, or cell lines. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+
         async def call() -> dict[str, Any]:
             async with PubTator3Client() as client:
                 return await search_biomedical_entities_impl(
@@ -161,6 +164,7 @@ def register_literature_tools(mcp: FastMCP) -> None:
         target_entity_type: str | None = None,
     ) -> dict[str, Any]:
         """Use this when a user has a PubTator entity ID and needs literature-derived related entities to expand a corpus after search_biomedical_entities. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+
         async def call() -> dict[str, Any]:
             async with PubTator3Client() as client:
                 return await find_entity_relations_impl(

@@ -180,9 +180,7 @@ def _guideline_rank_features(item: dict[str, Any]) -> dict[str, Any]:
     title = str(item.get("title") or "").lower()
     abstract = str(item.get("abstract") or "").lower()
     type_boost = sum(
-        3
-        for value in publication_types
-        if any(term in value for term in GUIDELINE_TYPES)
+        3 for value in publication_types if any(term in value for term in GUIDELINE_TYPES)
     )
     term_boost = sum(1 for term in GUIDELINE_TERMS if term in title or term in abstract)
     return {"guideline_boost": type_boost + term_boost}

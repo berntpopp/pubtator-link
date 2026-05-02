@@ -2,7 +2,7 @@
 
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict
 from uuid import uuid4
 
 import uvicorn
@@ -31,6 +31,7 @@ from .api.routes.dependencies import (
     resources_from_request,
 )
 from .config import review_rerag_config, settings
+from .db.migrate import ReviewSchemaDiagnostics
 from .logging_config import configure_logging
 from .mcp.facade import create_pubtator_mcp
 
@@ -178,9 +179,7 @@ class UnifiedServerManager:
                 "status": status,
                 "version": "1.0.0",
                 "transport": settings.transport,
-                "dependencies": {
-                    "database": database_dependency
-                },
+                "dependencies": {"database": database_dependency},
             }
 
         @app.middleware("http")
@@ -364,6 +363,6 @@ def _schema_diagnostics_payload(value: object) -> dict[str, object] | None:
         return None
     if isinstance(value, dict):
         return value
-    if is_dataclass(value):
+    if isinstance(value, ReviewSchemaDiagnostics):
         return asdict(value)
     return None

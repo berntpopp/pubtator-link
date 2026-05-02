@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from pubtator_link.db.migrate import ReviewSchemaDiagnostics
 from pubtator_link.models.responses import DiagnosticsResponse
@@ -23,7 +24,7 @@ class DiagnosticsService:
     async def get_diagnostics(self) -> DiagnosticsResponse:
         recovery: list[str] = []
         schema = await self._inspect_schema()
-        database = {
+        database: dict[str, Any] = {
             "connected": schema.connected,
             "schema_current": schema.current,
             "applied_versions": schema.applied_versions,
@@ -38,7 +39,7 @@ class DiagnosticsService:
         if not schema.connected:
             recovery.append("Configure PUBTATOR_LINK_DATABASE_URL or check database connectivity.")
 
-        subsystems = {
+        subsystems: dict[str, dict[str, Any]] = {
             "database": database,
             "review_queue": {"available": self._review_queue_available()},
             "pubtator_api": {"status": "unknown"},

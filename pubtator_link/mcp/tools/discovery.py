@@ -30,6 +30,7 @@ def register_discovery_tools(mcp: FastMCP) -> None:
         source: ArticleIdKind = "auto",
     ) -> dict[str, Any]:
         """Use this when a user provides article identifiers such as PMIDs, PMCIDs, or DOIs and needs normalized candidate PMIDs for research workflows. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+
         async def call() -> dict[str, Any]:
             service = await get_discovery_service()
             response = await service.convert_article_ids(ids=ids, source=source)
@@ -49,6 +50,7 @@ def register_discovery_tools(mcp: FastMCP) -> None:
         exact: bool = False,
     ) -> dict[str, Any]:
         """Use this when a user needs MeSH descriptors and candidate PubMed search terms for a biomedical research query. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+
         async def call() -> dict[str, Any]:
             service = await get_discovery_service()
             response = await service.lookup_mesh(query=query, limit=limit, exact=exact)
@@ -66,6 +68,7 @@ def register_discovery_tools(mcp: FastMCP) -> None:
         citations: Annotated[list[str], Field(min_length=1, max_length=100)],
     ) -> dict[str, Any]:
         """Use this when a user provides free-text citations and needs candidate PMIDs for research evidence gathering. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+
         async def call() -> dict[str, Any]:
             service = await get_discovery_service()
             response = await service.lookup_citation(citations=citations)
@@ -85,6 +88,7 @@ def register_discovery_tools(mcp: FastMCP) -> None:
         limit: Annotated[int, Field(ge=1, le=100)] = 20,
     ) -> dict[str, Any]:
         """Use this when a user has seed PMIDs and needs similar, cited-by, or reference-linked articles to expand a research corpus. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+
         async def call() -> dict[str, Any]:
             service = await get_discovery_service()
             response = await service.find_related_articles(pmids=pmids, mode=mode, limit=limit)

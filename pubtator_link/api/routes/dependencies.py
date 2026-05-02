@@ -25,8 +25,8 @@ from ...api.client import PubTator3Client
 from ...config import review_rerag_config
 from ...logging_config import configure_logging
 from ...repositories.review_rerag import PostgresReviewReragRepository
-from ...services.europe_pmc import EuropePmcClient
 from ...services.diagnostics import DiagnosticsService
+from ...services.europe_pmc import EuropePmcClient
 from ...services.full_text_preparation import FullTextPreparationService
 from ...services.ncbi_discovery import DiscoveryService, NcbiDiscoveryClient
 from ...services.publication_passage_service import PublicationPassageService
@@ -332,7 +332,9 @@ def _build_diagnostics_service(resources: AppResources | None) -> DiagnosticsSer
     return DiagnosticsService(
         inspect_schema=inspect_schema_for_diagnostics,
         review_queue_available=lambda: (
-            resources.review_queue is not None if resources is not None else _review_queue is not None
+            resources.review_queue is not None
+            if resources is not None
+            else _review_queue is not None
         ),
         europe_pmc_enabled=lambda: (
             resources.europe_pmc_client is not None

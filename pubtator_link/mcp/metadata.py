@@ -30,6 +30,7 @@ def register_metadata(mcp: FastMCP) -> None:
     )
     async def get_server_capabilities() -> dict[str, Any]:
         """Use this when a client needs supported tools, transports, formats, and limitations. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+
         async def call() -> dict[str, Any]:
             return get_capabilities_resource()
 

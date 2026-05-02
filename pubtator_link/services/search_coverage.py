@@ -26,7 +26,9 @@ async def attach_preflight_coverage(
     try:
         hints = await preflight_service.preflight_pmids(pmids)
     except Exception:
-        response.message = "Coverage preflight failed; search results returned without coverage hints."
+        response.message = (
+            "Coverage preflight failed; search results returned without coverage hints."
+        )
         response.source_versions["coverage_preflight"] = "failed"
         return
 

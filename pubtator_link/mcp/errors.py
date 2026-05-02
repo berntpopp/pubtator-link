@@ -52,10 +52,14 @@ def error_code_for_exception(exc: Exception) -> str:
 def _fallback_for_context(context: McpErrorContext) -> tuple[str | None, dict[str, Any] | None]:
     if context.fallback_tool is not None:
         return context.fallback_tool, context.fallback_args or {}
-    if context.tool_name in {
-        "pubtator.index_review_evidence",
-        "pubtator.stage_research_session",
-    } and context.pmids:
+    if (
+        context.tool_name
+        in {
+            "pubtator.index_review_evidence",
+            "pubtator.stage_research_session",
+        }
+        and context.pmids
+    ):
         return (
             "pubtator.get_publication_passages",
             {"pmids": context.pmids, "mode": "compact_passages"},

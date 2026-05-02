@@ -228,8 +228,6 @@ class ReviewReragConfig:
     """Review-scoped re-RAG POC configuration."""
 
     database_url: str | None
-    auto_migrate: bool
-    require_schema_current: bool
     prep_concurrency: int
     document_timeout_seconds: int
     source_timeout_seconds: int
@@ -237,6 +235,8 @@ class ReviewReragConfig:
     text_max_bytes: int
     allow_http_urls: bool
     enable_docling: bool
+    auto_migrate: bool = False
+    require_schema_current: bool = False
     retrieval_concurrency: int = 4
     preflight_concurrency: int = 3
     index_ttl_seconds: int | None = None

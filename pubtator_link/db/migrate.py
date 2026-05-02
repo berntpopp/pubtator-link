@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import sys
 from dataclasses import dataclass
 from importlib import resources
 
@@ -74,13 +75,9 @@ def migration_files() -> list[tuple[str, str]]:
 
 def schema_repair_statements() -> list[str]:
     """Return repair migration statements for tests and diagnostics."""
-    migration = resources.files(MIGRATIONS_PACKAGE).joinpath(
-        "0002_review_schema_drift_repair.sql"
-    )
+    migration = resources.files(MIGRATIONS_PACKAGE).joinpath("0002_review_schema_drift_repair.sql")
     return [
-        statement.strip()
-        for statement in migration.read_text().split(";")
-        if statement.strip()
+        statement.strip() for statement in migration.read_text().split(";") if statement.strip()
     ]
 
 
@@ -174,8 +171,7 @@ async def inspect_review_schema(database_url: str | None = None) -> ReviewSchema
         )
         missing_tables = sorted(required.tables - tables)
         missing_columns = [
-            f"{table}.{column}"
-            for table, column in sorted(required.columns - columns)
+            f"{table}.{column}" for table, column in sorted(required.columns - columns)
         ]
         return ReviewSchemaDiagnostics(
             connected=True,
@@ -198,15 +194,19 @@ async def _main() -> int:
     args = _parse_args()
     if args.check:
         diagnostics = await inspect_review_schema()
-        print(diagnostics)
+        _write_line(str(diagnostics))
         return 0 if diagnostics.current else 1
     applied = await apply_migrations()
-    print("Applied migrations:", ", ".join(applied) if applied else "none")
+    _write_line(f"Applied migrations: {', '.join(applied) if applied else 'none'}")
     diagnostics = await inspect_review_schema()
     if not diagnostics.current:
-        print(diagnostics)
+        _write_line(str(diagnostics))
         return 1
     return 0
+
+
+def _write_line(message: str) -> None:
+    sys.stdout.write(f"{message}\n")
 
 
 def main() -> None:

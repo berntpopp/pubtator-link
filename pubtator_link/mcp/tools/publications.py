@@ -31,6 +31,7 @@ def register_publication_tools(mcp: FastMCP) -> None:
         full: bool = False,
     ) -> dict[str, Any]:
         """Use this when a user provides PubMed IDs and needs raw PubTator BioC/annotation export; prefer compact passage or review context tools for grounded answers because full BioC can be large. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+
         async def call() -> dict[str, Any]:
             async with PubTator3Client() as client:
                 service = PublicationService(client=client)
@@ -59,6 +60,7 @@ def register_publication_tools(mcp: FastMCP) -> None:
         include_references: bool = False,
     ) -> dict[str, Any]:
         """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. Prefer this over raw annotation export for routine grounding. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+
         async def call() -> dict[str, Any]:
             service = await get_publication_passage_service()
             return await get_publication_passages_impl(
@@ -90,6 +92,7 @@ def register_publication_tools(mcp: FastMCP) -> None:
         include_references: bool = False,
     ) -> dict[str, Any]:
         """Use this when a user needs to estimate passage count and context size before fetching publication passages. Inputs mirror get_publication_passages except max_chars; output includes estimated_passages, estimated_chars, sections_by_pmid, recommended_mode, and warning. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+
         async def call() -> dict[str, Any]:
             service = await get_publication_passage_service()
             return await estimate_publication_context_impl(
@@ -115,6 +118,7 @@ def register_publication_tools(mcp: FastMCP) -> None:
         format: Literal["biocxml", "biocjson"] = "biocjson",
     ) -> dict[str, Any]:
         """Use this when a user provides PMC IDs and needs raw PubTator full-text BioC/annotation export; prefer compact passage or review context tools for focused grounding because full text can be large. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+
         async def call() -> dict[str, Any]:
             async with PubTator3Client() as client:
                 service = PublicationService(client=client)

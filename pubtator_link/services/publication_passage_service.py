@@ -110,8 +110,8 @@ class PublicationPassageService:
         passages, budget_drops = self._apply_char_budget(passages, request.max_chars)
         dropped.extend(budget_drops)
         estimate = self._estimate_from_passages(passages, request.pmids, request.mode)
-        coverage_by_pmid, coverage_reason_by_pmid, failed_pmids, warnings = (
-            self._coverage_summary(passages, request)
+        coverage_by_pmid, coverage_reason_by_pmid, failed_pmids, warnings = self._coverage_summary(
+            passages, request
         )
 
         return PublicationPassageResponse(
