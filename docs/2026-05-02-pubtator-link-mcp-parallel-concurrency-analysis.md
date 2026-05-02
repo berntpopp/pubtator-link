@@ -18,13 +18,14 @@ The reliability/ergonomics follow-up is also complete in source:
 - Publication passage responses expose degraded mode; passage retrieval supports dry-run and verbosity controls.
 - Full-text preparation records structured resolver attempts, including Europe PMC PMCID/DOI metadata before abstract fallback.
 - Review retrieval hides resolver traces by default and exposes `include_resolver_trace` for audit workflows.
-- Batch retrieval responses are leaner for compact/diagnostics modes and cap large dropped-passage lists with a summary.
+- Batch retrieval responses are leaner for compact/diagnostics modes, the output schema permits omitted empty `results`, and large dropped-passage lists are capped with a summary.
+- `index_review_evidence` accepts legacy cached `prepare_mode="selected"` calls while keeping the argument hidden from the current public schema.
 - Search and entity discovery return better guideline ranking reasons and bounded synonyms.
 - MCP capabilities now expose tool categories and a diagnostics-first recovery workflow.
 
 Latest verification:
 
-- `make ci-local` — 663 passed, 2 skipped.
+- `make ci-local` — 664 passed, 2 skipped.
 - `make docker-build`, `make docker-down`, `PUBTATOR_LINK_PORT=8011 make docker-up`.
 - `curl -sS http://localhost:8011/ready` returned `schema_current: true`.
 - `curl -sS http://localhost:8011/metrics | head -40` included `mcp_tool_calls_total` and `mcp_tool_latency_seconds`.

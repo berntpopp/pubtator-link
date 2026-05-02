@@ -500,7 +500,7 @@ class RetrieveReviewContextBatchResponse(BaseModel):
 
     success: bool = True
     review_id: str
-    results: list[RetrieveReviewContextResponse]
+    results: list[RetrieveReviewContextResponse] = Field(default_factory=list)
     merged_context_pack: ContextPack
     preparation_status: PreparationStatus
     response_mode: ReviewBatchResponseMode = "compact"

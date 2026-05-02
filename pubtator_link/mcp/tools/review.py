@@ -284,12 +284,14 @@ def register_review_tools(mcp: FastMCP) -> None:
         title="Index Review Evidence",
         output_schema=IndexReviewEvidenceResponse.model_json_schema(),
         annotations=REVIEW_WRITE_ANNOTATIONS,
+        exclude_args=["prepare_mode"],
     )
     async def index_review_evidence(
         review_id: Annotated[str, Field(min_length=1)],
         pmids: list[str] | None = None,
         curated_urls: list[str] | None = None,
         session_id: str | None = None,
+        prepare_mode: Literal["selected"] = "selected",
         wait_for_status: Literal["complete", "complete_or_partial", "terminal"] | None = None,
         wait_until_ready: bool = False,
         timeout_ms: int = 0,
@@ -305,6 +307,7 @@ def register_review_tools(mcp: FastMCP) -> None:
                 review_id=review_id,
                 pmids=pmids,
                 curated_urls=curated_urls,
+                prepare_mode=prepare_mode,
                 session_id=session_id,
                 wait_for_completion=wait_until_ready,
                 wait_for_status="complete_or_partial" if wait_until_ready else wait_for_status,

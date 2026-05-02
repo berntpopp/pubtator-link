@@ -97,3 +97,54 @@ def test_index_review_evidence_mcp_schema_does_not_advertise_candidate_fast() ->
 
     assert "prepare_mode" not in schema["properties"]
     assert "candidate_fast" not in str(schema)
+
+
+@pytest.mark.asyncio
+async def test_index_review_evidence_accepts_legacy_prepare_mode_without_schema_exposure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.review as review_tools
+    from pubtator_link.models.review_rerag import PreparationStatus
+
+    class FakeRepository:
+        async def research_session_exists(self, review_id: str, session_id: str) -> bool:
+            return True
+
+        async def preparation_job_statuses(self, review_id: str, source_ids: list[str]):
+            return {}
+
+        async def preparation_status(self, review_id: str, *, session_id: str | None = None):
+            return PreparationStatus(queued=1)
+
+        async def link_review_session_source(
+            self, review_id: str, session_id: str, source_id: str
+        ) -> None:
+            return None
+
+    class FakeQueue:
+        repository = FakeRepository()
+
+        async def enqueue_pmid(self, review_id: str, pmid: str):
+            return "newly_queued"
+
+        async def enqueue_curated_url(self, review_id: str, url: str):
+            return "newly_queued"
+
+    async def fake_get_review_queue():
+        return FakeQueue()
+
+    monkeypatch.setattr(review_tools, "get_review_queue", fake_get_review_queue)
+    mcp = create_pubtator_mcp()
+    tool = mcp._tool_manager._tools["pubtator.index_review_evidence"]
+
+    result = await tool.run(
+        {
+            "review_id": "review-1",
+            "pmids": ["40234174"],
+            "prepare_mode": "selected",
+        }
+    )
+
+    assert "prepare_mode" not in tool.parameters["properties"]
+    assert result.structured_content["success"] is True
+    assert result.structured_content["queued"] == 1

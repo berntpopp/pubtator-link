@@ -20,12 +20,14 @@ The foundation pieces from PR-1 through PR-3 and the review RAG reliability/LLM 
 | MCP error diagnostics | Shipped | MCP error envelopes can include bounded `diagnostics_snapshot`, `degraded_mode`, and `fallback_preview` fields. |
 | Degraded review notices | Shipped | Review indexing/retrieval MCP tools emit `ctx.warning()` when returned results carry a degraded mode. |
 | Resolver audit trace controls | Shipped | Review retrieval tools hide resolver attempts by default and expose `include_resolver_trace` for audit/debug workflows. |
+| Batch response schema | Shipped | Compact/diagnostics batch retrieval can omit empty `results`, and the advertised output schema permits that lean response. |
+| Prepare-mode compatibility | Shipped | `index_review_evidence` no longer advertises `prepare_mode`, but accepts cached legacy `prepare_mode="selected"` calls. |
 | OpenTelemetry traces | Not shipped | Still a follow-up; this guide keeps the trace plan as future work. |
 | Broader MCP-native UX notices | Partial | Degraded-mode notices are shipped; zero-result "call X first" notices and richer fallback notices remain follow-up work. |
 
 Fresh verification after the reliability/ergonomics work:
 
-- `make ci-local` — 663 passed, 2 skipped.
+- `make ci-local` — 664 passed, 2 skipped.
 - `make docker-build`, `make docker-down`, `PUBTATOR_LINK_PORT=8011 make docker-up`.
 - `curl -sS http://localhost:8011/ready` returned `schema_current: true`.
 - `curl -sS http://localhost:8011/metrics | head -40` included `mcp_tool_calls_total` and `mcp_tool_latency_seconds`.

@@ -522,6 +522,16 @@ def test_high_use_mcp_tools_expose_specific_output_schemas() -> None:
         _assert_specific_object_schema(_tool_output_schema(tools[name]), required)
 
 
+def test_batch_output_schema_allows_omitted_empty_results() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp()._tool_manager._tools["pubtator.retrieve_review_context_batch"]
+    schema = _tool_output_schema(tool)
+
+    assert "results" not in schema.get("required", [])
+    assert "results" in schema["properties"]
+
+
 def test_curated_facade_registers_resources_and_prompts() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 

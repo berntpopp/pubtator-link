@@ -100,6 +100,8 @@ Useful output paths:
 - Single retrieval passages: `context_pack.passages[]`
 - Batch merged passages: `merged_context_pack.passages[]`
 - Batch query summaries: `query_summaries[]`
+- Batch compact/diagnostics responses may omit empty `results`; use `merged_context_pack`
+  and `query_summaries` as the primary response surface.
 - Batch zero-result guidance: `query_summaries[].next_steps`
 - Citation map: `merged_context_pack.citation_map`
 - Stable citation keys: `merged_context_pack.passages[].stable_citation_key`
@@ -116,6 +118,10 @@ which reserves a fair first-pass share of the text budget across query variants 
 spending remaining budget on overflow passages. Use `scarcity_first` for guideline or
 cohort reviews where title-only or abstract-only sources should not be starved by richer
 full-text sources.
+
+Compatibility note: `pubtator.index_review_evidence` no longer advertises
+`prepare_mode`; cached clients that still send `prepare_mode="selected"` are accepted
+for backward compatibility. Refresh the MCP/tool cache to remove the stale argument.
 
 ## Claude Desktop HTTP Config
 
