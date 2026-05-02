@@ -805,6 +805,44 @@ async def test_search_literature_adapter_maps_client_results() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_literature_default_does_not_require_preflight_service() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {"results": [{"pmid": "123", "title": "MEFV colchicine"}], "count": 1}
+
+    class ExplodingPreflight:
+        async def preflight_pmids(self, pmids):
+            raise RuntimeError("review database unavailable")
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="MEFV colchicine",
+        coverage="none",
+        preflight_service=ExplodingPreflight(),
+        metadata="none",
+        metadata_service=None,
+    )
+
+    assert result["success"] is True
+    assert result["results"]
+    assert "review database unavailable" not in str(result).lower()
+    assert result["_meta"]["coverage_note"].startswith("Search is read-only metadata discovery.")
+    assert result["_meta"]["next_commands"] == [
+        {
+            "tool": "pubtator.preflight_review_sources",
+            "arguments": {"pmids": ["123"]},
+        },
+        {
+            "tool": "pubtator.index_review_evidence",
+            "arguments": {"review_id": "<review_id>", "pmids": ["123"]},
+            "requires": ["review_id"],
+        },
+    ]
+
+
+@pytest.mark.asyncio
 async def test_search_literature_attaches_preflight_coverage() -> None:
     from pubtator_link.mcp.service_adapters import search_literature_impl
     from pubtator_link.models.review_rerag import SourceCoverageHint

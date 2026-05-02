@@ -86,6 +86,20 @@ def _assert_specific_object_schema(schema: dict[str, object], required: set[str]
     assert properties != {}
 
 
+def _schema_enum_values(schema: dict[str, object]) -> set[object]:
+    values: set[object] = set()
+    enum = schema.get("enum")
+    if isinstance(enum, list):
+        values.update(enum)
+    for nested_key in ("anyOf", "oneOf"):
+        nested_schemas = schema.get(nested_key)
+        if isinstance(nested_schemas, list):
+            for nested_schema in nested_schemas:
+                if isinstance(nested_schema, dict):
+                    values.update(_schema_enum_values(nested_schema))
+    return values
+
+
 def test_server_instructions_are_tool_search_friendly() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
@@ -148,6 +162,8 @@ def test_search_literature_schema_defaults_to_nlm_citations_for_metadata() -> No
 
     assert schema["properties"]["metadata"]["default"] == "basic"
     assert schema["properties"]["include_citations"]["default"] == "nlm"
+    assert schema["properties"]["coverage"]["default"] == "none"
+    assert "preflight" in _schema_enum_values(schema["properties"]["coverage"])
     assert "coverage_preflight_internal_error" in tool.description
     assert "retryable=false" in tool.description
 
@@ -458,7 +474,8 @@ def test_common_mcp_tools_are_flat_and_unversioned() -> None:
     assert search_schema["properties"]["limit"]["default"] == 5
     assert "entity_ids" in search_schema["properties"]
     assert "guideline_boost" in search_schema["properties"]
-    assert search_schema["properties"]["coverage"]["default"] == "preflight"
+    assert search_schema["properties"]["coverage"]["default"] == "none"
+    assert "preflight" in _schema_enum_values(search_schema["properties"]["coverage"])
     assert search_schema["properties"]["metadata"]["default"] == "basic"
 
 

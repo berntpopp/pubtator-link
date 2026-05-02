@@ -307,9 +307,29 @@ async def search_literature_impl(
         metadata=metadata,
         metadata_by_pmid=metadata_by_pmid,
     )
+    candidate_pmids = [item.pmid for item in response.results]
+    response_meta = {
+        "coverage_note": (
+            "Search is read-only metadata discovery. Use coverage='preflight' or "
+            "pubtator.preflight_review_sources before indexing if source coverage matters."
+        ),
+        "next_commands": [
+            {
+                "tool": "pubtator.preflight_review_sources",
+                "arguments": {"pmids": candidate_pmids},
+            },
+            {
+                "tool": "pubtator.index_review_evidence",
+                "arguments": {"review_id": "<review_id>", "pmids": candidate_pmids},
+                "requires": ["review_id"],
+            },
+        ],
+    }
     if coverage == "preflight" and preflight_service is not None:
         await attach_preflight_coverage(response, preflight_service)
-    return response.model_dump()
+    dumped = response.model_dump()
+    dumped["_meta"] = response_meta
+    return dumped
 
 
 def _selected_search_items(
