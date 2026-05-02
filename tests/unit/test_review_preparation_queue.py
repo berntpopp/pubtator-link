@@ -38,15 +38,16 @@ class RecordingRepository:
         self.enqueued: list[tuple[str, str, str]] = []
         self.repaired_jobs = 0
         self.repair_calls = 0
+        self.next_enqueue_result = "newly_queued"
 
     async def enqueue_preparation_job(
         self,
         review_id: str,
         source_id: str,
         source_kind: str,
-    ) -> dict[str, Any]:
+    ) -> str:
         self.enqueued.append((review_id, source_id, source_kind))
-        return {"review_id": review_id}
+        return self.next_enqueue_result
 
     async def mark_running_jobs_failed_on_startup(self) -> int:
         self.repair_calls += 1
@@ -59,7 +60,7 @@ class SlowRecordingRepository(RecordingRepository):
         review_id: str,
         source_id: str,
         source_kind: str,
-    ) -> dict[str, Any]:
+    ) -> str:
         await asyncio.sleep(0.01)
         return await super().enqueue_preparation_job(review_id, source_id, source_kind)
 
@@ -74,7 +75,7 @@ class FailingOnceRepository(RecordingRepository):
         review_id: str,
         source_id: str,
         source_kind: str,
-    ) -> dict[str, Any]:
+    ) -> str:
         self.enqueue_calls += 1
         if self.enqueue_calls == 1:
             raise RuntimeError("temporary repository failure")
@@ -149,9 +150,9 @@ async def test_enqueue_pmid_deduplicates_same_review_source_in_memory() -> None:
     second = await queue.enqueue_pmid("review-1", "40234174")
     other_review = await queue.enqueue_pmid("review-2", "40234174")
 
-    assert first is True
-    assert second is False
-    assert other_review is True
+    assert first == "newly_queued"
+    assert second == "already_queued"
+    assert other_review == "newly_queued"
     assert repository.enqueued == [
         ("review-1", "PMID:40234174", "pubtator_full_bioc"),
         ("review-2", "PMID:40234174", "pubtator_full_bioc"),
@@ -172,7 +173,7 @@ async def test_enqueue_pmid_deduplicates_concurrent_same_review_source() -> None
         queue.enqueue_pmid("review-1", "40234174"),
     )
 
-    assert sorted(results) == [False, True]
+    assert sorted(results) == ["already_queued", "newly_queued"]
     assert repository.enqueued == [("review-1", "PMID:40234174", "pubtator_full_bioc")]
 
 
@@ -190,7 +191,7 @@ async def test_enqueue_allows_retry_after_repository_failure() -> None:
 
     retried = await queue.enqueue_pmid("review-1", "40234174")
 
-    assert retried is True
+    assert retried == "newly_queued"
     assert repository.enqueued == [("review-1", "PMID:40234174", "pubtator_full_bioc")]
 
 
@@ -205,7 +206,7 @@ async def test_enqueue_curated_url_uses_url_source_id_and_repository_job() -> No
 
     queued = await queue.enqueue_curated_url("review-1", "https://example.test/paper.pdf")
 
-    assert queued is True
+    assert queued == "newly_queued"
     assert repository.enqueued == [
         ("review-1", "URL:https://example.test/paper.pdf", "curated_pdf")
     ]
@@ -253,7 +254,7 @@ async def test_worker_records_actionable_error_on_timeout() -> None:
 
     await queue.start()
     try:
-        assert await queue.enqueue_pmid("review-1", "40234174") is True
+        assert await queue.enqueue_pmid("review-1", "40234174") == "newly_queued"
         await asyncio.wait_for(queue._queue.join(), timeout=2)
     finally:
         await queue.stop()
@@ -275,3 +276,19 @@ async def test_worker_records_actionable_error_on_timeout() -> None:
             "Preparation timed out after 1 seconds",
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_enqueue_pmid_returns_already_indexed_without_queueing() -> None:
+    repository = RecordingRepository()
+    repository.next_enqueue_result = "already_indexed"
+    queue = ReviewPreparationQueue(
+        config=_config(),
+        repository=repository,
+        preparation=RecordingPreparation(),
+    )
+
+    result = await queue.enqueue_pmid("review-1", "40234174")
+
+    assert result == "already_indexed"
+    assert queue._queue.empty()

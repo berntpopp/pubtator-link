@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from pubtator_link.config import ReviewReragConfig
+from pubtator_link.models.review_rerag import PreparationEnqueueResult
 from pubtator_link.repositories.review_rerag import ReviewReragRepository
 from pubtator_link.services.full_text_preparation import FullTextPreparationService
 
@@ -56,7 +57,7 @@ class ReviewPreparationQueue:
         """Mark jobs left running by a previous process as failed."""
         return await self.repository.mark_running_jobs_failed_on_startup()
 
-    async def enqueue_pmid(self, review_id: str, pmid: str) -> bool:
+    async def enqueue_pmid(self, review_id: str, pmid: str) -> PreparationEnqueueResult:
         """Queue preparation for a PubTator PMID source."""
         return await self._enqueue(
             review_id=review_id,
@@ -65,7 +66,7 @@ class ReviewPreparationQueue:
             source_value=pmid,
         )
 
-    async def enqueue_curated_url(self, review_id: str, url: str) -> bool:
+    async def enqueue_curated_url(self, review_id: str, url: str) -> PreparationEnqueueResult:
         """Queue preparation for a curated PDF URL source."""
         return await self._enqueue(
             review_id=review_id,
@@ -81,17 +82,21 @@ class ReviewPreparationQueue:
         source_id: str,
         source_kind: str,
         source_value: str,
-    ) -> bool:
+    ) -> PreparationEnqueueResult:
         key = (review_id, source_id)
         async with self._queued_lock:
             if key in self._queued:
-                return False
+                return "already_queued"
             self._queued.add(key)
 
         try:
-            await self.repository.enqueue_preparation_job(review_id, source_id, source_kind)
-            await self._queue.put((review_id, source_id, source_kind, source_value))
-            return True
+            result = await self.repository.enqueue_preparation_job(review_id, source_id, source_kind)
+            if result in {"newly_queued", "previously_failed_requeued"}:
+                await self._queue.put((review_id, source_id, source_kind, source_value))
+            else:
+                async with self._queued_lock:
+                    self._queued.discard(key)
+            return result
         except Exception:
             async with self._queued_lock:
                 self._queued.discard(key)

@@ -10,6 +10,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 PrepareMode = Literal["selected"]
 JobStatus = Literal["queued", "running", "complete", "partial", "failed"]
+PreparationEnqueueResult = Literal[
+    "newly_queued",
+    "already_queued",
+    "already_running",
+    "already_indexed",
+    "previously_failed_requeued",
+]
 AttemptStatus = Literal["success", "not_available", "blocked", "failed"]
 ReviewBatchResponseMode = Literal["compact", "merged_only", "full", "diagnostics"]
 ReviewTableMode = Literal["off", "preview", "full"]

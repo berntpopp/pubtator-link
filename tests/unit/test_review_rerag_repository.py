@@ -88,29 +88,62 @@ class FakeConnection:
 
 
 @pytest.mark.asyncio
-async def test_enqueue_preparation_job_creates_review_and_returns_status() -> None:
+async def test_enqueue_preparation_job_creates_review_and_returns_newly_queued() -> None:
     connection = FakeConnection()
-    connection.fetchrow_rows = [
-        {"queued": 1, "running": 0, "complete": 0, "partial": 0, "failed": 0}
-    ]
+    connection.fetchrow_rows = [None]
     repository = PostgresReviewReragRepository(FakePool(connection))
 
-    status = await repository.enqueue_preparation_job(
+    result = await repository.enqueue_preparation_job(
         review_id="review-1",
         source_id="40234174",
         source_kind="pubtator_abstract",
     )
 
-    assert status == PreparationStatus(queued=1)
+    assert result == "newly_queued"
     assert len(connection.executed) == 3
     assert "insert into reviews" in connection.executed[0][0].lower()
     assert connection.executed[0][1] == ("review-1",)
-    upsert_sql, upsert_args = connection.executed[1]
+    status_sql, status_args = connection.executed[1]
+    assert "for update" in status_sql.lower()
+    assert status_args == ("review-1", "40234174")
+    upsert_sql, upsert_args = connection.executed[2]
     assert "insert into review_preparation_jobs" in upsert_sql.lower()
-    assert "source_kind" in upsert_sql
-    assert "on conflict (review_id, source_id)" in upsert_sql.lower()
     assert isinstance(upsert_args[0], UUID)
     assert upsert_args[1:] == ("review-1", "40234174", "pubtator_abstract")
+
+
+@pytest.mark.asyncio
+async def test_enqueue_preparation_job_returns_already_indexed_for_terminal_job() -> None:
+    connection = FakeConnection()
+    connection.fetchrow_rows = [{"status": "complete"}]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    result = await repository.enqueue_preparation_job(
+        review_id="review-1",
+        source_id="PMID:1",
+        source_kind="pubtator_full_bioc",
+    )
+
+    assert result == "already_indexed"
+    assert not any(
+        "insert into review_preparation_jobs" in sql.lower() for sql, _ in connection.executed
+    )
+
+
+@pytest.mark.asyncio
+async def test_enqueue_preparation_job_requeues_failed_job() -> None:
+    connection = FakeConnection()
+    connection.fetchrow_rows = [{"status": "failed"}]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    result = await repository.enqueue_preparation_job(
+        review_id="review-1",
+        source_id="PMID:1",
+        source_kind="pubtator_full_bioc",
+    )
+
+    assert result == "previously_failed_requeued"
+    assert any("status = 'queued'" in sql.lower() for sql, _ in connection.executed)
 
 
 @pytest.mark.asyncio

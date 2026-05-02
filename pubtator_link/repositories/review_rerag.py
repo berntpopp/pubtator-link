@@ -10,6 +10,7 @@ from uuid import uuid4
 from pubtator_link.models.review_rerag import (
     EvidenceCertaintyRecord,
     FailedSourceSummary,
+    PreparationEnqueueResult,
     PreparationStatus,
     ResearchSessionCandidate,
     ResearchSessionManifest,
@@ -54,8 +55,8 @@ class ReviewReragRepository(Protocol):
 
     async def enqueue_preparation_job(
         self, review_id: str, source_id: str, source_kind: str
-    ) -> PreparationStatus:
-        """Create or deduplicate a preparation job and return aggregate status."""
+    ) -> PreparationEnqueueResult:
+        """Create or deduplicate a preparation job and return durable enqueue result."""
 
     async def record_retrieval_attempt(
         self,
@@ -276,7 +277,7 @@ class PostgresReviewReragRepository:
 
     async def enqueue_preparation_job(
         self, review_id: str, source_id: str, source_kind: str
-    ) -> PreparationStatus:
+    ) -> PreparationEnqueueResult:
         async with self._acquire() as connection, connection.transaction():
             await connection.execute(
                 """
@@ -287,6 +288,40 @@ class PostgresReviewReragRepository:
                 """,
                 review_id,
             )
+            existing = await connection.fetchrow(
+                """
+                select status
+                from review_preparation_jobs
+                where review_id = $1 and source_id = $2
+                for update
+                """,
+                review_id,
+                source_id,
+            )
+            if existing is not None:
+                status = str(existing["status"])
+                if status in {"complete", "partial"}:
+                    return "already_indexed"
+                if status == "queued":
+                    return "already_queued"
+                if status == "running":
+                    return "already_running"
+                if status == "failed":
+                    await connection.execute(
+                        """
+                        update review_preparation_jobs
+                        set source_kind = $3,
+                            status = 'queued',
+                            error = null,
+                            updated_at = now()
+                        where review_id = $1 and source_id = $2
+                        """,
+                        review_id,
+                        source_id,
+                        source_kind,
+                    )
+                    return "previously_failed_requeued"
+
             await connection.execute(
                 """
                 insert into review_preparation_jobs (
@@ -297,15 +332,13 @@ class PostgresReviewReragRepository:
                     status
                 )
                 values ($1, $2, $3, $4, 'queued')
-                on conflict (review_id, source_id) do update
-                set source_kind = excluded.source_kind
                 """,
                 uuid4(),
                 review_id,
                 source_id,
                 source_kind,
             )
-            return await self._preparation_status_on_connection(connection, review_id)
+            return "newly_queued"
 
     async def record_retrieval_attempt(
         self,
