@@ -158,6 +158,9 @@ class ResearchSessionService:
 
     async def list_sessions(self, *, review_id: str) -> ListResearchSessionsResponse:
         sessions = await self.repository.list_research_sessions(review_id)
+        preparation_status = await self.queue.repository.preparation_status(review_id)
+        for session in sessions:
+            session.preparation_status = preparation_status
         return ListResearchSessionsResponse(sessions=sessions)
 
     async def _candidate_pmids(

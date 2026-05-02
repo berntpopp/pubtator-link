@@ -51,6 +51,13 @@ class FakeRepository:
             skipped_count=sum(1 for item in self.candidates if item.status == "skipped"),
         )
 
+    async def list_research_sessions(self, review_id):
+        manifests = []
+        for session_review_id, session_id in self.sessions:
+            if session_review_id == review_id:
+                manifests.append(await self.get_research_session(review_id, session_id))
+        return manifests
+
 
 class FakeSearch:
     async def search(self, request):
@@ -227,3 +234,24 @@ async def test_stage_missing_manifest_raises_clear_service_error() -> None:
             review_id="review-1",
             request={"query": "FMF", "session_id": "session-1"},
         )
+
+
+async def test_list_sessions_attaches_preparation_status() -> None:
+    repository = FakeRepository()
+    await repository.upsert_research_session(
+        review_id="review-1",
+        session_id="session-1",
+        query="FMF",
+        status="active",
+        request={"query": "FMF"},
+    )
+    service = ResearchSessionService(
+        repository=repository,
+        search_provider=FakeSearch(),
+        preflight_service=FakePreflight(),
+        queue=FakeQueue(),
+    )
+
+    response = await service.list_sessions(review_id="review-1")
+
+    assert response.sessions[0].preparation_status == PreparationStatus(queued=1)
