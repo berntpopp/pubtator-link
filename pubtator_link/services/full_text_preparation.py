@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 from defusedxml import ElementTree
@@ -14,6 +15,7 @@ from pubtator_link.config import ReviewReragConfig
 from pubtator_link.models.review_rerag import (
     JobStatus,
     ReviewPassageRow,
+    CoverageReason,
     SourceCoverageHint,
     passage_id_for_pmcid,
     passage_id_for_pmid,
@@ -41,6 +43,30 @@ def looks_like_pdf(content: bytes) -> bool:
 
 def _passage_char_count(passages: list[ReviewPassageRow]) -> int:
     return sum(len(passage.text) for passage in passages)
+
+
+def _europe_pmc_coverage_reason(reason: str | None) -> CoverageReason:
+    if reason in {
+        "pmc_not_open_access",
+        "license_reuse_unavailable",
+        "upstream_timeout",
+        "upstream_404",
+        "parser_unsupported",
+    }:
+        return reason
+    if reason == "not_found":
+        return "pmc_not_open_access"
+    return "parser_unsupported"
+
+
+@dataclass(frozen=True)
+class EuropePmcPassageResult:
+    passages: list[ReviewPassageRow]
+    pmcid: str | None
+    doi: str | None
+    reason: str | None
+    coverage_reason: CoverageReason
+    license_or_access_hint: str | None = None
 
 
 class FullTextPreparationService:
@@ -120,7 +146,11 @@ class FullTextPreparationService:
         )
 
         if self.config.enable_europe_pmc_fallback and self.europe_pmc_client is not None:
-            passages = await self._europe_pmc_passages(review_id=review_id, pmid=pmid)
+            europe_pmc_result = await self._europe_pmc_passages_with_metadata(
+                review_id=review_id,
+                pmid=pmid,
+            )
+            passages = europe_pmc_result.passages
             if passages:
                 await self.repository.upsert_passages(passages)
                 await self._record_pmid_attempt(
@@ -132,6 +162,10 @@ class FullTextPreparationService:
                     coverage_reason="full_text_available",
                     coverage_hint=coverage_hint,
                     retry_metadata=None,
+                    pmcid=europe_pmc_result.pmcid,
+                    doi=europe_pmc_result.doi,
+                    license_or_access_hint=europe_pmc_result.license_or_access_hint,
+                    pmc_fallback_available=True,
                 )
                 return "complete"
             await self._record_pmid_attempt(
@@ -139,10 +173,14 @@ class FullTextPreparationService:
                 pmid=pmid,
                 source_kind="europe_pmc_jats",
                 status="not_available",
-                reason="Europe PMC open-access full text unavailable or unsupported",
-                coverage_reason="parser_unsupported",
+                reason=europe_pmc_result.reason,
+                coverage_reason=europe_pmc_result.coverage_reason,
                 coverage_hint=coverage_hint,
                 retry_metadata=None,
+                pmcid=europe_pmc_result.pmcid,
+                doi=europe_pmc_result.doi,
+                license_or_access_hint=europe_pmc_result.license_or_access_hint,
+                pmc_fallback_available=False,
             )
 
         if not passages:
@@ -217,19 +255,46 @@ class FullTextPreparationService:
         return hints[0] if hints else None
 
     async def _europe_pmc_passages(self, *, review_id: str, pmid: str) -> list[ReviewPassageRow]:
+        result = await self._europe_pmc_passages_with_metadata(review_id=review_id, pmid=pmid)
+        return result.passages
+
+    async def _europe_pmc_passages_with_metadata(
+        self, *, review_id: str, pmid: str
+    ) -> EuropePmcPassageResult:
         europe_pmc_client = self.europe_pmc_client
         if europe_pmc_client is None:
-            return []
+            return EuropePmcPassageResult(
+                passages=[],
+                pmcid=None,
+                doi=None,
+                reason="europe_pmc_unconfigured",
+                coverage_reason="unknown",
+            )
         result = await europe_pmc_client.lookup_open_access_record(pmid)
         if not result.available or result.full_text_url is None:
-            return []
+            return EuropePmcPassageResult(
+                passages=[],
+                pmcid=result.pmcid,
+                doi=result.doi,
+                reason=result.reason,
+                coverage_reason=_europe_pmc_coverage_reason(result.reason),
+                license_or_access_hint=result.license_or_access_hint,
+            )
         xml_text = await europe_pmc_client.fetch_full_text_xml(result.full_text_url)
-        return self._passages_from_jats_xml(
+        passages = self._passages_from_jats_xml(
             review_id=review_id,
             pmid=pmid,
             pmcid=result.pmcid,
             doi=result.doi,
             xml_text=xml_text,
+        )
+        return EuropePmcPassageResult(
+            passages=passages,
+            pmcid=result.pmcid,
+            doi=result.doi,
+            reason=result.reason,
+            coverage_reason="full_text_available" if passages else "parser_unsupported",
+            license_or_access_hint=result.license_or_access_hint,
         )
 
     def _passages_from_jats_xml(
@@ -307,6 +372,10 @@ class FullTextPreparationService:
         coverage_reason: str,
         coverage_hint: SourceCoverageHint | None,
         retry_metadata: dict[str, Any] | None,
+        pmcid: str | None = None,
+        doi: str | None = None,
+        license_or_access_hint: str | None = None,
+        pmc_fallback_available: bool | None = None,
     ) -> None:
         retry_metadata = retry_metadata or {}
         await self.repository.record_retrieval_attempt(
@@ -322,13 +391,17 @@ class FullTextPreparationService:
             retry_after_ms=retry_metadata.get("retry_after_ms"),
             backoff_ms=retry_metadata.get("backoff_ms"),
             terminal_reason=retry_metadata.get("terminal_reason"),
-            pmcid=coverage_hint.pmcid if coverage_hint else None,
-            doi=coverage_hint.doi if coverage_hint else None,
+            pmcid=pmcid if pmcid is not None else (coverage_hint.pmcid if coverage_hint else None),
+            doi=doi if doi is not None else (coverage_hint.doi if coverage_hint else None),
             license_or_access_hint=(
-                coverage_hint.license_or_access_hint if coverage_hint else None
+                license_or_access_hint
+                if license_or_access_hint is not None
+                else (coverage_hint.license_or_access_hint if coverage_hint else None)
             ),
             pmc_fallback_available=(
-                coverage_hint.pmc_fallback_available if coverage_hint else False
+                pmc_fallback_available
+                if pmc_fallback_available is not None
+                else (coverage_hint.pmc_fallback_available if coverage_hint else False)
             ),
         )
 

@@ -110,6 +110,24 @@ class FakeEuropePmcClient:
         """
 
 
+class UnavailableEuropePmcClient:
+    def __init__(self, *, pmcid: str, doi: str) -> None:
+        self.pmcid = pmcid
+        self.doi = doi
+        self.lookup_calls: list[str] = []
+
+    async def lookup_open_access_record(self, pmcid_or_pmid: str):
+        from pubtator_link.services.europe_pmc import EuropePmcLookupResult
+
+        self.lookup_calls.append(pmcid_or_pmid)
+        return EuropePmcLookupResult(
+            available=False,
+            pmcid=self.pmcid,
+            doi=self.doi,
+            reason="license_reuse_unavailable",
+        )
+
+
 class StaticFetcher:
     def __init__(self, body: bytes, content_type: str) -> None:
         self.body = body
@@ -291,6 +309,57 @@ async def test_prepare_pmid_uses_enabled_europe_pmc_before_abstract_fallback() -
     ]
     assert repository.attempts[-1]["source_kind"] == "europe_pmc_jats"
     assert repository.attempts[-1]["status"] == "success"
+
+
+@pytest.mark.asyncio
+async def test_prepare_pmid_records_resolver_attempts_before_abstract_fallback() -> None:
+    repository = RecordingRepository()
+    client = RecordingPubTatorClient(
+        [
+            {"PubTator3": [{"id": "111", "pmid": "111", "passages": []}]},
+            {
+                "documents": [
+                    {
+                        "id": "111",
+                        "pmid": "111",
+                        "passages": [
+                            {
+                                "infons": {"type": "abstract"},
+                                "text": "Abstract fallback text.",
+                            }
+                        ],
+                    }
+                ]
+            },
+        ]
+    )
+    europe_pmc = UnavailableEuropePmcClient(pmcid="PMC123", doi="10.1000/example")
+    base_config = _config()
+    config = ReviewReragConfig(
+        **{**base_config.__dict__, "enable_europe_pmc_fallback": True}
+    )
+    service = FullTextPreparationService(
+        config=config,
+        repository=repository,
+        pubtator_client=client,
+        europe_pmc_client=europe_pmc,
+    )
+
+    status = await service.prepare_pmid("review-1", "111")
+
+    assert status == "complete"
+    assert [attempt["source_kind"] for attempt in repository.attempts] == [
+        "pubtator_full_bioc",
+        "europe_pmc_jats",
+        "pubtator_abstract",
+    ]
+    assert repository.attempts[1]["coverage_reason"] in {
+        "pmc_not_open_access",
+        "parser_unsupported",
+        "license_reuse_unavailable",
+    }
+    assert repository.attempts[1]["pmcid"] == "PMC123"
+    assert repository.attempts[1]["doi"] == "10.1000/example"
 
 
 @pytest.mark.asyncio

@@ -540,6 +540,36 @@ async def test_retrieve_review_context_batch_adapter_sets_budget_strategy() -> N
 
 
 @pytest.mark.asyncio
+async def test_retrieve_review_context_batch_adapter_omits_resolver_trace_by_default() -> None:
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
+
+    class ResponseWithTrace:
+        def model_dump(self, **kwargs):
+            return {
+                "success": True,
+                "review_id": "review-1",
+                "resolver_attempts": [{"source_kind": "pubtator_full_bioc"}],
+                "sources": [
+                    {"source_id": "s1", "resolver_attempts": [{"source_kind": "europe_pmc_jats"}]}
+                ],
+            }
+
+    class FakeService:
+        async def retrieve_context_batch(self, review_id, request):
+            return ResponseWithTrace()
+
+    result = await retrieve_review_context_batch_impl(
+        service=FakeService(),
+        review_id="review-1",
+        queries=["MEFV"],
+        include_resolver_trace=False,
+    )
+
+    assert "resolver_attempts" not in result
+    assert "resolver_attempts" not in result["sources"][0]
+
+
+@pytest.mark.asyncio
 async def test_list_review_indexes_adapter_calls_lifecycle_service() -> None:
     from pubtator_link.mcp.service_adapters import list_review_indexes_impl
     from pubtator_link.models.review_rerag import ListReviewIndexesResponse

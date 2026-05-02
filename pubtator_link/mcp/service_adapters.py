@@ -66,6 +66,22 @@ from pubtator_link.services.search_shaping import (
 from pubtator_link.services.source_preflight import SourcePreflightService
 
 
+def _strip_resolver_trace(result: dict[str, Any]) -> dict[str, Any]:
+    result.pop("resolver_attempts", None)
+    for key in ("sources", "failed_sources", "results"):
+        values = result.get(key)
+        if isinstance(values, list):
+            for value in values:
+                if isinstance(value, dict):
+                    value.pop("resolver_attempts", None)
+                    nested_sources = value.get("sources")
+                    if isinstance(nested_sources, list):
+                        for source in nested_sources:
+                            if isinstance(source, dict):
+                                source.pop("resolver_attempts", None)
+    return result
+
+
 async def search_biomedical_entities_impl(
     *,
     client: PubTator3Client,
@@ -682,6 +698,7 @@ async def retrieve_review_context_impl(
     table_mode: ReviewTableMode = "preview",
     allow_truncated_passages: bool = True,
     max_chars_per_passage: int = 2200,
+    include_resolver_trace: bool = False,
 ) -> dict[str, Any]:
     response = await service.retrieve_context(
         review_id=review_id,
@@ -701,7 +718,8 @@ async def retrieve_review_context_impl(
             max_chars_per_passage=max_chars_per_passage,
         ),
     )
-    return response.model_dump()
+    result = response.model_dump()
+    return result if include_resolver_trace else _strip_resolver_trace(result)
 
 
 async def retrieve_review_context_batch_impl(
@@ -730,6 +748,7 @@ async def retrieve_review_context_batch_impl(
     allow_truncated_passages: bool = True,
     max_chars_per_passage: int = 2200,
     dry_run: bool = False,
+    include_resolver_trace: bool = False,
 ) -> dict[str, Any]:
     response = await service.retrieve_context_batch(
         review_id=review_id,
@@ -758,7 +777,8 @@ async def retrieve_review_context_batch_impl(
             dry_run=dry_run,
         ),
     )
-    return response.model_dump()
+    result = response.model_dump()
+    return result if include_resolver_trace else _strip_resolver_trace(result)
 
 
 async def list_review_indexes_impl(

@@ -129,6 +129,15 @@ def test_get_publication_passages_schema_exposes_dry_run_and_verbosity() -> None
     assert set(schema["properties"]["verbosity"]["enum"]) == {"lean", "standard", "full"}
 
 
+def test_review_retrieval_schema_hides_resolver_trace_by_default() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp()._tool_manager._tools["pubtator.retrieve_review_context_batch"]
+    schema = tool.parameters
+
+    assert schema["properties"]["include_resolver_trace"]["default"] is False
+
+
 def test_capabilities_resource_advertises_grounding_workflows() -> None:
     from pubtator_link.mcp.resources import get_capabilities_resource
     from pubtator_link.models.corpus_suggestion import CorpusSuggestionRequest
