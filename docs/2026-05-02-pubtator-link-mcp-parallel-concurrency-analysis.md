@@ -475,6 +475,16 @@ After both: the same 4-call burst usually completes with 1–2 actual upstream r
 
 ---
 
+### Batch Retrieval Recovery
+
+Batch retrieval is the preferred multi-question path. Compact batch responses
+can omit empty `results` while remaining schema-valid. When retrieval is empty or
+over budget, drivers should inspect top-level `recovery` first, then
+`query_summaries[]` and `merged_context_pack.dropped_summary` for bounded
+follow-up filters.
+
+---
+
 ## 7. References
 
 - Status: reliability/ergonomics follow-up is tracked by `docs/superpowers/plans/2026-05-02-review-rag-reliability-and-llm-ergonomics-implementation.md`.

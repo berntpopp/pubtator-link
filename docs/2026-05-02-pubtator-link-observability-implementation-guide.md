@@ -480,6 +480,23 @@ If you're on a single VM and want zero-vendor: a [Grafana + Prometheus + Loki + 
 
 ---
 
+## LLM MCP Ergonomics Recommendation Status
+
+| # | Recommendation | Status |
+|---|---|---|
+| 1 | Fix batch output schema | Implemented |
+| 2 | Fix `prepare_mode` validation | Implemented with hidden compatibility shim |
+| 3 | Reduce deferred-tool friction | Implemented as `llm_driver_contract`; client eager-loading remains host-controlled |
+| 4 | Promote recovery fields | Implemented with top-level `recovery` |
+| 5 | Add quote offsets | Implemented with passage `quote` |
+| 6 | Add grounding confidence | Implemented with `confidence_for_grounding` |
+| 7 | Progress notifications | Implemented for wait-mode indexing |
+| 8 | Improve preflight coverage expectation | Implemented with `expected_coverage_after_index` |
+| 9 | Smarter dropped summaries | Implemented with structured `dropped_summary` |
+| 10 | Add audit trail helper | Implemented as `pubtator.get_review_audit_trail` |
+
+---
+
 ## 9. Acceptance checklist
 
 When all four PRs are merged, you should be able to perform the following exercises in production within 60 seconds each:

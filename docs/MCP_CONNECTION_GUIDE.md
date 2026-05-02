@@ -190,6 +190,20 @@ Use stdio only for local desktop workflows that cannot connect to HTTP MCP endpo
 | `pubtator.export_review_audit_bundle` | Export review audit metadata, passage IDs, and stable citation keys |
 | `pubtator.get_server_capabilities` | Discover formats, bioconcepts, relation types, and limitations |
 
+### LLM Driver Ergonomics
+
+For review-grounded work, start with `pubtator.workflow_help` or
+`pubtator.get_server_capabilities`. The capabilities payload includes
+`llm_driver_contract`, which identifies the core workflow tools and the response
+fields an LLM should inspect:
+
+- `recovery` for empty, degraded, or high-drop retrievals,
+- `merged_context_pack.passages[].quote` for bounded citation snippets,
+- `merged_context_pack.passages[].confidence_for_grounding` for deterministic
+  retrieval confidence,
+- `merged_context_pack.dropped_summary` for reason counts and suggested filters,
+- `pubtator.get_review_audit_trail` for copy-ready selected-passage audit blocks.
+
 ## Verification
 
 ```bash
