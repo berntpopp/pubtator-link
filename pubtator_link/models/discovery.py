@@ -9,7 +9,6 @@ ArticleIdTarget = Literal["pmid", "pmcid", "doi"]
 ArticleIdStatus = Literal["resolved", "unresolved", "invalid", "failed"]
 CitationLookupStatus = Literal["matched", "not_found", "ambiguous", "failed"]
 RelatedArticleMode = Literal["similar", "cited_by", "references"]
-RelatedArticleStatus = Literal["found", "not_found", "error"]
 
 
 class DiscoveryMeta(BaseModel):
@@ -123,7 +122,7 @@ class RelatedArticleRecord(BaseModel):
 
     source_pmid: str
     pmid: str
-    relation: str
+    relation: RelatedArticleMode
     title: str | None = None
     journal: str | None = None
     year: int | None = None

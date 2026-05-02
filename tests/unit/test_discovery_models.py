@@ -187,6 +187,11 @@ def test_related_articles_response_deduplicates_candidates_in_caller_order() -> 
     assert response.unresolved == []
 
 
+def test_related_article_record_rejects_invalid_relation() -> None:
+    with pytest.raises(ValidationError):
+        RelatedArticleRecord(source_pmid="1", pmid="2", relation="nonsense")
+
+
 def test_related_articles_request_defaults_and_constraints() -> None:
     request = RelatedArticlesRequest(pmids=["1"])
 
