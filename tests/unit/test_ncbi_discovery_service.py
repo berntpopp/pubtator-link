@@ -93,6 +93,12 @@ async def test_ncbi_client_parses_id_conversion_json() -> None:
     transport = MockTransport(
         {
             "records": [
+                {
+                    "requested-id": "10.1000/example",
+                    "pmid": "456",
+                    "pmcid": "PMC456",
+                    "doi": "10.1000/example",
+                },
                 {"pmid": "123", "pmcid": "PMC123", "doi": "10.1000/example"},
                 {"requested-id": "bad", "status": "error"},
             ]
@@ -101,19 +107,42 @@ async def test_ncbi_client_parses_id_conversion_json() -> None:
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
     client = NcbiDiscoveryClient(http_client=http_client)
 
-    records = await client.convert_article_ids(["PMC123", "bad"], "auto")
+    records = await client.convert_article_ids(["10.1000/example", "PMC123", "bad"], "auto")
 
-    assert [record.input_id for record in records] == ["PMC123", "bad"]
+    assert [record.input_id for record in records] == ["10.1000/example", "PMC123", "bad"]
     assert records[0].status == "resolved"
-    assert records[0].pmid == "123"
-    assert records[0].pmcid == "PMC123"
+    assert records[0].pmid == "456"
+    assert records[0].pmcid == "PMC456"
     assert records[0].doi == "10.1000/example"
-    assert records[1].status == "unresolved"
-    assert records[1].reason == "not_found"
-    assert transport.requests[0].url.path.endswith("/idconv/v1.0/")
-    assert transport.requests[0].url.params["ids"] == "PMC123,bad"
+    assert records[1].status == "resolved"
+    assert records[1].pmid == "123"
+    assert records[1].pmcid == "PMC123"
+    assert records[2].status == "unresolved"
+    assert records[2].reason == "not_found"
+    assert (
+        str(transport.requests[0].url.copy_with(query=None))
+        == "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/"
+    )
+    assert transport.requests[0].url.params["ids"] == "10.1000/example,PMC123,bad"
     assert transport.requests[0].url.params["format"] == "json"
     assert transport.requests[0].url.params["tool"] == "pubtator-link"
+    assert "idtype" not in transport.requests[0].url.params
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_ncbi_client_sends_idtype_for_explicit_source() -> None:
+    transport = MockTransport(
+        {"records": [{"requested-id": "PMC123", "pmid": "123", "pmcid": "PMC123"}]}
+    )
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = NcbiDiscoveryClient(http_client=http_client)
+
+    records = await client.convert_article_ids(["PMC123"], "pmcid")
+
+    assert records[0].status == "resolved"
+    assert transport.requests[0].url.params["ids"] == "PMC123"
+    assert transport.requests[0].url.params["idtype"] == "pmcid"
     await client.close()
 
 

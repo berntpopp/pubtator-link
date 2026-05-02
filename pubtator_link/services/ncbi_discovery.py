@@ -23,6 +23,7 @@ from pubtator_link.models.discovery import (
 )
 
 NCBI_EUTILS_BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+NCBI_ID_CONVERTER_BASE_URL = "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/"
 NCBI_EUTILS_SOURCE_URL = "https://www.ncbi.nlm.nih.gov/books/NBK25501/"
 NCBI_MESH_SOURCE_URL = "https://www.ncbi.nlm.nih.gov/mesh/"
 QueryParams = Mapping[str, str]
@@ -57,11 +58,13 @@ class NcbiDiscoveryClient:
         *,
         http_client: httpx.AsyncClient | None = None,
         base_url: str = NCBI_EUTILS_BASE_URL,
+        id_converter_url: str = NCBI_ID_CONVERTER_BASE_URL,
         retry_policy: RetryPolicy | None = None,
     ) -> None:
         self._client = http_client or httpx.AsyncClient()
         self._owns_client = http_client is None
         self.base_url = base_url.rstrip("/")
+        self.id_converter_url = id_converter_url
         self.retry_policy = retry_policy or RetryPolicy()
 
     async def close(self) -> None:
@@ -77,15 +80,23 @@ class NcbiDiscoveryClient:
         response.raise_for_status()
         return response
 
+    async def _get_absolute(self, url: str, params: QueryParams) -> httpx.Response:
+        response, _metadata = await call_with_retries(
+            lambda: self._client.get(url, params=params),
+            policy=self.retry_policy,
+        )
+        response.raise_for_status()
+        return response
+
     async def convert_article_ids(
         self,
         ids: Sequence[str],
         source: ArticleIdKind,
     ) -> list[ArticleIdConversionRecord]:
-        response = await self._get(
-            "idconv/v1.0/",
-            {"ids": ",".join(ids), "format": "json", "tool": "pubtator-link"},
-        )
+        params = {"ids": ",".join(ids), "format": "json", "tool": "pubtator-link"}
+        if source != "auto":
+            params["idtype"] = source
+        response = await self._get_absolute(self.id_converter_url, params)
         payload = response.json()
         records_payload = payload.get("records", []) if isinstance(payload, dict) else []
 
