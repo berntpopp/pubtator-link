@@ -27,27 +27,32 @@ class WorkflowHelpService:
             ),
             WorkflowStep(
                 order=2,
+                tool_name="pubtator.find_entity_relations",
+                purpose="Use grounded entity IDs to discover relation evidence and PMID candidates.",
+            ),
+            WorkflowStep(
+                order=3,
                 tool_name="pubtator.search_literature",
                 purpose="Find candidate PMIDs with compact results and optional metadata.",
                 key_args={"metadata": "basic", "coverage": "preflight"},
             ),
             WorkflowStep(
-                order=3,
+                order=4,
                 tool_name="pubtator.get_publication_metadata",
                 purpose="Fetch citation-grade author and journal metadata for selected PMIDs.",
             ),
             WorkflowStep(
-                order=4,
+                order=5,
                 tool_name="pubtator.index_review_evidence",
                 purpose="Prepare the selected corpus for review-scoped retrieval.",
             ),
             WorkflowStep(
-                order=5,
+                order=6,
                 tool_name="pubtator.inspect_review_index",
                 purpose="Verify indexed coverage, source status, and sample passages.",
             ),
             WorkflowStep(
-                order=6,
+                order=7,
                 tool_name="pubtator.retrieve_review_context_batch",
                 purpose="Retrieve citable passages for final claims.",
             ),
@@ -102,11 +107,16 @@ class WorkflowHelpService:
             ),
             WorkflowStep(
                 order=2,
+                tool_name="pubtator.find_entity_relations",
+                purpose="Find PubTator relation evidence for grounded entities before broad search.",
+            ),
+            WorkflowStep(
+                order=3,
                 tool_name="pubtator.lookup_mesh",
                 purpose="Normalize disease and phenotype vocabulary to MeSH descriptors.",
             ),
             WorkflowStep(
-                order=3,
+                order=4,
                 tool_name="pubtator.search_literature",
                 purpose="Use resolved entity IDs and normalized terms to find candidate PMIDs.",
             ),

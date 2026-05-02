@@ -486,6 +486,7 @@ async def index_review_evidence_impl(
     response = await service.index_review_evidence(review_id, api_request)
     return response.model_dump()
 
+
 async def preflight_review_sources_impl(
     *,
     service: SourcePreflightService,

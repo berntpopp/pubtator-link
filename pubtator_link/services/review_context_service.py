@@ -353,9 +353,7 @@ class ReviewContextService:
             sample_section_policy=request.sample_section_policy,
             session_id=request.session_id,
         )
-        totals = await self.repository.review_index_totals(
-            review_id, session_id=request.session_id
-        )
+        totals = await self.repository.review_index_totals(review_id, session_id=request.session_id)
         failed_sources = await self.repository.list_review_failed_sources(
             review_id, session_id=request.session_id
         )

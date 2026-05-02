@@ -163,7 +163,9 @@ class ReviewReragRepository(Protocol):
     ) -> ReviewIndexTotals:
         """Return aggregate index counts for a review."""
 
-    async def available_sections(self, review_id: str, *, session_id: str | None = None) -> list[str]:
+    async def available_sections(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> list[str]:
         """Return distinct indexed sections for retrieval diagnostics."""
 
     async def indexed_pmids(self, review_id: str, *, session_id: str | None = None) -> list[str]:

@@ -90,7 +90,9 @@ class ReviewPreparationQueue:
             self._queued.add(key)
 
         try:
-            result = await self.repository.enqueue_preparation_job(review_id, source_id, source_kind)
+            result = await self.repository.enqueue_preparation_job(
+                review_id, source_id, source_kind
+            )
             if result in {"newly_queued", "previously_failed_requeued"}:
                 await self._queue.put((review_id, source_id, source_kind, source_value))
             else:

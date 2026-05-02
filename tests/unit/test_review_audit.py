@@ -14,10 +14,14 @@ from pubtator_link.services.review_audit import ReviewAuditService
 
 
 class FakeAuditRepository:
-    async def preparation_status(self, review_id: str) -> PreparationStatus:
+    async def preparation_status(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> PreparationStatus:
         return PreparationStatus(complete=1)
 
-    async def review_index_totals(self, review_id: str) -> ReviewIndexTotals:
+    async def review_index_totals(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> ReviewIndexTotals:
         return ReviewIndexTotals(pmid_count=1, source_count=1, passage_count=2, char_count=42)
 
     async def list_review_sources(self, review_id: str, pmids=None, **kwargs):
@@ -39,10 +43,12 @@ class FakeAuditRepository:
             )
         ]
 
-    async def list_review_failed_sources(self, review_id: str):
+    async def list_review_failed_sources(self, review_id: str, *, session_id: str | None = None):
         return []
 
-    async def list_review_passage_ids(self, review_id: str) -> list[str]:
+    async def list_review_passage_ids(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> list[str]:
         return ["PMID:1:title:0", "PMID:1:abstract:1"]
 
     async def list_review_audit_events(self, review_id: str):
@@ -107,3 +113,13 @@ async def test_review_audit_bundle_exports_sources_attempts_events_and_citation_
     assert bundle.passage_ids == ["PMID:1:title:0", "PMID:1:abstract:1"]
     assert bundle.stable_citation_keys["PMID:1:title:0"].startswith("c_")
     assert bundle.index_snapshot_date is not None
+
+
+@pytest.mark.asyncio
+async def test_review_audit_bundle_records_session_id() -> None:
+    bundle = await ReviewAuditService(FakeAuditRepository()).export_bundle(
+        "review-1",
+        session_id="session-1",
+    )
+
+    assert bundle.session_id == "session-1"

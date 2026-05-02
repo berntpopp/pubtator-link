@@ -58,6 +58,8 @@ def get_capabilities_resource() -> dict[str, Any]:
             "Call pubtator.workflow_help for the canonical task-specific sequence.",
             "search -> preflight -> index -> inspect -> retrieve for review-grounded answers",
             "Use pubtator.get_publication_metadata when citation-grade PMID metadata is needed.",
+            "After entity grounding, use pubtator.find_entity_relations to inspect relation evidence "
+            "before choosing search terms or candidate PMIDs.",
             "If review indexing is unavailable, call pubtator.diagnostics and fall back "
             "to pubtator.get_publication_passages with the same PMIDs.",
             "Discovery tools can normalize MeSH terms, resolve citations or article IDs, "
@@ -75,6 +77,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             "Use pubtator.lookup_citation when a user provides formatted references.",
             "Use pubtator.convert_article_ids when a user provides DOI, PMCID, or mixed article IDs.",
             "Use pubtator.find_related_articles to expand from seed PMIDs.",
+            "Use pubtator.find_entity_relations to explore relation evidence for grounded entities.",
             "Use pubtator.suggest_corpus to build a small role-labeled candidate corpus.",
             "Pass discovery candidate_pmids as pmids to pubtator.stage_research_session "
             "before indexing large corpora.",
@@ -136,6 +139,7 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "pubtator.lookup_mesh",
                 "pubtator.lookup_citation",
                 "pubtator.find_related_articles",
+                "pubtator.find_entity_relations",
                 "pubtator.suggest_corpus",
             ],
             "diagnostics": [
@@ -225,6 +229,11 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "mode": "similar",
                 "limit": 20,
             },
+            "pubtator.find_entity_relations": {
+                "entity_id": "@GENE_MEFV",
+                "relation_type": "associate",
+                "target_entity_type": "Disease",
+            },
             "pubtator.suggest_corpus": {
                 "question": "FMF MEFV VUS colchicine",
                 "max_pmids": 8,
@@ -308,6 +317,52 @@ def get_capabilities_resource() -> dict[str, Any]:
             "index_snapshot_date": "index_snapshot_date",
             "corpus_snapshot_date": "corpus_snapshot_date",
             "budget": "budget",
+        },
+        "schema_policy": {
+            "argument_style": "flat",
+            "deprecated_shapes": [
+                {
+                    "shape": "request_envelope",
+                    "status": "unsupported",
+                    "replacement": "flat_top_level_arguments",
+                }
+            ],
+            "deprecated_fields": [
+                {
+                    "field": "prepare_mode",
+                    "status": "deprecated",
+                    "replacement": "omit",
+                    "removal_after": "next_minor",
+                }
+            ],
+            "deprecated_tools": [],
+        },
+        "citation_keys": {
+            "stable_citation_key": (
+                "Stable across repeated retrieval calls and review index snapshots for the "
+                "same passage_id; use stable_citation_map for render-time numbering."
+            ),
+            "stable_citation_map": "Maps stable_citation_key values back to passage_id values.",
+        },
+        "section_taxonomy": {
+            "canonical_case": "lowercase",
+            "canonical_sections": [
+                "title",
+                "abstract",
+                "introduction",
+                "methods",
+                "results",
+                "discussion",
+                "conclusion",
+                "table",
+                "figure",
+                "references",
+                "unknown",
+            ],
+            "normalization": (
+                "Lowercase ASCII with non-alphanumeric separators collapsed to underscores "
+                "for review passage IDs, filters, diagnostics, and examples."
+            ),
         },
         "budgeting_defaults": {
             "batch_response_mode": "compact",

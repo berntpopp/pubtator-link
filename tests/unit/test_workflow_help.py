@@ -8,6 +8,7 @@ def test_workflow_help_includes_metadata_and_review_index_steps() -> None:
 
     names = [step.tool_name for step in response.steps]
     assert "pubtator.search_biomedical_entities" in names
+    assert "pubtator.find_entity_relations" in names
     assert "pubtator.search_literature" in names
     assert "pubtator.get_publication_metadata" in names
     assert "pubtator.index_review_evidence" in names
@@ -20,6 +21,7 @@ def test_workflow_help_entity_discovery_uses_discovery_tools() -> None:
 
     assert response.tool_sequence == [
         "pubtator.search_biomedical_entities",
+        "pubtator.find_entity_relations",
         "pubtator.lookup_mesh",
         "pubtator.search_literature",
     ]

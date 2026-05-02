@@ -179,7 +179,13 @@ def _status_satisfies(
     wait_for_status: str,
 ) -> bool:
     if wait_for_status == "complete":
-        return status.complete > 0 and status.queued == 0 and status.running == 0 and status.partial == 0 and status.failed == 0
+        return (
+            status.complete > 0
+            and status.queued == 0
+            and status.running == 0
+            and status.partial == 0
+            and status.failed == 0
+        )
     if wait_for_status == "complete_or_partial":
         return status.queued == 0 and status.running == 0 and (status.complete + status.partial) > 0
     return status.queued == 0 and status.running == 0

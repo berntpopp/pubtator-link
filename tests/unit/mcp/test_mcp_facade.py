@@ -169,6 +169,9 @@ def test_capabilities_document_new_budget_and_stable_citation_fields() -> None:
     assert "prompt_injection" in capabilities
     assert "scarcity_first" in str(capabilities)
     assert "stable_citation_key" in str(capabilities)
+    assert capabilities["schema_policy"]["deprecated_fields"][0]["field"] == "prepare_mode"
+    assert capabilities["section_taxonomy"]["canonical_case"] == "lowercase"
+    assert capabilities["citation_keys"]["stable_citation_key"].startswith("Stable across")
     assert capabilities["output_cheatsheet"]["index_snapshot_date"] == "index_snapshot_date"
     assert capabilities["review_rerag"]["snapshot_dates"]["index_snapshot_date"] == (
         "review index state snapshot date"
