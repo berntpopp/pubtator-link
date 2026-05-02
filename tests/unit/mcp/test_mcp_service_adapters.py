@@ -233,18 +233,60 @@ async def test_stage_research_session_impl_calls_service() -> None:
         async def stage(self, *, review_id, request):
             assert review_id == "review-1"
             assert request.query == "FMF"
+            assert request.session_id == "session-1"
+            assert request.pmids == ["40234174"]
+            assert request.page == 2
+            assert request.sort == "score desc"
+            assert request.filters == "year:2024"
+            assert request.publication_types == ["Guideline"]
+            assert request.year_min == 2020
+            assert request.year_max == 2026
+            assert request.sections == ["title", "abstract"]
+            assert request.max_candidates == 10
+            assert request.stage_full_text is False
             return type("Response", (), {"model_dump": lambda self: {"success": True}})()
 
     result = await stage_research_session_impl(
         service=Service(),
         review_id="review-1",
         query="FMF",
-        pmids=None,
+        pmids=["40234174"],
+        session_id="session-1",
+        page=2,
+        sort="score desc",
+        filters="year:2024",
+        publication_types=["Guideline"],
+        year_min=2020,
+        year_max=2026,
+        sections=["title", "abstract"],
         max_candidates=10,
-        stage_full_text=True,
+        stage_full_text=False,
     )
 
     assert result == {"success": True}
+
+
+async def test_stage_research_session_impl_serializes_meta_alias() -> None:
+    from pubtator_link.models.review_rerag import (
+        ResearchSessionManifest,
+        StageResearchSessionResponse,
+    )
+
+    class Service:
+        async def stage(self, *, review_id, request):
+            return StageResearchSessionResponse(
+                manifest=ResearchSessionManifest(session_id="session-1", review_id=review_id),
+                meta={"retry_after_ms": 5000},
+            )
+
+    result = await stage_research_session_impl(
+        service=Service(),
+        review_id="review-1",
+        query="FMF",
+    )
+
+    assert result["_meta"] == {"retry_after_ms": 5000}
+    assert "meta" not in result
 
 
 @pytest.mark.asyncio

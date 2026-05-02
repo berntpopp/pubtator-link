@@ -170,11 +170,18 @@ def register_review_tools(mcp: FastMCP) -> None:
         annotations=REVIEW_WRITE_ANNOTATIONS,
     )
     async def stage_research_session(
-        review_id: str,
-        query: str | None = None,
+        review_id: Annotated[str, Field(min_length=1)],
+        query: Annotated[str | None, Field(min_length=1)] = None,
         pmids: list[str] | None = None,
-        session_id: str | None = None,
-        max_candidates: int = 20,
+        session_id: Annotated[str | None, Field(min_length=1)] = None,
+        page: Annotated[int, Field(ge=1, le=1000)] = 1,
+        sort: str | None = None,
+        filters: str | None = None,
+        publication_types: list[str] | None = None,
+        year_min: Annotated[int | None, Field(ge=1800, le=2030)] = None,
+        year_max: Annotated[int | None, Field(ge=1800, le=2030)] = None,
+        sections: list[str] | None = None,
+        max_candidates: Annotated[int, Field(ge=1, le=100)] = 20,
         stage_full_text: bool = True,
     ) -> dict[str, Any]:
         """Use this after search planning to stage candidate PMIDs with coverage hints and queued review preparation. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
@@ -185,6 +192,13 @@ def register_review_tools(mcp: FastMCP) -> None:
             query=query,
             pmids=pmids,
             session_id=session_id,
+            page=page,
+            sort=sort,
+            filters=filters,
+            publication_types=publication_types,
+            year_min=year_min,
+            year_max=year_max,
+            sections=sections,
             max_candidates=max_candidates,
             stage_full_text=stage_full_text,
         )

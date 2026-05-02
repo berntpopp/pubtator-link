@@ -152,6 +152,52 @@ def test_research_session_tools_are_registered(mcp_tool_names) -> None:
     assert "pubtator.list_research_sessions" in mcp_tool_names
 
 
+def test_research_session_tool_schema_and_annotations_are_stable() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp()
+    tools = mcp._tool_manager._tools
+    stage_tool = tools["pubtator.stage_research_session"]
+    stage_properties = stage_tool.parameters["properties"]
+
+    for property_name in (
+        "review_id",
+        "session_id",
+        "query",
+        "pmids",
+        "page",
+        "sort",
+        "filters",
+        "publication_types",
+        "year_min",
+        "year_max",
+        "sections",
+        "max_candidates",
+        "stage_full_text",
+    ):
+        assert property_name in stage_properties
+
+    assert stage_properties["max_candidates"]["minimum"] == 1
+    assert stage_properties["max_candidates"]["maximum"] == 100
+    assert stage_properties["page"]["minimum"] == 1
+    assert stage_properties["page"]["maximum"] == 1000
+
+    assert "not for diagnosis" in stage_tool.description
+    assert stage_tool.annotations.readOnlyHint is False
+    assert stage_tool.annotations.destructiveHint is False
+    assert stage_tool.annotations.openWorldHint is True
+
+    for name in (
+        "pubtator.get_research_session_status",
+        "pubtator.list_research_sessions",
+    ):
+        tool = tools[name]
+        assert "not for diagnosis" in tool.description
+        assert tool.annotations.readOnlyHint is True
+        assert tool.annotations.destructiveHint is False
+        assert tool.annotations.openWorldHint is True
+
+
 def test_common_mcp_tools_are_flat_and_unversioned() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
