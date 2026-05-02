@@ -83,6 +83,34 @@ async def test_publication_passages_adapter_calls_service() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_publication_metadata_impl_returns_typed_payload() -> None:
+    from pubtator_link.mcp import service_adapters
+    from pubtator_link.models.publication_metadata import PublicationMetadataResponse
+
+    class FakeService:
+        async def get_metadata(self, request):
+            assert request.pmids == ["33454820"]
+            return PublicationMetadataResponse(
+                success=True,
+                metadata=[],
+                failed_pmids={},
+                _meta={"next_commands": []},
+            )
+
+    result = await service_adapters.get_publication_metadata_impl(
+        service=FakeService(),
+        pmids=["33454820"],
+        include_mesh=True,
+        include_publication_types=True,
+        include_citations="both",
+        include_coverage=True,
+    )
+
+    assert result["success"] is True
+    assert result["metadata"] == []
+
+
+@pytest.mark.asyncio
 async def test_preflight_review_sources_adapter_returns_hints() -> None:
     from pubtator_link.mcp.service_adapters import preflight_review_sources_impl
     from pubtator_link.models.review_rerag import SourceCoverageHint
@@ -124,6 +152,7 @@ async def test_inspect_review_index_adapter_calls_service() -> None:
                 sources=[],
                 totals=ReviewIndexTotals(),
                 failed_sources=[],
+                index_snapshot_date="2026-05-02",
             )
 
     result = await inspect_review_index_impl(
@@ -133,6 +162,7 @@ async def test_inspect_review_index_adapter_calls_service() -> None:
 
     assert result["success"] is True
     assert result["review_id"] == "rev_123"
+    assert result["index_snapshot_date"] is not None
 
 
 @pytest.mark.asyncio
@@ -216,6 +246,7 @@ async def test_export_review_audit_bundle_adapter_returns_bundle() -> None:
                 resolver_attempts=[],
                 passage_ids=[],
                 stable_citation_keys={},
+                index_snapshot_date="2026-05-02",
             )
 
     result = await export_review_audit_bundle_impl(
@@ -226,6 +257,7 @@ async def test_export_review_audit_bundle_adapter_returns_bundle() -> None:
     assert set(result) == {"success", "audit_bundle"}
     assert result["success"] is True
     assert result["audit_bundle"]["review_id"] == "rev_123"
+    assert result["audit_bundle"]["index_snapshot_date"] is not None
 
 
 async def test_stage_research_session_impl_calls_service() -> None:
@@ -264,6 +296,35 @@ async def test_stage_research_session_impl_calls_service() -> None:
     )
 
     assert result == {"success": True}
+
+
+@pytest.mark.asyncio
+async def test_suggest_corpus_impl_returns_candidate_pmids() -> None:
+    from pubtator_link.mcp import service_adapters
+    from pubtator_link.models.corpus_suggestion import CorpusSuggestionResponse
+
+    class FakeService:
+        async def suggest(self, request):
+            assert request.question == "FMF MEFV VUS colchicine"
+            return CorpusSuggestionResponse(
+                candidate_pmids=["26802180"],
+                candidates=[],
+                searches=[],
+                _meta={"next_commands": ["pubtator.index_review_evidence"]},
+            )
+
+    result = await service_adapters.suggest_corpus_impl(
+        service=FakeService(),
+        question="FMF MEFV VUS colchicine",
+        max_pmids=8,
+        entity_ids=[],
+        must_include_pmids=[],
+        prefer_guidelines=True,
+        include_metadata=True,
+    )
+
+    assert result["candidate_pmids"] == ["26802180"]
+    assert result["_meta"]["next_commands"] == ["pubtator.index_review_evidence"]
 
 
 async def test_stage_research_session_impl_serializes_meta_alias() -> None:
@@ -317,7 +378,8 @@ async def test_index_review_evidence_adapter_returns_lifecycle_guidance() -> Non
     assert result["queued"] == 1
     assert result["already_prepared"] == 2
     assert set(result) >= {"success", "review_id", "preparation_status"}
-    assert result["retry_after_ms"] == 5000
+    assert result["retry_after_ms"] == 3000
+    assert result["index_snapshot_date"] is not None
     assert "already_prepared" in result["lifecycle_note"]
     assert "inspect_review_index" in result["lifecycle_note"]
 
@@ -342,6 +404,7 @@ async def test_retrieve_review_context_batch_adapter_calls_service() -> None:
                     citation_map={},
                 ),
                 preparation_status=PreparationStatus(complete=1),
+                index_snapshot_date="2026-05-02",
             )
 
     result = await retrieve_review_context_batch_impl(
@@ -354,6 +417,7 @@ async def test_retrieve_review_context_batch_adapter_calls_service() -> None:
     assert result["review_id"] == "rev_123"
     assert set(result) >= {"success", "review_id", "merged_context_pack"}
     assert result["merged_context_pack"]["question"] == "colchicine children"
+    assert result["index_snapshot_date"] is not None
 
 
 @pytest.mark.asyncio
@@ -378,6 +442,7 @@ async def test_retrieve_review_context_batch_adapter_builds_request_from_flat_ar
                 results=[],
                 merged_context_pack=ContextPack(question="", passages=[], citation_map={}),
                 preparation_status=PreparationStatus(),
+                index_snapshot_date="2026-05-02",
             )
 
     service = RecordingService()
@@ -399,6 +464,7 @@ async def test_retrieve_review_context_batch_adapter_builds_request_from_flat_ar
     assert service.request.include_tables is False
     assert service.request.dry_run is True
     assert result["response_mode"] == "diagnostics"
+    assert result["index_snapshot_date"] is not None
 
 
 @pytest.mark.asyncio
@@ -489,6 +555,7 @@ async def test_retrieve_review_context_adapter_builds_request_from_flat_args() -
                     citation_map={},
                 ),
                 preparation_status=PreparationStatus(),
+                index_snapshot_date="2026-05-02",
             )
 
     service = RecordingService()
@@ -505,6 +572,7 @@ async def test_retrieve_review_context_adapter_builds_request_from_flat_args() -
     assert service.request.pmids == ["40234174"]
     assert service.request.include_tables is True
     assert result["context_pack"]["question"] == "MEFV colchicine"
+    assert result["index_snapshot_date"] is not None
 
 
 @pytest.mark.asyncio
@@ -529,6 +597,7 @@ async def test_inspect_review_index_adapter_builds_request_from_flat_args() -> N
                 sources=[],
                 totals=ReviewIndexTotals(),
                 failed_sources=[],
+                index_snapshot_date="2026-05-02",
             )
 
     service = RecordingService()
@@ -539,12 +608,17 @@ async def test_inspect_review_index_adapter_builds_request_from_flat_args() -> N
         pmids=["40234174"],
         include_passage_samples=True,
         sample_per_pmid=3,
+        min_sample_chars=120,
+        sample_section_policy="original_order",
     )
 
     assert service.review_id == "rev"
     assert service.request.pmids == ["40234174"]
     assert service.request.sample_per_pmid == 3
+    assert service.request.min_sample_chars == 120
+    assert service.request.sample_section_policy == "original_order"
     assert result["review_id"] == "rev"
+    assert result["index_snapshot_date"] is not None
 
 
 @pytest.mark.asyncio
@@ -610,6 +684,108 @@ async def test_search_literature_attaches_preflight_coverage() -> None:
     )
 
     assert result["results"][0]["coverage_hint"]["expected_coverage"] == "abstract_only"
+
+
+@pytest.mark.asyncio
+async def test_search_literature_impl_enriches_basic_metadata() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+    from pubtator_link.models.publication_metadata import (
+        PublicationAuthor,
+        PublicationMetadata,
+        PublicationMetadataResponse,
+    )
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "results": [{"pmid": "33454820", "title": "FMF"}],
+                "count": 1,
+                "total_pages": 1,
+                "page_size": 10,
+            }
+
+    class FakeMetadata:
+        async def get_metadata(self, request):
+            assert request.pmids == ["33454820"]
+            return PublicationMetadataResponse(
+                metadata=[
+                    PublicationMetadata(
+                        pmid="33454820",
+                        authors=[PublicationAuthor(last_name="Kavrul Kayaalp", initials="GK")],
+                    )
+                ],
+                _meta={"next_commands": []},
+            )
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="MEFV",
+        metadata="basic",
+        metadata_service=FakeMetadata(),
+    )
+
+    assert result["results"][0]["authors"][0]["display_name"] == "Kavrul Kayaalp GK"
+
+
+@pytest.mark.asyncio
+async def test_search_literature_metadata_respects_limit() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+    from pubtator_link.models.publication_metadata import PublicationMetadataResponse
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "results": [
+                    {"pmid": "1", "title": "First"},
+                    {"pmid": "2", "title": "Second"},
+                ],
+                "count": 2,
+                "total_pages": 1,
+                "page_size": 10,
+            }
+
+    class FakeMetadata:
+        async def get_metadata(self, request):
+            assert request.pmids == ["1"]
+            return PublicationMetadataResponse(metadata=[], _meta={"next_commands": []})
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="MEFV",
+        limit=1,
+        metadata="basic",
+        metadata_service=FakeMetadata(),
+    )
+
+    assert [item["pmid"] for item in result["results"]] == ["1"]
+
+
+@pytest.mark.asyncio
+async def test_search_literature_full_metadata_requests_citations() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+    from pubtator_link.models.publication_metadata import PublicationMetadataResponse
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "results": [{"pmid": "33454820", "title": "FMF"}],
+                "count": 1,
+                "total_pages": 1,
+                "page_size": 10,
+            }
+
+    class FakeMetadata:
+        async def get_metadata(self, request):
+            assert request.include_mesh is True
+            assert request.include_citations == "both"
+            return PublicationMetadataResponse(metadata=[], _meta={"next_commands": []})
+
+    await search_literature_impl(
+        client=FakeClient(),
+        text="MEFV",
+        metadata="full",
+        metadata_service=FakeMetadata(),
+    )
 
 
 @pytest.mark.asyncio

@@ -5,9 +5,14 @@ from typing import Annotated, Any
 from fastmcp import FastMCP
 from pydantic import Field
 
-from pubtator_link.api.routes.dependencies import get_discovery_service
+from pubtator_link.api.routes.dependencies import (
+    get_corpus_suggestion_service,
+    get_discovery_service,
+)
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from pubtator_link.mcp.errors import run_mcp_tool
+from pubtator_link.mcp.service_adapters import suggest_corpus_impl
+from pubtator_link.models.corpus_suggestion import CorpusSuggestionResponse
 from pubtator_link.models.discovery import (
     ArticleIdConversionResponse,
     ArticleIdKind,
@@ -19,6 +24,36 @@ from pubtator_link.models.discovery import (
 
 
 def register_discovery_tools(mcp: FastMCP) -> None:
+    @mcp.tool(
+        name="pubtator.suggest_corpus",
+        title="Suggest Corpus",
+        output_schema=CorpusSuggestionResponse.model_json_schema(),
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def suggest_corpus(
+        question: Annotated[str, Field(min_length=3, max_length=1000)],
+        max_pmids: Annotated[int, Field(ge=1, le=20)] = 8,
+        entity_ids: list[str] | None = None,
+        must_include_pmids: list[str] | None = None,
+        prefer_guidelines: bool = True,
+        include_metadata: bool = True,
+    ) -> dict[str, Any]:
+        """Suggest a compact, review-feeding PMID corpus for a research question. Returns candidate PMIDs, roles, coverage hints, metadata, and next commands. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+
+        async def call() -> dict[str, Any]:
+            service = await get_corpus_suggestion_service()
+            return await suggest_corpus_impl(
+                service=service,
+                question=question,
+                max_pmids=max_pmids,
+                entity_ids=entity_ids,
+                must_include_pmids=must_include_pmids,
+                prefer_guidelines=prefer_guidelines,
+                include_metadata=include_metadata,
+            )
+
+        return await run_mcp_tool("pubtator.suggest_corpus", call)
+
     @mcp.tool(
         name="pubtator.convert_article_ids",
         title="Convert Article IDs",

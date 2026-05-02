@@ -65,6 +65,8 @@ class FakeReviewContextRepository:
         *,
         include_passage_samples: bool = False,
         sample_per_pmid: int = 2,
+        min_sample_chars: int = 80,
+        sample_section_policy: str = "evidence_first",
     ) -> list[ReviewSourceSummary]:
         self.inspect_calls.append(
             {
@@ -73,6 +75,8 @@ class FakeReviewContextRepository:
                 "pmids": pmids,
                 "include_passage_samples": include_passage_samples,
                 "sample_per_pmid": sample_per_pmid,
+                "min_sample_chars": min_sample_chars,
+                "sample_section_policy": sample_section_policy,
             }
         )
         if self.source_summaries:
@@ -177,6 +181,8 @@ class QueryMappedReviewContextRepository(FakeReviewContextRepository):
         *,
         include_passage_samples: bool = False,
         sample_per_pmid: int = 2,
+        min_sample_chars: int = 80,
+        sample_section_policy: str = "evidence_first",
     ) -> list[ReviewSourceSummary]:
         self.inspect_calls.append(
             {
@@ -185,6 +191,8 @@ class QueryMappedReviewContextRepository(FakeReviewContextRepository):
                 "pmids": pmids,
                 "include_passage_samples": include_passage_samples,
                 "sample_per_pmid": sample_per_pmid,
+                "min_sample_chars": min_sample_chars,
+                "sample_section_policy": sample_section_policy,
             }
         )
         if self.source_summaries:
@@ -323,6 +331,7 @@ async def test_retrieve_context_packs_deterministic_diverse_context() -> None:
         "S2": "p-other-pmid",
         "S3": "p-abstract-tie",
     }
+    assert response.index_snapshot_date is not None
     assert response.preparation_status.queued == 1
     assert response.preparation_status.complete == 2
 
@@ -525,6 +534,8 @@ async def test_inspect_review_index_returns_sources_totals_and_failures() -> Non
             pmids=["111"],
             include_passage_samples=True,
             sample_per_pmid=1,
+            min_sample_chars=90,
+            sample_section_policy="original_order",
         ),
     )
 
@@ -535,6 +546,7 @@ async def test_inspect_review_index_returns_sources_totals_and_failures() -> Non
     assert response.totals.passage_count == 2
     assert response.sources[0].sample_passages[0].passage_id == "p1"
     assert response.failed_sources[0].error == "not available"
+    assert response.index_snapshot_date is not None
     assert repository.inspect_calls == [
         {
             "method": "list_review_sources",
@@ -542,6 +554,8 @@ async def test_inspect_review_index_returns_sources_totals_and_failures() -> Non
             "pmids": ["111"],
             "include_passage_samples": True,
             "sample_per_pmid": 1,
+            "min_sample_chars": 90,
+            "sample_section_policy": "original_order",
         },
         {"method": "review_index_totals", "review_id": "review-1"},
         {"method": "list_review_failed_sources", "review_id": "review-1"},
@@ -895,6 +909,7 @@ async def test_batch_dry_run_returns_diagnostics_without_passage_text() -> None:
     assert response.query_summaries[0].returned_count == 1
     assert response.cache_key is not None
     assert response.corpus_snapshot_date is not None
+    assert response.index_snapshot_date is not None
 
 
 @pytest.mark.asyncio
@@ -919,6 +934,7 @@ async def test_batch_context_pack_includes_stable_citation_map() -> None:
     assert response.merged_context_pack.stable_citation_map == {
         passage.stable_citation_key: passage.passage_id
     }
+    assert response.index_snapshot_date is not None
 
 
 @pytest.mark.asyncio

@@ -14,11 +14,15 @@ AttemptStatus = Literal["success", "not_available", "blocked", "failed"]
 ReviewBatchResponseMode = Literal["compact", "merged_only", "full", "diagnostics"]
 ReviewTableMode = Literal["off", "preview", "full"]
 SourceCoverage = Literal["title_only", "abstract_only", "full_text", "curated_url", "unknown"]
+CoverageTier = SourceCoverage
+SampleSectionPolicy = Literal["evidence_first", "original_order"]
 CoverageReason = Literal[
     "full_text_available",
+    "pmc_oa_bioc",
     "abstract_fallback_used",
     "title_only_metadata",
     "no_pmcid",
+    "pre_resolution_best_guess",
     "pmc_not_open_access",
     "license_reuse_unavailable",
     "upstream_timeout",
@@ -120,6 +124,7 @@ class SourceCoverageHint(BaseModel):
     doi: str | None = None
     license_or_access_hint: str | None = None
     pmc_fallback_available: bool = False
+    notes: list[str] = Field(default_factory=list)
     resolver_attempts: list[ResolverAttemptSummary] = Field(default_factory=list)
 
 
@@ -170,6 +175,7 @@ class IndexReviewEvidenceResponse(BaseModel):
     already_prepared: int
     preparation_status: PreparationStatus
     retry_after_ms: int | None = None
+    index_snapshot_date: str | None = None
     lifecycle_note: str | None = None
 
 
@@ -375,6 +381,7 @@ class RetrieveReviewContextResponse(BaseModel):
     review_id: str
     context_pack: ContextPack
     preparation_status: PreparationStatus
+    index_snapshot_date: str | None = None
     diagnostics: "RetrieveReviewDiagnostics | None" = None
 
 
@@ -460,6 +467,7 @@ class RetrieveReviewContextBatchResponse(BaseModel):
     budget: ContextBudget | None = None
     cache_key: str | None = None
     corpus_snapshot_date: str | None = None
+    index_snapshot_date: str | None = None
     source_versions: dict[str, str] = Field(default_factory=dict)
 
 
@@ -528,6 +536,7 @@ class ReviewAuditBundle(BaseModel):
     research_sessions: list[ResearchSessionManifest] = Field(default_factory=list)
     passage_ids: list[str]
     stable_citation_keys: dict[str, str]
+    index_snapshot_date: str | None = None
 
 
 class McpReviewAuditBundleResponse(BaseModel):
@@ -643,6 +652,7 @@ class ReviewSourceSummary(BaseModel):
     pmc_fallback_available: bool = False
     resolver_attempts: list[ResolverAttemptSummary] = Field(default_factory=list)
     sample_passages: list[ReviewPassageSample] = Field(default_factory=list)
+    sample_warning: str | None = None
 
 
 class FailedSourceSummary(BaseModel):
@@ -677,7 +687,9 @@ class InspectReviewIndexRequest(BaseModel):
 
     pmids: list[str] = Field(default_factory=list)
     include_passage_samples: bool = False
-    sample_per_pmid: int = Field(default=2, ge=1, le=5)
+    sample_per_pmid: int = Field(default=2, ge=0, le=10)
+    min_sample_chars: int = Field(default=80, ge=0, le=1000)
+    sample_section_policy: SampleSectionPolicy = "evidence_first"
 
 
 class InspectReviewIndexResponse(BaseModel):
@@ -689,6 +701,7 @@ class InspectReviewIndexResponse(BaseModel):
     sources: list[ReviewSourceSummary]
     totals: ReviewIndexTotals
     failed_sources: list[FailedSourceSummary]
+    index_snapshot_date: str | None = None
 
 
 class ReviewPassageRow(BaseModel):

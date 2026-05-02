@@ -24,11 +24,17 @@ from pubtator_link.models.review_rerag import StageResearchSessionRequest
 from ...api.client import PubTator3Client
 from ...config import review_rerag_config
 from ...logging_config import configure_logging
+from ...models.review_rerag import CoverageReason, CoverageTier
 from ...repositories.review_rerag import PostgresReviewReragRepository
+from ...services.corpus_suggestion import CorpusSuggestionService
 from ...services.diagnostics import DiagnosticsService
 from ...services.europe_pmc import EuropePmcClient
 from ...services.full_text_preparation import FullTextPreparationService
 from ...services.ncbi_discovery import DiscoveryService, NcbiDiscoveryClient
+from ...services.publication_metadata import (
+    NcbiPublicationMetadataClient,
+    PublicationMetadataService,
+)
 from ...services.publication_passage_service import PublicationPassageService
 from ...services.publication_service import PublicationService
 from ...services.research_session import ResearchSessionSearchProvider, ResearchSessionService
@@ -46,6 +52,8 @@ logger = logging.getLogger(__name__)
 _api_client: PubTator3Client | None = None
 _publication_service: PublicationService | None = None
 _publication_passage_service: PublicationPassageService | None = None
+_publication_metadata_service: PublicationMetadataService | None = None
+_ncbi_publication_metadata_client: NcbiPublicationMetadataClient | None = None
 _ncbi_discovery_client: NcbiDiscoveryClient | None = None
 _discovery_service: DiscoveryService | None = None
 _logger: FilteringBoundLogger | None = None
@@ -59,6 +67,7 @@ _review_index_lifecycle_service: ReviewIndexLifecycleService | None = None
 _source_preflight_service: SourcePreflightService | None = None
 _research_session_service: ResearchSessionService | None = None
 _diagnostics_service: DiagnosticsService | None = None
+_corpus_suggestion_service: CorpusSuggestionService | None = None
 
 
 @dataclass
@@ -69,6 +78,8 @@ class AppResources:
     api_client: PubTator3Client
     publication_service: PublicationService
     publication_passage_service: PublicationPassageService
+    ncbi_publication_metadata_client: NcbiPublicationMetadataClient | None = None
+    publication_metadata_service: PublicationMetadataService | None = None
     ncbi_discovery_client: NcbiDiscoveryClient | None = None
     discovery_service: DiscoveryService | None = None
     europe_pmc_client: EuropePmcClient | None = None
@@ -83,6 +94,7 @@ class AppResources:
     research_session_service: ResearchSessionService | None = None
     schema_diagnostics: ReviewSchemaDiagnostics | None = None
     diagnostics_service: DiagnosticsService | None = None
+    corpus_suggestion_service: CorpusSuggestionService | None = None
 
 
 _app_resources_context: ContextVar[AppResources | None] = ContextVar(
@@ -135,6 +147,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
     """Create resources owned by one FastAPI application lifespan."""
     api_client: PubTator3Client | None = None
     ncbi_discovery_client: NcbiDiscoveryClient | None = None
+    ncbi_publication_metadata_client: NcbiPublicationMetadataClient | None = None
     review_pool: asyncpg.Pool | None = None
     review_queue: ReviewPreparationQueue | None = None
     review_audit_service: ReviewAuditService | None = None
@@ -148,19 +161,19 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
         publication_passage_service = PublicationPassageService(
             publication_service=publication_service
         )
+        ncbi_publication_metadata_client = NcbiPublicationMetadataClient()
+        publication_metadata_service = PublicationMetadataService(
+            client=ncbi_publication_metadata_client,
+            coverage_provider=_publication_metadata_coverage_provider,
+        )
         ncbi_discovery_client = NcbiDiscoveryClient()
         discovery_service = DiscoveryService(ncbi_discovery_client)
-        source_preflight_service = SourcePreflightService.from_pubtator_client(
-            api_client,
-            preflight_concurrency=getattr(review_rerag_config, "preflight_concurrency", 3),
-        )
         europe_pmc_client = _build_europe_pmc_client(api_client)
-        if europe_pmc_client is not None:
-            source_preflight_service = SourcePreflightService.from_pubtator_client(
-                api_client,
-                preflight_concurrency=getattr(review_rerag_config, "preflight_concurrency", 3),
-                europe_pmc_client=europe_pmc_client,
-            )
+        source_preflight_service = _build_source_preflight_service(
+            api_client=api_client,
+            discovery_service=discovery_service,
+            europe_pmc_client=europe_pmc_client,
+        )
 
         review_repository: PostgresReviewReragRepository | None = None
         review_context_service: ReviewContextService | None = None
@@ -215,6 +228,8 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             api_client=api_client,
             publication_service=publication_service,
             publication_passage_service=publication_passage_service,
+            ncbi_publication_metadata_client=ncbi_publication_metadata_client,
+            publication_metadata_service=publication_metadata_service,
             ncbi_discovery_client=ncbi_discovery_client,
             discovery_service=discovery_service,
             europe_pmc_client=europe_pmc_client,
@@ -236,6 +251,8 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             await review_pool.close()
         if ncbi_discovery_client is not None:
             await ncbi_discovery_client.close()
+        if ncbi_publication_metadata_client is not None:
+            await ncbi_publication_metadata_client.close()
         if api_client is not None:
             await api_client.close()
         raise
@@ -249,6 +266,8 @@ async def close_app_resources(resources: AppResources) -> None:
         await resources.review_pool.close()
     if resources.ncbi_discovery_client is not None:
         await resources.ncbi_discovery_client.close()
+    if resources.ncbi_publication_metadata_client is not None:
+        await resources.ncbi_publication_metadata_client.close()
     await resources.api_client.close()
 
 
@@ -301,6 +320,37 @@ async def get_publication_passage_service() -> PublicationPassageService:
     return _publication_passage_service
 
 
+async def get_publication_metadata_service() -> PublicationMetadataService:
+    """Get citation-grade publication metadata service."""
+    global _ncbi_publication_metadata_client, _publication_metadata_service
+    resources = current_app_resources()
+    if resources is not None:
+        if resources.publication_metadata_service is None:
+            if resources.ncbi_publication_metadata_client is None:
+                resources.ncbi_publication_metadata_client = NcbiPublicationMetadataClient()
+            resources.publication_metadata_service = PublicationMetadataService(
+                client=resources.ncbi_publication_metadata_client,
+                coverage_provider=_publication_metadata_coverage_provider,
+            )
+        return resources.publication_metadata_service
+    if _publication_metadata_service is None:
+        if _ncbi_publication_metadata_client is None:
+            _ncbi_publication_metadata_client = NcbiPublicationMetadataClient()
+        _publication_metadata_service = PublicationMetadataService(
+            client=_ncbi_publication_metadata_client,
+            coverage_provider=_publication_metadata_coverage_provider,
+        )
+    return _publication_metadata_service
+
+
+async def _publication_metadata_coverage_provider(
+    pmids: list[str],
+) -> dict[str, tuple[CoverageTier, CoverageReason]]:
+    preflight = await get_source_preflight_service()
+    hints = await preflight.preflight_pmids(pmids)
+    return {hint.pmid: (hint.expected_coverage, hint.coverage_reason) for hint in hints}
+
+
 async def get_discovery_service() -> DiscoveryService:
     """Get NCBI discovery service."""
     global _ncbi_discovery_client, _discovery_service
@@ -329,6 +379,37 @@ async def get_diagnostics_service() -> DiagnosticsService:
     if _diagnostics_service is None:
         _diagnostics_service = _build_diagnostics_service(None)
     return _diagnostics_service
+
+
+async def get_corpus_suggestion_service() -> CorpusSuggestionService:
+    """Get deterministic corpus suggestion service."""
+    global _corpus_suggestion_service
+    resources = current_app_resources()
+    if resources is not None:
+        if resources.corpus_suggestion_service is None:
+            resources.corpus_suggestion_service = CorpusSuggestionService(
+                search_client=_CorpusSuggestionSearchClient(resources.api_client),
+                metadata_service=await get_publication_metadata_service(),
+                source_preflight_service=await get_source_preflight_service(),
+            )
+        return resources.corpus_suggestion_service
+    if _corpus_suggestion_service is None:
+        _corpus_suggestion_service = CorpusSuggestionService(
+            search_client=_CorpusSuggestionSearchClient(await get_api_client()),
+            metadata_service=await get_publication_metadata_service(),
+            source_preflight_service=await get_source_preflight_service(),
+        )
+    return _corpus_suggestion_service
+
+
+class _CorpusSuggestionSearchClient:
+    def __init__(self, client: PubTator3Client) -> None:
+        self.client = client
+
+    async def search(self, query: str, *, limit: int, sort: str | None) -> dict[str, Any]:
+        raw = await self.client.search_publications(text=query, page=1, sort=sort)
+        results = list(raw.get("results", []))
+        return {**raw, "results": results[:limit]}
 
 
 def _build_diagnostics_service(resources: AppResources | None) -> DiagnosticsService:
@@ -429,20 +510,53 @@ async def get_source_preflight_service() -> SourcePreflightService:
     resources = current_app_resources()
     if resources is not None:
         if resources.source_preflight_service is None:
-            resources.source_preflight_service = SourcePreflightService.from_pubtator_client(
-                resources.api_client,
-                preflight_concurrency=getattr(review_rerag_config, "preflight_concurrency", 3),
+            resources.source_preflight_service = _build_source_preflight_service(
+                api_client=resources.api_client,
+                discovery_service=await get_discovery_service(),
                 europe_pmc_client=resources.europe_pmc_client,
             )
         return resources.source_preflight_service
     if _source_preflight_service is None:
         client = await get_api_client()
-        _source_preflight_service = SourcePreflightService.from_pubtator_client(
-            client,
-            preflight_concurrency=getattr(review_rerag_config, "preflight_concurrency", 3),
+        _source_preflight_service = _build_source_preflight_service(
+            api_client=client,
+            discovery_service=await get_discovery_service(),
             europe_pmc_client=_build_europe_pmc_client(client),
         )
     return _source_preflight_service
+
+
+def _build_source_preflight_service(
+    *,
+    api_client: PubTator3Client,
+    discovery_service: DiscoveryService,
+    europe_pmc_client: EuropePmcClient | None = None,
+) -> SourcePreflightService:
+    async def id_converter(pmid: str) -> dict[str, str | None]:
+        converted = await discovery_service.convert_article_ids([pmid], source="auto")
+        record = next(
+            (
+                record
+                for record in converted.records
+                if record.input_id == pmid or record.pmid == pmid
+            ),
+            None,
+        )
+        if record is None:
+            return {"id_resolution_status": "unresolved"}
+        return {
+            "pmcid": record.pmcid,
+            "doi": record.doi,
+            "id_resolution_status": record.status,
+            "id_resolution_reason": record.reason,
+        }
+
+    return SourcePreflightService.from_pubtator_client(
+        api_client,
+        id_converter=id_converter,
+        preflight_concurrency=getattr(review_rerag_config, "preflight_concurrency", 3),
+        europe_pmc_client=europe_pmc_client,
+    )
 
 
 def _build_europe_pmc_client(client: PubTator3Client) -> EuropePmcClient | None:
@@ -623,6 +737,12 @@ PublicationServiceDep = Annotated[PublicationService, Depends(get_publication_se
 PublicationPassageServiceDep = Annotated[
     PublicationPassageService, Depends(get_publication_passage_service)
 ]
+PublicationMetadataServiceDep = Annotated[
+    PublicationMetadataService, Depends(get_publication_metadata_service)
+]
+CorpusSuggestionServiceDep = Annotated[
+    CorpusSuggestionService, Depends(get_corpus_suggestion_service)
+]
 DiscoveryServiceDep = Annotated[DiscoveryService, Depends(get_discovery_service)]
 ReviewQueueDep = Annotated[ReviewPreparationQueue, Depends(get_review_queue)]
 ReviewContextServiceDep = Annotated[ReviewContextService, Depends(get_review_context_service)]
@@ -760,11 +880,13 @@ def validate_limit(limit: int, max_limit: int = 100) -> int:
 async def cleanup_dependencies() -> None:
     """Cleanup function for graceful shutdown."""
     global _api_client, _publication_passage_service, _publication_service, _logger
-    global _discovery_service, _ncbi_discovery_client
+    global _discovery_service, _ncbi_discovery_client, _ncbi_publication_metadata_client
+    global _publication_metadata_service
     global _review_context_service, _review_pool, _review_queue, _review_repository
     global _review_evidence_certainty_service
     global _review_index_lifecycle_service
     global _research_session_service
+    global _corpus_suggestion_service
 
     if _api_client:
         api_client = _api_client
@@ -775,6 +897,11 @@ async def cleanup_dependencies() -> None:
         ncbi_discovery_client = _ncbi_discovery_client
         _ncbi_discovery_client = None
         await ncbi_discovery_client.close()
+
+    if _ncbi_publication_metadata_client:
+        publication_metadata_client = _ncbi_publication_metadata_client
+        _ncbi_publication_metadata_client = None
+        await publication_metadata_client.close()
 
     if _review_queue:
         await _review_queue.stop()
@@ -789,7 +916,9 @@ async def cleanup_dependencies() -> None:
     _review_evidence_certainty_service = None
     _review_index_lifecycle_service = None
     _research_session_service = None
+    _corpus_suggestion_service = None
     _discovery_service = None
     _publication_passage_service = None
+    _publication_metadata_service = None
     _publication_service = None
     _logger = None

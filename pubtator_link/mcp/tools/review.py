@@ -53,6 +53,7 @@ from pubtator_link.models.review_rerag import (
     ReviewIndexSummaryResponse,
     ReviewPassageLookupResponse,
     ReviewTableMode,
+    SampleSectionPolicy,
     StageResearchSessionResponse,
 )
 
@@ -311,6 +312,8 @@ def register_review_tools(mcp: FastMCP) -> None:
         pmids: list[str] | None = None,
         include_passage_samples: bool = False,
         sample_per_pmid: int = 2,
+        min_sample_chars: int = 80,
+        sample_section_policy: SampleSectionPolicy = "evidence_first",
     ) -> dict[str, Any]:
         """Use this when a user needs to inspect indexed PMIDs, sections, passage counts, and failures for a review_id, including source coverage. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
 
@@ -322,6 +325,8 @@ def register_review_tools(mcp: FastMCP) -> None:
                 pmids=pmids,
                 include_passage_samples=include_passage_samples,
                 sample_per_pmid=sample_per_pmid,
+                min_sample_chars=min_sample_chars,
+                sample_section_policy=sample_section_policy,
             )
 
         return await run_mcp_tool("pubtator.inspect_review_index", call, pmids=pmids)

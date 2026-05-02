@@ -175,6 +175,27 @@ Projected impact: **4-run PMID overlap should move from ~2/13 → ~10/13**, with
 
 ---
 
+## Implementation Status
+
+The LLM citation and state surface stabilization work adds:
+
+- `pubtator.get_publication_metadata` for citation-grade PMID metadata.
+- Optional `search_literature(metadata="basic" | "full")` enrichment.
+- Honest pre-resolution coverage labeling when PMCID conversion is unavailable.
+- State-aware `retry_after_ms` values that are omitted for terminal review preparation.
+- `index_snapshot_date` alongside `corpus_snapshot_date` on review-index responses.
+- Sample passage filtering for `inspect_review_index`.
+- `pubtator.workflow_help` for canonical workflow guidance.
+- `pubtator.suggest_corpus` for compact review-feeding PMID selection.
+
+Remaining out of scope for this change:
+
+- Public tool renaming or shortened aliases.
+- Full-text coverage expansion beyond available PubTator and PMC OA sources.
+- Breaking consolidation of existing discovery verbs.
+
+---
+
 ## 8. Appendix — Citation-integrity verification
 
 All 16 PMIDs cited across the 4 runs were verified against `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi`. Every author / journal / year / volume / issue / pages / DOI matched the runs' citations.

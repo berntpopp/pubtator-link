@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 
+from ...models.corpus_suggestion import CorpusSuggestionRequest, CorpusSuggestionResponse
 from ...models.discovery import (
     ArticleIdConversionRequest,
     ArticleIdConversionResponse,
@@ -13,7 +14,7 @@ from ...models.discovery import (
     RelatedArticlesRequest,
     RelatedArticlesResponse,
 )
-from .dependencies import DiscoveryServiceDep, handle_api_errors
+from .dependencies import CorpusSuggestionServiceDep, DiscoveryServiceDep, handle_api_errors
 
 router = APIRouter(prefix="/api/discovery", tags=["discovery"])
 
@@ -72,3 +73,15 @@ async def related_articles(
         mode=request.mode,
         limit=request.limit,
     )
+
+
+@router.post(
+    "/suggest-corpus",
+    response_model=CorpusSuggestionResponse,
+)
+@handle_api_errors
+async def suggest_corpus(
+    request: CorpusSuggestionRequest,
+    service: CorpusSuggestionServiceDep,
+) -> CorpusSuggestionResponse:
+    return await service.suggest(request)

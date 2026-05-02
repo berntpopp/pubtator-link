@@ -5,7 +5,12 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from pubtator_link.api.routes import dependencies
-from pubtator_link.api.routes.dependencies import cleanup_dependencies, get_discovery_service
+from pubtator_link.api.routes.dependencies import (
+    cleanup_dependencies,
+    get_corpus_suggestion_service,
+    get_discovery_service,
+)
+from pubtator_link.models.corpus_suggestion import CorpusSuggestionResponse
 from pubtator_link.models.discovery import (
     ArticleIdConversionRecord,
     ArticleIdConversionResponse,
@@ -212,6 +217,30 @@ async def test_related_articles_route_returns_candidate_pmids() -> None:
         mode="similar",
         limit=20,
     )
+
+
+@pytest.mark.asyncio
+async def test_suggest_corpus_route_returns_candidate_pmids() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.suggest.return_value = CorpusSuggestionResponse(
+        candidate_pmids=["26802180", "33726481"],
+        candidates=[],
+        searches=[],
+        _meta={"next_commands": ["pubtator.index_review_evidence"]},
+    )
+    app.dependency_overrides[get_corpus_suggestion_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/discovery/suggest-corpus",
+            json={"question": "FMF MEFV VUS colchicine", "max_pmids": 2},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["candidate_pmids"] == ["26802180", "33726481"]
+    service.suggest.assert_awaited_once()
+    assert service.suggest.await_args.args[0].question == "FMF MEFV VUS colchicine"
 
 
 @pytest.mark.asyncio

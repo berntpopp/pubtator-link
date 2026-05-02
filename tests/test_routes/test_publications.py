@@ -6,7 +6,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 from pubtator_link.api.client import PubTator3Client
-from pubtator_link.api.routes.dependencies import get_publication_passage_service
+from pubtator_link.api.routes.dependencies import (
+    get_publication_metadata_service,
+    get_publication_passage_service,
+)
+from pubtator_link.models.publication_metadata import (
+    PublicationAuthor,
+    PublicationMetadata,
+    PublicationMetadataResponse,
+)
 from pubtator_link.models.publication_passages import (
     PublicationContextEstimate,
     PublicationContextEstimateResponse,
@@ -20,6 +28,32 @@ from tests.fixtures.api_responses import MockPubTatorResponses
 MOCK_PUBLICATION_EXPORT_RESPONSE = MockPubTatorResponses.publication_export_biocjson()
 
 
+class FakePublicationMetadataService:
+    """Route fake for publication metadata dependency override."""
+
+    async def get_metadata(self, request):
+        assert request.pmids == ["33454820"]
+        return PublicationMetadataResponse(
+            success=True,
+            metadata=[
+                PublicationMetadata(
+                    pmid="33454820",
+                    title="Adherence to best practice consensus guidelines for familial Mediterranean fever",
+                    journal="Rheumatology International",
+                    pub_year=2022,
+                    volume="42",
+                    issue="1",
+                    pages="87-94",
+                    authors=[PublicationAuthor(last_name="Kavrul Kayaalp", initials="GK")],
+                    publication_types=["Journal Article"],
+                    mesh_headings=["Familial Mediterranean Fever"],
+                )
+            ],
+            failed_pmids={},
+            _meta={"next_commands": []},
+        )
+
+
 @pytest.fixture
 def test_client():
     """Create test client."""
@@ -30,6 +64,25 @@ def test_client():
 
 class TestPublicationRoutes:
     """Test publication export endpoints."""
+
+    def test_publication_metadata_route(self):
+        """Test citation-grade publication metadata endpoint."""
+        manager = UnifiedServerManager()
+        app = manager.create_app()
+        service = FakePublicationMetadataService()
+        app.dependency_overrides[get_publication_metadata_service] = lambda: service
+
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/publications/metadata",
+                json={"pmids": ["33454820"], "include_mesh": True},
+            )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["success"] is True
+        assert payload["metadata"][0]["pmid"] == "33454820"
+        assert payload["metadata"][0]["authors"][0]["display_name"] == "Kavrul Kayaalp GK"
 
     @patch.object(PubTator3Client, "export_publications")
     def test_export_publications_biocjson(self, mock_export, test_client):

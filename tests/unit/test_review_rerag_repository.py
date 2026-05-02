@@ -516,6 +516,7 @@ async def test_list_review_sources_aggregates_jobs_attempts_passages_and_samples
                     char_count=16,
                 )
             ],
+            sample_warning="Only short sample passages were available for this PMID.",
         )
     ]
     summary_sql, summary_args = connection.executed[0]
@@ -525,7 +526,147 @@ async def test_list_review_sources_aggregates_jobs_attempts_passages_and_samples
     assert "review_passages" in summary_sql
     assert summary_args == ("review-1", ["111"])
     assert "row_number()" in sample_sql.lower()
-    assert sample_args == ("review-1", ["111"], ["111"], 1)
+    assert sample_args == ("review-1", ["111"], ["111"], 1, "evidence_first", 80)
+
+
+@pytest.mark.asyncio
+async def test_list_review_sources_prefers_informative_non_stub_samples() -> None:
+    connection = FakeConnection()
+    connection.fetched_row_batches = [
+        [
+            {
+                "source_id": "PMID:33454820",
+                "pmid": "33454820",
+                "source_kind": "pubtator_abstract",
+                "job_status": "complete",
+                "error": None,
+                "attempt_statuses": ["success"],
+                "sections": ["Background", "abstract"],
+                "passage_count": 2,
+                "char_count": 120,
+            }
+        ],
+        [
+            {
+                "source_id": "PMID:33454820",
+                "passage_id": "PMID:33454820:abstract:0",
+                "section": "abstract",
+                "text": "Familial Mediterranean fever is a clinically diagnosed autoinflammatory disease with MEFV-associated genetic findings.",
+                "char_count": 113,
+            }
+        ],
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    sources = await repository.list_review_sources(
+        "review-samples",
+        include_passage_samples=True,
+        sample_per_pmid=1,
+        min_sample_chars=80,
+        sample_section_policy="evidence_first",
+    )
+
+    assert sources[0].sample_passages[0].passage_id == "PMID:33454820:abstract:0"
+    assert sources[0].sample_warning is None
+    sample_sql, sample_args = connection.executed[1]
+    normalized_sql = " ".join(sample_sql.split())
+    assert "char_length(text)" in sample_sql
+    assert "abstract" in sample_sql
+    assert "results" in sample_sql
+    assert "order by" in normalized_sql
+    assert sample_args == (
+        "review-samples",
+        None,
+        ["PMID:33454820"],
+        1,
+        "evidence_first",
+        80,
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_review_sources_warns_when_only_stub_samples_exist() -> None:
+    connection = FakeConnection()
+    connection.fetched_row_batches = [
+        [
+            {
+                "source_id": "PMID:33454820",
+                "pmid": "33454820",
+                "source_kind": "pubtator_abstract",
+                "job_status": "complete",
+                "error": None,
+                "attempt_statuses": ["success"],
+                "sections": ["Background"],
+                "passage_count": 1,
+                "char_count": 10,
+            }
+        ],
+        [
+            {
+                "source_id": "PMID:33454820",
+                "passage_id": "PMID:33454820:background:0",
+                "section": "Background",
+                "text": "Background",
+                "char_count": 10,
+            }
+        ],
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    sources = await repository.list_review_sources(
+        "review-stub-samples",
+        include_passage_samples=True,
+        sample_per_pmid=1,
+        min_sample_chars=80,
+        sample_section_policy="evidence_first",
+    )
+
+    assert sources[0].sample_passages[0].text == "Background"
+    assert sources[0].sample_warning == "Only short sample passages were available for this PMID."
+
+
+@pytest.mark.asyncio
+async def test_list_review_sources_original_order_uses_passage_id_not_section() -> None:
+    connection = FakeConnection()
+    connection.fetched_row_batches = [
+        [
+            {
+                "source_id": "PMID:33454820",
+                "pmid": "33454820",
+                "source_kind": "pubtator_abstract",
+                "job_status": "complete",
+                "error": None,
+                "attempt_statuses": ["success"],
+                "sections": ["z-section", "a-section"],
+                "passage_count": 2,
+                "char_count": 200,
+            }
+        ],
+        [
+            {
+                "source_id": "PMID:33454820",
+                "passage_id": "PMID:33454820:z-section:0",
+                "section": "z-section",
+                "text": "Original first passage.",
+                "char_count": 24,
+            }
+        ],
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    await repository.list_review_sources(
+        "review-original-order",
+        include_passage_samples=True,
+        sample_per_pmid=1,
+        sample_section_policy="original_order",
+    )
+
+    sample_sql, _sample_args = connection.executed[1]
+    normalized_sql = " ".join(sample_sql.split())
+    assert "when $5::text = 'evidence_first' then section else '' end" in normalized_sql
+    assert "when $5::text = 'evidence_first' then null else created_at end, passage_id" in (
+        normalized_sql
+    )
 
 
 @pytest.mark.asyncio

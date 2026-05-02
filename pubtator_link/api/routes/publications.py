@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Query
 
 from ...config import api_config
+from ...models.publication_metadata import PublicationMetadataRequest, PublicationMetadataResponse
 from ...models.publication_passages import (
     PublicationContextEstimateRequest,
     PublicationContextEstimateResponse,
@@ -14,6 +15,7 @@ from ...models.publication_passages import (
 from ...models.requests import PMCExportRequest, PublicationExportRequest
 from ...models.responses import PublicationExportResponse
 from .dependencies import (
+    PublicationMetadataServiceDep,
     PublicationPassageServiceDep,
     PublicationServiceDep,
     handle_api_errors,
@@ -53,6 +55,21 @@ async def estimate_publication_context(
 ) -> PublicationContextEstimateResponse:
     """Estimate compact passage count and character size before retrieval."""
     return await service.estimate_context(request)
+
+
+@router.post(
+    "/metadata",
+    response_model=PublicationMetadataResponse,
+    operation_id="get_publication_metadata",
+    summary="Get publication metadata",
+)
+@handle_api_errors
+async def get_publication_metadata(
+    request: PublicationMetadataRequest,
+    service: PublicationMetadataServiceDep,
+) -> PublicationMetadataResponse:
+    """Return citation-grade metadata for known PMIDs."""
+    return await service.get_metadata(request)
 
 
 @router.get(

@@ -18,6 +18,7 @@ from pubtator_link.models.review_rerag import (
     ReviewPassageRow,
     ReviewPassageSample,
     ReviewSourceSummary,
+    SampleSectionPolicy,
     UpsertEvidenceCertaintyRequest,
 )
 from pubtator_link.repositories.review_rerag_mappers import (
@@ -34,6 +35,18 @@ from pubtator_link.repositories.review_rerag_mappers import (
     _review_inventory_item_from_row,
     _source_summary_from_row,
 )
+
+SHORT_SAMPLE_WARNING = "Only short sample passages were available for this PMID."
+
+
+def _sample_warning(
+    samples: list[ReviewPassageSample],
+    *,
+    min_sample_chars: int,
+) -> str | None:
+    if samples and all(sample.char_count < min_sample_chars for sample in samples):
+        return SHORT_SAMPLE_WARNING
+    return None
 
 
 class ReviewReragRepository(Protocol):
@@ -113,6 +126,8 @@ class ReviewReragRepository(Protocol):
         *,
         include_passage_samples: bool = False,
         sample_per_pmid: int = 2,
+        min_sample_chars: int = 80,
+        sample_section_policy: SampleSectionPolicy = "evidence_first",
     ) -> list[ReviewSourceSummary]:
         """List review source summaries, optionally with passage samples."""
 
@@ -701,6 +716,8 @@ class PostgresReviewReragRepository:
         *,
         include_passage_samples: bool = False,
         sample_per_pmid: int = 2,
+        min_sample_chars: int = 80,
+        sample_section_policy: SampleSectionPolicy = "evidence_first",
     ) -> list[ReviewSourceSummary]:
         pmid_filter = _filter_or_none(pmids)
         async with self._acquire() as connection:
@@ -817,7 +834,7 @@ class PostgresReviewReragRepository:
                 pmid_filter,
             )
             sources = [_source_summary_from_row(row) for row in rows]
-            if include_passage_samples and sources:
+            if include_passage_samples and sources and sample_per_pmid > 0:
                 source_ids = [source.source_id for source in sources]
                 sample_rows = await connection.fetch(
                     """
@@ -830,7 +847,34 @@ class PostgresReviewReragRepository:
                             length(text)::int as char_count,
                             row_number() over (
                                 partition by coalesce(pmid, source_id)
-                                order by section, passage_id
+                                order by
+                                    case
+                                        when $5::text = 'evidence_first'
+                                             and char_length(text) >= $6::int then 0
+                                        when $5::text = 'evidence_first' then 1
+                                        else 0
+                                    end,
+                                    case
+                                        when $5::text <> 'evidence_first' then 0
+                                        when lower(section) in (
+                                            'abstract',
+                                            'results',
+                                            'discussion',
+                                            'methods',
+                                            'introduction'
+                                        ) then 0
+                                        when lower(section) in ('background', 'conclusion') then 1
+                                        else 2
+                                    end,
+                                    case
+                                        when $5::text = 'evidence_first' then section
+                                        else ''
+                                    end,
+                                    case
+                                        when $5::text = 'evidence_first' then null
+                                        else created_at
+                                    end,
+                                    passage_id
                             ) as sample_rank
                         from review_passages
                         where review_id = $1
@@ -846,6 +890,8 @@ class PostgresReviewReragRepository:
                     pmid_filter,
                     source_ids,
                     sample_per_pmid,
+                    sample_section_policy,
+                    min_sample_chars,
                 )
                 samples_by_source: dict[str, list[ReviewPassageSample]] = {}
                 for row in sample_rows:
@@ -854,7 +900,13 @@ class PostgresReviewReragRepository:
                     )
                 sources = [
                     source.model_copy(
-                        update={"sample_passages": samples_by_source.get(source.source_id, [])}
+                        update={
+                            "sample_passages": samples_by_source.get(source.source_id, []),
+                            "sample_warning": _sample_warning(
+                                samples_by_source.get(source.source_id, []),
+                                min_sample_chars=min_sample_chars,
+                            ),
+                        }
                     )
                     for source in sources
                 ]

@@ -11,6 +11,11 @@ def corpus_snapshot_date() -> str:
     return date.today().isoformat()
 
 
+def index_snapshot_date() -> str:
+    """Return the local date used for review-index snapshots."""
+    return date.today().isoformat()
+
+
 def stable_cache_key(namespace: str, payload: dict[str, Any]) -> str:
     """Return a compact deterministic key for request provenance."""
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)

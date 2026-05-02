@@ -5,6 +5,8 @@ from typing import Any, Literal, cast
 from pubtator_link.api.client import PubTator3Client
 from pubtator_link.api.search_filters import merge_search_filters
 from pubtator_link.config import text_processing_config
+from pubtator_link.models.corpus_suggestion import CorpusSuggestionRequest
+from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 from pubtator_link.models.publication_passages import (
     PublicationContextEstimateRequest,
     PublicationPassageMode,
@@ -25,15 +27,19 @@ from pubtator_link.models.review_rerag import (
     IndexReviewEvidenceRequest,
     InspectReviewIndexRequest,
     McpReviewAuditBundleResponse,
+    PreparationStatus,
     PrepareMode,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
     ReviewBatchResponseMode,
     ReviewTableMode,
+    SampleSectionPolicy,
     StageResearchSessionRequest,
     UpsertEvidenceCertaintyRequest,
 )
+from pubtator_link.services.corpus_suggestion import CorpusSuggestionService
 from pubtator_link.services.entity_matching import matched_terms_from_match_text
+from pubtator_link.services.publication_metadata import PublicationMetadataService
 from pubtator_link.services.publication_passage_service import PublicationPassageService
 from pubtator_link.services.publication_service import PublicationService
 from pubtator_link.services.review_audit import ReviewAuditService
@@ -41,6 +47,7 @@ from pubtator_link.services.review_context_service import ReviewContextService
 from pubtator_link.services.review_evidence_certainty import ReviewEvidenceCertaintyService
 from pubtator_link.services.review_index_lifecycle import ReviewIndexLifecycleService
 from pubtator_link.services.review_preparation_queue import ReviewPreparationQueue
+from pubtator_link.services.review_state import index_snapshot_date, retry_after_ms_for_status
 from pubtator_link.services.search_coverage import (
     SearchCoverageMode,
     SearchCoveragePreflight,
@@ -48,9 +55,11 @@ from pubtator_link.services.search_coverage import (
 )
 from pubtator_link.services.search_shaping import (
     IncludeCitations,
+    SearchMetadataMode,
     SearchResponseMode,
     TextHighlightFormat,
     combined_search_text,
+    selected_search_items,
     shaped_search_response,
 )
 from pubtator_link.services.source_preflight import SourcePreflightService
@@ -137,6 +146,50 @@ async def get_publication_passages_impl(
     return response.model_dump()
 
 
+async def get_publication_metadata_impl(
+    *,
+    service: PublicationMetadataService,
+    pmids: list[str],
+    include_mesh: bool = True,
+    include_publication_types: bool = True,
+    include_citations: Literal["none", "nlm", "bibtex", "both"] = "both",
+    include_coverage: bool = True,
+) -> dict[str, Any]:
+    response = await service.get_metadata(
+        PublicationMetadataRequest(
+            pmids=pmids,
+            include_mesh=include_mesh,
+            include_publication_types=include_publication_types,
+            include_citations=include_citations,
+            include_coverage=include_coverage,
+        )
+    )
+    return response.model_dump(by_alias=True)
+
+
+async def suggest_corpus_impl(
+    *,
+    service: CorpusSuggestionService,
+    question: str,
+    max_pmids: int = 8,
+    entity_ids: list[str] | None = None,
+    must_include_pmids: list[str] | None = None,
+    prefer_guidelines: bool = True,
+    include_metadata: bool = True,
+) -> dict[str, Any]:
+    response = await service.suggest(
+        CorpusSuggestionRequest(
+            question=question,
+            max_pmids=max_pmids,
+            entity_ids=entity_ids or [],
+            must_include_pmids=must_include_pmids or [],
+            prefer_guidelines=prefer_guidelines,
+            include_metadata=include_metadata,
+        )
+    )
+    return response.model_dump(by_alias=True)
+
+
 async def estimate_publication_context_impl(
     *,
     service: PublicationPassageService,
@@ -181,6 +234,8 @@ async def search_literature_impl(
     guideline_boost: bool = False,
     coverage: SearchCoverageMode = "none",
     preflight_service: SearchCoveragePreflight | None = None,
+    metadata: SearchMetadataMode = "none",
+    metadata_service: PublicationMetadataService | None = None,
 ) -> dict[str, Any]:
     normalized_text = combined_search_text(text, entity_ids)
     merged_filters = merge_search_filters(
@@ -196,6 +251,17 @@ async def search_literature_impl(
         filters=merged_filters,
         sections=",".join(sections) if sections else None,
     )
+    raw_items = _selected_search_items(
+        result,
+        limit=limit,
+        guideline_boost=guideline_boost,
+    )
+    metadata_by_pmid = await _search_metadata_by_pmid(
+        raw_items,
+        metadata=metadata,
+        include_citations=include_citations,
+        metadata_service=metadata_service,
+    )
     response = shaped_search_response(
         raw=result,
         query=normalized_text,
@@ -208,10 +274,50 @@ async def search_literature_impl(
         text_hl_format=text_hl_format,
         limit=limit,
         guideline_boost=guideline_boost,
+        metadata=metadata,
+        metadata_by_pmid=metadata_by_pmid,
     )
     if coverage == "preflight" and preflight_service is not None:
         await attach_preflight_coverage(response, preflight_service)
     return response.model_dump()
+
+
+def _selected_search_items(
+    raw_result: dict[str, Any],
+    *,
+    limit: int | None,
+    guideline_boost: bool,
+) -> list[dict[str, Any]]:
+    items = list(raw_result.get("results", []))
+    return selected_search_items(items, guideline_boost=guideline_boost, limit=limit)
+
+
+async def _search_metadata_by_pmid(
+    raw_items: list[dict[str, Any]],
+    *,
+    metadata: SearchMetadataMode,
+    include_citations: IncludeCitations,
+    metadata_service: PublicationMetadataService | None,
+) -> dict[str, dict[str, Any]]:
+    if metadata == "none" or metadata_service is None:
+        return {}
+    pmids = [str(item.get("pmid", "")) for item in raw_items]
+    pmids = [pmid for pmid in dict.fromkeys(pmids) if pmid]
+    if not pmids:
+        return {}
+    include_metadata_citations: IncludeCitations = (
+        "both" if metadata == "full" and include_citations == "none" else include_citations
+    )
+    response = await metadata_service.get_metadata(
+        PublicationMetadataRequest(
+            pmids=pmids,
+            include_mesh=metadata == "full",
+            include_publication_types=True,
+            include_citations=include_metadata_citations if metadata == "full" else "none",
+            include_coverage=False,
+        )
+    )
+    return {item.pmid: item.model_dump() for item in response.metadata}
 
 
 async def fetch_pmc_annotations_impl(
@@ -379,14 +485,15 @@ async def index_review_evidence_impl(
             queued += 1
         else:
             already_prepared += 1
-    status = await queue.repository.preparation_status(review_id)
+    status = _preparation_status_model(await queue.repository.preparation_status(review_id))
     response = {
         "success": True,
         "review_id": review_id,
         "queued": queued,
         "already_prepared": already_prepared,
         "preparation_status": status.model_dump(),
-        "retry_after_ms": 5000 if status.queued or status.running else None,
+        "retry_after_ms": retry_after_ms_for_status(status),
+        "index_snapshot_date": index_snapshot_date(),
         "lifecycle_note": (
             "Repeated calls with the same review_id and already prepared PMIDs are no-ops "
             "counted as already_prepared; new PMIDs are enqueued for the same review_id. "
@@ -395,6 +502,12 @@ async def index_review_evidence_impl(
         ),
     }
     return response
+
+
+def _preparation_status_model(status: PreparationStatus | dict[str, int]) -> PreparationStatus:
+    if isinstance(status, PreparationStatus):
+        return status
+    return PreparationStatus(**status)
 
 
 async def preflight_review_sources_impl(
@@ -471,6 +584,8 @@ async def inspect_review_index_impl(
     pmids: list[str] | None = None,
     include_passage_samples: bool = False,
     sample_per_pmid: int = 2,
+    min_sample_chars: int = 80,
+    sample_section_policy: SampleSectionPolicy = "evidence_first",
 ) -> dict[str, Any]:
     response = await service.inspect_review_index(
         review_id=review_id,
@@ -478,6 +593,8 @@ async def inspect_review_index_impl(
             pmids=pmids or [],
             include_passage_samples=include_passage_samples,
             sample_per_pmid=sample_per_pmid,
+            min_sample_chars=min_sample_chars,
+            sample_section_policy=sample_section_policy,
         ),
     )
     return response.model_dump()
