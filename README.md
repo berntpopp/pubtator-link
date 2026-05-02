@@ -212,6 +212,9 @@ For hosted deployments, configure remote MCP clients with `https://your-domain.e
 | `pubtator.inspect_review_index` | Inspect indexed PMIDs, sections, counts, and failures |
 | `pubtator.retrieve_review_context` | Retrieve compact context from prepared review passages |
 | `pubtator.retrieve_review_context_batch` | Try multiple review retrieval queries and merge context |
+| `pubtator.stage_research_session` | Stage query or PMID candidates with coverage hints and queued review preparation |
+| `pubtator.get_research_session_status` | Poll staged candidate and preparation status |
+| `pubtator.list_research_sessions` | List staged sessions for a review ID |
 | `pubtator.fetch_publication_annotations` | Fetch annotations for PubMed IDs |
 | `pubtator.fetch_pmc_annotations` | Fetch annotations for PMC full-text articles |
 | `pubtator.search_biomedical_entities` | Find canonical PubTator biomedical entity IDs |

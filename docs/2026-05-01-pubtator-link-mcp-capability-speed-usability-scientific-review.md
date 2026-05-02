@@ -4,7 +4,7 @@ Date: 2026-05-01
 
 ## Implementation Status
 
-Updated: 2026-05-01
+Updated: 2026-05-02
 
 - [x] Coverage preflight, resolver attempts, and coverage reasons.
 - [x] Retry/backoff and transient failure transparency.
@@ -16,6 +16,8 @@ Updated: 2026-05-01
 - [x] GRADE-style evidence certainty storage.
 - [x] Optional Europe PMC fallback.
 - [x] Public `candidate_fast` prepare mode removal.
+- [x] Research-session staging for query or PMID candidates with coverage hints
+      and queued review preparation.
 
 ## Completed Roadmap
 
@@ -26,13 +28,13 @@ concurrency, passage addressability, and the audit bundle foundation. The
 remaining roadmap implementation added typed MCP output schemas, review index
 inventory and TTL cleanup, user-supplied GRADE-style evidence certainty storage,
 optional Europe PMC fallback, and public removal of the no-op `candidate_fast`
-prepare mode.
+prepare mode. Research-session staging is also implemented for transparent
+query or PMID candidate manifests, coverage hints, and queued review preparation.
 
 Residual future opportunities:
 
-1. Design a real search-candidate screening workflow if fast candidate indexing
-   is still needed. It should be a separate endpoint with explicit search
-   candidate inputs, measurable selection semantics, and latency targets.
+1. Refine staged research-session screening with additional selection
+   semantics or latency targets if observed review workflows need them.
 2. Add richer audit export formats such as Markdown and RIS/BibTeX if downstream
    review tooling needs them.
 3. Add deterministic claim-support records if clients need stored
