@@ -6,8 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 ArticleIdKind = Literal["pmid", "pmcid", "doi", "auto"]
 ArticleIdTarget = Literal["pmid", "pmcid", "doi"]
-ArticleIdStatus = Literal["resolved", "not_found", "ambiguous", "invalid", "error"]
-CitationLookupStatus = Literal["matched", "not_found", "ambiguous", "error"]
+ArticleIdStatus = Literal["resolved", "unresolved", "invalid", "failed"]
+CitationLookupStatus = Literal["matched", "not_found", "ambiguous", "failed"]
 RelatedArticleMode = Literal["similar", "cited_by", "references"]
 RelatedArticleStatus = Literal["found", "not_found", "error"]
 
@@ -17,7 +17,7 @@ class DiscoveryMeta(BaseModel):
 
     research_use_only: bool = True
     source_urls: list[str] = Field(default_factory=list)
-    next_commands: list[str] = Field(default_factory=list)
+    next_commands: list[dict[str, object]] = Field(default_factory=list)
 
 
 class ArticleIdConversionRequest(BaseModel):
@@ -32,11 +32,12 @@ class ArticleIdConversionRecord(BaseModel):
     """One identifier conversion result."""
 
     input_id: str
+    input_kind: ArticleIdKind
     status: ArticleIdStatus
     pmid: str | None = None
     pmcid: str | None = None
     doi: str | None = None
-    error: str | None = None
+    reason: str | None = None
 
 
 class ArticleIdConversionResponse(BaseModel):
@@ -44,9 +45,9 @@ class ArticleIdConversionResponse(BaseModel):
 
     model_config = ConfigDict(serialize_by_alias=True, validate_by_name=True)
 
-    success: bool = True
     records: list[ArticleIdConversionRecord]
     candidate_pmids: list[str] = Field(default_factory=list)
+    unresolved: list[str] = Field(default_factory=list)
     meta: DiscoveryMeta = Field(default_factory=DiscoveryMeta, alias="_meta")
 
 
@@ -55,16 +56,18 @@ class MeshLookupRequest(BaseModel):
 
     query: str = Field(min_length=1, max_length=500)
     limit: int = Field(default=10, ge=1, le=50)
+    exact: bool = False
 
 
 class MeshDescriptor(BaseModel):
     """One MeSH descriptor match."""
 
-    descriptor_ui: str
+    ui: str
     name: str
-    tree_numbers: list[str] = Field(default_factory=list)
-    entry_terms: list[str] = Field(default_factory=list)
     scope_note: str | None = None
+    entry_terms: list[str] = Field(default_factory=list)
+    tree_numbers: list[str] = Field(default_factory=list)
+    search_terms: list[str] = Field(default_factory=list)
 
 
 class MeshLookupResponse(BaseModel):
@@ -72,7 +75,6 @@ class MeshLookupResponse(BaseModel):
 
     model_config = ConfigDict(serialize_by_alias=True, validate_by_name=True)
 
-    success: bool = True
     query: str
     descriptors: list[MeshDescriptor] = Field(default_factory=list)
     candidate_pmids: list[str] = Field(default_factory=list)
@@ -91,8 +93,11 @@ class CitationLookupRecord(BaseModel):
     citation: str
     status: CitationLookupStatus
     pmid: str | None = None
+    doi: str | None = None
     title: str | None = None
-    error: str | None = None
+    journal: str | None = None
+    year: int | None = None
+    reason: str | None = None
 
 
 class CitationLookupResponse(BaseModel):
@@ -100,7 +105,6 @@ class CitationLookupResponse(BaseModel):
 
     model_config = ConfigDict(serialize_by_alias=True, validate_by_name=True)
 
-    success: bool = True
     records: list[CitationLookupRecord]
     candidate_pmids: list[str] = Field(default_factory=list)
     meta: DiscoveryMeta = Field(default_factory=DiscoveryMeta, alias="_meta")
@@ -118,11 +122,11 @@ class RelatedArticleRecord(BaseModel):
     """One related article lookup result."""
 
     source_pmid: str
-    status: RelatedArticleStatus
-    related_pmid: str | None = None
+    pmid: str
+    relation: str
     title: str | None = None
-    score: float | None = None
-    error: str | None = None
+    journal: str | None = None
+    year: int | None = None
 
 
 class RelatedArticlesResponse(BaseModel):
@@ -130,9 +134,11 @@ class RelatedArticlesResponse(BaseModel):
 
     model_config = ConfigDict(serialize_by_alias=True, validate_by_name=True)
 
-    success: bool = True
-    records: list[RelatedArticleRecord]
+    source_pmids: list[str]
+    mode: RelatedArticleMode
+    related_articles: list[RelatedArticleRecord] = Field(default_factory=list)
     candidate_pmids: list[str] = Field(default_factory=list)
+    unresolved: list[str] = Field(default_factory=list)
     meta: DiscoveryMeta = Field(default_factory=DiscoveryMeta, alias="_meta")
 
     @field_validator("candidate_pmids")
