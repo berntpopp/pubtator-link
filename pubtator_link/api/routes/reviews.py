@@ -1,5 +1,7 @@
 """Review-scoped evidence preparation and context retrieval routes."""
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Query
 
 from ...models.review_rerag import (
@@ -245,6 +247,8 @@ async def inspect_review_index(
     sample_per_pmid: int = Query(default=2, ge=0, le=10),
     min_sample_chars: int = Query(default=80, ge=0, le=1000),
     sample_section_policy: SampleSectionPolicy = "evidence_first",
+    include_metadata: bool = False,
+    metadata: Literal["basic", "full"] = "basic",
 ) -> InspectReviewIndexResponse:
     pmid_list = [pmid.strip() for pmid in pmids.split(",") if pmid.strip()] if pmids else []
     return await service.inspect_review_index(
@@ -256,6 +260,8 @@ async def inspect_review_index(
             sample_per_pmid=sample_per_pmid,
             min_sample_chars=min_sample_chars,
             sample_section_policy=sample_section_policy,
+            include_metadata=include_metadata,
+            metadata=metadata,
         ),
     )
 

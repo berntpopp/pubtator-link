@@ -33,6 +33,9 @@ def test_review_tools_are_registered_with_flat_canonical_schemas() -> None:
     assert "request" not in properties
     assert properties["response_mode"]["default"] == "compact"
     assert properties["dry_run"]["default"] is False
+    inspect_properties = tools["pubtator.inspect_review_index"].parameters["properties"]
+    assert inspect_properties["include_metadata"]["default"] is False
+    assert inspect_properties["metadata"]["default"] == "basic"
 
 
 def test_review_rerag_tool_descriptions_explain_workflow_and_query_style() -> None:

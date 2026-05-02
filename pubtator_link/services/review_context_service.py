@@ -2,7 +2,9 @@
 
 import asyncio
 from collections.abc import Sequence
-from typing import Protocol
+from typing import Any, Protocol
+
+from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 
 from pubtator_link.models.review_rerag import (
     ContextPack,
@@ -117,6 +119,11 @@ class ReviewContextRepository(Protocol):
         """Return passages around an anchor passage."""
 
 
+class PublicationMetadataLookup(Protocol):
+    async def get_metadata(self, request: PublicationMetadataRequest) -> Any:
+        """Return publication metadata for PMIDs."""
+
+
 class ReviewContextService:
     """Retrieve, rerank, and pack review-scoped context passages."""
 
@@ -124,9 +131,11 @@ class ReviewContextService:
         self,
         repository: ReviewContextRepository,
         *,
+        metadata_service: PublicationMetadataLookup | None = None,
         retrieval_concurrency: int = 4,
     ) -> None:
         self.repository = repository
+        self.metadata_service = metadata_service
         self.retrieval_concurrency = retrieval_concurrency
 
     async def retrieve_context(
@@ -357,6 +366,8 @@ class ReviewContextService:
         failed_sources = await self.repository.list_review_failed_sources(
             review_id, session_id=request.session_id
         )
+        if request.include_metadata and self.metadata_service is not None:
+            await self._attach_source_metadata(sources, request.metadata)
         return InspectReviewIndexResponse(
             review_id=review_id,
             preparation_status=preparation_status,
@@ -365,6 +376,28 @@ class ReviewContextService:
             failed_sources=failed_sources,
             index_snapshot_date=index_snapshot_date(),
         )
+
+    async def _attach_source_metadata(
+        self,
+        sources: list[ReviewSourceSummary],
+        metadata_mode: str,
+    ) -> None:
+        pmids = list(dict.fromkeys(source.pmid for source in sources if source.pmid))
+        if not pmids:
+            return
+        response = await self.metadata_service.get_metadata(
+            PublicationMetadataRequest(
+                pmids=pmids,
+                include_mesh=metadata_mode == "full",
+                include_publication_types=True,
+                include_citations="both" if metadata_mode == "full" else "none",
+                include_coverage=True,
+            )
+        )
+        metadata_by_pmid = {item.pmid: item for item in getattr(response, "metadata", [])}
+        for source in sources:
+            if source.pmid in metadata_by_pmid:
+                source.citation_metadata = metadata_by_pmid[source.pmid]
 
     async def get_passages_by_id(
         self,

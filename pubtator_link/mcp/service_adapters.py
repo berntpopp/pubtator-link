@@ -564,6 +564,8 @@ async def inspect_review_index_impl(
     sample_per_pmid: int = 2,
     min_sample_chars: int = 80,
     sample_section_policy: SampleSectionPolicy = "evidence_first",
+    include_metadata: bool = False,
+    metadata: Literal["basic", "full"] = "basic",
 ) -> dict[str, Any]:
     response = await service.inspect_review_index(
         review_id=review_id,
@@ -574,6 +576,8 @@ async def inspect_review_index_impl(
             sample_per_pmid=sample_per_pmid,
             min_sample_chars=min_sample_chars,
             sample_section_policy=sample_section_policy,
+            include_metadata=include_metadata,
+            metadata=metadata,
         ),
     )
     return response.model_dump()

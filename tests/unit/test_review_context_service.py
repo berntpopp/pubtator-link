@@ -3,6 +3,10 @@ from collections.abc import Sequence
 
 import pytest
 
+from pubtator_link.models.publication_metadata import (
+    PublicationMetadata,
+    PublicationMetadataResponse,
+)
 from pubtator_link.models.review_rerag import (
     FailedSourceSummary,
     InspectReviewIndexRequest,
@@ -173,6 +177,24 @@ class FakeReviewContextRepository:
         start = max(0, anchor_index - before)
         stop = anchor_index + after + 1
         return candidates[start:stop]
+
+
+class FakeMetadataService:
+    def __init__(self) -> None:
+        self.requests = []
+
+    async def get_metadata(self, request):
+        self.requests.append(request)
+        return PublicationMetadataResponse(
+            metadata=[
+                PublicationMetadata(
+                    pmid="111",
+                    title="Citation title",
+                    journal="Citation journal",
+                )
+            ],
+            _meta={"next_commands": []},
+        )
 
 
 class QueryMappedReviewContextRepository(FakeReviewContextRepository):
@@ -650,6 +672,31 @@ async def test_inspect_review_index_returns_sources_totals_and_failures() -> Non
         {"method": "review_index_totals", "review_id": "review-1", "session_id": None},
         {"method": "list_review_failed_sources", "review_id": "review-1", "session_id": None},
     ]
+
+
+@pytest.mark.asyncio
+async def test_inspect_review_index_attaches_citation_metadata() -> None:
+    repository = FakeReviewContextRepository([], preparation_status={"complete": 1})
+    repository.source_summaries = [
+        ReviewSourceSummary(
+            source_id="111",
+            pmid="111",
+            source_kind="pubtator_abstract",
+            job_status="complete",
+        )
+    ]
+    metadata_service = FakeMetadataService()
+    service = ReviewContextService(repository, metadata_service=metadata_service)
+
+    response = await service.inspect_review_index(
+        review_id="review-1",
+        request=InspectReviewIndexRequest(include_metadata=True, metadata="basic"),
+    )
+
+    assert response.sources[0].citation_metadata is not None
+    assert response.sources[0].citation_metadata.title == "Citation title"
+    assert metadata_service.requests[0].pmids == ["111"]
+    assert metadata_service.requests[0].include_mesh is False
 
 
 @pytest.mark.asyncio

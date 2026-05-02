@@ -438,7 +438,12 @@ async def test_inspect_review_index_returns_sources_and_failures() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get(
             "/api/reviews/rev_123/index",
-            params={"include_passage_samples": "true", "sample_per_pmid": "1"},
+            params={
+                "include_passage_samples": "true",
+                "sample_per_pmid": "1",
+                "include_metadata": "true",
+                "metadata": "full",
+            },
         )
 
     assert response.status_code == 200
@@ -452,6 +457,9 @@ async def test_inspect_review_index_returns_sources_and_failures() -> None:
     assert data["sources"][0]["resolver_attempts"] == []
     assert data["index_snapshot_date"] == "2026-05-02"
     service.inspect_review_index.assert_awaited_once()
+    request = service.inspect_review_index.await_args.kwargs["request"]
+    assert request.include_metadata is True
+    assert request.metadata == "full"
 
 
 @pytest.mark.asyncio

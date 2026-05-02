@@ -686,6 +686,7 @@ class ReviewSourceSummary(BaseModel):
     resolver_attempts: list[ResolverAttemptSummary] = Field(default_factory=list)
     sample_passages: list[ReviewPassageSample] = Field(default_factory=list)
     sample_warning: str | None = None
+    citation_metadata: Any | None = None
 
 
 class FailedSourceSummary(BaseModel):
@@ -724,6 +725,8 @@ class InspectReviewIndexRequest(BaseModel):
     sample_per_pmid: int = Field(default=2, ge=0, le=10)
     min_sample_chars: int = Field(default=80, ge=0, le=1000)
     sample_section_policy: SampleSectionPolicy = "evidence_first"
+    include_metadata: bool = False
+    metadata: Literal["basic", "full"] = "basic"
 
 
 class InspectReviewIndexResponse(BaseModel):

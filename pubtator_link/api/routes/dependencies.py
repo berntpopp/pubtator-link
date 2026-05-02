@@ -204,7 +204,10 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
                 preparation=preparation,
                 logger=logger,
             )
-            review_context_service = _build_review_context_service(review_repository)
+            review_context_service = _build_review_context_service(
+                review_repository,
+                publication_metadata_service=publication_metadata_service,
+            )
             review_audit_service = ReviewAuditService(repository=review_repository)
             review_evidence_certainty_service = ReviewEvidenceCertaintyService(
                 repository=review_repository
@@ -488,16 +491,21 @@ async def get_review_context_service() -> ReviewContextService:
             raise RuntimeError("PUBTATOR_LINK_DATABASE_URL is required for review re-RAG")
         return resources.review_context_service
     if _review_context_service is None:
-        _review_context_service = _build_review_context_service(await get_review_repository())
+        _review_context_service = _build_review_context_service(
+            await get_review_repository(),
+            publication_metadata_service=await get_publication_metadata_service(),
+        )
     return _review_context_service
 
 
 def _build_review_context_service(
     repository: PostgresReviewReragRepository,
+    publication_metadata_service: PublicationMetadataService | None = None,
 ) -> ReviewContextService:
     try:
         return ReviewContextService(
             repository=repository,
+            metadata_service=publication_metadata_service,
             retrieval_concurrency=getattr(review_rerag_config, "retrieval_concurrency", 4),
         )
     except TypeError:
