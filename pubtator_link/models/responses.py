@@ -160,6 +160,9 @@ class SearchResult(BaseModel):
     publication_types: list[str] = Field(
         default_factory=list, description="Publication type metadata"
     )
+    coverage_hint: dict[str, Any] | None = Field(default=None, description="Coverage hint")
+    rank_features: dict[str, Any] | None = Field(default=None, description="Ranking features")
+    matched_terms: list[str] = Field(default_factory=list, description="Matched query terms")
 
     @field_validator("pub_date", mode="before")
     @classmethod
@@ -180,6 +183,11 @@ class SearchResponse(BaseResponse):
     per_page: int = Field(default=20, description="Results per page")
     total_pages: int = Field(..., description="Total number of pages")
     sort_order: str | None = Field(default=None, description="Applied sort order")
+    cache_key: str | None = Field(default=None, description="Stable search cache key")
+    corpus_snapshot_date: str | None = Field(
+        default=None, description="Date when the live corpus was queried"
+    )
+    source_versions: dict[str, str] = Field(default_factory=dict, description="Source versions")
 
 
 class RelatedEntity(BaseModel):

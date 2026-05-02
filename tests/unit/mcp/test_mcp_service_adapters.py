@@ -645,7 +645,11 @@ async def test_search_literature_adapter_maps_pubtator3_count_and_metadata() -> 
                 "page_size": 10,
             }
 
-    result = await search_literature_impl(client=FakeClient(), text="guideline")
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="guideline",
+        include_citations="nlm",
+    )
 
     item = result["results"][0]
     assert result["total_results"] == 2776
@@ -661,6 +665,94 @@ async def test_search_literature_adapter_maps_pubtator3_count_and_metadata() -> 
     assert item["pages"] == "123-130"
     assert item["publication_types"] == ["Guideline", "Practice Guideline"]
     assert item["citations"]["nlm"].endswith("39596913")
+
+
+@pytest.mark.asyncio
+async def test_search_literature_compact_omits_bibtex_and_plainifies_text_hl() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "results": [
+                    {
+                        "pmid": "1",
+                        "title": "FMF guideline",
+                        "journal": "Ann Rheum Dis",
+                        "date": "2025-01-01T00:00:00Z",
+                        "text_hl": "@GENE_MEFV @@@MEFV@@@ in @DISEASE_FMF @@@FMF@@@",
+                        "citations": {"NLM": "NLM citation", "BibTeX": "@article{x}"},
+                    }
+                ],
+                "count": 1,
+                "total_pages": 1,
+                "page_size": 10,
+            }
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="FMF",
+        include_citations="nlm",
+        text_hl_format="plain",
+        limit=5,
+    )
+
+    first = result["results"][0]
+    assert first["text_hl"] == "MEFV in FMF"
+    assert first["citations"] == {"NLM": "NLM citation"}
+    assert "BibTeX" not in first["citations"]
+
+
+@pytest.mark.asyncio
+async def test_search_literature_combines_entity_ids_with_text() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    captured = {}
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            captured.update(kwargs)
+            return {"results": [], "count": 0, "total_pages": 0, "page_size": 10}
+
+    await search_literature_impl(
+        client=FakeClient(),
+        text="colchicine",
+        entity_ids=["@GENE_MEFV", "@DISEASE_FMF"],
+    )
+
+    assert captured["text"] == "(colchicine) AND @GENE_MEFV AND @DISEASE_FMF"
+
+
+@pytest.mark.asyncio
+async def test_search_literature_guideline_boost_reranks_page() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "results": [
+                    {"pmid": "1", "title": "Narrative review", "score": 10.0},
+                    {
+                        "pmid": "2",
+                        "title": "EULAR recommendations for FMF",
+                        "score": 5.0,
+                        "publication_types": ["Practice Guideline"],
+                    },
+                ],
+                "count": 2,
+                "total_pages": 1,
+                "page_size": 10,
+            }
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="FMF",
+        guideline_boost=True,
+        response_mode="full",
+    )
+
+    assert [item["pmid"] for item in result["results"]] == ["2", "1"]
+    assert result["results"][0]["rank_features"]["guideline_boost"] > 0
 
 
 @pytest.mark.asyncio

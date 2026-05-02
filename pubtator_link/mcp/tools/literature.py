@@ -14,6 +14,11 @@ from pubtator_link.mcp.service_adapters import (
     search_literature_impl,
 )
 from pubtator_link.models.responses import SearchResponse
+from pubtator_link.services.search_shaping import (
+    IncludeCitations,
+    SearchResponseMode,
+    TextHighlightFormat,
+)
 
 
 def register_literature_tools(mcp: FastMCP) -> None:
@@ -32,6 +37,12 @@ def register_literature_tools(mcp: FastMCP) -> None:
         year_min: int | None = None,
         year_max: int | None = None,
         sections: list[str] | None = None,
+        response_mode: SearchResponseMode = "compact",
+        include_citations: IncludeCitations = "none",
+        text_hl_format: TextHighlightFormat = "plain",
+        limit: Annotated[int | None, Field(ge=1, le=20)] = 5,
+        entity_ids: list[str] | None = None,
+        guideline_boost: bool = False,
     ) -> dict[str, Any]:
         """Use this when a user needs PubMed literature search through PubTator3. Use short biomedical queries, optional sort such as 'score desc' or 'date desc', flat publication/year filters, raw filters JSON, and optional section filters. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         async def call() -> dict[str, Any]:
@@ -46,9 +57,57 @@ def register_literature_tools(mcp: FastMCP) -> None:
                     year_min=year_min,
                     year_max=year_max,
                     sections=sections,
+                    response_mode=response_mode,
+                    include_citations=include_citations,
+                    text_hl_format=text_hl_format,
+                    limit=limit,
+                    entity_ids=entity_ids,
+                    guideline_boost=guideline_boost,
                 )
 
         return await run_mcp_tool("pubtator.search_literature", call)
+
+    @mcp.tool(
+        name="pubtator.search_guidelines",
+        title="Search Biomedical Guidelines",
+        output_schema=SearchResponse.model_json_schema(),
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def search_guidelines(
+        text: str,
+        page: int = 1,
+        year_min: int | None = None,
+        year_max: int | None = None,
+        sections: list[str] | None = None,
+        limit: Annotated[int | None, Field(ge=1, le=20)] = 5,
+        entity_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        async def call() -> dict[str, Any]:
+            async with PubTator3Client() as client:
+                return await search_literature_impl(
+                    client=client,
+                    text=text,
+                    page=page,
+                    sort="score desc",
+                    publication_types=[
+                        "Guideline",
+                        "Practice Guideline",
+                        "Consensus Development Conference",
+                        "Systematic Review",
+                    ],
+                    year_min=year_min,
+                    year_max=year_max,
+                    sections=sections,
+                    response_mode="standard",
+                    include_citations="nlm",
+                    text_hl_format="plain",
+                    limit=limit,
+                    entity_ids=entity_ids,
+                    guideline_boost=True,
+                )
+
+        return await run_mcp_tool("pubtator.search_guidelines", call)
 
     @mcp.tool(
         name="pubtator.search_biomedical_entities",

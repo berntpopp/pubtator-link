@@ -18,6 +18,7 @@ def get_capabilities_resource() -> dict[str, Any]:
         "endpoint": "/mcp",
         "tools": [
             "pubtator.search_literature",
+            "pubtator.search_guidelines",
             "pubtator.convert_article_ids",
             "pubtator.lookup_mesh",
             "pubtator.lookup_citation",
@@ -69,6 +70,7 @@ def get_capabilities_resource() -> dict[str, Any]:
         "tool_groups": {
             "literature_search": [
                 "pubtator.search_literature",
+                "pubtator.search_guidelines",
             ],
             "discovery": [
                 "pubtator.convert_article_ids",
@@ -134,6 +136,11 @@ def get_capabilities_resource() -> dict[str, Any]:
             "pubtator.search_literature": {
                 "text": "MEFV colchicine familial Mediterranean fever guideline",
                 "sort": "score desc",
+                "response_mode": "compact",
+            },
+            "pubtator.search_guidelines": {
+                "text": "MEFV familial Mediterranean fever EULAR recommendations",
+                "entity_ids": ["@GENE_MEFV"],
             },
             "pubtator.lookup_mesh": {
                 "query": "familial Mediterranean fever",

@@ -6,7 +6,14 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, status
 
 from ...models.requests import SearchRequest, SearchSection, SearchSortOrder
-from ...models.responses import SearchResponse, SearchResult
+from ...models.responses import SearchResponse
+from ...services.search_shaping import (
+    IncludeCitations,
+    SearchResponseMode,
+    TextHighlightFormat,
+    combined_search_text,
+    shaped_search_response,
+)
 from ..search_filters import merge_search_filters
 from .dependencies import (
     ClientDep,
@@ -276,6 +283,30 @@ async def search_publications(
             },
         ),
     ] = None,
+    response_mode: Annotated[
+        SearchResponseMode,
+        Query(description="Response verbosity: compact, standard, or full"),
+    ] = "standard",
+    include_citations: Annotated[
+        IncludeCitations,
+        Query(description="Citation formats to include"),
+    ] = "both",
+    text_hl_format: Annotated[
+        TextHighlightFormat,
+        Query(description="Highlight format: none, plain, or annotated"),
+    ] = "annotated",
+    limit: Annotated[
+        int | None,
+        Query(ge=1, le=50, description="Trim results returned from the current page"),
+    ] = None,
+    entity_ids: Annotated[
+        list[str] | None,
+        Query(description="Canonical PubTator entity IDs combined with the text query"),
+    ] = None,
+    guideline_boost: Annotated[
+        bool,
+        Query(description="Rerank current page to prioritize guideline/consensus records"),
+    ] = False,
 ) -> SearchResponse:
     """Search biomedical literature with advanced filtering and section targeting.
 
@@ -383,7 +414,7 @@ async def search_publications(
 
     # Create request object
     request = SearchRequest(
-        text=text.strip(),
+        text=combined_search_text(text, entity_ids),
         page=validated_page,
         sort=sort,
         filters=None,
@@ -400,52 +431,18 @@ async def search_publications(
             sections=(",".join([s.value for s in request.sections]) if request.sections else None),
         )
 
-        # Parse API response and create SearchResult objects
-        search_results = []
-        api_results = result.get("results", [])
-
-        for item in api_results:
-            # Extract publication information from PubTator3 response
-            search_result = SearchResult(
-                pmid=item.get("pmid", ""),
-                title=item.get("title", ""),
-                abstract=item.get("abstract"),
-                authors=item.get("authors", []),
-                journal=item.get("journal"),
-                pub_date=item.get("pub_date")
-                or item.get("meta_date_publication")
-                or item.get("date"),
-                annotations=item.get("annotations", []),
-                score=item.get("score"),
-                pmcid=item.get("pmcid"),
-                doi=item.get("doi"),
-                date=item.get("date"),
-                text_hl=item.get("text_hl"),
-                citations=item.get("citations"),
-                volume=item.get("volume") or item.get("meta_volume"),
-                issue=item.get("issue") or item.get("meta_issue"),
-                pages=item.get("pages") or item.get("meta_pages"),
-                publication_types=item.get("publication_types", []),
-            )
-            search_results.append(search_result)
-
-        # Extract pagination information
-        total_results = result.get("count", result.get("total", 0))
-        per_page = result.get("page_size", result.get("per_page", 20))
-        total_pages = result.get(
-            "total_pages",
-            (total_results + per_page - 1) // per_page if per_page else 0,
-        )
-
-        return SearchResponse(
-            success=True,
+        return shaped_search_response(
+            raw=result,
             query=request.text,
-            results=search_results,
-            total_results=total_results,
             page=validated_page,
-            per_page=per_page,
-            total_pages=total_pages,
-            sort_order=request.sort.value if request.sort else None,
+            sort=request.sort.value if request.sort else None,
+            filters=merged_filters,
+            sections=[section.value for section in request.sections] if request.sections else None,
+            response_mode=response_mode,
+            include_citations=include_citations,
+            text_hl_format=text_hl_format,
+            limit=limit,
+            guideline_boost=guideline_boost,
         )
 
     except ValueError as e:

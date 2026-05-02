@@ -17,8 +17,6 @@ from pubtator_link.models.responses import (
     PublicationExportResponse,
     RelatedEntity,
     RelationsResponse,
-    SearchResponse,
-    SearchResult,
     TextAnnotationResultResponse,
     TextAnnotationSubmitResponse,
 )
@@ -42,6 +40,13 @@ from pubtator_link.services.review_context_service import ReviewContextService
 from pubtator_link.services.review_evidence_certainty import ReviewEvidenceCertaintyService
 from pubtator_link.services.review_index_lifecycle import ReviewIndexLifecycleService
 from pubtator_link.services.review_preparation_queue import ReviewPreparationQueue
+from pubtator_link.services.search_shaping import (
+    IncludeCitations,
+    SearchResponseMode,
+    TextHighlightFormat,
+    combined_search_text,
+    shaped_search_response,
+)
 from pubtator_link.services.source_preflight import SourcePreflightService
 
 
@@ -161,8 +166,14 @@ async def search_literature_impl(
     year_min: int | None = None,
     year_max: int | None = None,
     sections: list[str] | None = None,
+    response_mode: SearchResponseMode = "compact",
+    include_citations: IncludeCitations = "none",
+    text_hl_format: TextHighlightFormat = "plain",
+    limit: int | None = 5,
+    entity_ids: list[str] | None = None,
+    guideline_boost: bool = False,
 ) -> dict[str, Any]:
-    normalized_text = text.strip()
+    normalized_text = combined_search_text(text, entity_ids)
     merged_filters = merge_search_filters(
         filters=filters,
         publication_types=publication_types,
@@ -176,46 +187,20 @@ async def search_literature_impl(
         filters=merged_filters,
         sections=",".join(sections) if sections else None,
     )
-    search_results = [
-        SearchResult(
-            pmid=item.get("pmid", ""),
-            title=item.get("title", ""),
-            abstract=item.get("abstract"),
-            authors=item.get("authors", []),
-            journal=item.get("journal"),
-            pub_date=item.get("pub_date") or item.get("meta_date_publication") or item.get("date"),
-            annotations=item.get("annotations", []),
-            score=item.get("score"),
-            pmcid=item.get("pmcid"),
-            doi=item.get("doi"),
-            date=item.get("date"),
-            text_hl=item.get("text_hl"),
-            citations=item.get("citations"),
-            volume=item.get("volume") or item.get("meta_volume"),
-            issue=item.get("issue") or item.get("meta_issue"),
-            pages=item.get("pages") or item.get("meta_pages"),
-            publication_types=item.get("publication_types", []),
-        )
-        for item in result.get("results", [])
-    ]
-    total_results = int(result.get("count", result.get("total", 0)))
-    per_page = int(result.get("page_size", result.get("per_page", 20)))
-    total_pages = int(
-        result.get(
-            "total_pages",
-            (total_results + per_page - 1) // per_page if per_page else 0,
-        )
-    )
-    return SearchResponse(
-        success=True,
+    response = shaped_search_response(
+        raw=result,
         query=normalized_text,
-        results=search_results,
-        total_results=total_results,
         page=page,
-        per_page=per_page,
-        total_pages=total_pages,
-        sort_order=sort,
-    ).model_dump()
+        sort=sort,
+        filters=merged_filters,
+        sections=sections,
+        response_mode=response_mode,
+        include_citations=include_citations,
+        text_hl_format=text_hl_format,
+        limit=limit,
+        guideline_boost=guideline_boost,
+    )
+    return response.model_dump()
 
 
 async def fetch_pmc_annotations_impl(

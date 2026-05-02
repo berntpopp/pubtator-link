@@ -10,6 +10,7 @@ EXPECTED_PUBLIC_TOOL_NAMES = {
     "pubtator.lookup_citation",
     "pubtator.find_related_articles",
     "pubtator.diagnostics",
+    "pubtator.search_guidelines",
     "pubtator.fetch_publication_annotations",
     "pubtator.get_publication_passages",
     "pubtator.estimate_publication_context",
@@ -110,7 +111,7 @@ def test_mcp_masks_unhandled_error_details() -> None:
 
     mcp = create_pubtator_mcp()
 
-    assert getattr(mcp, "_mask_error_details") is True
+    assert mcp._mask_error_details is True
 
 
 def test_capabilities_resource_advertises_grounding_workflows() -> None:
@@ -298,6 +299,12 @@ def test_common_mcp_tools_are_flat_and_unversioned() -> None:
     assert "publication_types" in search_schema["properties"]
     assert "year_min" in search_schema["properties"]
     assert "year_max" in search_schema["properties"]
+    assert search_schema["properties"]["response_mode"]["default"] == "compact"
+    assert search_schema["properties"]["include_citations"]["default"] == "none"
+    assert search_schema["properties"]["text_hl_format"]["default"] == "plain"
+    assert search_schema["properties"]["limit"]["default"] == 5
+    assert "entity_ids" in search_schema["properties"]
+    assert "guideline_boost" in search_schema["properties"]
 
 
 def test_review_context_schema_defaults_are_stable() -> None:
