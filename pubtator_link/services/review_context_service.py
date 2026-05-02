@@ -22,7 +22,6 @@ from pubtator_link.models.review_rerag import (
     ReviewIndexTotals,
     ReviewPassageLookupResponse,
     ReviewPassageRow,
-    ReviewQuote,
     ReviewSourceSummary,
     SampleSectionPolicy,
     SourceCoverage,
@@ -41,6 +40,7 @@ from pubtator_link.services.review_context.packing import (
     pack_passages,
     pack_totals,
 )
+from pubtator_link.services.review_context.quotes import quotes_from_passages
 from pubtator_link.services.review_context.ranking import (
     SOURCE_COVERAGE_SCARCITY_PRIORITY,
     rerank_key,
@@ -367,7 +367,7 @@ class ReviewContextService:
             text_chars=merged.budget_text_chars,
             dropped_count=len(merged.dropped),
         )
-        quotes = _quotes_from_passages(merged.passages) if request.response_mode == "quotes" else []
+        quotes = quotes_from_passages(merged.passages) if request.response_mode == "quotes" else []
         merged_passages = [] if request.response_mode == "quotes" else merged.passages
         prepared_pmids, still_preparing_pmids, failed_pmids = await self._preparation_pmids(
             review_id,
@@ -673,45 +673,3 @@ def _review_batch_cache_key(
             "request": request.model_dump(mode="json"),
         },
     )
-
-
-def _quotes_from_passages(passages: Sequence[ContextPassage]) -> list[ReviewQuote]:
-    return [
-        ReviewQuote(
-            stable_citation_key=passage.stable_citation_key
-            or stable_citation_key_for_passage(passage.passage_id),
-            pmid=passage.pmid,
-            passage_id=passage.passage_id,
-            section=passage.section,
-            quote=_quote_text_for_passage(passage),
-            matched_queries=passage.matched_queries,
-            coverage_status=_coverage_status_for_passage(passage),
-        )
-        for passage in passages
-    ]
-
-
-def _quote_text_for_passage(passage: ContextPassage) -> str:
-    if passage.quote is not None and passage.quote.text.strip():
-        return passage.quote.text.strip()[:350]
-
-    text = " ".join(passage.text.split())
-    if len(text) <= 350:
-        return text
-    sentence_end = next(
-        (index + 1 for index, char in enumerate(text[:350]) if char in {".", "!", "?"}),
-        None,
-    )
-    if sentence_end is not None:
-        return text[:sentence_end].strip()
-    return text[:350].strip()
-
-
-def _coverage_status_for_passage(passage: ContextPassage) -> SourceCoverage:
-    if passage.source_kind in {"pubtator_full_bioc", "pmc_bioc", "europe_pmc_jats"}:
-        return "full_text"
-    if passage.source_kind == "pubtator_abstract":
-        return "abstract_only"
-    if passage.source_kind in {"curated_pdf", "curated_html", "docling_pdf"}:
-        return "curated_url"
-    return "unknown"
