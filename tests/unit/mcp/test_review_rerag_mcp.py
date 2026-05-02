@@ -148,3 +148,49 @@ async def test_index_review_evidence_accepts_legacy_prepare_mode_without_schema_
     assert "prepare_mode" not in tool.parameters["properties"]
     assert result.structured_content["success"] is True
     assert result.structured_content["queued"] == 1
+
+
+@pytest.mark.asyncio
+async def test_index_review_evidence_reports_progress_when_waiting(monkeypatch) -> None:
+    progress_calls: list[tuple[float, float | None]] = []
+
+    class FakeContext:
+        async def report_progress(self, progress: float, total: float | None = None) -> None:
+            progress_calls.append((progress, total))
+
+        async def warning(self, _message: str) -> None:
+            return None
+
+    async def fake_impl(**_kwargs):
+        return {
+            "success": True,
+            "review_id": "rev-1",
+            "queued": 1,
+            "already_prepared": 0,
+            "preparation_status": {
+                "queued": 0,
+                "running": 0,
+                "complete": 1,
+                "partial": 0,
+                "failed": 0,
+            },
+            "waited_ms": 10,
+            "timed_out": False,
+        }
+
+    async def fake_get_review_queue():
+        return object()
+
+    monkeypatch.setattr("pubtator_link.mcp.tools.review.index_review_evidence_impl", fake_impl)
+    monkeypatch.setattr("pubtator_link.mcp.tools.review.get_review_queue", fake_get_review_queue)
+
+    tool = create_pubtator_mcp()._tool_manager._tools["pubtator.index_review_evidence"]
+    await tool.fn(
+        review_id="rev-1",
+        pmids=["40234174"],
+        wait_until_ready=True,
+        ctx=FakeContext(),
+    )
+
+    assert progress_calls[0] == (0, 100)
+    assert progress_calls[-1] == (100, 100)

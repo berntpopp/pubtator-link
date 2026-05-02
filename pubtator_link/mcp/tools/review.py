@@ -70,6 +70,16 @@ async def _warn_if_degraded(ctx: Context | None, result: dict[str, Any]) -> None
         )
 
 
+async def _report_index_progress(
+    ctx: Context | None,
+    *,
+    progress: float,
+    total: float = 100,
+) -> None:
+    if ctx is not None:
+        await ctx.report_progress(progress=progress, total=total)
+
+
 def register_review_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         name="pubtator.list_review_indexes",
@@ -338,6 +348,8 @@ def register_review_tools(mcp: FastMCP) -> None:
 
         async def call() -> dict[str, Any]:
             queue = await get_review_queue()
+            if wait_until_ready:
+                await _report_index_progress(ctx, progress=0)
             result = await index_review_evidence_impl(
                 queue=queue,
                 review_id=review_id,
@@ -350,6 +362,20 @@ def register_review_tools(mcp: FastMCP) -> None:
                 timeout_ms=timeout_ms,
                 dry_run=dry_run,
             )
+            if wait_until_ready:
+                status = result.get("preparation_status", {})
+                complete = int(status.get("complete", 0)) + int(status.get("partial", 0))
+                total = max(
+                    1,
+                    int(status.get("queued", 0))
+                    + int(status.get("running", 0))
+                    + complete
+                    + int(status.get("failed", 0)),
+                )
+                progress = (
+                    100 if result.get("timed_out") is False else min(95, (complete / total) * 100)
+                )
+                await _report_index_progress(ctx, progress=progress)
             await _warn_if_degraded(ctx, result)
             return result
 
