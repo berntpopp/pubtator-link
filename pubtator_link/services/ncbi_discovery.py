@@ -190,8 +190,8 @@ class NcbiDiscoveryClient:
                     ui=_optional_str(item.get("ds_meshui")) or uid,
                     name=name,
                     scope_note=_optional_str(item.get("ds_scopenote")),
-                    entry_terms=_string_list(item.get("ds_idxlinks")),
-                    tree_numbers=_string_list(item.get("ds_tree")),
+                    entry_terms=mesh_terms[1:],
+                    tree_numbers=_mesh_tree_numbers(item),
                     search_terms=[f"{name}[MeSH Terms]"],
                 )
             )
@@ -307,6 +307,21 @@ def _string_list(value: object) -> list[str]:
     if isinstance(value, list | tuple):
         return [str(item) for item in value]
     return [str(value)]
+
+
+def _mesh_tree_numbers(item: Mapping[str, object]) -> list[str]:
+    tree_numbers: list[str] = []
+    idx_links = item.get("ds_idxlinks")
+    if isinstance(idx_links, list | tuple):
+        for link in idx_links:
+            if not isinstance(link, dict):
+                continue
+            tree_number = _optional_str(link.get("treenum"))
+            if tree_number is not None:
+                tree_numbers.append(tree_number)
+    if tree_numbers:
+        return tree_numbers
+    return _string_list(item.get("ds_tree"))
 
 
 def _candidate_meta(candidate_pmids: list[str]) -> DiscoveryMeta:

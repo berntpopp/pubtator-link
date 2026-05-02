@@ -26,6 +26,17 @@ class MockTransport:
         return httpx.Response(200, json=self.payload, request=request)
 
 
+class SequentialMockTransport:
+    def __init__(self, payloads: Sequence[dict[str, object]]) -> None:
+        self.payloads = list(payloads)
+        self.requests: list[httpx.Request] = []
+
+    async def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        payload = self.payloads[len(self.requests) - 1]
+        return httpx.Response(200, json=payload, request=request)
+
+
 class FakeDiscoveryClient:
     async def convert_article_ids(
         self,
@@ -182,7 +193,7 @@ async def test_ncbi_client_parses_mesh_lookup_json() -> None:
     assert descriptors[0].ui == "D005505"
     assert descriptors[0].name == "Familial Mediterranean Fever"
     assert descriptors[0].scope_note == "An autoinflammatory disease."
-    assert descriptors[0].entry_terms == ["FMF"]
+    assert descriptors[0].entry_terms == []
     assert descriptors[0].tree_numbers == ["C16.320.565"]
     assert descriptors[0].search_terms == ["Familial Mediterranean Fever[MeSH Terms]"]
     assert transport.requests[0].url.path.endswith("/esearch.fcgi")
@@ -191,6 +202,60 @@ async def test_ncbi_client_parses_mesh_lookup_json() -> None:
     assert transport.requests[0].url.params["retmode"] == "json"
     assert transport.requests[0].url.params["retmax"] == "5"
     assert transport.requests[0].url.params["tool"] == "pubtator-link"
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_ncbi_client_parses_mesh_lookup_esummary_json() -> None:
+    transport = SequentialMockTransport(
+        [
+            {"esearchresult": {"idlist": ["68050505"]}},
+            {
+                "result": {
+                    "68050505": {
+                        "uid": "68050505",
+                        "ds_meshterms": [
+                            "Familial Mediterranean Fever",
+                            "FMF",
+                            "Periodic Disease",
+                        ],
+                        "ds_scopenote": "An autoinflammatory disease.",
+                        "ds_idxlinks": [{"treenum": "C16.320.565"}],
+                        "ds_meshui": "D005505",
+                    }
+                }
+            },
+        ]
+    )
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = NcbiDiscoveryClient(http_client=http_client)
+
+    descriptors = await client.lookup_mesh("FMF", limit=5, exact=False)
+
+    assert len(transport.requests) == 2
+    assert transport.requests[0].url.path.endswith("/esearch.fcgi")
+    assert transport.requests[1].url.path.endswith("/esummary.fcgi")
+    assert transport.requests[1].url.params["id"] == "68050505"
+    assert len(descriptors) == 1
+    assert descriptors[0].ui == "D005505"
+    assert descriptors[0].name == "Familial Mediterranean Fever"
+    assert descriptors[0].scope_note == "An autoinflammatory disease."
+    assert descriptors[0].entry_terms == ["FMF", "Periodic Disease"]
+    assert descriptors[0].tree_numbers == ["C16.320.565"]
+    assert descriptors[0].search_terms == ["Familial Mediterranean Fever[MeSH Terms]"]
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_ncbi_client_lookup_mesh_exact_mode_uses_mesh_terms_query() -> None:
+    transport = MockTransport({"esearchresult": {"idlist": []}})
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = NcbiDiscoveryClient(http_client=http_client)
+
+    descriptors = await client.lookup_mesh("FMF", limit=5, exact=True)
+
+    assert descriptors == []
+    assert transport.requests[0].url.params["term"] == '"FMF"[MeSH Terms]'
     await client.close()
 
 
