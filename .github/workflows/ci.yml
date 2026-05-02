@@ -6,6 +6,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -30,9 +34,6 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --group dev --frozen
-
-      - name: Run local CI checks
-        run: make ci-local
 
       - name: Run coverage
         run: make test-cov

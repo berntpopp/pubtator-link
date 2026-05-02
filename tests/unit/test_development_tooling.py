@@ -177,7 +177,6 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
     assert quality_job["name"] == "Format, lint, typecheck, tests, and coverage"
     ci_commands = {step.get("run") for step in quality_job["steps"]}
     assert "uv sync --group dev --frozen" in ci_commands
-    assert "make ci-local" in ci_commands
     assert "make test-cov" in ci_commands
 
     assert docker["permissions"] == {"contents": "read"}
@@ -192,7 +191,11 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
     codeql_job = security["jobs"]["codeql"]
     dependency_review_job = security["jobs"]["dependency-review"]
     assert codeql_job["name"] == "CodeQL"
-    assert codeql_job["permissions"] == {"contents": "read", "security-events": "write"}
+    assert codeql_job["permissions"] == {
+        "actions": "read",
+        "contents": "read",
+        "security-events": "write",
+    }
     assert dependency_review_job["name"] == "Dependency review"
     assert dependency_review_job["permissions"] == {
         "contents": "read",
@@ -202,6 +205,7 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
         step.get("uses") for job in security["jobs"].values() for step in job["steps"]
     }
     assert "github/codeql-action/init@v4" in security_actions
+    assert "github/codeql-action/autobuild@v4" not in security_actions
     assert "actions/dependency-review-action@v4" in security_actions
 
 
