@@ -36,6 +36,46 @@ def test_mcp_tool_error_serializes_recovery_envelope() -> None:
     assert "updated_at" not in payload["message"]
 
 
+def test_mcp_tool_error_includes_bounded_diagnostics_snapshot() -> None:
+    error = mcp_tool_error(
+        RuntimeError("relation review_passages is unavailable"),
+        McpErrorContext(
+            tool_name="pubtator.index_review_evidence",
+            pmids=["35042149", "39540697"],
+            diagnostics_snapshot={
+                "database": {
+                    "status": "ready",
+                    "schema_current": True,
+                    "missing_tables": [],
+                    "missing_columns": [],
+                },
+                "review_index": {
+                    "review_id": "fmf-vus",
+                    "known_sources": 2,
+                    "prepared_sources": 0,
+                    "failed_sources": 2,
+                },
+                "recovery_hint": "Continue with abstract_only fallback.",
+            },
+            degraded_mode="index_unavailable",
+            fallback_preview={
+                "tool": "pubtator.get_publication_passages",
+                "mode": "compact_passages",
+                "source_count": 2,
+                "degraded_mode": "abstract_only",
+                "coverage_by_pmid": {"35042149": "abstract_only"},
+            },
+        ),
+    )
+
+    payload = json.loads(str(error))
+
+    assert payload["degraded_mode"] == "index_unavailable"
+    assert payload["diagnostics_snapshot"]["database"]["schema_current"] is True
+    assert payload["fallback_preview"]["source_count"] == 2
+    assert len(json.dumps(payload["diagnostics_snapshot"])) < 2048
+
+
 def test_public_mcp_tools_use_centralized_error_wrapper() -> None:
     tool_files = [
         Path("pubtator_link/mcp/metadata.py"),

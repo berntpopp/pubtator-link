@@ -40,6 +40,14 @@ def test_review_tools_are_registered_with_flat_canonical_schemas() -> None:
     assert inspect_properties["metadata"]["default"] == "basic"
 
 
+def test_review_tools_accept_context_without_exposing_ctx_parameter() -> None:
+    mcp = create_pubtator_mcp()
+    tool = mcp._tool_manager._tools["pubtator.retrieve_review_context_batch"]
+    schema = tool.parameters
+
+    assert "ctx" not in schema["properties"]
+
+
 def test_review_rerag_tool_descriptions_explain_workflow_and_query_style() -> None:
     mcp = create_pubtator_mcp()
     tools = mcp._tool_manager._tools

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
 from pydantic import Field
 
 from pubtator_link.api.routes.dependencies import (
@@ -55,6 +55,16 @@ from pubtator_link.models.review_rerag import (
     SampleSectionPolicy,
     StageResearchSessionResponse,
 )
+
+
+async def _warn_if_degraded(ctx: Context | None, result: dict[str, Any]) -> None:
+    degraded_mode = result.get("degraded_mode")
+    if ctx is not None and degraded_mode:
+        await ctx.warning(
+            "Review evidence is degraded: "
+            f"{degraded_mode}. Inspect coverage before relying on passage-level claims.",
+            logger="pubtator.review",
+        )
 
 
 def register_review_tools(mcp: FastMCP) -> None:
@@ -285,12 +295,13 @@ def register_review_tools(mcp: FastMCP) -> None:
         wait_for_status: Literal["complete", "complete_or_partial", "terminal"] | None = None,
         timeout_ms: int = 0,
         dry_run: bool = False,
+        ctx: Context | None = None,
     ) -> dict[str, Any]:
         """Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs. Call this before retrieve_review_context, use session_id to scope staged research sessions, set wait_for_completion for small corpora, and inspect preparation_status before retrieval."""
 
         async def call() -> dict[str, Any]:
             queue = await get_review_queue()
-            return await index_review_evidence_impl(
+            result = await index_review_evidence_impl(
                 queue=queue,
                 review_id=review_id,
                 pmids=pmids,
@@ -301,6 +312,8 @@ def register_review_tools(mcp: FastMCP) -> None:
                 timeout_ms=timeout_ms,
                 dry_run=dry_run,
             )
+            await _warn_if_degraded(ctx, result)
+            return result
 
         return await run_mcp_tool(
             "pubtator.index_review_evidence",
@@ -445,12 +458,13 @@ def register_review_tools(mcp: FastMCP) -> None:
         table_mode: ReviewTableMode = "preview",
         allow_truncated_passages: bool = True,
         max_chars_per_passage: int = 2200,
+        ctx: Context | None = None,
     ) -> dict[str, Any]:
         """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Use a short keyword query, PMID filters for paper-specific evidence, and diagnostics for zero-result debugging. If zero passages are returned, simplify the query, inspect the review index, or fall back to fetch_publication_annotations."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_context_service()
-            return await retrieve_review_context_impl(
+            result = await retrieve_review_context_impl(
                 service=service,
                 review_id=review_id,
                 question=question,
@@ -467,6 +481,8 @@ def register_review_tools(mcp: FastMCP) -> None:
                 allow_truncated_passages=allow_truncated_passages,
                 max_chars_per_passage=max_chars_per_passage,
             )
+            await _warn_if_degraded(ctx, result)
+            return result
 
         return await run_mcp_tool("pubtator.retrieve_review_context", call, pmids=pmids)
 
@@ -500,12 +516,13 @@ def register_review_tools(mcp: FastMCP) -> None:
         allow_truncated_passages: bool = True,
         max_chars_per_passage: int = 2200,
         dry_run: bool = False,
+        ctx: Context | None = None,
     ) -> dict[str, Any]:
         """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode uses query_fair budgeting: merged passages plus per-query summaries, a fair first-pass budget across queries before overflow, and next_steps for zero-result queries. Use dry_run to get diagnostics and predicted hit counts without returning passage text. Opt into source_fair or scarcity_first to give each PMID/source first-pass representation before overflow. Use diagnostics for query refinement and full only when per-query passage text is needed."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_context_service()
-            return await retrieve_review_context_batch_impl(
+            result = await retrieve_review_context_batch_impl(
                 service=service,
                 review_id=review_id,
                 queries=queries,
@@ -531,6 +548,8 @@ def register_review_tools(mcp: FastMCP) -> None:
                 max_chars_per_passage=max_chars_per_passage,
                 dry_run=dry_run,
             )
+            await _warn_if_degraded(ctx, result)
+            return result
 
         return await run_mcp_tool(
             "pubtator.retrieve_review_context_batch",

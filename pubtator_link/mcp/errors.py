@@ -12,6 +12,8 @@ import httpx
 from fastmcp.exceptions import ToolError
 
 from pubtator_link.observability.metrics import record_mcp_tool_call
+from pubtator_link.services.degradation import DegradedMode
+from pubtator_link.services.mcp_diagnostics import bounded_diagnostics_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,9 @@ class McpErrorContext:
     pmids: list[str] | None = None
     fallback_tool: str | None = None
     fallback_args: dict[str, Any] | None = None
+    diagnostics_snapshot: dict[str, Any] | None = None
+    degraded_mode: DegradedMode | None = None
+    fallback_preview: dict[str, Any] | None = None
 
 
 def sanitize_error_message(message: str) -> str:
@@ -95,6 +100,13 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> ToolError:
             "unsafe_for_clinical_use": True,
         },
     }
+    if context.degraded_mode is not None:
+        payload["degraded_mode"] = context.degraded_mode
+    diagnostics_snapshot = bounded_diagnostics_snapshot(context.diagnostics_snapshot)
+    if diagnostics_snapshot is not None:
+        payload["diagnostics_snapshot"] = diagnostics_snapshot
+    if context.fallback_preview is not None:
+        payload["fallback_preview"] = context.fallback_preview
     return ToolError(json.dumps(payload, separators=(",", ":"), sort_keys=True))
 
 
@@ -105,6 +117,9 @@ async def run_mcp_tool(
     pmids: list[str] | None = None,
     fallback_tool: str | None = None,
     fallback_args: dict[str, Any] | None = None,
+    diagnostics_snapshot: dict[str, Any] | None = None,
+    degraded_mode: DegradedMode | None = None,
+    fallback_preview: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run one MCP tool body and convert execution failures to ToolError."""
     started_at = perf_counter()
@@ -155,6 +170,9 @@ async def run_mcp_tool(
                 pmids=pmids,
                 fallback_tool=fallback_tool,
                 fallback_args=fallback_args,
+                diagnostics_snapshot=diagnostics_snapshot,
+                degraded_mode=degraded_mode,
+                fallback_preview=fallback_preview,
             ),
         ) from exc
     latency_seconds = perf_counter() - started_at
