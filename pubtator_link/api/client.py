@@ -25,29 +25,30 @@ class RateLimiter:
         self.rate = rate
         self.burst = float(burst)
         self.tokens = float(burst)
-        self.last_update = time.time()
+        self.last_update = time.monotonic()
         self._lock = asyncio.Lock()
 
     async def acquire(self) -> float:
-        """Acquire a token, waiting if necessary.
+        """Acquire a token, blocking until one is available.
 
-        Returns:
-            Wait time in seconds (0 if no wait required)
+        The token is consumed before this method returns. The return value is
+        the cumulative wait time spent inside this call (0.0 if no wait was
+        required), which callers may log for telemetry. Callers MUST NOT sleep
+        again on the returned value -- the wait has already happened.
         """
-        async with self._lock:
-            now = time.time()
-            # Add tokens based on elapsed time
-            elapsed = now - self.last_update
-            self.tokens = min(self.burst, self.tokens + elapsed * self.rate)
-            self.last_update = now
-
-            if self.tokens >= 1:
-                self.tokens -= 1
-                return 0.0
-            else:
-                # Calculate wait time for next token
-                wait_time = (1 - self.tokens) / self.rate
-                return wait_time
+        total_wait = 0.0
+        while True:
+            async with self._lock:
+                now = time.monotonic()
+                elapsed = now - self.last_update
+                self.tokens = min(self.burst, self.tokens + elapsed * self.rate)
+                self.last_update = now
+                if self.tokens >= 1:
+                    self.tokens -= 1
+                    return total_wait
+                wait = (1 - self.tokens) / self.rate
+            await asyncio.sleep(wait)
+            total_wait += wait
 
 
 class PubTatorAPIError(Exception):
@@ -151,12 +152,10 @@ class PubTator3Client:
         Raises:
             PubTatorAPIError: On API errors
         """
-        # Apply rate limiting
+        # Apply rate limiting (blocks until a token is available)
         wait_time = await self.rate_limiter.acquire()
-        if wait_time > 0:
-            if self.logger:
-                log_rate_limit_event(self.logger, endpoint=url, wait_time=wait_time)
-            await asyncio.sleep(wait_time)
+        if wait_time > 0 and self.logger:
+            log_rate_limit_event(self.logger, endpoint=url, wait_time=wait_time)
 
         client = self.text_client if use_text_client else self.client
         start_time = time.time()

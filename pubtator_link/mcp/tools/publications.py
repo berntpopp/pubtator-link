@@ -5,8 +5,10 @@ from typing import Annotated, Any, Literal
 from fastmcp import FastMCP
 from pydantic import Field
 
-from pubtator_link.api.client import PubTator3Client
-from pubtator_link.api.routes.dependencies import get_publication_passage_service
+from pubtator_link.api.routes.dependencies import (
+    get_publication_passage_service,
+    get_publication_service,
+)
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.service_adapters import (
@@ -16,7 +18,6 @@ from pubtator_link.mcp.service_adapters import (
     get_publication_passages_impl,
 )
 from pubtator_link.models.publication_passages import PublicationPassageMode
-from pubtator_link.services.publication_service import PublicationService
 
 
 def register_publication_tools(mcp: FastMCP) -> None:
@@ -33,14 +34,13 @@ def register_publication_tools(mcp: FastMCP) -> None:
         """Use this when a user provides PubMed IDs and needs raw PubTator BioC/annotation export; prefer compact passage or review context tools for grounded answers because full BioC can be large. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
 
         async def call() -> dict[str, Any]:
-            async with PubTator3Client() as client:
-                service = PublicationService(client=client)
-                return await fetch_publication_annotations_impl(
-                    service=service,
-                    pmids=pmids,
-                    format=format,
-                    full=full,
-                )
+            service = await get_publication_service()
+            return await fetch_publication_annotations_impl(
+                service=service,
+                pmids=pmids,
+                format=format,
+                full=full,
+            )
 
         return await run_mcp_tool("pubtator.fetch_publication_annotations", call, pmids=pmids)
 
@@ -120,12 +120,11 @@ def register_publication_tools(mcp: FastMCP) -> None:
         """Use this when a user provides PMC IDs and needs raw PubTator full-text BioC/annotation export; prefer compact passage or review context tools for focused grounding because full text can be large. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
 
         async def call() -> dict[str, Any]:
-            async with PubTator3Client() as client:
-                service = PublicationService(client=client)
-                return await fetch_pmc_annotations_impl(
-                    service=service,
-                    pmcids=pmcids,
-                    format=format,
-                )
+            service = await get_publication_service()
+            return await fetch_pmc_annotations_impl(
+                service=service,
+                pmcids=pmcids,
+                format=format,
+            )
 
         return await run_mcp_tool("pubtator.fetch_pmc_annotations", call)

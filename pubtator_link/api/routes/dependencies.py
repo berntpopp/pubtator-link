@@ -118,10 +118,16 @@ def review_pool_kwargs() -> dict[str, Any]:
     """Return asyncpg pool arguments for review re-RAG storage."""
     if review_rerag_config.database_url is None:
         raise RuntimeError("PUBTATOR_LINK_DATABASE_URL is required for review re-RAG")
+    # Pool sizing: cover the worst concurrent demand (prep workers + retrieval
+    # queries + occasional audit writes) with headroom. Floor of 10 prevents
+    # the default 2-prep-worker config from saturating under 4 concurrent batch
+    # retrievals each issuing 4 inner queries.
+    prep = review_rerag_config.prep_concurrency
+    retrieval = getattr(review_rerag_config, "retrieval_concurrency", 4)
     return {
         "dsn": review_rerag_config.database_url,
-        "min_size": 1,
-        "max_size": max(2, review_rerag_config.prep_concurrency * 2 + 2),
+        "min_size": min(4, max(1, prep)),
+        "max_size": max(10, prep * 2 + retrieval * 2 + 4),
     }
 
 

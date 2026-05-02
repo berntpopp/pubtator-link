@@ -233,13 +233,36 @@ class ReviewReragRepository(Protocol):
 class PostgresReviewReragRepository:
     """asyncpg-backed repository for review-scoped re-RAG persistence."""
 
-    def __init__(self, pool: Any) -> None:
+    DEFAULT_ACQUIRE_TIMEOUT_SECONDS: float = 5.0
+
+    def __init__(self, pool: Any, *, acquire_timeout: float | None = None) -> None:
         self._pool = pool
+        # Bounded pool acquisition prevents request hangs when the pool saturates
+        # under concurrent agent traffic (review prep + retrieval + audit writes).
+        # Saturation surfaces as asyncpg.PoolAcquireTimeoutError, which mcp/errors.py
+        # sanitizes to error_code: review_index_unavailable for the LLM client.
+        self._acquire_timeout: float | None = (
+            acquire_timeout if acquire_timeout is not None else self.DEFAULT_ACQUIRE_TIMEOUT_SECONDS
+        )
+
+    def _acquire(self) -> Any:
+        """Acquire a pooled connection with the configured timeout.
+
+        Returns the asyncpg pool acquire context manager. Use as
+        ``async with self._acquire() as connection:``.
+        """
+        if self._acquire_timeout is None:
+            return self._pool.acquire()
+        try:
+            return self._pool.acquire(timeout=self._acquire_timeout)
+        except TypeError:
+            # Compatibility with pool fakes that ignore the timeout kwarg
+            return self._pool.acquire()
 
     async def enqueue_preparation_job(
         self, review_id: str, source_id: str, source_kind: str
     ) -> PreparationStatus:
-        async with self._pool.acquire() as connection, connection.transaction():
+        async with self._acquire() as connection, connection.transaction():
             await connection.execute(
                 """
                 insert into reviews (review_id)
@@ -291,7 +314,7 @@ class PostgresReviewReragRepository:
         content_type: str | None = None,
         content_length: int | None = None,
     ) -> None:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             await connection.execute(
                 """
                 insert into full_text_retrieval_attempts (
@@ -343,7 +366,7 @@ class PostgresReviewReragRepository:
             await self._touch_review_on_connection(connection, review_id)
 
     async def mark_running_jobs_failed_on_startup(self) -> int:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             result = await connection.execute(
                 """
                 update review_preparation_jobs
@@ -356,11 +379,11 @@ class PostgresReviewReragRepository:
         return _parse_execute_count(result)
 
     async def preparation_status(self, review_id: str) -> PreparationStatus:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             return await self._preparation_status_on_connection(connection, review_id)
 
     async def mark_job_running(self, *, review_id: str, source_id: str) -> None:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             await connection.execute(
                 """
                 with updated as (
@@ -382,7 +405,7 @@ class PostgresReviewReragRepository:
     async def mark_job_finished(
         self, *, review_id: str, source_id: str, status: str, error: str | None
     ) -> None:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             await connection.execute(
                 """
                 with updated as (
@@ -410,7 +433,7 @@ class PostgresReviewReragRepository:
         source_id: str,
         callback: Callable[[], Awaitable[str]],
     ) -> str:
-        async with self._pool.acquire() as connection, connection.transaction():
+        async with self._acquire() as connection, connection.transaction():
             await connection.execute(
                 "select pg_advisory_xact_lock(hashtextextended($1, 0))",
                 f"{review_id}:{source_id}",
@@ -442,7 +465,7 @@ class PostgresReviewReragRepository:
             )
             for passage in passages
         ]
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             await connection.executemany(
                 """
                 insert into review_passages (
@@ -503,7 +526,7 @@ class PostgresReviewReragRepository:
         pmid_filter = _filter_or_none(pmids)
         section_filter = _filter_or_none(sections)
         recall_query = _recall_tsquery(query)
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             rows = await connection.fetch(
                 """
                 with query as (
@@ -558,7 +581,7 @@ class PostgresReviewReragRepository:
     ) -> list[ReviewPassageRow]:
         if not passage_ids:
             return []
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             rows = await connection.fetch(
                 """
                 select
@@ -598,7 +621,7 @@ class PostgresReviewReragRepository:
         after: int,
         same_section: bool,
     ) -> list[ReviewPassageRow]:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             anchor_row = await connection.fetchrow(
                 """
                 select
@@ -680,7 +703,7 @@ class PostgresReviewReragRepository:
         sample_per_pmid: int = 2,
     ) -> list[ReviewSourceSummary]:
         pmid_filter = _filter_or_none(pmids)
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             rows = await connection.fetch(
                 """
                 with source_scope as (
@@ -838,7 +861,7 @@ class PostgresReviewReragRepository:
         return sources
 
     async def list_review_failed_sources(self, review_id: str) -> list[FailedSourceSummary]:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             rows = await connection.fetch(
                 """
                 with source_scope as (
@@ -930,7 +953,7 @@ class PostgresReviewReragRepository:
         return [_failed_source_summary_from_row(row) for row in rows]
 
     async def review_index_totals(self, review_id: str) -> ReviewIndexTotals:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             row = await connection.fetchrow(
                 """
                 with indexed as (
@@ -968,7 +991,7 @@ class PostgresReviewReragRepository:
         return _review_index_totals_from_row(row)
 
     async def available_sections(self, review_id: str) -> list[str]:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             rows = await connection.fetch(
                 """
                 select distinct section
@@ -981,7 +1004,7 @@ class PostgresReviewReragRepository:
         return [str(row["section"]) for row in rows]
 
     async def indexed_pmids(self, review_id: str) -> list[str]:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             rows = await connection.fetch(
                 """
                 select distinct pmid
@@ -994,7 +1017,7 @@ class PostgresReviewReragRepository:
         return [str(row["pmid"]) for row in rows]
 
     async def list_review_passage_ids(self, review_id: str) -> list[str]:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             rows = await connection.fetch(
                 """
                 select passage_id
@@ -1012,7 +1035,7 @@ class PostgresReviewReragRepository:
         event_type: str,
         payload: Mapping[str, object],
     ) -> None:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             await connection.execute(
                 """
                 insert into review_audit_events (review_id, event_type, payload)
@@ -1025,7 +1048,7 @@ class PostgresReviewReragRepository:
             await self._touch_review_on_connection(connection, review_id)
 
     async def list_review_audit_events(self, review_id: str) -> list[Mapping[str, object]]:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             rows = await connection.fetch(
                 """
                 select event_type, payload, created_at
@@ -1051,7 +1074,7 @@ class PostgresReviewReragRepository:
         offset: int = 0,
         ttl_seconds: int | None = None,
     ) -> list[ReviewIndexInventoryItem]:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             rows = await connection.fetch(
                 self._review_inventory_sql(filtered=False),
                 limit,
@@ -1065,7 +1088,7 @@ class PostgresReviewReragRepository:
         *,
         ttl_seconds: int | None = None,
     ) -> ReviewIndexInventoryItem | None:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             row = await connection.fetchrow(
                 self._review_inventory_sql(filtered=True),
                 1,
@@ -1077,7 +1100,7 @@ class PostgresReviewReragRepository:
         return _review_inventory_item_from_row(row, ttl_seconds=ttl_seconds)
 
     async def delete_review_index(self, review_id: str) -> bool:
-        async with self._pool.acquire() as connection, connection.transaction():
+        async with self._acquire() as connection, connection.transaction():
             await connection.execute(
                 """
                 delete from review_research_session_candidates
@@ -1109,7 +1132,7 @@ class PostgresReviewReragRepository:
         return _parse_execute_count(result) > 0
 
     async def cleanup_expired_review_indexes(self, *, ttl_seconds: int) -> list[str]:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             rows = await connection.fetch(
                 """
                 select review_id
@@ -1135,7 +1158,7 @@ class PostgresReviewReragRepository:
         status: str,
         request: dict[str, Any],
     ) -> None:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             await connection.execute(
                 """
                 insert into reviews (review_id)
@@ -1175,7 +1198,7 @@ class PostgresReviewReragRepository:
             if candidate.coverage_hint
             else None
         )
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             await connection.execute(
                 """
                 insert into review_research_session_candidates
@@ -1207,7 +1230,7 @@ class PostgresReviewReragRepository:
     async def get_research_session(
         self, review_id: str, session_id: str
     ) -> ResearchSessionManifest | None:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             session = await connection.fetchrow(
                 """
                 select review_id, session_id, query, status,
@@ -1248,7 +1271,7 @@ class PostgresReviewReragRepository:
 
     async def list_research_sessions(self, review_id: str) -> list[ResearchSessionManifest]:
         async with (
-            self._pool.acquire() as connection,
+            self._acquire() as connection,
             connection.transaction(
                 isolation="repeatable_read",
                 readonly=True,
@@ -1314,7 +1337,7 @@ class PostgresReviewReragRepository:
             request.passage_ids,
             validate=request.validate_passages,
         )
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             await connection.execute(
                 """
                 insert into reviews (review_id)
@@ -1384,7 +1407,7 @@ class PostgresReviewReragRepository:
         return _evidence_certainty_from_row(row)
 
     async def list_evidence_certainty(self, review_id: str) -> list[EvidenceCertaintyRecord]:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             rows = await connection.fetch(
                 """
                 select *
@@ -1401,7 +1424,7 @@ class PostgresReviewReragRepository:
         review_id: str,
         certainty_id: str,
     ) -> EvidenceCertaintyRecord | None:
-        async with self._pool.acquire() as connection:
+        async with self._acquire() as connection:
             row = await connection.fetchrow(
                 """
                 select *

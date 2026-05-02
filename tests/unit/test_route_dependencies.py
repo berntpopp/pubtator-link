@@ -67,10 +67,11 @@ async def test_get_review_pool_leaves_headroom_for_preparation_workers(
     result = await dependencies.get_review_pool()
 
     assert result is pool
+    # prep=3, retrieval default 4 -> max(10, 3*2 + 4*2 + 4) = 18; min = min(4, 3) = 3
     assert captured_kwargs == {
         "dsn": "postgresql://user:pass@localhost:5434/pubtator_link",
-        "min_size": 1,
-        "max_size": 8,
+        "min_size": 3,
+        "max_size": 18,
     }
 
 
@@ -97,7 +98,9 @@ async def test_get_review_pool_keeps_spare_connections_when_concurrency_is_zero(
 
     await dependencies.get_review_pool()
 
-    assert captured_kwargs["max_size"] == 2
+    # prep=0 still gets the floor of 10 connections; min_size=1 because prep<1
+    assert captured_kwargs["max_size"] == 12
+    assert captured_kwargs["min_size"] == 1
 
 
 @pytest.mark.asyncio
@@ -189,10 +192,11 @@ async def test_create_app_resources_builds_review_resources_with_database(
     assert resources.review_repository == ("repo", pool)
     assert resources.review_queue is queue
     assert resources.review_context_service == ("context", ("repo", pool))
+    # prep=2, retrieval default 4 -> max(10, 2*2 + 4*2 + 4) = 16; min = min(4, 2) = 2
     assert captured_pool_kwargs == {
         "dsn": "postgresql://user:pass@localhost:5434/pubtator_link",
-        "min_size": 1,
-        "max_size": 6,
+        "min_size": 2,
+        "max_size": 16,
     }
 
 

@@ -32,7 +32,7 @@ class FakePool:
     def __init__(self, connection: "FakeConnection") -> None:
         self.connection = connection
 
-    def acquire(self) -> FakeAcquire:
+    def acquire(self, **_kwargs: Any) -> FakeAcquire:
         return FakeAcquire(self.connection)
 
 

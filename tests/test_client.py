@@ -16,7 +16,7 @@ class TestRateLimiter:
 
     @pytest.mark.asyncio
     async def test_rate_limiter_no_wait(self):
-        """Test rate limiter when tokens are available."""
+        """When tokens are available, acquire returns immediately with no wait."""
         limiter = RateLimiter(rate=5.0, burst=2)
 
         wait_time = await limiter.acquire()
@@ -25,23 +25,39 @@ class TestRateLimiter:
 
     @pytest.mark.asyncio
     async def test_rate_limiter_wait_required(self):
-        """Test rate limiter when wait is required."""
-        limiter = RateLimiter(rate=1.0, burst=1)
+        """When the bucket is empty, acquire blocks and consumes a token before returning."""
+        import asyncio
+        import time
 
-        # First request should not wait
-        wait_time1 = await limiter.acquire()
-        assert wait_time1 == 0.0
+        limiter = RateLimiter(rate=10.0, burst=1)  # 100ms between tokens
 
-        # Second request should require wait
-        wait_time2 = await limiter.acquire()
-        assert wait_time2 > 0.0
+        # First request: immediate
+        wait1 = await limiter.acquire()
+        assert wait1 == 0.0
+
+        # Second request: must wait until the next token is available
+        start = time.monotonic()
+        wait2 = await limiter.acquire()
+        elapsed = time.monotonic() - start
+        assert wait2 > 0.0
+        # acquire blocked for roughly the slot interval (1/rate = 100ms)
+        assert elapsed >= 0.05, f"acquire should have waited ~100ms, waited {elapsed:.3f}s"
+
+        # Concurrent third+fourth callers serialize behind the bucket
+        start = time.monotonic()
+        await asyncio.gather(limiter.acquire(), limiter.acquire())
+        concurrent_elapsed = time.monotonic() - start
+        # Two more tokens at 10 RPS -> at least ~150ms
+        assert concurrent_elapsed >= 0.15, (
+            f"two concurrent acquires should serialize, observed {concurrent_elapsed:.3f}s"
+        )
 
     @pytest.mark.asyncio
     async def test_rate_limiter_token_replenishment(self):
-        """Test that tokens are replenished over time."""
+        """Tokens replenish over wall time when the bucket sits idle."""
         import asyncio
 
-        limiter = RateLimiter(rate=10.0, burst=1)  # High rate for faster testing
+        limiter = RateLimiter(rate=10.0, burst=1)
 
         # Use up the token
         await limiter.acquire()
@@ -49,7 +65,7 @@ class TestRateLimiter:
         # Wait a bit for token replenishment
         await asyncio.sleep(0.2)
 
-        # Should have token available again
+        # Should have token available again with no wait
         wait_time = await limiter.acquire()
         assert wait_time == 0.0
 
