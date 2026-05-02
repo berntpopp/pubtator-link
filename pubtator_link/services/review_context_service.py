@@ -240,9 +240,14 @@ class ReviewContextService:
                 )
                 return query_index, result
 
-        indexed_results = await asyncio.gather(
-            *(retrieve_one(index, query) for index, query in enumerate(request.queries))
-        )
+        indexed_results: list[tuple[int, RetrieveReviewContextResponse]] = []
+        query_items = list(enumerate(request.queries))
+        chunk_size = max(1, self.retrieval_concurrency)
+        for offset in range(0, len(query_items), chunk_size):
+            chunk = query_items[offset : offset + chunk_size]
+            indexed_results.extend(
+                await asyncio.gather(*(retrieve_one(index, query) for index, query in chunk))
+            )
         for _query_index, result in sorted(indexed_results, key=lambda item: item[0]):
             query_results.append(result)
             if request.response_mode == "full":

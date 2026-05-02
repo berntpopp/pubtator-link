@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from pubtator_link.db.migrate import required_review_schema_items
+
 SCHEMA = Path("pubtator_link/db/review_schema.sql").read_text()
 
 
@@ -54,12 +56,21 @@ def test_schema_defines_research_session_tables() -> None:
 
 def test_schema_defines_review_session_source_links() -> None:
     migration = Path("pubtator_link/db/migrations/0002_review_schema_drift_repair.sql").read_text()
+    repair_migration = Path(
+        "pubtator_link/db/migrations/0003_review_session_sources_repair.sql"
+    ).read_text()
 
-    for sql in (SCHEMA, migration):
+    for sql in (SCHEMA, migration, repair_migration):
         assert "create table if not exists review_session_sources" in sql
         assert "primary key(review_id, session_id, source_id)" in sql
         assert "references review_research_sessions(review_id, session_id)" in sql
         assert "references review_preparation_jobs(review_id, source_id)" in sql
+
+
+def test_schema_diagnostics_require_review_session_source_links() -> None:
+    required = required_review_schema_items()
+
+    assert "review_session_sources" in required.tables
 
 
 def test_schema_tracks_review_inventory_timestamps() -> None:

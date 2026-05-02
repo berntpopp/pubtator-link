@@ -12,6 +12,7 @@ from pubtator_link.models.review_rerag import (
     InspectReviewIndexRequest,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
+    RetrieveReviewContextResponse,
     ReviewIndexTotals,
     ReviewPassageRow,
     ReviewPassageSample,
@@ -308,6 +309,27 @@ class BlockingQueryRepository(QueryMappedReviewContextRepository):
             session_id=session_id,
             limit=limit,
         )
+
+
+class CoroutineCountingReviewContextService(ReviewContextService):
+    def __init__(self, repository: object, *, retrieval_concurrency: int) -> None:
+        super().__init__(repository, retrieval_concurrency=retrieval_concurrency)
+        self.created_count = 0
+        self.max_created_before_release = 0
+        self.release = asyncio.Event()
+
+    async def retrieve_context(
+        self,
+        review_id: str,
+        request: RetrieveReviewContextRequest,
+    ) -> RetrieveReviewContextResponse:
+        self.created_count += 1
+        self.max_created_before_release = max(
+            self.max_created_before_release,
+            self.created_count,
+        )
+        await self.release.wait()
+        return await super().retrieve_context(review_id, request)
 
 
 def _passage(
@@ -829,6 +851,76 @@ async def test_batch_retrieval_runs_queries_with_bounded_concurrency_and_preserv
         "p2",
         "p3",
     ]
+
+
+@pytest.mark.asyncio
+async def test_batch_retrieval_bounds_created_query_coroutines() -> None:
+    repository = QueryMappedReviewContextRepository(
+        {
+            "q1": [_passage("p1", pmid="111", text="one", lexical_rank=9.0)],
+            "q2": [_passage("p2", pmid="222", text="two", lexical_rank=9.0)],
+            "q3": [_passage("p3", pmid="333", text="three", lexical_rank=9.0)],
+            "q4": [_passage("p4", pmid="444", text="four", lexical_rank=9.0)],
+        }
+    )
+    service = CoroutineCountingReviewContextService(repository, retrieval_concurrency=2)
+
+    task = asyncio.create_task(
+        service.retrieve_context_batch(
+            "review-1",
+            RetrieveReviewContextBatchRequest(
+                queries=["q1", "q2", "q3", "q4"],
+                max_passages_per_query=1,
+                max_total_passages=4,
+            ),
+        )
+    )
+    while service.created_count < 2:
+        await asyncio.sleep(0)
+
+    assert service.max_created_before_release == 2
+
+    service.release.set()
+    response = await task
+
+    assert [summary.query for summary in response.query_summaries] == ["q1", "q2", "q3", "q4"]
+
+
+@pytest.mark.asyncio
+async def test_batch_retrieval_gathers_no_more_than_concurrency_at_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = QueryMappedReviewContextRepository(
+        {
+            "q1": [_passage("p1", pmid="111", text="one", lexical_rank=9.0)],
+            "q2": [_passage("p2", pmid="222", text="two", lexical_rank=9.0)],
+            "q3": [_passage("p3", pmid="333", text="three", lexical_rank=9.0)],
+            "q4": [_passage("p4", pmid="444", text="four", lexical_rank=9.0)],
+        }
+    )
+    service = ReviewContextService(repository, retrieval_concurrency=2)
+    original_gather = asyncio.gather
+    gather_widths: list[int] = []
+
+    async def recording_gather(*aws, **kwargs):
+        gather_widths.append(len(aws))
+        return await original_gather(*aws, **kwargs)
+
+    monkeypatch.setattr(
+        "pubtator_link.services.review_context_service.asyncio.gather",
+        recording_gather,
+    )
+
+    await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["q1", "q2", "q3", "q4"],
+            max_passages_per_query=1,
+            max_total_passages=4,
+        ),
+    )
+
+    assert gather_widths == [2, 2]
 
 
 @pytest.mark.asyncio

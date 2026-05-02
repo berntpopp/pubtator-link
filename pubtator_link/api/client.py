@@ -98,6 +98,7 @@ class PubTator3Client:
         # HTTP client with appropriate headers
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(config.timeout),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
             headers={
                 "User-Agent": "PubTator-Link/1.0.0 (https://github.com/ai-assistant/pubtator-link)",
                 "Accept": "application/json",
@@ -108,6 +109,7 @@ class PubTator3Client:
         # Text processing client (different endpoint)
         self.text_client = httpx.AsyncClient(
             timeout=httpx.Timeout(text_config.timeout),
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
             headers={
                 "User-Agent": "PubTator-Link/1.0.0 (https://github.com/ai-assistant/pubtator-link)",
                 "Content-Type": "application/x-www-form-urlencoded",

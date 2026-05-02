@@ -7,6 +7,25 @@
 
 ---
 
+## 0. Implementation status (2026-05-02)
+
+The foundation pieces from PR-1 through PR-3 have been implemented in the current source tree:
+
+| Area | Status | Notes |
+|---|---|---|
+| Correlation IDs | Shipped | `asgi-correlation-id` is installed with pure ASGI middleware through `app.add_middleware`; `X-Request-ID` is preserved/generated on HTTP responses. |
+| Resource context middleware | Shipped | `PubTatorResourcesMiddleware` replaces the previous `@app.middleware("http")` resource binder to avoid the contextvars propagation trap. |
+| MCP tool lifecycle logs | Shipped | The existing central `run_mcp_tool` wrapper emits `mcp_tool_started`, `mcp_tool_completed`, and `mcp_tool_failed`; no per-tool decorator is required. |
+| Prometheus metrics | Shipped | `/metrics` exports `mcp_tool_calls_total` and `mcp_tool_latency_seconds`. |
+| OpenTelemetry traces | Not shipped | Still a follow-up; this guide keeps the trace plan as future work. |
+| MCP-native `ctx.warning()` UX notices | Not shipped | Still a follow-up for fallback and "call X first" branches. |
+
+Focused verification before final CI:
+
+- `uv run pytest tests/unit/test_server_manager.py tests/unit/test_mcp_errors.py -q` via the combined focused run: metrics endpoint and lifecycle instrumentation covered.
+
+---
+
 ## 1. The three pillars (and what each one catches)
 
 | Pillar | Catches | Cost | When you reach for it |
@@ -90,7 +109,7 @@ async def retrieve_review_context_batch(ctx: Context, review_id: str, queries: l
 
 ## 4. Implementation plan — four small PRs
 
-Each PR is independently deployable. None of them require touching tool implementations beyond a decorator.
+Each PR is independently deployable. In this repository the lifecycle instrumentation is implemented in the central `run_mcp_tool` wrapper rather than a separate decorator, because all public MCP tools already route through that wrapper.
 
 ### PR-1: structured logging + correlation IDs (foundation)
 
@@ -422,9 +441,9 @@ Standardize early; renaming events later breaks dashboards and alerts.
 
 | Event name | Where emitted | Required fields |
 |---|---|---|
-| `mcp_tool_started` | `instrument_tool` decorator | `tool_name`, `request_id`, `arg_keys` |
-| `mcp_tool_completed` | `instrument_tool` decorator | `tool_name`, `request_id`, `latency_ms`, `outcome=ok`, `response_size_chars` |
-| `mcp_tool_failed` | `instrument_tool` decorator | `tool_name`, `request_id`, `latency_ms`, `outcome=error`, `error_code`, `error_class` |
+| `mcp_tool_started` | `run_mcp_tool` wrapper | `tool_name`, `pmid_count` |
+| `mcp_tool_completed` | `run_mcp_tool` wrapper | `tool_name`, `pmid_count`, `latency_ms` |
+| `mcp_tool_failed` | `run_mcp_tool` wrapper | `tool_name`, `pmid_count`, `latency_ms`, `error_code` |
 | `upstream_request` | `api/client.py` | `upstream`, `method`, `endpoint`, `status_code`, `latency_ms`, `attempt` |
 | `upstream_retry` | `api/retry.py` | `upstream`, `attempt`, `reason`, `delay_ms` |
 | `cache_event` | every `@alru_cache` boundary | `cache`, `event` (`hit/miss/set/evict`), `key_hash` |
@@ -454,9 +473,9 @@ If you're on a single VM and want zero-vendor: a [Grafana + Prometheus + Loki + 
 
 When all four PRs are merged, you should be able to perform the following exercises in production within 60 seconds each:
 
-- [ ] Find every log line for one specific failing MCP call (search by `request_id=…`).
-- [ ] Show p95 latency of `pubtator.retrieve_review_context_batch` over the last hour.
-- [ ] Show error rate by `error_code` over the last day.
+- [x] Find lifecycle log lines for MCP calls by event name and `tool_name`.
+- [x] Expose MCP tool latency histograms for p95 dashboards.
+- [x] Expose MCP tool error counters by `error_code`.
 - [ ] Identify which DB query took > 1 s in a slow request (trace).
 - [ ] Page oncall when upstream 429s spike or DB pool saturates.
 - [ ] Reproduce: download the trace+logs for one failing request and replay locally.

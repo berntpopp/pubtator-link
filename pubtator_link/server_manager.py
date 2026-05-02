@@ -1,15 +1,17 @@
 """Unified server manager for PubTator-Link."""
 
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from uuid import uuid4
 
 import uvicorn
+from asgi_correlation_id import CorrelationIdMiddleware
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastmcp import FastMCP
 from starlette.responses import Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 from structlog.typing import FilteringBoundLogger
 
 from .api.routes import (
@@ -35,6 +37,31 @@ from .config import review_rerag_config, settings
 from .db.migrate import ReviewSchemaDiagnostics
 from .logging_config import configure_logging
 from .mcp.facade import create_pubtator_mcp
+from .observability.metrics import CONTENT_TYPE_LATEST, metrics_payload
+
+
+class PubTatorResourcesMiddleware:
+    """Bind app resources to request context without BaseHTTPMiddleware."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope)
+        resources = getattr(request.app.state, "pubtator_resources", None)
+        if resources is None:
+            await self.app(scope, receive, send)
+            return
+
+        token = bind_app_resources(resources_from_request(request))
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            reset_app_resources(token)
 
 
 class UnifiedServerManager:
@@ -119,6 +146,14 @@ class UnifiedServerManager:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+        app.add_middleware(PubTatorResourcesMiddleware)
+        app.add_middleware(
+            CorrelationIdMiddleware,
+            header_name="X-Request-ID",
+            update_request_header=True,
+            generator=lambda: str(uuid4()),
+            validator=None,
+        )
 
         # Add basic routes
         @app.get("/")
@@ -139,6 +174,11 @@ class UnifiedServerManager:
                 "version": "1.0.0",
                 "transport": settings.transport,
             }
+
+        @app.get("/metrics", include_in_schema=False)
+        async def metrics() -> Response:
+            """Prometheus metrics endpoint."""
+            return Response(metrics_payload(), media_type=CONTENT_TYPE_LATEST)
 
         @app.get("/ready")
         async def ready(request: Request) -> dict[str, object]:
@@ -182,32 +222,6 @@ class UnifiedServerManager:
                 "transport": settings.transport,
                 "dependencies": {"database": database_dependency},
             }
-
-        @app.middleware("http")
-        async def add_request_id(
-            request: Request,
-            call_next: Callable[[Request], Awaitable[Response]],
-        ) -> Response:
-            request_id = request.headers.get("X-Request-ID") or str(uuid4())
-            request.state.request_id = request_id
-            response = await call_next(request)
-            response.headers["X-Request-ID"] = request_id
-            return response
-
-        @app.middleware("http")
-        async def bind_pubtator_resources(
-            request: Request,
-            call_next: Callable[[Request], Awaitable[Response]],
-        ) -> Response:
-            resources = getattr(request.app.state, "pubtator_resources", None)
-            if resources is None:
-                return await call_next(request)
-            resources = resources_from_request(request)
-            token = bind_app_resources(resources)
-            try:
-                return await call_next(request)
-            finally:
-                reset_app_resources(token)
 
         # Include all API route modules
         app.include_router(publications_router)

@@ -4,11 +4,14 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Any
 
 import asyncpg
 import httpx
 from fastmcp.exceptions import ToolError
+
+from pubtator_link.observability.metrics import record_mcp_tool_call
 
 logger = logging.getLogger(__name__)
 
@@ -104,11 +107,47 @@ async def run_mcp_tool(
     fallback_args: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run one MCP tool body and convert execution failures to ToolError."""
+    started_at = perf_counter()
+    pmid_count = len(pmids or [])
+    logger.info("mcp_tool_started", extra={"tool_name": tool_name, "pmid_count": pmid_count})
     try:
-        return await func()
+        result = await func()
     except ToolError:
+        latency_seconds = perf_counter() - started_at
+        logger.warning(
+            "mcp_tool_failed",
+            extra={
+                "tool_name": tool_name,
+                "pmid_count": pmid_count,
+                "latency_ms": round(latency_seconds * 1000, 2),
+                "error_code": "tool_error",
+            },
+        )
+        record_mcp_tool_call(
+            tool_name=tool_name,
+            outcome="failure",
+            error_code="tool_error",
+            latency_seconds=latency_seconds,
+        )
         raise
     except Exception as exc:
+        latency_seconds = perf_counter() - started_at
+        error_code = error_code_for_exception(exc)
+        logger.warning(
+            "mcp_tool_failed",
+            extra={
+                "tool_name": tool_name,
+                "pmid_count": pmid_count,
+                "latency_ms": round(latency_seconds * 1000, 2),
+                "error_code": error_code,
+            },
+        )
+        record_mcp_tool_call(
+            tool_name=tool_name,
+            outcome="failure",
+            error_code=error_code,
+            latency_seconds=latency_seconds,
+        )
         raise mcp_tool_error(
             exc,
             McpErrorContext(
@@ -118,3 +157,18 @@ async def run_mcp_tool(
                 fallback_args=fallback_args,
             ),
         ) from exc
+    latency_seconds = perf_counter() - started_at
+    logger.info(
+        "mcp_tool_completed",
+        extra={
+            "tool_name": tool_name,
+            "pmid_count": pmid_count,
+            "latency_ms": round(latency_seconds * 1000, 2),
+        },
+    )
+    record_mcp_tool_call(
+        tool_name=tool_name,
+        outcome="success",
+        latency_seconds=latency_seconds,
+    )
+    return result

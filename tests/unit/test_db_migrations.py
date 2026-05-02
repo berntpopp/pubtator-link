@@ -14,6 +14,7 @@ def test_migration_files_are_ordered_and_include_repair_migration() -> None:
     assert names == [
         "0001_review_schema_base.sql",
         "0002_review_schema_drift_repair.sql",
+        "0003_review_session_sources_repair.sql",
     ]
     assert MIGRATIONS_PACKAGE == "pubtator_link.db.migrations"
 
@@ -44,6 +45,7 @@ def test_required_schema_items_include_review_tables_and_columns() -> None:
     assert ("full_text_retrieval_attempts", "coverage_reason") in required.columns
     assert "review_research_sessions" in required.tables
     assert "review_research_session_candidates" in required.tables
+    assert "review_session_sources" in required.tables
     assert "review_evidence_certainty" in required.tables
 
 

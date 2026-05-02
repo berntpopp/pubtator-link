@@ -2,7 +2,7 @@
 
 **Audience:** PubTator-Link maintainers planning hardening for parallel LLM-agent traffic.
 **Date:** 2026-05-02
-**Last updated:** 2026-05-02 — Steps 1–3 of the recommended fix sequence shipped (see §0 Status).
+**Last updated:** 2026-05-02 — Steps 1–6 of the recommended fix sequence shipped in source (see §0 Status).
 **Method:** static read of all concurrency-critical paths + three in-process load tests with `respx`-mocked upstream + per-call timing telemetry. Scripts live at `/tmp/stress_concurrency.py`, `/tmp/stress_ratelimiter.py`, `/tmp/stress_cache.py`. All measurements reproducible.
 **Companion to:** `docs/2026-05-02-pubtator-link-mcp-llm-engineering-review.md` and `docs/2026-05-02-pubtator-link-observability-implementation-guide.md`.
 
@@ -10,17 +10,22 @@
 
 ## 0. Fix status (2026-05-02)
 
-The two **🔴 Critical** bottlenecks and one **🟠 High** bottleneck have been fixed in source. CI is green (`make ci-local`: 544 passed / 2 skipped). The running container at `pubtator_link_server` (port 8011→8000) **has not been rebuilt yet** — it still runs the pre-fix image. Rebuild with `make docker-down && make docker-build && make docker-up` to deploy.
+The two **🔴 Critical** bottlenecks, both **🟠 High** bottlenecks, and the two scoped **🟡 Medium** hardening items have been fixed in source. The running Docker database was also repaired for an existing-volume drift case where `review_session_sources` was missing even though older migrations were marked applied.
+
+Latest focused verification before final CI:
+
+- `uv run pytest tests/unit/test_review_schema_sql.py tests/unit/test_server_manager.py tests/unit/test_mcp_errors.py tests/unit/test_pubtator_client_limits.py tests/unit/test_review_context_service.py -q` — 54 passed.
+- `PUBTATOR_LINK_DATABASE_URL=postgresql://pubtator_link:pubtator_link@localhost:55432/pubtator_link uv run python -m pubtator_link.db.migrate --check` — current, with `0003_review_session_sources_repair` applied.
 
 | # | Severity | Status | Verification |
 |---|---|---|---|
 | 1 | 🔴 RateLimiter math (thundering herd) | ✅ **Shipped** | `/tmp/stress_ratelimiter.py` — N=8 concurrent permits monotonically spaced 400 ms apart, observed 2.85 RPS vs. 2.5 RPS target (was: 19.97 RPS, all 7 waiters released at t=400 ms simultaneously) |
 | 2 | 🔴 Per-call PubTator3Client construction | ✅ **Shipped** | `/tmp/stress_concurrency.py` Scenario B — N=64 concurrent calls: max_in_flight=**1**, eff_rps=**2.53** (was: max_in_flight=63, eff_rps=156). Wall time: 25.36 s for 64 calls — the correct cost of honoring a 2.5 RPS budget |
 | 3 | 🟠 DB pool sizing + acquire timeout | ✅ **Shipped** | New formula: `max(10, prep×2 + retrieval×2 + 4)`; default config now 16 connections (was 6). 5 s acquire timeout via `PostgresReviewReragRepository._acquire()` helper applied to all 30 acquisition sites. Saturation now surfaces as `asyncpg.PoolAcquireTimeoutError` → `error_code: review_index_unavailable` for the LLM, not an indefinite hang |
-| 4 | 🟠 ASGI middleware contextvars trap | ⏳ **Not shipped** | Plan unchanged (see §3.6 / §4 Step 4). Untriggered by current load patterns; ship before adding new contextvar bindings or background tasks |
-| 5 | 🟡 Explicit `httpx.Limits` | ⏳ **Not shipped** | Defaults are adequate for single-worker; required before multi-worker Gunicorn |
-| 6 | 🟡 Bound batch coroutine creation | ⏳ **Not shipped** | No production reports of large batches |
-| 7 | 🟢 `async_lru` single-flight strength | — | Confirmed working; extension to `autocomplete_entity` / `search_publications` tracked as `gsd-add-todo` follow-up |
+| 4 | 🟠 ASGI middleware contextvars trap | ✅ **Shipped** | `PubTatorResourcesMiddleware` is pure ASGI and `CorrelationIdMiddleware` is installed through `app.add_middleware`; unit tests assert both middleware classes are registered |
+| 5 | 🟡 Explicit `httpx.Limits` | ✅ **Shipped** | `PubTator3Client` sets explicit connection and keepalive limits for both API and text clients; unit test asserts both clients receive `httpx.Limits` |
+| 6 | 🟡 Bound batch coroutine creation | ✅ **Shipped** | `retrieve_context_batch` submits query chunks no wider than `retrieval_concurrency`; unit test records `asyncio.gather` widths |
+| 7 | 🟢 `async_lru` single-flight strength | — | Confirmed working; extension to `autocomplete_entity` remains a follow-up; `search_publications` already has service-layer cache coverage |
 
 ### What changed in source
 
@@ -30,10 +35,14 @@ The two **🔴 Critical** bottlenecks and one **🟠 High** bottleneck have been
 | `_make_request()` no longer double-sleeps on the returned wait | `pubtator_link/api/client.py` | ~5 |
 | Rate-limiter tests rewritten to assert the new contract (acquire blocks until permitted; concurrent acquires serialize through the bucket) | `tests/test_client.py` | ~30 |
 | 8 MCP tool sites switched from `async with PubTator3Client():` to the shared `await get_api_client()` (or `await get_publication_service()` for the BioC tools, preserving `async_lru` cache benefit across calls) | `pubtator_link/mcp/tools/literature.py`, `mcp/tools/publications.py`, `mcp/tools/text_annotations.py` | ~30 |
-| New `PostgresReviewReragRepository._acquire()` helper with configurable `acquire_timeout` (5 s default) + sed-rewrite of all 30 `self._pool.acquire()` call sites; falls back gracefully if a pool fake doesn't accept `timeout=` | `pubtator_link/repositories/review_rerag.py` | ~15 + 30 sites |
+| New `PostgresReviewReragRepository._acquire()` helper with configurable `acquire_timeout` (5 s default) + rewrite of all 30 `self._pool.acquire()` call sites; falls back gracefully if a pool fake doesn't accept `timeout=` | `pubtator_link/repositories/review_rerag.py` | ~15 + 30 sites |
 | Pool sizing formula: floor of 10, scales with both prep and retrieval concurrency; min_size scales with prep workers up to a cap of 4 | `pubtator_link/api/routes/dependencies.py` | ~10 |
 | Test-fixture `FakePool.acquire(**_kwargs)` accepts and ignores the new `timeout` kwarg | `tests/unit/test_review_rerag_repository.py` | 1 |
 | Pool-sizing assertions updated for the new formula | `tests/unit/test_route_dependencies.py` | ~6 |
+| Existing-volume schema drift repaired for `review_session_sources`; readiness diagnostics now require the table and migration `0003_review_session_sources_repair` recreates it idempotently | `pubtator_link/db/migrate.py`, `pubtator_link/db/migrations/0003_review_session_sources_repair.sql` | ~20 |
+| Resource binding middleware moved from `@app.middleware("http")` to pure ASGI middleware; request IDs now use `asgi-correlation-id` | `pubtator_link/server_manager.py` | ~35 |
+| Explicit `httpx.Limits` added to both PubTator API clients | `pubtator_link/api/client.py` | ~2 |
+| Batch retrieval now chunks query submission by `retrieval_concurrency` instead of creating all query coroutines at once | `pubtator_link/services/review_context_service.py` | ~8 |
 
 ### Combined headline measurement (Scenario B — production code path)
 
@@ -49,7 +58,7 @@ The added wall time is the *correct* cost of honoring PubTator's 3 RPS guideline
 
 ### Deployment
 
-The fixes are committed to source but the container `pubtator_link_server` (image `docker-pubtator-link`, up 3 hours, healthy, listening on host port 8011) has not been rebuilt. Until rebuilt, parallel agent traffic still hits the buggy code in production. Rebuild:
+Rebuild after final CI to deploy the source changes:
 
 ```bash
 make docker-down && make docker-build && make docker-up
@@ -58,11 +67,10 @@ make docker-down && make docker-build && make docker-up
 
 ### Remaining items, prioritized
 
-1. **Rebuild and restart the container** to actually deploy the fixes.
-2. **Promote the three `/tmp/stress_*.py` scripts** into `tests/integration/test_concurrency.py` with `@pytest.mark.integration` markers — they are the regression suite that prevents these bugs returning.
-3. Step 4 (ASGI middleware) — schedule before adding any new contextvar bindings or background tasks.
-4. Step 5 (`httpx.Limits`) — schedule before any move to multi-worker Gunicorn.
-5. Step 6 (cache extension) — single-flight wrapping for `autocomplete_entity` and `search_publications`.
+1. **Run final CI and rebuild/restart the container** before load testing against the running service.
+2. **Promote the three `/tmp/stress_*.py` scripts** into `tests/integration/test_concurrency.py` with `@pytest.mark.integration` markers — they remain the broader regression suite for high-N traffic.
+3. Extend single-flight caching to `autocomplete_entity`.
+4. Step 7 (distributed rate limit) remains a separate multi-worker project.
 
 The historical analysis below is preserved as the design rationale for these fixes.
 

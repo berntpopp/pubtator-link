@@ -1,5 +1,6 @@
 import ast
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -76,6 +77,31 @@ async def test_mcp_error_wrapper_raises_tool_error() -> None:
 
     payload = json.loads(str(exc_info.value))
     assert payload["error_code"] == "review_schema_not_current"
+
+
+@pytest.mark.asyncio
+async def test_mcp_tool_wrapper_emits_lifecycle_logs_and_metrics(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from pubtator_link.mcp.errors import run_mcp_tool
+    from pubtator_link.observability.metrics import metrics_payload
+
+    async def successful() -> dict[str, object]:
+        return {"ok": True}
+
+    caplog.set_level(logging.INFO, logger="pubtator_link.mcp.errors")
+
+    result = await run_mcp_tool("pubtator.test_tool", successful, pmids=["1", "2"])
+
+    assert result == {"ok": True}
+    messages = [record.message for record in caplog.records]
+    assert "mcp_tool_started" in messages
+    assert "mcp_tool_completed" in messages
+    metrics = metrics_payload().decode()
+    assert (
+        'mcp_tool_calls_total{error_code="",outcome="success",tool_name="pubtator.test_tool"}'
+        in metrics
+    )
 
 
 def _is_mcp_tool(node: ast.AsyncFunctionDef | ast.FunctionDef) -> bool:

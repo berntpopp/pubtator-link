@@ -50,6 +50,19 @@ wheels = [
 ]
 
 [[package]]
+name = "asgi-correlation-id"
+version = "4.3.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+    { name = "starlette" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f4/ff/a6538245ac1eaa7733ec6740774e9d5add019e2c63caa29e758c16c0afdd/asgi_correlation_id-4.3.4.tar.gz", hash = "sha256:ea6bc310380373cb9f731dc2e8b2b6fb978a76afe33f7a2384f697b8d6cd811d", size = 20075, upload-time = "2024-10-17T11:44:30.324Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d9/ab/6936e2663c47a926e0659437b9333ad87d1ff49b1375d239026e0a268eba/asgi_correlation_id-4.3.4-py3-none-any.whl", hash = "sha256:36ce69b06c7d96b4acb89c7556a4c4f01a972463d3d49c675026cbbd08e9a0a2", size = 15262, upload-time = "2024-10-17T11:44:28.739Z" },
+]
+
+[[package]]
 name = "async-lru"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1343,10 +1356,20 @@ wheels = [
 ]
 
 [[package]]
+name = "prometheus-client"
+version = "0.25.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1b/fb/d9aa83ffe43ce1f19e557c0971d04b90561b0cfd50762aafb01968285553/prometheus_client-0.25.0.tar.gz", hash = "sha256:5e373b75c31afb3c86f1a52fa1ad470c9aace18082d39ec0d2f918d11cc9ba28", size = 86035, upload-time = "2026-04-09T19:53:42.359Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8d/9b/d4b1e644385499c8346fa9b622a3f030dce14cd6ef8a1871c221a17a67e7/prometheus_client-0.25.0-py3-none-any.whl", hash = "sha256:d5aec89e349a6ec230805d0df882f3807f74fd6c1a2fa86864e3c2279059fed1", size = 64154, upload-time = "2026-04-09T19:53:41.324Z" },
+]
+
+[[package]]
 name = "pubtator-link"
 version = "1.0.0"
 source = { editable = "." }
 dependencies = [
+    { name = "asgi-correlation-id" },
     { name = "async-lru" },
     { name = "asyncpg" },
     { name = "beautifulsoup4" },
@@ -1358,6 +1381,7 @@ dependencies = [
     { name = "lxml" },
     { name = "mcp", extra = ["cli"] },
     { name = "orjson" },
+    { name = "prometheus-client" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "rich" },
@@ -1383,6 +1407,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "asgi-correlation-id", specifier = ">=4.3.0,<5.0.0" },
     { name = "async-lru", specifier = ">=2.0.4,<3.0.0" },
     { name = "asyncpg", specifier = ">=0.30.0,<1.0.0" },
     { name = "beautifulsoup4", specifier = ">=4.12.0,<5.0.0" },
@@ -1394,6 +1419,7 @@ requires-dist = [
     { name = "lxml", specifier = ">=5.2.0,<7.0.0" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.27.0,<2.0.0" },
     { name = "orjson", specifier = ">=3.10.0,<4.0.0" },
+    { name = "prometheus-client", specifier = ">=0.21.0,<1.0.0" },
     { name = "pydantic", specifier = ">=2.11.0,<3.0.0" },
     { name = "pydantic-settings", specifier = ">=2.6.0,<3.0.0" },
     { name = "rich", specifier = ">=13.9.0,<15.0.0" },

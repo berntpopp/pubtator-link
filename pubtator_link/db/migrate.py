@@ -45,6 +45,7 @@ def required_review_schema_items() -> RequiredSchemaItems:
                 "review_audit_events",
                 "review_research_sessions",
                 "review_research_session_candidates",
+                "review_session_sources",
                 "review_evidence_certainty",
             }
         ),

@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from asgi_correlation_id import CorrelationIdMiddleware
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from starlette.routing import Mount
 
 from pubtator_link.api.routes import dependencies
 from pubtator_link.api.routes.dependencies import AppResources
-from pubtator_link.server_manager import UnifiedServerManager
+from pubtator_link.server_manager import PubTatorResourcesMiddleware, UnifiedServerManager
 
 
 class LoggerDouble:
@@ -82,6 +85,52 @@ def test_create_app_with_mcp_mounts_http_facade(monkeypatch: pytest.MonkeyPatch)
     assert any(
         isinstance(route, Mount) and route.app is mcp.http_app_double for route in app.routes
     )
+
+
+def test_create_app_uses_pure_asgi_observability_middleware() -> None:
+    manager = UnifiedServerManager(logger=LoggerDouble())
+    app = manager.create_app()
+
+    middleware_classes = [middleware.cls for middleware in app.user_middleware]
+
+    assert CorrelationIdMiddleware in middleware_classes
+    assert PubTatorResourcesMiddleware in middleware_classes
+
+
+def test_resource_middleware_preserves_contextvars_in_child_tasks() -> None:
+    manager = UnifiedServerManager(logger=LoggerDouble())
+    app = manager.create_app()
+    resources = AppResources(
+        logger=manager.logger,
+        api_client=ClientDouble(),
+        publication_service=object(),
+        publication_passage_service=object(),
+    )
+    app.state.pubtator_resources = resources
+
+    @app.get("/context-probe")
+    async def context_probe() -> dict[str, bool]:
+        async def probe() -> bool:
+            return dependencies.current_app_resources() is resources
+
+        return {"bound": await asyncio.create_task(probe())}
+
+    response = TestClient(app).get("/context-probe")
+
+    assert response.status_code == 200
+    assert response.json() == {"bound": True}
+    assert dependencies.current_app_resources() is None
+
+
+def test_metrics_endpoint_exports_prometheus_payload() -> None:
+    manager = UnifiedServerManager(logger=LoggerDouble())
+    app = manager.create_app()
+
+    response = TestClient(app).get("/metrics")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "mcp_tool_calls_total" in response.text
 
 
 @pytest.mark.asyncio
