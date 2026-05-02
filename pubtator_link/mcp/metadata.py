@@ -32,7 +32,7 @@ def register_metadata(mcp: FastMCP) -> None:
         annotations=READ_ONLY_CLOSED_WORLD,
     )
     async def get_server_capabilities() -> dict[str, Any]:
-        """Use this when a client needs supported tools, transports, formats, and limitations. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a client needs supported tools, transports, formats, and limitations."""
 
         async def call() -> dict[str, Any]:
             return get_capabilities_resource()
@@ -48,7 +48,7 @@ def register_metadata(mcp: FastMCP) -> None:
     async def workflow_help(
         task: WorkflowTask = "clinical_genetics_review",
     ) -> dict[str, Any]:
-        """Use this when a fresh context needs the canonical PubTator-Link research workflow. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a fresh context needs the canonical PubTator-Link research workflow."""
 
         async def call() -> dict[str, Any]:
             return WorkflowHelpService().get_help(task).model_dump(by_alias=True)

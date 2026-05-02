@@ -264,7 +264,7 @@ def test_research_session_tool_schema_and_annotations_are_stable() -> None:
     assert stage_properties["page"]["minimum"] == 1
     assert stage_properties["page"]["maximum"] == 1000
 
-    assert "not for diagnosis" in stage_tool.description
+    assert "coverage hints" in stage_tool.description
     assert stage_tool.annotations.readOnlyHint is False
     assert stage_tool.annotations.destructiveHint is False
     assert stage_tool.annotations.openWorldHint is True
@@ -274,7 +274,7 @@ def test_research_session_tool_schema_and_annotations_are_stable() -> None:
         "pubtator.list_research_sessions",
     ):
         tool = tools[name]
-        assert "not for diagnosis" in tool.description
+        assert "research session" in tool.description
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
         assert tool.annotations.openWorldHint is True
@@ -303,9 +303,20 @@ def test_discovery_tools_are_registered_with_specific_schemas() -> None:
     for name, required_properties in expected.items():
         assert name in tools
         tool = tools[name]
-        assert "Research use only" in tool.description
-        assert "not for diagnosis" in tool.description
         _assert_specific_object_schema(_tool_output_schema(tool), required_properties)
+
+
+def test_tool_descriptions_do_not_repeat_long_research_notice() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp()
+    repeated = [
+        name
+        for name, tool in mcp._tool_manager._tools.items()
+        if tool.description and "not for diagnosis, treatment, triage" in tool.description
+    ]
+
+    assert repeated == []
 
 
 def test_common_mcp_tools_are_flat_and_unversioned() -> None:
@@ -522,7 +533,6 @@ def test_public_hosted_tools_have_expected_annotations() -> None:
     ):
         tool = tools[name]
         assert "Use this when" in tool.description
-        assert "not for diagnosis" in tool.description
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
 

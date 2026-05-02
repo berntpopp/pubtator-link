@@ -68,7 +68,7 @@ def register_review_tools(mcp: FastMCP) -> None:
         limit: int = 50,
         offset: int = 0,
     ) -> dict[str, Any]:
-        """Use this to list persisted review indexes with preparation status, source counts, passage counts, and approximate storage size. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this to list persisted review indexes with preparation status, source counts, passage counts, and approximate storage size."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_index_lifecycle_service()
@@ -83,7 +83,7 @@ def register_review_tools(mcp: FastMCP) -> None:
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_review_index_summary(review_id: str) -> dict[str, Any]:
-        """Use this to inspect one persisted review index summary without loading passage samples. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this to inspect one persisted review index summary without loading passage samples."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_index_lifecycle_service()
@@ -113,7 +113,7 @@ def register_review_tools(mcp: FastMCP) -> None:
         created_by: str | None = None,
         validate_passages: bool = False,
     ) -> dict[str, Any]:
-        """Use this to store a user-supplied GRADE-style evidence certainty judgment linked to prepared passage IDs. The backend stores the judgment; it does not compute certainty. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this to store a user-supplied GRADE-style evidence certainty judgment linked to prepared passage IDs. The backend stores the judgment; it does not compute certainty."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_evidence_certainty_service()
@@ -144,7 +144,7 @@ def register_review_tools(mcp: FastMCP) -> None:
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def list_evidence_certainty(review_id: str) -> dict[str, Any]:
-        """Use this to list user-supplied evidence certainty judgments for a review. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this to list user-supplied evidence certainty judgments for a review."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_evidence_certainty_service()
@@ -159,7 +159,7 @@ def register_review_tools(mcp: FastMCP) -> None:
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_evidence_certainty(review_id: str, certainty_id: str) -> dict[str, Any]:
-        """Use this to retrieve one user-supplied evidence certainty judgment. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this to retrieve one user-supplied evidence certainty judgment."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_evidence_certainty_service()
@@ -180,7 +180,7 @@ def register_review_tools(mcp: FastMCP) -> None:
     async def preflight_review_sources(
         pmids: list[str],
     ) -> dict[str, Any]:
-        """Use this before indexing review evidence to estimate PMID source coverage, PMC fallback availability, and likely full-text versus abstract-only retrieval. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this before indexing review evidence to estimate PMID source coverage, PMC fallback availability, and likely full-text versus abstract-only retrieval."""
 
         async def call() -> dict[str, Any]:
             service = await get_source_preflight_service()
@@ -209,7 +209,7 @@ def register_review_tools(mcp: FastMCP) -> None:
         max_candidates: Annotated[int, Field(ge=1, le=100)] = 20,
         stage_full_text: bool = True,
     ) -> dict[str, Any]:
-        """Use this after search planning to stage candidate PMIDs with coverage hints and queued review preparation. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this after search planning to stage candidate PMIDs with coverage hints and queued review preparation."""
 
         async def call() -> dict[str, Any]:
             service = await get_research_session_service()
@@ -243,7 +243,7 @@ def register_review_tools(mcp: FastMCP) -> None:
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_research_session_status(review_id: str, session_id: str) -> dict[str, Any]:
-        """Use this to poll staged candidate, coverage, and preparation status for a research session. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this to poll staged candidate, coverage, and preparation status for a research session."""
 
         async def call() -> dict[str, Any]:
             service = await get_research_session_service()
@@ -262,7 +262,7 @@ def register_review_tools(mcp: FastMCP) -> None:
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def list_research_sessions(review_id: str) -> dict[str, Any]:
-        """Use this to list staged research sessions for one review ID. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this to list staged research sessions for one review ID."""
 
         async def call() -> dict[str, Any]:
             service = await get_research_session_service()
@@ -325,7 +325,7 @@ def register_review_tools(mcp: FastMCP) -> None:
         include_metadata: bool = False,
         metadata: Literal["basic", "full"] = "basic",
     ) -> dict[str, Any]:
-        """Use this when a user needs to inspect indexed PMIDs, sections, passage counts, and failures for a review_id, including source coverage. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user needs to inspect indexed PMIDs, sections, passage counts, and failures for a review_id, including source coverage."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_context_service()
@@ -356,7 +356,7 @@ def register_review_tools(mcp: FastMCP) -> None:
         session_id: str | None = None,
         max_chars_per_passage: int = 2200,
     ) -> dict[str, Any]:
-        """Use this to retrieve exact prepared review passages by stable passage IDs from prior context packs or audit bundles. This only reads the review index and does not call upstream APIs. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this to retrieve exact prepared review passages by stable passage IDs from prior context packs or audit bundles. This only reads the review index and does not call upstream APIs."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_context_service()
@@ -385,7 +385,7 @@ def register_review_tools(mcp: FastMCP) -> None:
         same_section: bool = True,
         max_chars_per_passage: int = 2200,
     ) -> dict[str, Any]:
-        """Use this to retrieve prepared review passages near a cited stable passage ID for local context expansion. This only reads the review index and does not call upstream APIs. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this to retrieve prepared review passages near a cited stable passage ID for local context expansion. This only reads the review index and does not call upstream APIs."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_context_service()
@@ -412,7 +412,7 @@ def register_review_tools(mcp: FastMCP) -> None:
         review_id: str,
         session_id: str | None = None,
     ) -> dict[str, Any]:
-        """Use this to export review preparation status, source coverage, resolver attempts, retrieval runs, passage IDs, and stable citation keys for scientific auditability. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this to export review preparation status, source coverage, resolver attempts, retrieval runs, passage IDs, and stable citation keys for scientific auditability."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_audit_service()
@@ -446,7 +446,7 @@ def register_review_tools(mcp: FastMCP) -> None:
         allow_truncated_passages: bool = True,
         max_chars_per_passage: int = 2200,
     ) -> dict[str, Any]:
-        """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Use a short keyword query, PMID filters for paper-specific evidence, and diagnostics for zero-result debugging. If zero passages are returned, simplify the query, inspect the review index, or fall back to fetch_publication_annotations. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Use a short keyword query, PMID filters for paper-specific evidence, and diagnostics for zero-result debugging. If zero passages are returned, simplify the query, inspect the review index, or fall back to fetch_publication_annotations."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_context_service()
@@ -501,7 +501,7 @@ def register_review_tools(mcp: FastMCP) -> None:
         max_chars_per_passage: int = 2200,
         dry_run: bool = False,
     ) -> dict[str, Any]:
-        """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode uses query_fair budgeting: merged passages plus per-query summaries, a fair first-pass budget across queries before overflow, and next_steps for zero-result queries. Use dry_run to get diagnostics and predicted hit counts without returning passage text. Opt into source_fair or scarcity_first to give each PMID/source first-pass representation before overflow. Use diagnostics for query refinement and full only when per-query passage text is needed. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode uses query_fair budgeting: merged passages plus per-query summaries, a fair first-pass budget across queries before overflow, and next_steps for zero-result queries. Use dry_run to get diagnostics and predicted hit counts without returning passage text. Opt into source_fair or scarcity_first to give each PMID/source first-pass representation before overflow. Use diagnostics for query refinement and full only when per-query passage text is needed."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_context_service()

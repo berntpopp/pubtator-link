@@ -52,7 +52,7 @@ def register_literature_tools(mcp: FastMCP) -> None:
         coverage: SearchCoverageMode = "preflight",
         metadata: SearchMetadataMode = "basic",
     ) -> dict[str, Any]:
-        """Use this when a user needs PubMed literature search through PubTator3. Use short biomedical queries, optional sort such as 'score desc' or 'date desc', flat publication/year filters, raw filters JSON, optional section filters, and coverage='preflight' when source coverage should be visible before indexing. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user needs PubMed literature search through PubTator3. Use short biomedical queries, optional sort such as 'score desc' or 'date desc', flat publication/year filters, raw filters JSON, optional section filters, and coverage='preflight' when source coverage should be visible before indexing."""
 
         async def call() -> dict[str, Any]:
             preflight_service = (
@@ -102,7 +102,7 @@ def register_literature_tools(mcp: FastMCP) -> None:
         entity_ids: list[str] | None = None,
         coverage: SearchCoverageMode = "preflight",
     ) -> dict[str, Any]:
-        """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. Defaults to source coverage preflight so abstract-only guideline hits are visible before indexing. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. Defaults to source coverage preflight so abstract-only guideline hits are visible before indexing."""
 
         async def call() -> dict[str, Any]:
             preflight_service = (
@@ -147,7 +147,7 @@ def register_literature_tools(mcp: FastMCP) -> None:
         | None = None,
         limit: int = 10,
     ) -> dict[str, Any]:
-        """Use this when a user needs canonical PubTator biomedical entity IDs for genes, diseases, chemicals, species, variants, or cell lines. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user needs canonical PubTator biomedical entity IDs for genes, diseases, chemicals, species, variants, or cell lines."""
 
         async def call() -> dict[str, Any]:
             client = await get_api_client()
@@ -173,7 +173,7 @@ def register_literature_tools(mcp: FastMCP) -> None:
         relation_type: str | None = None,
         target_entity_type: str | None = None,
     ) -> dict[str, Any]:
-        """Use this when a user has a PubTator entity ID and needs literature-derived related entities to expand a corpus after search_biomedical_entities. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user has a PubTator entity ID and needs literature-derived related entities to expand a corpus after search_biomedical_entities."""
 
         async def call() -> dict[str, Any]:
             client = await get_api_client()

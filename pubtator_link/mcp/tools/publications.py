@@ -33,7 +33,7 @@ def register_publication_tools(mcp: FastMCP) -> None:
         format: Literal["pubtator", "biocxml", "biocjson"] = "biocjson",
         full: bool = False,
     ) -> dict[str, Any]:
-        """Use this when a user provides PubMed IDs and needs raw PubTator BioC/annotation export; prefer compact passage or review context tools for grounded answers because full BioC can be large. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user provides PubMed IDs and needs raw PubTator BioC/annotation export; prefer compact passage or review context tools for grounded answers because full BioC can be large."""
 
         async def call() -> dict[str, Any]:
             service = await get_publication_service()
@@ -61,7 +61,7 @@ def register_publication_tools(mcp: FastMCP) -> None:
         include_tables: bool = True,
         include_references: bool = False,
     ) -> dict[str, Any]:
-        """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. Prefer this over raw annotation export for routine grounding. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. Prefer this over raw annotation export for routine grounding."""
 
         async def call() -> dict[str, Any]:
             service = await get_publication_passage_service()
@@ -91,7 +91,7 @@ def register_publication_tools(mcp: FastMCP) -> None:
         include_citations: Literal["none", "nlm", "bibtex", "both"] = "both",
         include_coverage: bool = True,
     ) -> dict[str, Any]:
-        """Return citation-grade metadata for known PMIDs, including authors, journal, year, DOI, publication types, MeSH headings, and citation strings. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Return citation-grade metadata for known PMIDs, including authors, journal, year, DOI, publication types, MeSH headings, and citation strings."""
 
         async def call() -> dict[str, Any]:
             service = await get_publication_metadata_service()
@@ -120,7 +120,7 @@ def register_publication_tools(mcp: FastMCP) -> None:
         include_tables: bool = True,
         include_references: bool = False,
     ) -> dict[str, Any]:
-        """Use this when a user needs to estimate passage count and context size before fetching publication passages. Inputs mirror get_publication_passages except max_chars; output includes estimated_passages, estimated_chars, sections_by_pmid, recommended_mode, and warning. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user needs to estimate passage count and context size before fetching publication passages. Inputs mirror get_publication_passages except max_chars; output includes estimated_passages, estimated_chars, sections_by_pmid, recommended_mode, and warning."""
 
         async def call() -> dict[str, Any]:
             service = await get_publication_passage_service()
@@ -146,7 +146,7 @@ def register_publication_tools(mcp: FastMCP) -> None:
         pmcids: Annotated[list[str], Field(min_length=1, max_length=50)],
         format: Literal["biocxml", "biocjson"] = "biocjson",
     ) -> dict[str, Any]:
-        """Use this when a user provides PMC IDs and needs raw PubTator full-text BioC/annotation export; prefer compact passage or review context tools for focused grounding because full text can be large. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user provides PMC IDs and needs raw PubTator full-text BioC/annotation export; prefer compact passage or review context tools for focused grounding because full text can be large."""
 
         async def call() -> dict[str, Any]:
             service = await get_publication_service()

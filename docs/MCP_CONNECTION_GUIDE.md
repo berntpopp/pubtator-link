@@ -67,7 +67,7 @@ Recommended review workflow:
 6. `pubtator.get_review_passages_by_id` or `pubtator.get_neighboring_review_passages` to re-fetch cited passages or local context.
 7. `pubtator.export_review_audit_bundle` before synthesis/reporting to capture passage IDs, source coverage, resolver attempts, and stable citation keys.
 
-Use `pubtator.fetch_publication_annotations` with `full=true` only when raw BioC is intentionally needed. Compact passage tools are safer for routine grounding. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support.
+Use `pubtator.fetch_publication_annotations` with `full=true` only when raw BioC is intentionally needed. Compact passage tools are safer for routine grounding. The full research-use limitation is exposed once in `pubtator.get_server_capabilities` and `pubtator://research-use`.
 
 All public MCP tools use flat top-level arguments. The server no longer exposes `_v2` aliases or `{ "request": ... }` wrapper-shaped public tools; if a client still shows them, refresh the client MCP/tool cache and reconnect.
 
@@ -108,7 +108,8 @@ Useful output paths:
 
 Request-local citation labels such as `S1` and `S2` are only stable within the current
 response. Use `stable_citation_key` and `stable_citation_map` for durable downstream
-references across later responses or exported notes.
+references across repeated retrieval calls, review index snapshots for the same passage
+identity, later responses, or exported notes.
 
 `pubtator.retrieve_review_context_batch` defaults to `budget_strategy="query_fair"`,
 which reserves a fair first-pass share of the text budget across query variants before

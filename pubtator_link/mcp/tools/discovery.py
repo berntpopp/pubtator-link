@@ -38,7 +38,7 @@ def register_discovery_tools(mcp: FastMCP) -> None:
         prefer_guidelines: bool = True,
         include_metadata: bool = True,
     ) -> dict[str, Any]:
-        """Suggest a compact, review-feeding PMID corpus for a research question. Returns candidate PMIDs, roles, coverage hints, metadata, and next commands. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Suggest a compact, review-feeding PMID corpus for a research question. Returns candidate PMIDs, roles, coverage hints, metadata, and next commands."""
 
         async def call() -> dict[str, Any]:
             service = await get_corpus_suggestion_service()
@@ -64,7 +64,7 @@ def register_discovery_tools(mcp: FastMCP) -> None:
         ids: Annotated[list[str], Field(min_length=1, max_length=200)],
         source: ArticleIdKind = "auto",
     ) -> dict[str, Any]:
-        """Use this when a user provides article identifiers such as PMIDs, PMCIDs, or DOIs and needs normalized candidate PMIDs for research workflows. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user provides article identifiers such as PMIDs, PMCIDs, or DOIs and needs normalized candidate PMIDs for research workflows."""
 
         async def call() -> dict[str, Any]:
             service = await get_discovery_service()
@@ -84,7 +84,7 @@ def register_discovery_tools(mcp: FastMCP) -> None:
         limit: Annotated[int, Field(ge=1, le=50)] = 10,
         exact: bool = False,
     ) -> dict[str, Any]:
-        """Use this when a user needs MeSH descriptors and candidate PubMed search terms for a biomedical research query. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user needs MeSH descriptors and candidate PubMed search terms for a biomedical research query."""
 
         async def call() -> dict[str, Any]:
             service = await get_discovery_service()
@@ -102,7 +102,7 @@ def register_discovery_tools(mcp: FastMCP) -> None:
     async def lookup_citation(
         citations: Annotated[list[str], Field(min_length=1, max_length=100)],
     ) -> dict[str, Any]:
-        """Use this when a user provides free-text citations and needs candidate PMIDs for research evidence gathering. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user provides free-text citations and needs candidate PMIDs for research evidence gathering."""
 
         async def call() -> dict[str, Any]:
             service = await get_discovery_service()
@@ -122,7 +122,7 @@ def register_discovery_tools(mcp: FastMCP) -> None:
         mode: RelatedArticleMode = "similar",
         limit: Annotated[int, Field(ge=1, le=100)] = 20,
     ) -> dict[str, Any]:
-        """Use this when a user has seed PMIDs and needs similar, cited-by, or reference-linked articles to expand a research corpus. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+        """Use this when a user has seed PMIDs and needs similar, cited-by, or reference-linked articles to expand a research corpus."""
 
         async def call() -> dict[str, Any]:
             service = await get_discovery_service()
