@@ -11,8 +11,23 @@ class FakeRepository:
         self.candidates = []
         self.return_none = False
 
-    async def upsert_research_session(self, **kwargs):
-        key = (kwargs["review_id"], kwargs["session_id"])
+    async def upsert_research_session(
+        self,
+        *,
+        review_id,
+        session_id,
+        query,
+        status,
+        request,
+    ):
+        key = (review_id, session_id)
+        kwargs = {
+            "review_id": review_id,
+            "session_id": session_id,
+            "query": query,
+            "status": status,
+            "request": request,
+        }
         current = self.sessions.get(key, {})
         self.sessions[key] = {**current, **kwargs}
 

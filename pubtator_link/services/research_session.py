@@ -44,6 +44,7 @@ class ResearchSessionService:
             else StageResearchSessionRequest.model_validate(request)
         )
         session_id = stage_request.session_id or f"session-{uuid4().hex}"
+        request_payload = stage_request.model_dump(mode="json")
         candidates = await self._candidate_pmids(stage_request)
         limited = candidates[: stage_request.max_candidates]
         await self.repository.upsert_research_session(
@@ -51,7 +52,7 @@ class ResearchSessionService:
             session_id=session_id,
             query=stage_request.query,
             status="active",
-            request=stage_request.model_dump(mode="json"),
+            request=request_payload,
         )
 
         try:
@@ -62,7 +63,9 @@ class ResearchSessionService:
             await self.repository.upsert_research_session(
                 review_id=review_id,
                 session_id=session_id,
+                query=stage_request.query,
                 status="failed",
+                request=request_payload,
             )
             raise RuntimeError(
                 f"preflight failed for research session {session_id}: {exc}"
@@ -96,7 +99,9 @@ class ResearchSessionService:
                     await self.repository.upsert_research_session(
                         review_id=review_id,
                         session_id=session_id,
+                        query=stage_request.query,
                         status="partial" if has_completed_candidate else "failed",
+                        request=request_payload,
                     )
                     raise RuntimeError(f"queue failed for PMID {pmid}: {exc}") from exc
                 if queued:
