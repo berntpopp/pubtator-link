@@ -9,7 +9,7 @@
 
 ## 0. Implementation status (2026-05-02)
 
-The foundation pieces from PR-1 through PR-3 have been implemented in the current source tree:
+The foundation pieces from PR-1 through PR-3 and the review RAG reliability/LLM ergonomics follow-up have been implemented in the current source tree:
 
 | Area | Status | Notes |
 |---|---|---|
@@ -17,12 +17,18 @@ The foundation pieces from PR-1 through PR-3 have been implemented in the curren
 | Resource context middleware | Shipped | `PubTatorResourcesMiddleware` replaces the previous `@app.middleware("http")` resource binder to avoid the contextvars propagation trap. |
 | MCP tool lifecycle logs | Shipped | The existing central `run_mcp_tool` wrapper emits `mcp_tool_started`, `mcp_tool_completed`, and `mcp_tool_failed`; no per-tool decorator is required. |
 | Prometheus metrics | Shipped | `/metrics` exports `mcp_tool_calls_total` and `mcp_tool_latency_seconds`. |
+| MCP error diagnostics | Shipped | MCP error envelopes can include bounded `diagnostics_snapshot`, `degraded_mode`, and `fallback_preview` fields. |
+| Degraded review notices | Shipped | Review indexing/retrieval MCP tools emit `ctx.warning()` when returned results carry a degraded mode. |
+| Resolver audit trace controls | Shipped | Review retrieval tools hide resolver attempts by default and expose `include_resolver_trace` for audit/debug workflows. |
 | OpenTelemetry traces | Not shipped | Still a follow-up; this guide keeps the trace plan as future work. |
-| MCP-native `ctx.warning()` UX notices | Not shipped | Still a follow-up for fallback and "call X first" branches. |
+| Broader MCP-native UX notices | Partial | Degraded-mode notices are shipped; zero-result "call X first" notices and richer fallback notices remain follow-up work. |
 
-Focused verification before final CI:
+Fresh verification after the reliability/ergonomics work:
 
-- `uv run pytest tests/unit/test_server_manager.py tests/unit/test_mcp_errors.py -q` via the combined focused run: metrics endpoint and lifecycle instrumentation covered.
+- `make ci-local` — 663 passed, 2 skipped.
+- `make docker-build`, `make docker-down`, `PUBTATOR_LINK_PORT=8011 make docker-up`.
+- `curl -sS http://localhost:8011/ready` returned `schema_current: true`.
+- `curl -sS http://localhost:8011/metrics | head -40` included `mcp_tool_calls_total` and `mcp_tool_latency_seconds`.
 
 ---
 
@@ -77,14 +83,14 @@ References: [MCP logging spec](https://modelcontextprotocol.info/specification/d
 
 ---
 
-## 3. The MCP-native logging channel — currently unused
+## 3. The MCP-native logging channel — partially implemented
 
 The MCP spec defines two relevant primitives:
 
 - **`notifications/message`** — server pushes a structured log to the host: `{ level, logger, data }` where `data` is arbitrary JSON.
 - **`logging/setLevel`** — host can request a minimum severity at runtime (default is `warning`).
 
-**Why this matters:** when a Claude/Cursor user runs `pubtator.retrieve_review_context_batch` and gets zero passages back, the host can surface your server-emitted notice ("query ran against empty index — try preflight first") *in the same chat thread*. Today your warnings only land in the container's stderr — invisible to the user.
+**Why this matters:** when a Claude/Cursor user runs `pubtator.retrieve_review_context_batch` against degraded evidence, the host can surface a server-emitted notice in the same chat thread. This is now implemented for review evidence degraded modes.
 
 In FastMCP this is exposed via the `Context` object passed to a tool:
 
@@ -92,18 +98,19 @@ In FastMCP this is exposed via the `Context` object passed to a tool:
 from fastmcp import Context
 
 @mcp.tool(name="pubtator.retrieve_review_context_batch", ...)
-async def retrieve_review_context_batch(ctx: Context, review_id: str, queries: list[str], ...):
+async def retrieve_review_context_batch(review_id: str, queries: list[str], ..., ctx: Context | None = None):
     if not await service.review_index_has_passages(review_id):
         await ctx.warning(
-            "Review index has no prepared passages — run pubtator.index_review_evidence first.",
-            logger="pubtator.review_context",
+            "Review index has no prepared passages - run pubtator.index_review_evidence first.",
         )
     ...
 ```
 
 `ctx.debug() / ctx.info() / ctx.notice() / ctx.warning() / ctx.error() / ctx.critical()` all map to `notifications/message`. The host respects the level set by the user's `logging/setLevel`, so you can emit liberally without being noisy.
 
-**Action:** wrap every fallback decision and every "you should call X first" branch in `ctx.warning()` or `ctx.notice()`. This single change is the most felt UX improvement from the LLM-consumer side.
+**Shipped:** `pubtator.index_review_evidence`, `pubtator.retrieve_review_context`, and `pubtator.retrieve_review_context_batch` now accept FastMCP-injected `ctx` without exposing it in public JSON schema, and emit warnings for degraded review evidence.
+
+**Still left:** wrap zero-result "call X first" branches and non-error fallback decisions in `ctx.warning()` or `ctx.notice()`.
 
 ---
 
@@ -477,10 +484,12 @@ When all four PRs are merged, you should be able to perform the following exerci
 - [x] Find lifecycle log lines for MCP calls by event name and `tool_name`.
 - [x] Expose MCP tool latency histograms for p95 dashboards.
 - [x] Expose MCP tool error counters by `error_code`.
+- [x] Return bounded MCP diagnostics, degraded mode, and fallback preview in tool error envelopes.
+- [x] Surface review degraded-mode warnings through MCP context notifications.
 - [ ] Identify which DB query took > 1 s in a slow request (trace).
 - [ ] Page oncall when upstream 429s spike or DB pool saturates.
 - [ ] Reproduce: download the trace+logs for one failing request and replay locally.
-- [ ] (LLM-side) Have Claude/Cursor surface a server-emitted `ctx.warning` to the user when `index_review_evidence` was skipped before retrieval.
+- [ ] (LLM-side) Have Claude/Cursor surface server-emitted `ctx.warning` notices for zero-result retrieval and fallback branches.
 
 The last item is the one no other server in this domain currently does. It's where the LLM-consumer experience leaps from "fine" to "feels alive."
 

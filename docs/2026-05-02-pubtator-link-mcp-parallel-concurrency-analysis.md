@@ -2,7 +2,7 @@
 
 **Audience:** PubTator-Link maintainers planning hardening for parallel LLM-agent traffic.
 **Date:** 2026-05-02
-**Last updated:** 2026-05-02 — Steps 1–6 of the recommended fix sequence shipped in source (see §0 Status).
+**Last updated:** 2026-05-02 — Steps 1–6 of the recommended fix sequence and the review RAG reliability/LLM ergonomics follow-up shipped in source (see §0 Status).
 **Method:** static read of all concurrency-critical paths + three in-process load tests with `respx`-mocked upstream + per-call timing telemetry. Scripts live at `/tmp/stress_concurrency.py`, `/tmp/stress_ratelimiter.py`, `/tmp/stress_cache.py`. All measurements reproducible.
 **Companion to:** `docs/2026-05-02-pubtator-link-mcp-llm-engineering-review.md` and `docs/2026-05-02-pubtator-link-observability-implementation-guide.md`.
 
@@ -12,10 +12,22 @@
 
 The two **🔴 Critical** bottlenecks, both **🟠 High** bottlenecks, and the two scoped **🟡 Medium** hardening items have been fixed in source. The running Docker database was also repaired for an existing-volume drift case where `review_session_sources` was missing even though older migrations were marked applied.
 
-Latest focused verification before final CI:
+The reliability/ergonomics follow-up is also complete in source:
 
-- `uv run pytest tests/unit/test_review_schema_sql.py tests/unit/test_server_manager.py tests/unit/test_mcp_errors.py tests/unit/test_pubtator_client_limits.py tests/unit/test_review_context_service.py -q` — 54 passed.
-- `PUBTATOR_LINK_DATABASE_URL=postgresql://pubtator_link:pubtator_link@localhost:55432/pubtator_link uv run python -m pubtator_link.db.migrate --check` — current, with `0003_review_session_sources_repair` applied.
+- Review RAG failures now expose `degraded_mode`, bounded diagnostics snapshots, and fallback previews in MCP error envelopes.
+- Publication passage responses expose degraded mode; passage retrieval supports dry-run and verbosity controls.
+- Full-text preparation records structured resolver attempts, including Europe PMC PMCID/DOI metadata before abstract fallback.
+- Review retrieval hides resolver traces by default and exposes `include_resolver_trace` for audit workflows.
+- Batch retrieval responses are leaner for compact/diagnostics modes and cap large dropped-passage lists with a summary.
+- Search and entity discovery return better guideline ranking reasons and bounded synonyms.
+- MCP capabilities now expose tool categories and a diagnostics-first recovery workflow.
+
+Latest verification:
+
+- `make ci-local` — 663 passed, 2 skipped.
+- `make docker-build`, `make docker-down`, `PUBTATOR_LINK_PORT=8011 make docker-up`.
+- `curl -sS http://localhost:8011/ready` returned `schema_current: true`.
+- `curl -sS http://localhost:8011/metrics | head -40` included `mcp_tool_calls_total` and `mcp_tool_latency_seconds`.
 
 | # | Severity | Status | Verification |
 |---|---|---|---|
@@ -58,7 +70,7 @@ The added wall time is the *correct* cost of honoring PubTator's 3 RPS guideline
 
 ### Deployment
 
-Rebuild after final CI to deploy the source changes:
+Rebuild after future changes to deploy the source:
 
 ```bash
 make docker-down && make docker-build && make docker-up
@@ -67,10 +79,10 @@ make docker-down && make docker-build && make docker-up
 
 ### Remaining items, prioritized
 
-1. **Run final CI and rebuild/restart the container** before load testing against the running service.
-2. **Promote the three `/tmp/stress_*.py` scripts** into `tests/integration/test_concurrency.py` with `@pytest.mark.integration` markers — they remain the broader regression suite for high-N traffic.
-3. Extend single-flight caching to `autocomplete_entity`.
-4. Step 7 (distributed rate limit) remains a separate multi-worker project.
+1. **Promote the three `/tmp/stress_*.py` scripts** into `tests/integration/test_concurrency.py` with `@pytest.mark.integration` markers — they remain the broader regression suite for high-N traffic.
+2. Extend single-flight caching to `autocomplete_entity`.
+3. Step 7 (distributed rate limit) remains a separate multi-worker project.
+4. Add OpenTelemetry traces for route -> service -> repository -> upstream/API/DB causality; see the observability guide.
 
 The historical analysis below is preserved as the design rationale for these fixes.
 
