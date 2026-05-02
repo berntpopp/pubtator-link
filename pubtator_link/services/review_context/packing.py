@@ -8,6 +8,8 @@ from pubtator_link.models.review_rerag import (
     ContextBudget,
     ContextDropReason,
     ContextPassage,
+    GroundingConfidence,
+    PassageQuote,
     RetrieveReviewContextRequest,
     ReviewPassageRow,
     estimate_tokens_from_chars,
@@ -19,6 +21,9 @@ from pubtator_link.services.review_context.diagnostics import query_tokens
 class PackedPassages:
     selected: list[ReviewPassageRow]
     dropped: list[ContextDropReason]
+
+
+QUOTE_MAX_CHARS = 320
 
 
 def pack_passages(
@@ -80,9 +85,10 @@ def context_passage_from_row(
     row: ReviewPassageRow,
     request: RetrieveReviewContextRequest,
 ) -> ContextPassage:
+    tokens = query_tokens(request.question)
     text, start_char, end_char, truncated = excerpt_text(
         row.text,
-        query_tokens=query_tokens(request.question),
+        query_tokens=tokens,
         max_chars=request.max_chars_per_passage,
         allow_truncated=request.allow_truncated_passages,
     )
@@ -102,6 +108,12 @@ def context_passage_from_row(
         start_char=start_char,
         end_char=end_char,
         boundary="query_window" if truncated else "full_passage",
+        quote=passage_quote(text, passage_start_char=start_char, query_tokens=tokens),
+        confidence_for_grounding=grounding_confidence_from_row(
+            row,
+            truncated=truncated,
+            query_tokens=tokens,
+        ),
     )
 
 
@@ -163,6 +175,100 @@ def excerpt_text(
     end = min(len(text), start + max_chars)
     start = max(0, end - max_chars)
     return text[start:end], start, end, True
+
+
+def passage_quote(
+    returned_text: str,
+    *,
+    passage_start_char: int,
+    query_tokens: Sequence[str],
+) -> PassageQuote | None:
+    if not returned_text:
+        return None
+    lowered = returned_text.lower()
+    match_index = -1
+    for token in query_tokens:
+        match_index = lowered.find(token.lower())
+        if match_index >= 0:
+            break
+    if match_index < 0:
+        match_index = 0
+    sentence_start = returned_text.rfind(".", 0, match_index) + 1
+    sentence_start = max(0, sentence_start)
+    sentence_end = returned_text.find(".", match_index)
+    if sentence_end < 0:
+        sentence_end = min(len(returned_text), sentence_start + QUOTE_MAX_CHARS)
+    else:
+        sentence_end = min(len(returned_text), sentence_end + 1)
+    if sentence_end - sentence_start > QUOTE_MAX_CHARS:
+        sentence_end = sentence_start + QUOTE_MAX_CHARS
+    quote_window = returned_text[sentence_start:sentence_end]
+    quote_text = quote_window.strip()
+    leading_trim = len(quote_window) - len(quote_window.lstrip())
+    returned_start = sentence_start + leading_trim
+    returned_end = returned_start + len(quote_text)
+    return PassageQuote(
+        text=quote_text,
+        returned_start_offset=returned_start,
+        returned_end_offset=returned_end,
+        passage_start_char=passage_start_char + returned_start,
+        passage_end_char=passage_start_char + returned_end,
+    )
+
+
+def grounding_confidence_from_row(
+    row: ReviewPassageRow,
+    *,
+    truncated: bool,
+    query_tokens: Sequence[str],
+) -> GroundingConfidence:
+    lexical_match = 0.0
+    lowered = row.text.lower()
+    if query_tokens:
+        matched = sum(1 for token in query_tokens if token.lower() in lowered)
+        lexical_match = matched / len(query_tokens)
+    section_weight = 1.0 if row.section.lower() in {"abstract", "results", "discussion"} else 0.5
+    coverage_weight = 1.0 if row.source_kind in {"pmc_bioc", "europe_pmc_jats"} else 0.7
+    if row.source_kind == "pubtator_abstract":
+        coverage_weight = 0.6
+    if row.source_kind == "unknown":
+        coverage_weight = 0.2
+    entity_overlap = 1.0 if row.entity_ids else 0.0
+    truncation_penalty = 0.15 if truncated else 0.0
+    score = max(
+        0.0,
+        min(
+            1.0,
+            (lexical_match * 0.45)
+            + (section_weight * 0.2)
+            + (coverage_weight * 0.25)
+            + (entity_overlap * 0.1)
+            - truncation_penalty,
+        ),
+    )
+    level = "unknown"
+    if score >= 0.75:
+        level = "high"
+    elif score >= 0.45:
+        level = "moderate"
+    elif score > 0:
+        level = "low"
+    return GroundingConfidence(
+        level=level,
+        score=round(score, 3),
+        factors={
+            "lexical_match": round(lexical_match, 3),
+            "section_weight": round(section_weight, 3),
+            "coverage_weight": round(coverage_weight, 3),
+            "entity_overlap": round(entity_overlap, 3),
+            "truncation_penalty": round(truncation_penalty, 3),
+        },
+        match_mode="strict_and_relaxed",
+        explanation=(
+            f"{level.capitalize()} deterministic retrieval grounding based on lexical match, "
+            f"section, source coverage, entity overlap, and truncation."
+        ),
+    )
 
 
 def context_budget(max_chars: int, text_chars: int, dropped_count: int = 0) -> ContextBudget:

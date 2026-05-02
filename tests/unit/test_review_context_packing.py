@@ -81,3 +81,46 @@ def test_truncated_context_passage_includes_tail_preview() -> None:
     assert passage.truncated is True
     assert passage.tail_preview == "A" * 120
     assert passage.next_window_token is None
+
+
+def test_context_passage_quote_offsets_use_returned_and_original_text() -> None:
+    row = _row("p1", rank=1.0, section="abstract", source_kind="pubtator_abstract")
+    row.text = "A" * 250 + "MEFV variants respond to colchicine. Follow-up sentence." + "B" * 250
+
+    passage = context_passage_from_row(
+        index=1,
+        row=row,
+        request=RetrieveReviewContextRequest(
+                question="MEFV colchicine",
+                max_chars_per_passage=300,
+            ),
+        )
+
+    assert passage.quote is not None
+    assert "MEFV variants respond to colchicine" in passage.quote.text
+    assert passage.quote.returned_start_offset >= 0
+    assert passage.quote.returned_end_offset <= len(passage.text)
+    assert passage.quote.passage_start_char == (
+        passage.start_char + passage.quote.returned_start_offset
+    )
+    assert passage.quote.passage_end_char == (
+        passage.start_char + passage.quote.returned_end_offset
+    )
+
+
+def test_context_passage_confidence_explains_low_truncated_unknown_source() -> None:
+    row = _row("p1", rank=0.0, section="unknown", source_kind="unknown")
+    row.text = "A" * 500
+
+    passage = context_passage_from_row(
+        index=1,
+        row=row,
+        request=RetrieveReviewContextRequest(
+            question="MEFV",
+            max_chars_per_passage=300,
+        ),
+    )
+
+    assert passage.confidence_for_grounding is not None
+    assert passage.confidence_for_grounding.level in {"low", "unknown"}
+    assert "truncation_penalty" in passage.confidence_for_grounding.factors
