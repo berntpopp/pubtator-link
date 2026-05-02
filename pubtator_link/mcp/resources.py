@@ -25,6 +25,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             "pubtator.lookup_mesh",
             "pubtator.lookup_citation",
             "pubtator.find_related_articles",
+            "pubtator.suggest_corpus",
             "pubtator.diagnostics",
             "pubtator.get_publication_metadata",
             "pubtator.get_publication_passages",
@@ -60,6 +61,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             "to pubtator.get_publication_passages with the same PMIDs.",
             "Discovery tools can normalize MeSH terms, resolve citations or article IDs, "
             "and expand seed PMIDs before staging or indexing candidate PMIDs.",
+            "Use pubtator.suggest_corpus to turn a research question into a compact candidate PMID corpus.",
             "For live research sessions, call `pubtator.stage_research_session` with a "
             "review ID and query or PMID list, then poll "
             "`pubtator.get_research_session_status` before retrieving review context.",
@@ -70,6 +72,7 @@ def get_capabilities_resource() -> dict[str, Any]:
             "Use pubtator.lookup_citation when a user provides formatted references.",
             "Use pubtator.convert_article_ids when a user provides DOI, PMCID, or mixed article IDs.",
             "Use pubtator.find_related_articles to expand from seed PMIDs.",
+            "Use pubtator.suggest_corpus to build a small role-labeled candidate corpus.",
             "Pass discovery candidate_pmids as pmids to pubtator.stage_research_session "
             "before indexing large corpora.",
         ],
@@ -128,6 +131,7 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "pubtator.lookup_mesh",
                 "pubtator.lookup_citation",
                 "pubtator.find_related_articles",
+                "pubtator.suggest_corpus",
             ],
             "diagnostics": [
                 "pubtator.diagnostics",
@@ -214,6 +218,10 @@ def get_capabilities_resource() -> dict[str, Any]:
                 "pmids": ["40234174"],
                 "mode": "similar",
                 "limit": 20,
+            },
+            "pubtator.suggest_corpus": {
+                "question": "FMF MEFV VUS colchicine",
+                "max_pmids": 8,
             },
             "pubtator.diagnostics": {},
             "pubtator.get_publication_passages": {

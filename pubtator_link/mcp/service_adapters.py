@@ -5,6 +5,7 @@ from typing import Any, Literal, cast
 from pubtator_link.api.client import PubTator3Client
 from pubtator_link.api.search_filters import merge_search_filters
 from pubtator_link.config import text_processing_config
+from pubtator_link.models.corpus_suggestion import CorpusSuggestionRequest
 from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 from pubtator_link.models.publication_passages import (
     PublicationContextEstimateRequest,
@@ -36,6 +37,7 @@ from pubtator_link.models.review_rerag import (
     StageResearchSessionRequest,
     UpsertEvidenceCertaintyRequest,
 )
+from pubtator_link.services.corpus_suggestion import CorpusSuggestionService
 from pubtator_link.services.entity_matching import matched_terms_from_match_text
 from pubtator_link.services.publication_metadata import PublicationMetadataService
 from pubtator_link.services.publication_passage_service import PublicationPassageService
@@ -160,6 +162,29 @@ async def get_publication_metadata_impl(
             include_publication_types=include_publication_types,
             include_citations=include_citations,
             include_coverage=include_coverage,
+        )
+    )
+    return response.model_dump(by_alias=True)
+
+
+async def suggest_corpus_impl(
+    *,
+    service: CorpusSuggestionService,
+    question: str,
+    max_pmids: int = 8,
+    entity_ids: list[str] | None = None,
+    must_include_pmids: list[str] | None = None,
+    prefer_guidelines: bool = True,
+    include_metadata: bool = True,
+) -> dict[str, Any]:
+    response = await service.suggest(
+        CorpusSuggestionRequest(
+            question=question,
+            max_pmids=max_pmids,
+            entity_ids=entity_ids or [],
+            must_include_pmids=must_include_pmids or [],
+            prefer_guidelines=prefer_guidelines,
+            include_metadata=include_metadata,
         )
     )
     return response.model_dump(by_alias=True)

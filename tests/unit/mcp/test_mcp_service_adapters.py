@@ -298,6 +298,35 @@ async def test_stage_research_session_impl_calls_service() -> None:
     assert result == {"success": True}
 
 
+@pytest.mark.asyncio
+async def test_suggest_corpus_impl_returns_candidate_pmids() -> None:
+    from pubtator_link.mcp import service_adapters
+    from pubtator_link.models.corpus_suggestion import CorpusSuggestionResponse
+
+    class FakeService:
+        async def suggest(self, request):
+            assert request.question == "FMF MEFV VUS colchicine"
+            return CorpusSuggestionResponse(
+                candidate_pmids=["26802180"],
+                candidates=[],
+                searches=[],
+                _meta={"next_commands": ["pubtator.index_review_evidence"]},
+            )
+
+    result = await service_adapters.suggest_corpus_impl(
+        service=FakeService(),
+        question="FMF MEFV VUS colchicine",
+        max_pmids=8,
+        entity_ids=[],
+        must_include_pmids=[],
+        prefer_guidelines=True,
+        include_metadata=True,
+    )
+
+    assert result["candidate_pmids"] == ["26802180"]
+    assert result["_meta"]["next_commands"] == ["pubtator.index_review_evidence"]
+
+
 async def test_stage_research_session_impl_serializes_meta_alias() -> None:
     from pubtator_link.models.review_rerag import (
         ResearchSessionManifest,
