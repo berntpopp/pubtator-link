@@ -169,13 +169,11 @@ async def test_lookup_mesh_returns_search_next_command() -> None:
 
 @pytest.mark.asyncio
 async def test_ncbi_client_parses_ecitmatch_lines() -> None:
+    requests: list[httpx.Request] = []
+
     async def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path.endswith("/ecitmatch.cgi")
-        assert request.url.params["db"] == "pubmed"
-        assert request.url.params["retmode"] == "text"
-        assert request.url.params["tool"] == "pubtator-link"
-        assert request.url.params["bdata"] == "known\nunknown"
-        text = "Ann Rheum Dis|2024|83|1|Author|Title|39596913|\nUnknown||||||NOT_FOUND|\n"
+        requests.append(request)
+        text = "Ann Rheum Dis|2024|83|1|Author|known-key|39596913\nUnknown||||||NOT_FOUND\n"
         return httpx.Response(200, text=text, request=request)
 
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
@@ -185,7 +183,37 @@ async def test_ncbi_client_parses_ecitmatch_lines() -> None:
 
     assert records[0].status == "matched"
     assert records[0].pmid == "39596913"
+    assert records[0].pmid != "known-key"
     assert records[1].status == "not_found"
+    assert requests[0].url.path.endswith("/ecitmatch.cgi")
+    assert requests[0].url.params["db"] == "pubmed"
+    assert requests[0].url.params["retmode"] == "text"
+    assert requests[0].url.params["tool"] == "pubtator-link"
+    assert requests[0].url.params["bdata"] == "known\runknown"
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_ncbi_client_keeps_ecitmatch_blank_lines_aligned() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        text = (
+            "Ann Rheum Dis|2024|83|1|Author|known-key|39596913\n"
+            "\n"
+            "Lancet|2023|401|1|Author|third-key|31234567\n"
+        )
+        return httpx.Response(200, text=text, request=request)
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    client = NcbiDiscoveryClient(http_client=http_client)
+
+    records = await client.lookup_citations(["known", "blank", "third"])
+
+    assert records[0].status == "matched"
+    assert records[0].pmid == "39596913"
+    assert records[1].status == "not_found"
+    assert records[1].pmid is None
+    assert records[2].status == "matched"
+    assert records[2].pmid == "31234567"
     await client.close()
 
 

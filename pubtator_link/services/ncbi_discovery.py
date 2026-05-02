@@ -204,18 +204,18 @@ class NcbiDiscoveryClient:
             {
                 "db": "pubmed",
                 "retmode": "text",
-                "bdata": "\n".join(citations),
+                "bdata": "\r".join(citations),
                 "tool": "pubtator-link",
             },
         )
-        lines = [line for line in response.text.splitlines() if line]
+        lines = response.text.splitlines()
 
         records: list[CitationLookupRecord] = []
         for index, citation in enumerate(citations):
             line = lines[index] if index < len(lines) else ""
             fields = line.split("|") if line else []
-            pmid = fields[-2].strip() if len(fields) >= 2 else ""
-            if pmid and pmid != "NOT_FOUND":
+            pmid = next((field.strip() for field in reversed(fields) if field.strip()), "")
+            if pmid.isdecimal() and pmid != "NOT_FOUND":
                 records.append(CitationLookupRecord(citation=citation, status="matched", pmid=pmid))
             else:
                 records.append(
