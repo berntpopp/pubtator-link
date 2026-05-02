@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from pubtator_link.services.degradation import DegradedMode
+
 PublicationPassageMode = Literal["abstracts", "compact_passages", "section_text"]
 PublicationCoverage = Literal["full_text", "abstract_only", "title_only", "unknown"]
 PassageDropReasonCode = Literal[
@@ -97,6 +99,7 @@ class PublicationPassageResponse(BaseModel):
     cache_key: str | None = None
     corpus_snapshot_date: str | None = None
     source_versions: dict[str, str] = Field(default_factory=dict)
+    degraded_mode: DegradedMode | None = None
 
 
 class PublicationContextEstimateResponse(PublicationContextEstimate):

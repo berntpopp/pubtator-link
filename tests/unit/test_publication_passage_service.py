@@ -6,6 +6,7 @@ from pubtator_link.models.publication_passages import (
     PublicationPassageRequest,
 )
 from pubtator_link.models.responses import PublicationExportResponse
+from pubtator_link.services.degradation import degraded_mode_from_coverage
 from pubtator_link.services.publication_passage_service import PublicationPassageService
 
 
@@ -97,6 +98,13 @@ class ModelDumpPublicationService:
         )
 
 
+def test_degraded_mode_from_coverage_prefers_most_severe_mode() -> None:
+    assert degraded_mode_from_coverage({"1": "full_text", "2": "abstract_only"}) == "abstract_only"
+    assert degraded_mode_from_coverage({"1": "title_only", "2": "abstract_only"}) == "metadata_only"
+    assert degraded_mode_from_coverage({"1": "full_text"}) is None
+    assert degraded_mode_from_coverage({}) is None
+
+
 @pytest.mark.asyncio
 async def test_get_publication_passages_filters_sections_and_references() -> None:
     service = PublicationPassageService(FakePublicationService())
@@ -177,7 +185,7 @@ async def test_get_publication_passages_enforces_per_pmid_limit() -> None:
 async def test_get_publication_passages_reports_upstream_errors() -> None:
     service = PublicationPassageService(RaisingPublicationService())
 
-    response = await service.get_passages(PublicationPassageRequest(pmids=["111"]))
+    response = await service.get_passages(PublicationPassageRequest(pmids=["111"], mode="abstracts"))
 
     assert response.success is False
     assert response.passages == []
@@ -224,6 +232,16 @@ async def test_section_text_warns_when_only_abstract_passages_returned() -> None
     assert response.coverage_by_pmid["39540697"] == "abstract_only"
     assert response.failed_pmids == []
     assert any("No full-text section passages" in warning for warning in response.warnings)
+
+
+@pytest.mark.asyncio
+async def test_get_passages_sets_degraded_mode_for_abstract_only_response() -> None:
+    service = PublicationPassageService(FakePublicationService())
+
+    response = await service.get_passages(PublicationPassageRequest(pmids=["111"], mode="abstracts"))
+
+    assert response.coverage_by_pmid == {"111": "abstract_only"}
+    assert response.degraded_mode == "abstract_only"
 
 
 @pytest.mark.asyncio

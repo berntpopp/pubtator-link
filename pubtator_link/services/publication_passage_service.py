@@ -20,6 +20,7 @@ from pubtator_link.models.publication_passages import (
     PublicationPassageSource,
 )
 from pubtator_link.models.review_rerag import normalize_section, passage_id_for_pmid
+from pubtator_link.services.degradation import degraded_mode_from_coverage
 from pubtator_link.services.provenance import corpus_snapshot_date, stable_cache_key
 
 
@@ -61,6 +62,10 @@ class PublicationPassageService:
                 full=request.full,
             )
         except Exception as exc:
+            coverage_by_pmid = cast(
+                dict[str, PublicationCoverage],
+                dict.fromkeys(request.pmids, "unknown"),
+            )
             estimate = PublicationContextEstimate(
                 estimated_passages=0,
                 estimated_chars=0,
@@ -80,10 +85,7 @@ class PublicationPassageService:
                     )
                 ],
                 context_estimate=estimate,
-                coverage_by_pmid=cast(
-                    dict[str, PublicationCoverage],
-                    dict.fromkeys(request.pmids, "unknown"),
-                ),
+                coverage_by_pmid=coverage_by_pmid,
                 coverage_reason_by_pmid=cast(
                     dict[str, str],
                     dict.fromkeys(request.pmids, "publication_export_failed"),
@@ -96,6 +98,7 @@ class PublicationPassageService:
                 cache_key=_publication_passage_cache_key(request),
                 corpus_snapshot_date=corpus_snapshot_date(),
                 source_versions={"pubtator3": "live"},
+                degraded_mode=degraded_mode_from_coverage(coverage_by_pmid),
             )
 
         passages, dropped = self._compact_export(
@@ -128,6 +131,7 @@ class PublicationPassageService:
             cache_key=_publication_passage_cache_key(request),
             corpus_snapshot_date=corpus_snapshot_date(),
             source_versions={"pubtator3": "live"},
+            degraded_mode=degraded_mode_from_coverage(coverage_by_pmid),
         )
 
     async def estimate_context(
