@@ -63,3 +63,16 @@ def test_schema_defines_review_evidence_certainty_table() -> None:
     assert "overall_certainty text not null" in SCHEMA
     assert "passage_ids text[] not null default '{}'" in SCHEMA
     assert "review_evidence_certainty_review_id_idx" in SCHEMA
+
+
+def test_bootstrap_schema_matches_first_migration_core_tables() -> None:
+    base = Path("pubtator_link/db/migrations/0001_review_schema_base.sql").read_text()
+
+    for fragment in (
+        "create table if not exists reviews",
+        "updated_at timestamptz not null default now()",
+        "create table if not exists review_research_sessions",
+        "create table if not exists review_evidence_certainty",
+    ):
+        assert fragment in base
+        assert fragment in SCHEMA

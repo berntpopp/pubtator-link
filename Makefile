@@ -100,9 +100,13 @@ mcp-serve: ## Start local stdio MCP server
 mcp-serve-http: ## Start hosted MCP endpoint with REST API
 	uv run python server.py --transport unified --host 127.0.0.1 --port 8000
 
-db-init: ## Apply review re-RAG PostgreSQL schema using PUBTATOR_LINK_DATABASE_URL
+db-init: ## Apply bootstrap review re-RAG schema to empty databases
 	test -n "$$PUBTATOR_LINK_DATABASE_URL"
 	psql "$$PUBTATOR_LINK_DATABASE_URL" -f pubtator_link/db/review_schema.sql
+
+db-migrate: ## Apply idempotent review re-RAG PostgreSQL migrations
+	test -n "$$PUBTATOR_LINK_DATABASE_URL"
+	uv run python -m pubtator_link.db.migrate
 
 docker-build: ## Build Docker image
 	$(DOCKER_COMPOSE) -f docker/docker-compose.yml build
