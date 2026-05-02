@@ -8,6 +8,7 @@ from pydantic import Field
 from pubtator_link.api.client import PubTator3Client
 from pubtator_link.api.routes.dependencies import get_publication_passage_service
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
+from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.service_adapters import (
     estimate_publication_context_impl,
     fetch_pmc_annotations_impl,
@@ -30,14 +31,17 @@ def register_publication_tools(mcp: FastMCP) -> None:
         full: bool = False,
     ) -> dict[str, Any]:
         """Use this when a user provides PubMed IDs and needs raw PubTator BioC/annotation export; prefer compact passage or review context tools for grounded answers because full BioC can be large. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        async with PubTator3Client() as client:
-            service = PublicationService(client=client)
-            return await fetch_publication_annotations_impl(
-                service=service,
-                pmids=pmids,
-                format=format,
-                full=full,
-            )
+        async def call() -> dict[str, Any]:
+            async with PubTator3Client() as client:
+                service = PublicationService(client=client)
+                return await fetch_publication_annotations_impl(
+                    service=service,
+                    pmids=pmids,
+                    format=format,
+                    full=full,
+                )
+
+        return await run_mcp_tool("pubtator.fetch_publication_annotations", call, pmids=pmids)
 
     @mcp.tool(
         name="pubtator.get_publication_passages",
@@ -55,18 +59,21 @@ def register_publication_tools(mcp: FastMCP) -> None:
         include_references: bool = False,
     ) -> dict[str, Any]:
         """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. Prefer this over raw annotation export for routine grounding. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        service = await get_publication_passage_service()
-        return await get_publication_passages_impl(
-            service=service,
-            pmids=pmids,
-            sections=sections,
-            mode=mode,
-            full=full,
-            max_passages_per_pmid=max_passages_per_pmid,
-            max_chars=max_chars,
-            include_tables=include_tables,
-            include_references=include_references,
-        )
+        async def call() -> dict[str, Any]:
+            service = await get_publication_passage_service()
+            return await get_publication_passages_impl(
+                service=service,
+                pmids=pmids,
+                sections=sections,
+                mode=mode,
+                full=full,
+                max_passages_per_pmid=max_passages_per_pmid,
+                max_chars=max_chars,
+                include_tables=include_tables,
+                include_references=include_references,
+            )
+
+        return await run_mcp_tool("pubtator.get_publication_passages", call, pmids=pmids)
 
     @mcp.tool(
         name="pubtator.estimate_publication_context",
@@ -83,17 +90,20 @@ def register_publication_tools(mcp: FastMCP) -> None:
         include_references: bool = False,
     ) -> dict[str, Any]:
         """Use this when a user needs to estimate passage count and context size before fetching publication passages. Inputs mirror get_publication_passages except max_chars; output includes estimated_passages, estimated_chars, sections_by_pmid, recommended_mode, and warning. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        service = await get_publication_passage_service()
-        return await estimate_publication_context_impl(
-            service=service,
-            pmids=pmids,
-            sections=sections,
-            mode=mode,
-            full=full,
-            max_passages_per_pmid=max_passages_per_pmid,
-            include_tables=include_tables,
-            include_references=include_references,
-        )
+        async def call() -> dict[str, Any]:
+            service = await get_publication_passage_service()
+            return await estimate_publication_context_impl(
+                service=service,
+                pmids=pmids,
+                sections=sections,
+                mode=mode,
+                full=full,
+                max_passages_per_pmid=max_passages_per_pmid,
+                include_tables=include_tables,
+                include_references=include_references,
+            )
+
+        return await run_mcp_tool("pubtator.estimate_publication_context", call, pmids=pmids)
 
     @mcp.tool(
         name="pubtator.fetch_pmc_annotations",
@@ -105,10 +115,13 @@ def register_publication_tools(mcp: FastMCP) -> None:
         format: Literal["biocxml", "biocjson"] = "biocjson",
     ) -> dict[str, Any]:
         """Use this when a user provides PMC IDs and needs raw PubTator full-text BioC/annotation export; prefer compact passage or review context tools for focused grounding because full text can be large. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        async with PubTator3Client() as client:
-            service = PublicationService(client=client)
-            return await fetch_pmc_annotations_impl(
-                service=service,
-                pmcids=pmcids,
-                format=format,
-            )
+        async def call() -> dict[str, Any]:
+            async with PubTator3Client() as client:
+                service = PublicationService(client=client)
+                return await fetch_pmc_annotations_impl(
+                    service=service,
+                    pmcids=pmcids,
+                    format=format,
+                )
+
+        return await run_mcp_tool("pubtator.fetch_pmc_annotations", call)

@@ -7,6 +7,7 @@ from pydantic import Field
 
 from pubtator_link.api.routes.dependencies import get_discovery_service
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
+from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.models.discovery import (
     ArticleIdConversionResponse,
     ArticleIdKind,
@@ -29,9 +30,12 @@ def register_discovery_tools(mcp: FastMCP) -> None:
         source: ArticleIdKind = "auto",
     ) -> dict[str, Any]:
         """Use this when a user provides article identifiers such as PMIDs, PMCIDs, or DOIs and needs normalized candidate PMIDs for research workflows. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        service = await get_discovery_service()
-        response = await service.convert_article_ids(ids=ids, source=source)
-        return response.model_dump(by_alias=True)
+        async def call() -> dict[str, Any]:
+            service = await get_discovery_service()
+            response = await service.convert_article_ids(ids=ids, source=source)
+            return response.model_dump(by_alias=True)
+
+        return await run_mcp_tool("pubtator.convert_article_ids", call)
 
     @mcp.tool(
         name="pubtator.lookup_mesh",
@@ -45,9 +49,12 @@ def register_discovery_tools(mcp: FastMCP) -> None:
         exact: bool = False,
     ) -> dict[str, Any]:
         """Use this when a user needs MeSH descriptors and candidate PubMed search terms for a biomedical research query. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        service = await get_discovery_service()
-        response = await service.lookup_mesh(query=query, limit=limit, exact=exact)
-        return response.model_dump(by_alias=True)
+        async def call() -> dict[str, Any]:
+            service = await get_discovery_service()
+            response = await service.lookup_mesh(query=query, limit=limit, exact=exact)
+            return response.model_dump(by_alias=True)
+
+        return await run_mcp_tool("pubtator.lookup_mesh", call)
 
     @mcp.tool(
         name="pubtator.lookup_citation",
@@ -59,9 +66,12 @@ def register_discovery_tools(mcp: FastMCP) -> None:
         citations: Annotated[list[str], Field(min_length=1, max_length=100)],
     ) -> dict[str, Any]:
         """Use this when a user provides free-text citations and needs candidate PMIDs for research evidence gathering. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        service = await get_discovery_service()
-        response = await service.lookup_citation(citations=citations)
-        return response.model_dump(by_alias=True)
+        async def call() -> dict[str, Any]:
+            service = await get_discovery_service()
+            response = await service.lookup_citation(citations=citations)
+            return response.model_dump(by_alias=True)
+
+        return await run_mcp_tool("pubtator.lookup_citation", call)
 
     @mcp.tool(
         name="pubtator.find_related_articles",
@@ -75,6 +85,9 @@ def register_discovery_tools(mcp: FastMCP) -> None:
         limit: Annotated[int, Field(ge=1, le=100)] = 20,
     ) -> dict[str, Any]:
         """Use this when a user has seed PMIDs and needs similar, cited-by, or reference-linked articles to expand a research corpus. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        service = await get_discovery_service()
-        response = await service.find_related_articles(pmids=pmids, mode=mode, limit=limit)
-        return response.model_dump(by_alias=True)
+        async def call() -> dict[str, Any]:
+            service = await get_discovery_service()
+            response = await service.find_related_articles(pmids=pmids, mode=mode, limit=limit)
+            return response.model_dump(by_alias=True)
+
+        return await run_mcp_tool("pubtator.find_related_articles", call, pmids=pmids)

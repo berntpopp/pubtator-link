@@ -15,6 +15,7 @@ from pubtator_link.mcp.tools.text_annotations import register_text_annotation_to
 def create_pubtator_mcp() -> FastMCP:
     mcp = FastMCP(
         name="pubtator-link",
+        mask_error_details=True,
         instructions=(
             "PubTator-Link grounds biomedical literature work: search PubMed/PubTator, "
             "fetch compact passages or raw BioC, inspect review indexes, retrieve "

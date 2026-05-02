@@ -5,6 +5,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from pubtator_link.mcp.annotations import READ_ONLY_CLOSED_WORLD
+from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.prompts import (
     annotate_research_text_prompt,
     review_pubtator_annotations_prompt,
@@ -27,9 +28,12 @@ def register_metadata(mcp: FastMCP) -> None:
         title="Get PubTator-Link Capabilities",
         annotations=READ_ONLY_CLOSED_WORLD,
     )
-    def get_server_capabilities() -> dict[str, Any]:
+    async def get_server_capabilities() -> dict[str, Any]:
         """Use this when a client needs supported tools, transports, formats, and limitations. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        return get_capabilities_resource()
+        async def call() -> dict[str, Any]:
+            return get_capabilities_resource()
+
+        return await run_mcp_tool("pubtator.get_server_capabilities", call)
 
     @mcp.resource("pubtator://capabilities")
     def capabilities() -> dict[str, Any]:

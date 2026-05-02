@@ -7,6 +7,7 @@ from pydantic import Field
 
 from pubtator_link.api.client import PubTator3Client
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD, REMOTE_JOB_ANNOTATIONS
+from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.service_adapters import (
     get_text_annotation_results_impl,
     submit_text_annotation_impl,
@@ -26,12 +27,15 @@ def register_text_annotation_tools(mcp: FastMCP) -> None:
         ] = "Gene",
     ) -> dict[str, Any]:
         """Use this when research text should be submitted for PubTator biomedical named entity recognition. Do not submit identifiable patient data to public demo instances."""
-        async with PubTator3Client() as client:
-            return await submit_text_annotation_impl(
-                client=client,
-                text=text,
-                bioconcepts=bioconcepts,
-            )
+        async def call() -> dict[str, Any]:
+            async with PubTator3Client() as client:
+                return await submit_text_annotation_impl(
+                    client=client,
+                    text=text,
+                    bioconcepts=bioconcepts,
+                )
+
+        return await run_mcp_tool("pubtator.submit_text_annotation", call)
 
     @mcp.tool(
         name="pubtator.get_text_annotation_results",
@@ -42,5 +46,8 @@ def register_text_annotation_tools(mcp: FastMCP) -> None:
         session_id: Annotated[str, Field(min_length=8)],
     ) -> dict[str, Any]:
         """Use this when a user has a PubTator text annotation session ID and needs its results."""
-        async with PubTator3Client() as client:
-            return await get_text_annotation_results_impl(client=client, session_id=session_id)
+        async def call() -> dict[str, Any]:
+            async with PubTator3Client() as client:
+                return await get_text_annotation_results_impl(client=client, session_id=session_id)
+
+        return await run_mcp_tool("pubtator.get_text_annotation_results", call)
