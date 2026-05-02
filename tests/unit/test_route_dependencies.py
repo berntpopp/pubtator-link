@@ -314,6 +314,7 @@ async def test_create_app_resources_closes_partial_resources_when_review_setup_f
 @pytest.mark.asyncio
 async def test_close_app_resources_closes_only_owned_resources() -> None:
     client = CloseableClient()
+    metadata_client = CloseableClient()
     pool = CloseablePool()
     queue = StoppableQueue()
     resources = dependencies.AppResources(
@@ -321,6 +322,7 @@ async def test_close_app_resources_closes_only_owned_resources() -> None:
         api_client=client,
         publication_service=object(),
         publication_passage_service=object(),
+        ncbi_publication_metadata_client=metadata_client,
         review_pool=pool,
         review_queue=queue,
     )
@@ -329,6 +331,7 @@ async def test_close_app_resources_closes_only_owned_resources() -> None:
 
     assert queue.stopped is True
     assert pool.closed is True
+    assert metadata_client.closed is True
     assert client.closed is True
 
 
@@ -351,11 +354,13 @@ async def test_context_bound_resources_are_available_to_existing_dependency_name
     client = CloseableClient()
     publication_service = object()
     passage_service = object()
+    metadata_service = object()
     resources = dependencies.AppResources(
         logger=object(),
         api_client=client,
         publication_service=publication_service,
         publication_passage_service=passage_service,
+        publication_metadata_service=metadata_service,
     )
 
     token = dependencies.bind_app_resources(resources)
@@ -364,6 +369,7 @@ async def test_context_bound_resources_are_available_to_existing_dependency_name
         assert await dependencies.get_api_client() is client
         assert await dependencies.get_publication_service() is publication_service
         assert await dependencies.get_publication_passage_service() is passage_service
+        assert await dependencies.get_publication_metadata_service() is metadata_service
     finally:
         dependencies.reset_app_resources(token)
 
