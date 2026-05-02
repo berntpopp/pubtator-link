@@ -18,6 +18,8 @@ Updated: 2026-05-02
 - [x] Public `candidate_fast` prepare mode removal.
 - [x] Research-session staging for query or PMID candidates with coverage hints
       and queued review preparation.
+- [x] Review-feeding discovery tools for MeSH lookup, citation lookup, article
+      ID conversion, and related/cited/reference expansion.
 
 ## Completed Roadmap
 
@@ -30,6 +32,8 @@ inventory and TTL cleanup, user-supplied GRADE-style evidence certainty storage,
 optional Europe PMC fallback, and public removal of the no-op `candidate_fast`
 prepare mode. Research-session staging is also implemented for transparent
 query or PMID candidate manifests, coverage hints, and queued review preparation.
+MeSH lookup, citation lookup, article ID conversion, and related/cited/reference
+expansion now feed candidate PMIDs to staging and indexing workflows.
 
 Residual future opportunities:
 
@@ -123,7 +127,8 @@ Current behavior:
 
 - Full PubTator export attempted with `full=True`.
 - Abstract PubTator export attempted only if full export yields no passages.
-- No PMC ID conversion preflight.
+- Article ID conversion can resolve PMCID/DOI/MID inputs to candidate PMIDs;
+  coverage preflight still needs full PMC availability hints.
 - No BioC-PMC fallback by PMID/PMCID.
 - No precise `coverage_reason`.
 - No `pmc_fallback_available` or `license/access` hint.
@@ -640,6 +645,8 @@ recommendations.
 9. Optional Europe PMC fallback.
 10. Public `candidate_fast` prepare-mode removal unless a later search-candidate
     workflow gives it real semantics.
+11. Review-feeding discovery tools for MeSH lookup, citation lookup, article ID
+    conversion, and related/cited/reference expansion.
 
 ## Acceptance Criteria For The Next Major Upgrade
 
@@ -677,6 +684,12 @@ recommendations.
   <https://www.ncbi.nlm.nih.gov/research/bionlp/APIs/BioC-PMC/>
 - PMC ID Converter API:
   <https://pmc.ncbi.nlm.nih.gov/tools/id-converter-api/>
+- NCBI E-utilities:
+  <https://www.ncbi.nlm.nih.gov/books/NBK25501/>
+- NCBI ECitMatch:
+  <https://www.ncbi.nlm.nih.gov/books/NBK25499/#chapter4.ECitMatch>
+- NCBI ELink:
+  <https://www.ncbi.nlm.nih.gov/books/NBK25499/#chapter4.ELink>
 - PMC OAI-PMH API:
   <https://pmc.ncbi.nlm.nih.gov/tools/oai/>
 - Europe PMC open-access downloads:

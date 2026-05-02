@@ -35,13 +35,6 @@ EXPECTED_PUBLIC_TOOL_NAMES = {
     "pubtator.list_research_sessions",
 }
 
-DISCOVERY_TOOL_NAMES = {
-    "pubtator.convert_article_ids",
-    "pubtator.lookup_mesh",
-    "pubtator.lookup_citation",
-    "pubtator.find_related_articles",
-}
-
 EXPECTED_RESOURCE_URIS = {
     "pubtator://capabilities",
     "pubtator://bioconcepts",
@@ -120,6 +113,7 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
     assert "tool_groups" in capabilities
     assert "large_output_guidance" in capabilities
     assert "review_rerag" in capabilities
+    assert "discovery_workflow" in capabilities
     assert (
         "search -> preflight -> index -> inspect -> retrieve"
         in (capabilities["recommended_workflows"][0])
@@ -128,6 +122,8 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
         "pubtator.get_publication_passages" in capabilities["tool_groups"]["publication_grounding"]
     )
     assert "pubtator.inspect_review_index" in capabilities["tool_groups"]["review_grounding"]
+    assert "pubtator.lookup_mesh" in capabilities["tool_groups"]["discovery"]
+    assert "candidate_pmids" in repr(capabilities["output_cheatsheet"])
 
 
 def test_capabilities_document_new_budget_and_stable_citation_fields() -> None:
@@ -216,15 +212,16 @@ def test_discovery_tools_are_registered_with_specific_schemas() -> None:
     tools = mcp._tool_manager._tools
 
     expected = {
-        "pubtator.convert_article_ids": {"records", "candidate_pmids", "unresolved"},
-        "pubtator.lookup_mesh": {"query", "descriptors", "candidate_pmids"},
-        "pubtator.lookup_citation": {"records", "candidate_pmids"},
+        "pubtator.convert_article_ids": {"records", "candidate_pmids", "unresolved", "_meta"},
+        "pubtator.lookup_mesh": {"query", "descriptors", "candidate_pmids", "_meta"},
+        "pubtator.lookup_citation": {"records", "candidate_pmids", "_meta"},
         "pubtator.find_related_articles": {
             "source_pmids",
             "mode",
             "related_articles",
             "candidate_pmids",
             "unresolved",
+            "_meta",
         },
     }
 
@@ -334,15 +331,16 @@ def test_high_use_mcp_tools_expose_specific_output_schemas() -> None:
 
     expected = {
         "pubtator.search_literature": {"success", "results"},
-        "pubtator.convert_article_ids": {"records", "candidate_pmids", "unresolved"},
-        "pubtator.lookup_mesh": {"query", "descriptors", "candidate_pmids"},
-        "pubtator.lookup_citation": {"records", "candidate_pmids"},
+        "pubtator.convert_article_ids": {"records", "candidate_pmids", "unresolved", "_meta"},
+        "pubtator.lookup_mesh": {"query", "descriptors", "candidate_pmids", "_meta"},
+        "pubtator.lookup_citation": {"records", "candidate_pmids", "_meta"},
         "pubtator.find_related_articles": {
             "source_pmids",
             "mode",
             "related_articles",
             "candidate_pmids",
             "unresolved",
+            "_meta",
         },
         "pubtator.preflight_review_sources": {"success", "coverage_hints"},
         "pubtator.index_review_evidence": {"success", "review_id", "preparation_status"},
@@ -485,7 +483,7 @@ def test_capabilities_resource_tool_names_are_registered() -> None:
     advertised_tools.update(capabilities["review_rerag"]["tools"])
 
     assert registered_tools == EXPECTED_PUBLIC_TOOL_NAMES
-    assert advertised_tools == EXPECTED_PUBLIC_TOOL_NAMES - DISCOVERY_TOOL_NAMES
+    assert advertised_tools == registered_tools == EXPECTED_PUBLIC_TOOL_NAMES
 
 
 def test_capabilities_include_context_management_cheatsheet() -> None:

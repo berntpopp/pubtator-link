@@ -18,6 +18,10 @@ def get_capabilities_resource() -> dict[str, Any]:
         "endpoint": "/mcp",
         "tools": [
             "pubtator.search_literature",
+            "pubtator.convert_article_ids",
+            "pubtator.lookup_mesh",
+            "pubtator.lookup_citation",
+            "pubtator.find_related_articles",
             "pubtator.get_publication_passages",
             "pubtator.estimate_publication_context",
             "pubtator.fetch_publication_annotations",
@@ -46,14 +50,29 @@ def get_capabilities_resource() -> dict[str, Any]:
         ],
         "recommended_workflows": [
             "search -> preflight -> index -> inspect -> retrieve for review-grounded answers",
+            "Discovery tools can normalize MeSH terms, resolve citations or article IDs, "
+            "and expand seed PMIDs before staging or indexing candidate PMIDs.",
             "For live research sessions, call `pubtator.stage_research_session` with a "
             "review ID and query or PMID list, then poll "
             "`pubtator.get_research_session_status` before retrieving review context.",
             "publication passages -> context estimate -> compact passage retrieval before raw BioC",
         ],
+        "discovery_workflow": [
+            "Use pubtator.lookup_mesh to normalize biomedical vocabulary before search.",
+            "Use pubtator.lookup_citation when a user provides formatted references.",
+            "Use pubtator.convert_article_ids when a user provides DOI, PMCID, or mixed article IDs.",
+            "Use pubtator.find_related_articles to expand from seed PMIDs.",
+            "Pass candidate_pmids to pubtator.stage_research_session before indexing large corpora.",
+        ],
         "tool_groups": {
             "literature_search": [
                 "pubtator.search_literature",
+            ],
+            "discovery": [
+                "pubtator.convert_article_ids",
+                "pubtator.lookup_mesh",
+                "pubtator.lookup_citation",
+                "pubtator.find_related_articles",
             ],
             "publication_grounding": [
                 "pubtator.get_publication_passages",
@@ -110,6 +129,21 @@ def get_capabilities_resource() -> dict[str, Any]:
             "pubtator.search_literature": {
                 "text": "MEFV colchicine familial Mediterranean fever guideline",
                 "sort": "score desc",
+            },
+            "pubtator.lookup_mesh": {
+                "query": "familial Mediterranean fever",
+                "max_results": 5,
+            },
+            "pubtator.lookup_citation": {
+                "citations": ["Biochem Med (Zagreb). 2024;34(1):010501"],
+            },
+            "pubtator.convert_article_ids": {
+                "ids": ["10.1186/s13023-024-03102-5", "PMC11000000"],
+            },
+            "pubtator.find_related_articles": {
+                "pmids": ["40234174"],
+                "mode": "related",
+                "max_results": 20,
             },
             "pubtator.get_publication_passages": {
                 "pmids": ["40234174"],
@@ -173,6 +207,8 @@ def get_capabilities_resource() -> dict[str, Any]:
             "citation_map": "merged_context_pack.citation_map",
             "stable_citation_key": "merged_context_pack.passages[].stable_citation_key",
             "stable_citation_map": "merged_context_pack.stable_citation_map",
+            "discovery_candidate_pmids": "candidate_pmids",
+            "handoff_next_commands": "_meta.next_commands",
             "budget": "budget",
         },
         "budgeting_defaults": {
@@ -213,7 +249,9 @@ def get_capabilities_resource() -> dict[str, Any]:
             "scope": "research-use review-scoped evidence preparation and retrieval",
             "workflow": [
                 "preflight candidate PMIDs to estimate source coverage",
+                "feed discovery candidate PMIDs into stage_research_session for screening",
                 "stage live research sessions from a query or PMID list before retrieval",
+                "pass curated discovery candidate PMIDs to index_review_evidence for durable retrieval",
                 "index candidate PMIDs or curated URLs for a stable review_id",
                 "inspect the review index before retrieval to check source coverage",
                 "wait for preparation_status to show complete or partial records",

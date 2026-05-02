@@ -207,6 +207,10 @@ For hosted deployments, configure remote MCP clients with `https://your-domain.e
 | `pubtator.retrieve_review_context_v2` | Flat-argument compact citable review context retrieval |
 | `pubtator.retrieve_review_context_batch_v2` | Flat-argument batch review retrieval with compact/default diagnostics |
 | `pubtator.search_literature` | Search PubMed literature through PubTator3 |
+| `pubtator.convert_article_ids` | Read-only research-use article ID conversion; returns candidate PMIDs for staging/indexing |
+| `pubtator.lookup_mesh` | Read-only research-use MeSH vocabulary lookup before search |
+| `pubtator.lookup_citation` | Read-only research-use citation-to-PMID lookup; returns candidate PMIDs |
+| `pubtator.find_related_articles` | Read-only research-use related/cited/reference article expansion; returns candidate PMIDs |
 | `pubtator.get_publication_passages` | Fetch compact citable passages for PubMed IDs |
 | `pubtator.estimate_publication_context` | Estimate compact publication context before fetching |
 | `pubtator.inspect_review_index` | Inspect indexed PMIDs, sections, counts, and failures |
