@@ -9,6 +9,7 @@ from pubtator_link.services.provenance import corpus_snapshot_date, stable_cache
 SearchResponseMode = Literal["compact", "standard", "full"]
 IncludeCitations = Literal["none", "nlm", "bibtex", "both"]
 TextHighlightFormat = Literal["none", "plain", "annotated"]
+SearchMetadataMode = Literal["none", "basic", "full"]
 
 GUIDELINE_TERMS = ("recommendation", "guideline", "consensus", "eular", "pres", "share")
 GUIDELINE_TYPES = (
@@ -42,12 +43,11 @@ def shaped_search_response(
     text_hl_format: TextHighlightFormat,
     limit: int | None,
     guideline_boost: bool,
+    metadata: SearchMetadataMode = "none",
+    metadata_by_pmid: dict[str, dict[str, Any]] | None = None,
 ) -> SearchResponse:
     raw_items = list(raw.get("results", []))
-    if guideline_boost:
-        raw_items = _rerank_guidelines(raw_items)
-    if limit is not None:
-        raw_items = raw_items[:limit]
+    raw_items = selected_search_items(raw_items, guideline_boost=guideline_boost, limit=limit)
 
     total_results = int(raw.get("count", raw.get("total", 0)))
     per_page = int(raw.get("page_size", raw.get("per_page", 20)))
@@ -61,6 +61,8 @@ def shaped_search_response(
                 include_citations=include_citations,
                 text_hl_format=text_hl_format,
                 guideline_boost=guideline_boost,
+                metadata=metadata,
+                metadata_item=(metadata_by_pmid or {}).get(str(item.get("pmid", ""))),
             )
             for item in raw_items
         ],
@@ -93,10 +95,12 @@ def shaped_search_result(
     include_citations: IncludeCitations,
     text_hl_format: TextHighlightFormat,
     guideline_boost: bool,
+    metadata: SearchMetadataMode = "none",
+    metadata_item: dict[str, Any] | None = None,
 ) -> SearchResult:
     rank_features = _guideline_rank_features(item) if guideline_boost else None
     include_text_hl = text_hl_format != "none"
-    return SearchResult(
+    shaped = SearchResult(
         pmid=item.get("pmid", ""),
         title=item.get("title", ""),
         abstract=item.get("abstract") if response_mode in {"standard", "full"} else None,
@@ -118,6 +122,40 @@ def shaped_search_result(
         rank_features=rank_features,
         matched_terms=item.get("matched_terms", []),
     )
+    _merge_metadata_fields(shaped, metadata, metadata_item)
+    return shaped
+
+
+def _merge_metadata_fields(
+    shaped: SearchResult,
+    metadata: SearchMetadataMode,
+    metadata_item: dict[str, Any] | None,
+) -> None:
+    if metadata == "none" or metadata_item is None:
+        return
+
+    basic_fields = (
+        "authors",
+        "journal",
+        "pub_year",
+        "pub_date",
+        "volume",
+        "issue",
+        "pages",
+        "doi",
+        "pmcid",
+        "publication_types",
+    )
+    full_fields = (*basic_fields, "mesh_headings", "nlm_citation", "bibtex")
+    for field_name in full_fields if metadata == "full" else basic_fields:
+        if _has_metadata_value(getattr(shaped, field_name)):
+            continue
+        if field_name in metadata_item and _has_metadata_value(metadata_item[field_name]):
+            setattr(shaped, field_name, metadata_item[field_name])
+
+
+def _has_metadata_value(value: Any) -> bool:
+    return value not in (None, "", [], {})
 
 
 def search_cache_key(
@@ -146,6 +184,16 @@ def _rerank_guidelines(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         key=lambda pair: (-_guideline_rank_features(pair[1])["guideline_boost"], pair[0]),
     )
     return [item for _, item in ranked]
+
+
+def selected_search_items(
+    items: list[dict[str, Any]],
+    *,
+    guideline_boost: bool,
+    limit: int | None,
+) -> list[dict[str, Any]]:
+    selected = _rerank_guidelines(items) if guideline_boost else items
+    return selected[:limit] if limit is not None else selected
 
 
 def _shape_text_hl(value: str | None, mode: TextHighlightFormat) -> str | None:

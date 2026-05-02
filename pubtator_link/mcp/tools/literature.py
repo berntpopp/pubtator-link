@@ -6,7 +6,10 @@ from fastmcp import FastMCP
 from pydantic import Field
 
 from pubtator_link.api.client import PubTator3Client
-from pubtator_link.api.routes.dependencies import get_source_preflight_service
+from pubtator_link.api.routes.dependencies import (
+    get_publication_metadata_service,
+    get_source_preflight_service,
+)
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.service_adapters import (
@@ -18,6 +21,7 @@ from pubtator_link.models.responses import EntityAutocompleteResponse, SearchRes
 from pubtator_link.services.search_coverage import SearchCoverageMode
 from pubtator_link.services.search_shaping import (
     IncludeCitations,
+    SearchMetadataMode,
     SearchResponseMode,
     TextHighlightFormat,
 )
@@ -46,12 +50,16 @@ def register_literature_tools(mcp: FastMCP) -> None:
         entity_ids: list[str] | None = None,
         guideline_boost: bool = False,
         coverage: SearchCoverageMode = "preflight",
+        metadata: SearchMetadataMode = "none",
     ) -> dict[str, Any]:
         """Use this when a user needs PubMed literature search through PubTator3. Use short biomedical queries, optional sort such as 'score desc' or 'date desc', flat publication/year filters, raw filters JSON, optional section filters, and coverage='preflight' when source coverage should be visible before indexing. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
 
         async def call() -> dict[str, Any]:
             preflight_service = (
                 await get_source_preflight_service() if coverage == "preflight" else None
+            )
+            metadata_service = (
+                await get_publication_metadata_service() if metadata != "none" else None
             )
             async with PubTator3Client() as client:
                 return await search_literature_impl(
@@ -72,6 +80,8 @@ def register_literature_tools(mcp: FastMCP) -> None:
                     guideline_boost=guideline_boost,
                     coverage=coverage,
                     preflight_service=preflight_service,
+                    metadata=metadata,
+                    metadata_service=metadata_service,
                 )
 
         return await run_mcp_tool("pubtator.search_literature", call)

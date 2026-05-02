@@ -641,6 +641,108 @@ async def test_search_literature_attaches_preflight_coverage() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_literature_impl_enriches_basic_metadata() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+    from pubtator_link.models.publication_metadata import (
+        PublicationAuthor,
+        PublicationMetadata,
+        PublicationMetadataResponse,
+    )
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "results": [{"pmid": "33454820", "title": "FMF"}],
+                "count": 1,
+                "total_pages": 1,
+                "page_size": 10,
+            }
+
+    class FakeMetadata:
+        async def get_metadata(self, request):
+            assert request.pmids == ["33454820"]
+            return PublicationMetadataResponse(
+                metadata=[
+                    PublicationMetadata(
+                        pmid="33454820",
+                        authors=[PublicationAuthor(last_name="Kavrul Kayaalp", initials="GK")],
+                    )
+                ],
+                _meta={"next_commands": []},
+            )
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="MEFV",
+        metadata="basic",
+        metadata_service=FakeMetadata(),
+    )
+
+    assert result["results"][0]["authors"][0]["display_name"] == "Kavrul Kayaalp GK"
+
+
+@pytest.mark.asyncio
+async def test_search_literature_metadata_respects_limit() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+    from pubtator_link.models.publication_metadata import PublicationMetadataResponse
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "results": [
+                    {"pmid": "1", "title": "First"},
+                    {"pmid": "2", "title": "Second"},
+                ],
+                "count": 2,
+                "total_pages": 1,
+                "page_size": 10,
+            }
+
+    class FakeMetadata:
+        async def get_metadata(self, request):
+            assert request.pmids == ["1"]
+            return PublicationMetadataResponse(metadata=[], _meta={"next_commands": []})
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="MEFV",
+        limit=1,
+        metadata="basic",
+        metadata_service=FakeMetadata(),
+    )
+
+    assert [item["pmid"] for item in result["results"]] == ["1"]
+
+
+@pytest.mark.asyncio
+async def test_search_literature_full_metadata_requests_citations() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+    from pubtator_link.models.publication_metadata import PublicationMetadataResponse
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "results": [{"pmid": "33454820", "title": "FMF"}],
+                "count": 1,
+                "total_pages": 1,
+                "page_size": 10,
+            }
+
+    class FakeMetadata:
+        async def get_metadata(self, request):
+            assert request.include_mesh is True
+            assert request.include_citations == "both"
+            return PublicationMetadataResponse(metadata=[], _meta={"next_commands": []})
+
+    await search_literature_impl(
+        client=FakeClient(),
+        text="MEFV",
+        metadata="full",
+        metadata_service=FakeMetadata(),
+    )
+
+
+@pytest.mark.asyncio
 async def test_search_entities_derives_matched_terms_from_match_text() -> None:
     from pubtator_link.mcp.service_adapters import search_biomedical_entities_impl
 

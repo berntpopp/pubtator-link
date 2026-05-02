@@ -50,9 +50,11 @@ from pubtator_link.services.search_coverage import (
 )
 from pubtator_link.services.search_shaping import (
     IncludeCitations,
+    SearchMetadataMode,
     SearchResponseMode,
     TextHighlightFormat,
     combined_search_text,
+    selected_search_items,
     shaped_search_response,
 )
 from pubtator_link.services.source_preflight import SourcePreflightService
@@ -204,6 +206,8 @@ async def search_literature_impl(
     guideline_boost: bool = False,
     coverage: SearchCoverageMode = "none",
     preflight_service: SearchCoveragePreflight | None = None,
+    metadata: SearchMetadataMode = "none",
+    metadata_service: PublicationMetadataService | None = None,
 ) -> dict[str, Any]:
     normalized_text = combined_search_text(text, entity_ids)
     merged_filters = merge_search_filters(
@@ -219,6 +223,17 @@ async def search_literature_impl(
         filters=merged_filters,
         sections=",".join(sections) if sections else None,
     )
+    raw_items = _selected_search_items(
+        result,
+        limit=limit,
+        guideline_boost=guideline_boost,
+    )
+    metadata_by_pmid = await _search_metadata_by_pmid(
+        raw_items,
+        metadata=metadata,
+        include_citations=include_citations,
+        metadata_service=metadata_service,
+    )
     response = shaped_search_response(
         raw=result,
         query=normalized_text,
@@ -231,10 +246,53 @@ async def search_literature_impl(
         text_hl_format=text_hl_format,
         limit=limit,
         guideline_boost=guideline_boost,
+        metadata=metadata,
+        metadata_by_pmid=metadata_by_pmid,
     )
     if coverage == "preflight" and preflight_service is not None:
         await attach_preflight_coverage(response, preflight_service)
     return response.model_dump()
+
+
+def _selected_search_items(
+    raw_result: dict[str, Any],
+    *,
+    limit: int | None,
+    guideline_boost: bool,
+) -> list[dict[str, Any]]:
+    items = list(raw_result.get("results", []))
+    return selected_search_items(items, guideline_boost=guideline_boost, limit=limit)
+
+
+async def _search_metadata_by_pmid(
+    raw_items: list[dict[str, Any]],
+    *,
+    metadata: SearchMetadataMode,
+    include_citations: IncludeCitations,
+    metadata_service: PublicationMetadataService | None,
+) -> dict[str, dict[str, Any]]:
+    if metadata == "none" or metadata_service is None:
+        return {}
+    pmids = [str(item.get("pmid", "")) for item in raw_items]
+    pmids = [pmid for pmid in dict.fromkeys(pmids) if pmid]
+    if not pmids:
+        return {}
+    include_metadata_citations: IncludeCitations = (
+        "both" if metadata == "full" and include_citations == "none" else include_citations
+    )
+    response = await metadata_service.get_metadata(
+        PublicationMetadataRequest(
+            pmids=pmids,
+            include_mesh=metadata == "full",
+            include_publication_types=True,
+            include_citations=include_metadata_citations if metadata == "full" else "none",
+            include_coverage=False,
+        )
+    )
+    return {
+        item.pmid: item.model_dump()
+        for item in response.metadata
+    }
 
 
 async def fetch_pmc_annotations_impl(

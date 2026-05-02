@@ -393,6 +393,57 @@ class TestSearchRoutes:
         assert data["results"][0]["coverage_hint"]["expected_coverage"] == "abstract_only"
 
     @patch.object(PubTator3Client, "search_publications")
+    def test_search_publications_can_enrich_basic_metadata(self, mock_search, test_client):
+        from pubtator_link.api.routes.dependencies import get_publication_metadata_service
+        from pubtator_link.models.publication_metadata import (
+            PublicationAuthor,
+            PublicationMetadata,
+            PublicationMetadataResponse,
+        )
+
+        class FakeMetadataService:
+            async def get_metadata(self, request):
+                assert request.pmids == ["33454820"]
+                assert request.include_mesh is False
+                return PublicationMetadataResponse(
+                    metadata=[
+                        PublicationMetadata(
+                            pmid="33454820",
+                            authors=[PublicationAuthor(last_name="Kavrul Kayaalp", initials="GK")],
+                            journal="Rheumatology International",
+                            pub_year=2022,
+                        )
+                    ],
+                    _meta={"next_commands": []},
+                )
+
+        async def fake_metadata_service() -> FakeMetadataService:
+            return FakeMetadataService()
+
+        mock_search.return_value = {
+            "results": [{"pmid": "33454820", "title": "FMF"}],
+            "count": 1,
+            "total_pages": 1,
+            "page_size": 10,
+        }
+        test_client.app.dependency_overrides[get_publication_metadata_service] = (
+            fake_metadata_service
+        )
+
+        try:
+            response = test_client.get(
+                "/api/search/",
+                params={"text": "MEFV", "metadata": "basic", "response_mode": "compact"},
+            )
+        finally:
+            test_client.app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        item = response.json()["results"][0]
+        assert item["authors"][0]["display_name"] == "Kavrul Kayaalp GK"
+        assert item["journal"] == "Rheumatology International"
+
+    @patch.object(PubTator3Client, "search_publications")
     def test_search_publications_merges_flat_filters(self, mock_search, test_client):
         """Test route merges raw JSON filters with flat filter query params."""
         mock_search.return_value = {"results": [], "count": 0, "total_pages": 0, "page_size": 10}

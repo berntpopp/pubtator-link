@@ -146,7 +146,8 @@ class SearchResult(BaseModel):
         return str(v)
 
     abstract: str | None = Field(default=None, description="Article abstract")
-    authors: list[str] = Field(default_factory=list, description="Authors")
+    authors: list[Any] = Field(default_factory=list, description="Authors")
+    pub_year: int | None = Field(default=None, description="Publication year")
     journal: str | None = Field(default=None, description="Journal name")
     pub_date: str | None = Field(default=None, description="Publication date")
     annotations: list[dict[str, Any]] = Field(default_factory=list, description="Annotations found")
@@ -164,6 +165,9 @@ class SearchResult(BaseModel):
     publication_types: list[str] = Field(
         default_factory=list, description="Publication type metadata"
     )
+    mesh_headings: list[str] = Field(default_factory=list, description="MeSH headings")
+    nlm_citation: str | None = Field(default=None, description="NLM citation")
+    bibtex: str | None = Field(default=None, description="BibTeX citation")
     coverage_hint: dict[str, Any] | None = Field(default=None, description="Coverage hint")
     rank_features: dict[str, Any] | None = Field(default=None, description="Ranking features")
     matched_terms: list[str] = Field(default_factory=list, description="Matched query terms")

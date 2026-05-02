@@ -5,19 +5,23 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 
+from ...models.publication_metadata import PublicationMetadataRequest
 from ...models.requests import SearchRequest, SearchSection, SearchSortOrder
 from ...models.responses import SearchResponse
 from ...services.search_coverage import SearchCoverageMode, attach_preflight_coverage
 from ...services.search_shaping import (
     IncludeCitations,
+    SearchMetadataMode,
     SearchResponseMode,
     TextHighlightFormat,
     combined_search_text,
+    selected_search_items,
     shaped_search_response,
 )
 from ..search_filters import merge_search_filters
 from .dependencies import (
     ClientDep,
+    PublicationMetadataServiceDep,
     SourcePreflightServiceDep,
     handle_api_errors,
     validate_page_number,
@@ -94,6 +98,7 @@ router = APIRouter(prefix="/api/search", tags=["Search"])
 async def search_publications(
     client: ClientDep,
     source_preflight_service: SourcePreflightServiceDep,
+    publication_metadata_service: PublicationMetadataServiceDep,
     text: str = Query(
         description="Search query (free text, entity ID, or relation query)",
         min_length=1,
@@ -314,6 +319,10 @@ async def search_publications(
         SearchCoverageMode,
         Query(description="Coverage hints to attach to search hits: none or preflight"),
     ] = "none",
+    metadata: Annotated[
+        SearchMetadataMode,
+        Query(description="Publication metadata enrichment: none, basic, or full"),
+    ] = "none",
 ) -> SearchResponse:
     """Search biomedical literature with advanced filtering and section targeting.
 
@@ -438,6 +447,34 @@ async def search_publications(
             sections=(",".join([s.value for s in request.sections]) if request.sections else None),
         )
 
+        raw_items = selected_search_items(
+            list(result.get("results", [])),
+            guideline_boost=guideline_boost,
+            limit=limit,
+        )
+
+        metadata_by_pmid = {}
+        if metadata != "none":
+            pmids = [str(item.get("pmid", "")) for item in raw_items]
+            pmids = [pmid for pmid in dict.fromkeys(pmids) if pmid]
+            if pmids:
+                include_metadata_citations: IncludeCitations = (
+                    "both" if metadata == "full" and include_citations == "none" else include_citations
+                )
+                metadata_response = await publication_metadata_service.get_metadata(
+                    PublicationMetadataRequest(
+                        pmids=pmids,
+                        include_mesh=metadata == "full",
+                        include_publication_types=True,
+                        include_citations=include_metadata_citations if metadata == "full" else "none",
+                        include_coverage=False,
+                    )
+                )
+                metadata_by_pmid = {
+                    item.pmid: item.model_dump()
+                    for item in metadata_response.metadata
+                }
+
         response = shaped_search_response(
             raw=result,
             query=request.text,
@@ -450,6 +487,8 @@ async def search_publications(
             text_hl_format=text_hl_format,
             limit=limit,
             guideline_boost=guideline_boost,
+            metadata=metadata,
+            metadata_by_pmid=metadata_by_pmid,
         )
         if coverage == "preflight":
             await attach_preflight_coverage(response, source_preflight_service)
