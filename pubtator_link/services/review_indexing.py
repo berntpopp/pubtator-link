@@ -12,7 +12,6 @@ from pubtator_link.models.review_rerag import (
     PreparationEnqueueResult,
     PreparationStatus,
 )
-from pubtator_link.services.review_preparation_queue import ReviewPreparationQueue
 from pubtator_link.services.review_state import index_snapshot_date, retry_after_ms_for_status
 
 

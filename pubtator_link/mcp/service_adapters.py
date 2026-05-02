@@ -44,8 +44,8 @@ from pubtator_link.services.publication_service import PublicationService
 from pubtator_link.services.review_audit import ReviewAuditService
 from pubtator_link.services.review_context_service import ReviewContextService
 from pubtator_link.services.review_evidence_certainty import ReviewEvidenceCertaintyService
-from pubtator_link.services.review_indexing import ReviewIndexingService
 from pubtator_link.services.review_index_lifecycle import ReviewIndexLifecycleService
+from pubtator_link.services.review_indexing import ReviewIndexingService
 from pubtator_link.services.review_preparation_queue import ReviewPreparationQueue
 from pubtator_link.services.search_coverage import (
     SearchCoverageMode,
