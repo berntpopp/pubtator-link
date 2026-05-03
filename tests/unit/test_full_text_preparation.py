@@ -8,6 +8,10 @@ from pubtator_link.services.full_text_preparation import (
     FullTextPreparationService,
     looks_like_pdf,
 )
+from pubtator_link.services.review_context.embeddings import (
+    EmbeddingProviderUnavailableError,
+    text_hash,
+)
 
 
 def _config(*, enable_docling: bool = False) -> ReviewReragConfig:
@@ -28,6 +32,7 @@ class RecordingRepository:
     def __init__(self) -> None:
         self.attempts: list[dict[str, Any]] = []
         self.passages: list[ReviewPassageRow] = []
+        self.embedding_records: list[Any] = []
 
     async def record_retrieval_attempt(
         self,
@@ -50,6 +55,9 @@ class RecordingRepository:
     async def upsert_passages(self, passages: list[ReviewPassageRow]) -> None:
         self.passages.extend(passages)
 
+    async def upsert_passage_embeddings(self, records: list[Any]) -> None:
+        self.embedding_records.extend(records)
+
 
 class RecordingPubTatorClient:
     def __init__(self, responses: list[dict[str, Any]]) -> None:
@@ -66,6 +74,24 @@ class RecordingPubTatorClient:
             self.retry_metadata_by_call.pop(0) if self.retry_metadata_by_call else None
         )
         return self.responses.pop(0)
+
+
+class RecordingEmbeddingProvider:
+    model_name = "BAAI/bge-small-en-v1.5"
+    dim = 384
+
+    def __init__(self, *, fail: bool = False) -> None:
+        self.fail = fail
+        self.passage_batches: list[list[str]] = []
+
+    async def embed_query(self, text: str) -> list[float]:
+        return [0.0] * self.dim
+
+    async def embed_passages(self, texts: list[str]) -> list[list[float]]:
+        self.passage_batches.append(texts)
+        if self.fail:
+            raise EmbeddingProviderUnavailableError("embedding model unavailable")
+        return [[float(index), 0.5] for index, _text in enumerate(texts, start=1)]
 
 
 class StaticPreflightService:
@@ -279,6 +305,98 @@ async def test_prepare_pmid_falls_back_to_abstract_and_records_passages() -> Non
         },
     ]
     assert preflight.calls == [["40234174"]]
+
+
+@pytest.mark.asyncio
+async def test_prepare_pmid_embeds_newly_indexed_passages_when_enabled() -> None:
+    repository = RecordingRepository()
+    embedding_provider = RecordingEmbeddingProvider()
+    pubtator_client = RecordingPubTatorClient(
+        [
+            {"PubTator3": [{"id": "40234174", "pmid": "40234174", "passages": []}]},
+            {
+                "documents": [
+                    {
+                        "id": "40234174",
+                        "pmid": "40234174",
+                        "passages": [
+                            {
+                                "infons": {"type": "abstract"},
+                                "text": "Colchicine should start after diagnosis.",
+                            }
+                        ],
+                    }
+                ]
+            },
+        ]
+    )
+    base_config = _config()
+    config = ReviewReragConfig(
+        **{**base_config.__dict__, "embedding_rerank_enabled": True}
+    )
+    service = FullTextPreparationService(
+        config=config,
+        repository=repository,
+        pubtator_client=pubtator_client,
+        embedding_provider=embedding_provider,
+    )
+
+    status = await service.prepare_pmid(review_id="review-1", pmid="40234174")
+
+    assert status == "complete"
+    assert embedding_provider.passage_batches == [["Colchicine should start after diagnosis."]]
+    assert len(repository.embedding_records) == 1
+    record = repository.embedding_records[0]
+    assert record.review_id == "review-1"
+    assert record.passage_id == "PMID:40234174:abstract:0"
+    assert record.model_name == "BAAI/bge-small-en-v1.5"
+    assert record.embedding_dim == 384
+    assert record.text_hash == text_hash("Colchicine should start after diagnosis.")
+    assert record.embedding == [1.0, 0.5]
+
+
+@pytest.mark.asyncio
+async def test_prepare_pmid_embedding_provider_failure_does_not_fail_indexing() -> None:
+    repository = RecordingRepository()
+    embedding_provider = RecordingEmbeddingProvider(fail=True)
+    pubtator_client = RecordingPubTatorClient(
+        [
+            {"PubTator3": [{"id": "40234174", "pmid": "40234174", "passages": []}]},
+            {
+                "documents": [
+                    {
+                        "id": "40234174",
+                        "pmid": "40234174",
+                        "passages": [
+                            {
+                                "infons": {"type": "abstract"},
+                                "text": "Colchicine should start after diagnosis.",
+                            }
+                        ],
+                    }
+                ]
+            },
+        ]
+    )
+    base_config = _config()
+    config = ReviewReragConfig(
+        **{**base_config.__dict__, "embedding_rerank_enabled": True}
+    )
+    service = FullTextPreparationService(
+        config=config,
+        repository=repository,
+        pubtator_client=pubtator_client,
+        embedding_provider=embedding_provider,
+    )
+
+    status = await service.prepare_pmid(review_id="review-1", pmid="40234174")
+
+    assert status == "complete"
+    assert [passage.passage_id for passage in repository.passages] == [
+        "PMID:40234174:abstract:0"
+    ]
+    assert repository.embedding_records == []
+    assert repository.attempts[-1]["status"] == "success"
 
 
 @pytest.mark.asyncio
