@@ -192,6 +192,11 @@ claude mcp add --transport http pubtator-link http://127.0.0.1:8000/mcp
 
 For hosted deployments, configure remote MCP clients with `https://your-domain.example/mcp`. Public deployments should be protected by OAuth or an authenticated reverse proxy.
 
+The default MCP profile is `lean`, which exposes the core research and review
+workflow with a smaller tool surface. Set `PUBTATOR_LINK_MCP_PROFILE=full` for
+advanced and compatibility tools, or `PUBTATOR_LINK_MCP_PROFILE=readonly` for
+hosted research deployments that should not expose write/export operations.
+
 ### Available MCP Tools
 
 | Tool | Use When |
@@ -209,8 +214,8 @@ For hosted deployments, configure remote MCP clients with `https://your-domain.e
 | `pubtator.get_publication_passages` | Fetch compact citable passages for PubMed IDs |
 | `pubtator.estimate_publication_context` | Estimate compact publication context before fetching |
 | `pubtator.inspect_review_index` | Inspect indexed PMIDs, sections, counts, failures, and useful samples with `min_sample_chars=80` |
-| `pubtator.retrieve_review_context` | Retrieve compact context from prepared review passages |
-| `pubtator.retrieve_review_context_batch` | Try multiple review retrieval queries and merge context |
+| `pubtator.retrieve_review_context_batch` | Preferred review retrieval path; try multiple queries and merge compact citable context |
+| `pubtator.record_review_context` | Persist durable review decisions, selected evidence IDs, and next-step state without article text |
 | `pubtator.stage_research_session` | Stage query or PMID candidates with coverage hints and queued review preparation |
 | `pubtator.get_research_session_status` | Poll staged candidate and preparation status |
 | `pubtator.list_research_sessions` | List staged sessions for a review ID |
@@ -230,6 +235,15 @@ citable passages plus per-query summaries. Use `response_mode="diagnostics"` to
 refine queries without passage text, `response_mode="merged_only"` for the
 smallest citable response, and `response_mode="full"` only when full per-query
 passage packs are intentionally needed.
+
+Prefer MCP resources for follow-up reads after retrieval instead of rerunning
+tools: `pubtator://reviews/{review_id}`,
+`pubtator://reviews/{review_id}/sessions/{session_id}`,
+`pubtator://reviews/{review_id}/passages/{passage_id}`,
+`pubtator://reviews/{review_id}/audit/{passage_id}`, and
+`pubtator://reviews/{review_id}/llm-context/latest`. Use
+`pubtator.record_review_context` to persist selected PMIDs/passages, open
+questions, user decisions, and next commands for later resume.
 
 Search defaults are compact for LLM use: `response_mode="compact"`,
 `include_citations="none"`, `text_hl_format="plain"`, and MCP coverage

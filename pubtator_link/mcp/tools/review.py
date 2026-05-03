@@ -384,7 +384,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         dry_run: bool = False,
         ctx: Context | None = None,
     ) -> dict[str, Any]:
-        """Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs. Call this before retrieve_review_context, use session_id to scope staged research sessions, set wait_until_ready for small corpora, and inspect preparation_status before retrieval."""
+        """Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs. Call this before retrieve_review_context_batch, use session_id to scope staged research sessions, set wait_until_ready for small corpora, and inspect preparation_status before retrieval."""
 
         async def call() -> dict[str, Any]:
             queue = await get_review_queue()

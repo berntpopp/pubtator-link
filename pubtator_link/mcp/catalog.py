@@ -287,9 +287,9 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         profiles=("lean", "full"),
         stability="lean",
         do_not_use_for=("retrieving passages",),
-        example='{"review_id":"demo","passage_ids":["p1"],"note":"used in answer"}',
+        example='{"review_id":"demo","event_type":"passage_selected","passage_ids":["p1"],"selected_passage_ids":["p1"],"summary":"used in answer"}',
         next_tools=("pubtator.get_review_audit_trail",),
-        resource_links=("pubtator://reviews/{review_id}/audit",),
+        resource_links=("pubtator://reviews/{review_id}/llm-context/latest",),
     ),
     "pubtator.retrieve_review_context": ToolCatalogSupplement(
         category="retrieval",

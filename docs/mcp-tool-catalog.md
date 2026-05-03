@@ -276,7 +276,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `review`
 - Profiles: `lean`, `full`
 - Stability: `lean`
-- Description: Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs. Call this before retrieve_review_context, use session_id to scope staged research sessions, set wait_until_ready for small corpora, and inspect preparation_status before retrieval.
+- Description: Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs. Call this before retrieve_review_context_batch, use session_id to scope staged research sessions, set wait_until_ready for small corpora, and inspect preparation_status before retrieval.
 - Do not use for: `ad hoc passage retrieval without a review_id`
 - Example: `{"review_id":"demo","pmids":["12345"],"wait_until_ready":true}`
 - Next tools by profile: lean: `pubtator.inspect_review_index`, `pubtator.retrieve_review_context_batch`; full: `pubtator.inspect_review_index`, `pubtator.retrieve_review_context_batch`
@@ -402,11 +402,11 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `audit`
 - Profiles: `lean`, `full`
 - Stability: `lean`
-- Description: Use this when a user needs to record selected review passage IDs used as context in a research answer.
+- Description: Use this when a user needs to persist compact LLM review context, selected evidence IDs, decisions, or next-step state without storing article text.
 - Do not use for: `retrieving passages`
-- Example: `{"review_id":"demo","passage_ids":["p1"],"note":"used in answer"}`
+- Example: `{"review_id":"demo","event_type":"passage_selected","passage_ids":["p1"],"selected_passage_ids":["p1"],"summary":"used in answer"}`
 - Next tools by profile: lean: `pubtator.get_review_audit_trail`; full: `pubtator.get_review_audit_trail`
-- Resource links: `pubtator://reviews/{review_id}/audit`
+- Resource links: `pubtator://reviews/{review_id}/llm-context/latest`
 - Output schema: `RecordReviewContextResponse`; has_output_schema: `yes`
 
 ## `pubtator.retrieve_review_context`

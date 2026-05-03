@@ -9,6 +9,12 @@ PubTator-Link exposes a curated research-use MCP surface for biomedical literatu
 
 PubTator-Link tools are research-oriented and must not be used for diagnosis, treatment, triage, patient management, or clinical decision support.
 
+The MCP server defaults to `PUBTATOR_LINK_MCP_PROFILE=lean`. Use
+`PUBTATOR_LINK_MCP_PROFILE=full` for advanced and compatibility tools such as
+single-query review retrieval, quickstart, exports, and maintenance views. Use
+`PUBTATOR_LINK_MCP_PROFILE=readonly` for hosted research deployments that should
+allow read-only discovery and retrieval while excluding write/export tools.
+
 ## Start The Server
 
 ```bash
@@ -59,19 +65,18 @@ the final corpus.
 
 Recommended review workflow:
 
-For casual review setup, call `pubtator.review_quickstart` with `topic` and
-`n_pmids` first. It searches, stages/indexes the selected PMIDs, inspects the
-review index, and returns `review_id`, `session_id`, `coverage_summary`, and
-`ready_to_retrieve` so the next call can go straight to
-`pubtator.retrieve_review_context_batch` when passages are ready.
+In the default lean profile, build a review with search/preflight/index/inspect,
+then retrieve with `pubtator.retrieve_review_context_batch`. In the full
+profile, `pubtator.review_quickstart` is available for casual one-shot setup.
 
 1. `pubtator.search_literature` to find candidate PMIDs.
 2. `pubtator.preflight_review_sources` to estimate full-text, abstract, and fallback coverage.
 3. `pubtator.index_review_evidence` with a stable `review_id`.
 4. `pubtator.inspect_review_index` to verify PMIDs, sections, source coverage, counts, resolver attempts, and failures.
-5. `pubtator.retrieve_review_context` or `pubtator.retrieve_review_context_batch` for compact citable passages.
-6. `pubtator.get_review_passages_by_id` or `pubtator.get_neighboring_review_passages` to re-fetch cited passages or local context.
-7. `pubtator.export_review_audit_bundle` before synthesis/reporting to capture passage IDs, source coverage, resolver attempts, and stable citation keys.
+5. `pubtator.retrieve_review_context_batch` for compact citable passages across query variants.
+6. MCP resources such as `pubtator://reviews/{review_id}/passages/{passage_id}` and `pubtator://reviews/{review_id}/audit/{passage_id}` to re-fetch cited passages, local context, or audit blocks.
+7. `pubtator.record_review_context` to persist selected evidence IDs, decisions, open questions, and next commands without storing article text.
+8. In the full profile, `pubtator.export_review_audit_bundle` before synthesis/reporting to capture passage IDs, source coverage, resolver attempts, and stable citation keys.
 
 Use `pubtator.fetch_publication_annotations` with `full=true` only when raw BioC is intentionally needed. Compact passage tools are safer for routine grounding. The full research-use limitation is exposed once in `pubtator.get_server_capabilities` and `pubtator://research-use`.
 
@@ -183,11 +188,11 @@ Use stdio only for local desktop workflows that cannot connect to HTTP MCP endpo
 | `pubtator.preflight_review_sources` | Estimate source coverage and fallback availability before indexing |
 | `pubtator.index_review_evidence` | Queue review-scoped evidence preparation |
 | `pubtator.inspect_review_index` | Flat-argument review index/source coverage inspection |
-| `pubtator.retrieve_review_context` | Flat-argument compact context from prepared review passages |
-| `pubtator.retrieve_review_context_batch` | Flat-argument batch review retrieval with compact/default diagnostics |
+| `pubtator.retrieve_review_context_batch` | Preferred flat-argument batch review retrieval with compact/default diagnostics |
 | `pubtator.get_review_passages_by_id` | Retrieve exact prepared review passages by stable passage ID |
 | `pubtator.get_neighboring_review_passages` | Retrieve local prepared context around a stable passage ID |
 | `pubtator.export_review_audit_bundle` | Export review audit metadata, passage IDs, and stable citation keys |
+| `pubtator.record_review_context` | Persist durable review decisions and selected evidence IDs |
 | `pubtator.get_server_capabilities` | Discover formats, bioconcepts, relation types, and limitations |
 
 ### LLM Driver Ergonomics
@@ -203,6 +208,12 @@ fields an LLM should inspect:
   retrieval confidence,
 - `merged_context_pack.dropped_summary` for reason counts and suggested filters,
 - `pubtator.get_review_audit_trail` for copy-ready selected-passage audit blocks.
+- Review resources such as `pubtator://reviews/{review_id}`,
+  `pubtator://reviews/{review_id}/sessions/{session_id}`,
+  `pubtator://reviews/{review_id}/passages/{passage_id}`,
+  `pubtator://reviews/{review_id}/audit/{passage_id}`, and
+  `pubtator://reviews/{review_id}/llm-context/latest` for compact follow-up
+  reads without rerunning retrieval.
 
 ## Verification
 

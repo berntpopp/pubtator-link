@@ -66,6 +66,10 @@ source or documentation:
 | Container scan and SBOM | Shipped but non-blocking | Trivy workflow creates artifacts with `exit-code: "0"` |
 | Release validation workflow | Shipped validation only | tag workflow builds and validates, but does not publish/sign |
 | MCP capability discovery cleanup | Shipped | slim default `get_server_capabilities`, opt-in details, preferred tool-name policy |
+| Lean/read-only MCP profiles | Shipped | default lean profile, full compatibility profile, and readonly hosted profile |
+| MCP resource templates | Shipped | review, session, passage, audit, LLM-context, and tool-detail resources |
+| Runtime MCP tool catalog | Shipped | generated `docs/mcp-tool-catalog.md` from registered tool metadata |
+| Durable LLM review context | Shipped foundation | `record_review_context` and `pubtator://reviews/{review_id}/llm-context/latest` |
 | Read-only literature discovery | Shipped | `search_literature` defaults to `coverage="none"` with review-index handoff guidance |
 | Recent MCP failure diagnostics | Shipped | bounded recent-error recorder and degraded diagnostics for review-tool failures |
 | LLM input normalization | Shipped at adapter boundary | query/limit aliases, singleton lists, enum casing, and structured field errors |
@@ -159,10 +163,11 @@ Exit criteria:
 
 ### P1: MCP Protocol Modernity And Agent UX
 
-**6. Add MCP resource templates.**
+**6. Add MCP resource templates.** Shipped foundation; remaining work is richer
+not-found/error shaping and any client-specific UX polish.
 
-Current MCP resources are static. Parameterized resources would let clients
-render review summaries, passage previews, and tool docs without running tools.
+Parameterized resources now let clients render review summaries, passage
+previews, audit blocks, LLM context, and tool docs without rerunning tools.
 
 Recommended templates:
 
@@ -255,7 +260,8 @@ Exit criteria:
 
 ### P1: Runtime Docs And Contract Drift
 
-**13. Generate an MCP tool catalog from runtime registration.**
+**13. Generate an MCP tool catalog from runtime registration.** Shipped
+foundation; remaining work is adding a CI freshness gate if desired.
 
 The tool surface is large enough that static docs will drift. Generate a compact
 catalog from the actual registered MCP tools, schemas, annotations, and resource
