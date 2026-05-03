@@ -12,10 +12,14 @@ from pubtator_link.models.review_rerag import (
     FailedSourceSummary,
     PreparationEnqueueResult,
     PreparationStatus,
+    RecordReviewContextRequest,
+    RecordReviewContextResponse,
     ResearchSessionCandidate,
     ResearchSessionManifest,
     ReviewIndexInventoryItem,
     ReviewIndexTotals,
+    ReviewLlmContext,
+    ReviewLlmContextEvent,
     ReviewPassageRow,
     ReviewPassageSample,
     ReviewSourceSummary,
@@ -48,6 +52,63 @@ def _sample_warning(
     if samples and all(sample.char_count < min_sample_chars for sample in samples):
         return SHORT_SAMPLE_WARNING
     return None
+
+
+def _json_value(value: Any, fallback: Any) -> Any:
+    if value is None:
+        return fallback
+    if isinstance(value, str):
+        return json.loads(value)
+    return value
+
+
+def _llm_context_from_row(row: Mapping[str, Any]) -> ReviewLlmContext:
+    return ReviewLlmContext(
+        context_id=str(row["context_id"]),
+        review_id=str(row["review_id"]),
+        session_id=row["session_id"],
+        kind=row["kind"],
+        topic=row["topic"],
+        research_question=row["research_question"],
+        question_hash=row["question_hash"],
+        request=_json_value(row["request"], {}),
+        response_summary=_json_value(row["response_summary"], {}),
+        selected_pmids=list(row["selected_pmids"] or []),
+        rejected_pmids=list(row["rejected_pmids"] or []),
+        preferred_entity_ids=list(row["preferred_entity_ids"] or []),
+        active_queries=list(row["active_queries"] or []),
+        successful_queries=list(row["successful_queries"] or []),
+        failed_queries=list(row["failed_queries"] or []),
+        selected_passage_ids=list(row["selected_passage_ids"] or []),
+        audit_passage_ids=list(row["audit_passage_ids"] or []),
+        open_questions=_json_value(row["open_questions"], []),
+        user_decisions=_json_value(row["user_decisions"], []),
+        last_next_commands=_json_value(row["last_next_commands"], []),
+        stable_citation_keys=_json_value(row["stable_citation_keys"], {}),
+        cache_key=row["cache_key"],
+        token_estimate=row["token_estimate"],
+        created_by=row["created_by"],
+        created_at=str(row["created_at"]),
+        updated_at=str(row["updated_at"]),
+    )
+
+
+def _llm_context_event_from_row(row: Mapping[str, Any]) -> ReviewLlmContextEvent:
+    return ReviewLlmContextEvent(
+        event_id=str(row["event_id"]),
+        context_id=str(row["context_id"]) if row["context_id"] is not None else None,
+        review_id=str(row["review_id"]),
+        session_id=row["session_id"],
+        event_type=row["event_type"],
+        summary=row["summary"],
+        pmids=list(row["pmids"] or []),
+        passage_ids=list(row["passage_ids"] or []),
+        queries=list(row["queries"] or []),
+        decision=_json_value(row["decision"], None),
+        payload=_json_value(row["payload"], {}),
+        created_by=row["created_by"],
+        created_at=str(row["created_at"]),
+    )
 
 
 class ReviewReragRepository(Protocol):
@@ -188,6 +249,16 @@ class ReviewReragRepository(Protocol):
         self, review_id: str, *, limit: int | None = None
     ) -> list[Mapping[str, object]]:
         """Return append-only review audit events."""
+
+    async def record_llm_context_event(
+        self, review_id: str, request: RecordReviewContextRequest
+    ) -> RecordReviewContextResponse:
+        """Persist a compact LLM context snapshot and append-only context event."""
+
+    async def get_latest_llm_context(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> ReviewLlmContext | None:
+        """Return the latest durable LLM context snapshot for a review."""
 
     async def list_review_indexes(
         self,
@@ -1405,6 +1476,137 @@ class PostgresReviewReragRepository:
             for row in rows
         ]
 
+    async def record_llm_context_event(
+        self, review_id: str, request: RecordReviewContextRequest
+    ) -> RecordReviewContextResponse:
+        async with self._acquire() as connection, connection.transaction():
+            await connection.execute(
+                """
+                insert into reviews (review_id)
+                values ($1)
+                on conflict (review_id) do update
+                set updated_at = now()
+                """,
+                review_id,
+            )
+            context_row = await connection.fetchrow(
+                """
+                insert into review_llm_context (
+                    review_id,
+                    session_id,
+                    kind,
+                    topic,
+                    research_question,
+                    question_hash,
+                    request,
+                    response_summary,
+                    selected_pmids,
+                    rejected_pmids,
+                    preferred_entity_ids,
+                    active_queries,
+                    successful_queries,
+                    failed_queries,
+                    selected_passage_ids,
+                    audit_passage_ids,
+                    open_questions,
+                    user_decisions,
+                    last_next_commands,
+                    stable_citation_keys,
+                    cache_key,
+                    token_estimate,
+                    created_by
+                )
+                values (
+                    $1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb,
+                    $9, $10, $11, $12, $13, $14, $15, $16,
+                    $17::jsonb, $18::jsonb, $19::jsonb, $20::jsonb,
+                    $21, $22, $23
+                )
+                returning *
+                """,
+                review_id,
+                request.session_id,
+                request.kind,
+                request.topic,
+                request.research_question,
+                request.question_hash,
+                json.dumps(request.request, sort_keys=True),
+                json.dumps(request.response_summary, sort_keys=True),
+                request.selected_pmids,
+                request.rejected_pmids,
+                request.preferred_entity_ids,
+                request.active_queries,
+                request.successful_queries,
+                request.failed_queries,
+                request.selected_passage_ids,
+                request.audit_passage_ids,
+                json.dumps(request.open_questions, sort_keys=True),
+                json.dumps(request.user_decisions, sort_keys=True),
+                json.dumps(request.last_next_commands, sort_keys=True),
+                json.dumps(request.stable_citation_keys, sort_keys=True),
+                request.cache_key,
+                request.token_estimate,
+                request.created_by,
+            )
+            event_row = await connection.fetchrow(
+                """
+                insert into review_llm_context_events (
+                    context_id,
+                    review_id,
+                    session_id,
+                    event_type,
+                    summary,
+                    pmids,
+                    passage_ids,
+                    queries,
+                    decision,
+                    payload,
+                    created_by
+                )
+                values (
+                    $1::uuid, $2, $3, $4, $5, $6, $7, $8,
+                    $9::jsonb, $10::jsonb, $11
+                )
+                returning *
+                """,
+                context_row["context_id"],
+                review_id,
+                request.session_id,
+                request.event_type,
+                request.summary,
+                request.pmids,
+                request.passage_ids,
+                request.queries,
+                json.dumps(request.decision, sort_keys=True)
+                if request.decision is not None
+                else None,
+                json.dumps(request.payload, sort_keys=True),
+                request.created_by,
+            )
+            await self._touch_review_on_connection(connection, review_id)
+        return RecordReviewContextResponse(
+            context=_llm_context_from_row(context_row),
+            event=_llm_context_event_from_row(event_row),
+        )
+
+    async def get_latest_llm_context(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> ReviewLlmContext | None:
+        async with self._acquire() as connection:
+            row = await connection.fetchrow(
+                """
+                select *
+                from review_llm_context
+                where review_id = $1
+                  and ($2::text is null or session_id = $2)
+                order by updated_at desc, created_at desc
+                limit 1
+                """,
+                review_id,
+                session_id,
+            )
+        return _llm_context_from_row(row) if row is not None else None
+
     async def list_review_indexes(
         self,
         *,
@@ -1452,6 +1654,14 @@ class PostgresReviewReragRepository:
             )
             await connection.execute(
                 "delete from review_audit_events where review_id = $1", review_id
+            )
+            await connection.execute(
+                "delete from review_llm_context_events where review_id = $1",
+                review_id,
+            )
+            await connection.execute(
+                "delete from review_llm_context where review_id = $1",
+                review_id,
             )
             await connection.execute(
                 "delete from review_evidence_certainty where review_id = $1",

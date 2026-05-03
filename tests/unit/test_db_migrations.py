@@ -15,6 +15,7 @@ def test_migration_files_are_ordered_and_include_repair_migration() -> None:
         "0001_review_schema_base.sql",
         "0002_review_schema_drift_repair.sql",
         "0003_review_session_sources_repair.sql",
+        "0004_review_llm_context.sql",
     ]
     assert MIGRATIONS_PACKAGE == "pubtator_link.db.migrations"
 
@@ -47,6 +48,11 @@ def test_required_schema_items_include_review_tables_and_columns() -> None:
     assert "review_research_session_candidates" in required.tables
     assert "review_session_sources" in required.tables
     assert "review_evidence_certainty" in required.tables
+    assert "review_llm_context" in required.tables
+    assert "review_llm_context_events" in required.tables
+    assert ("review_llm_context", "context_id") in required.columns
+    assert ("review_llm_context", "response_summary") in required.columns
+    assert ("review_llm_context_events", "payload") in required.columns
 
 
 def test_schema_repair_statements_are_non_destructive() -> None:

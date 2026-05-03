@@ -46,6 +46,19 @@ def test_schema_defines_review_audit_events_table() -> None:
     assert "review_audit_events_review_id_idx" in SCHEMA
 
 
+def test_review_llm_context_tables_are_declared() -> None:
+    schema = Path("pubtator_link/db/review_schema.sql").read_text()
+    assert "CREATE TABLE IF NOT EXISTS review_llm_context" in schema
+    assert "CREATE TABLE IF NOT EXISTS review_llm_context_events" in schema
+    assert "CREATE INDEX IF NOT EXISTS idx_review_llm_context_events_review" in schema
+    assert "review_id TEXT NOT NULL REFERENCES reviews(review_id)" in schema
+    assert "UNIQUE (context_id, review_id)" in schema
+    assert (
+        "FOREIGN KEY (context_id, review_id)\n"
+        "        REFERENCES review_llm_context(context_id, review_id)"
+    ) in schema
+
+
 def test_schema_defines_research_session_tables() -> None:
     assert "create table if not exists review_research_sessions" in SCHEMA
     assert "create table if not exists review_research_session_candidates" in SCHEMA
@@ -71,6 +84,58 @@ def test_schema_diagnostics_require_review_session_source_links() -> None:
     required = required_review_schema_items()
 
     assert "review_session_sources" in required.tables
+
+
+def test_schema_diagnostics_require_review_llm_context_columns() -> None:
+    required = required_review_schema_items()
+
+    context_columns = {
+        "context_id",
+        "review_id",
+        "session_id",
+        "kind",
+        "topic",
+        "research_question",
+        "question_hash",
+        "request",
+        "response_summary",
+        "selected_pmids",
+        "rejected_pmids",
+        "preferred_entity_ids",
+        "active_queries",
+        "successful_queries",
+        "failed_queries",
+        "selected_passage_ids",
+        "audit_passage_ids",
+        "open_questions",
+        "user_decisions",
+        "last_next_commands",
+        "stable_citation_keys",
+        "cache_key",
+        "token_estimate",
+        "created_by",
+        "created_at",
+        "updated_at",
+    }
+    event_columns = {
+        "event_id",
+        "context_id",
+        "review_id",
+        "session_id",
+        "event_type",
+        "summary",
+        "pmids",
+        "passage_ids",
+        "queries",
+        "decision",
+        "payload",
+        "created_by",
+        "created_at",
+    }
+    for column in context_columns:
+        assert ("review_llm_context", column) in required.columns
+    for column in event_columns:
+        assert ("review_llm_context_events", column) in required.columns
 
 
 def test_schema_tracks_review_inventory_timestamps() -> None:

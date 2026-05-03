@@ -90,6 +90,21 @@ ResearchSessionDecisionReason = Literal[
     "already_indexed",
     "queue_rejected",
 ]
+ReviewLlmContextKind = Literal["retrieval_context"]
+ReviewLlmContextEventType = Literal[
+    "context_created",
+    "session_selected",
+    "pmids_selected",
+    "pmids_rejected",
+    "query_succeeded",
+    "query_failed",
+    "passage_selected",
+    "audit_passage_selected",
+    "question_opened",
+    "decision_recorded",
+    "next_commands_recorded",
+    "context_summarized",
+]
 
 
 class McpToolKind(StrEnum):
@@ -737,6 +752,95 @@ class ReviewRetrievalRun(BaseModel):
     queries: list[str]
     passage_ids: list[str] = Field(default_factory=list)
     created_at: str | None = None
+
+
+class ReviewLlmContext(BaseModel):
+    """Compact durable context snapshot for LLM review resume."""
+
+    context_id: str
+    review_id: str
+    session_id: str | None = None
+    kind: ReviewLlmContextKind = "retrieval_context"
+    topic: str | None = Field(default=None, max_length=500)
+    research_question: str | None = Field(default=None, max_length=1000)
+    question_hash: str | None = Field(default=None, max_length=128)
+    request: dict[str, Any] = Field(default_factory=dict, max_length=40)
+    response_summary: dict[str, Any] = Field(default_factory=dict, max_length=40)
+    selected_pmids: list[str] = Field(default_factory=list, max_length=200)
+    rejected_pmids: list[str] = Field(default_factory=list, max_length=200)
+    preferred_entity_ids: list[str] = Field(default_factory=list, max_length=200)
+    active_queries: list[str] = Field(default_factory=list, max_length=50)
+    successful_queries: list[str] = Field(default_factory=list, max_length=100)
+    failed_queries: list[str] = Field(default_factory=list, max_length=100)
+    selected_passage_ids: list[str] = Field(default_factory=list, max_length=500)
+    audit_passage_ids: list[str] = Field(default_factory=list, max_length=500)
+    open_questions: list[dict[str, Any]] = Field(default_factory=list, max_length=50)
+    user_decisions: list[dict[str, Any]] = Field(default_factory=list, max_length=100)
+    last_next_commands: list[dict[str, Any]] = Field(default_factory=list, max_length=20)
+    stable_citation_keys: dict[str, str] = Field(default_factory=dict, max_length=500)
+    cache_key: str | None = Field(default=None, max_length=500)
+    token_estimate: int | None = Field(default=None, ge=0)
+    created_by: str | None = Field(default=None, max_length=200)
+    created_at: str
+    updated_at: str
+
+
+class ReviewLlmContextEvent(BaseModel):
+    """Append-only LLM context event with compact evidence references."""
+
+    event_id: str
+    context_id: str | None = None
+    review_id: str
+    session_id: str | None = None
+    event_type: ReviewLlmContextEventType
+    summary: str | None = Field(default=None, max_length=4000)
+    pmids: list[str] = Field(default_factory=list, max_length=200)
+    passage_ids: list[str] = Field(default_factory=list, max_length=500)
+    queries: list[str] = Field(default_factory=list, max_length=100)
+    decision: dict[str, Any] | None = Field(default=None, max_length=40)
+    payload: dict[str, Any] = Field(default_factory=dict, max_length=40)
+    created_by: str | None = Field(default=None, max_length=200)
+    created_at: str
+
+
+class RecordReviewContextRequest(BaseModel):
+    """Request to persist compact LLM context without article text."""
+
+    session_id: str | None = Field(default=None, min_length=1, max_length=200)
+    kind: ReviewLlmContextKind = "retrieval_context"
+    topic: str | None = Field(default=None, max_length=500)
+    research_question: str | None = Field(default=None, max_length=1000)
+    question_hash: str | None = Field(default=None, max_length=128)
+    request: dict[str, Any] = Field(default_factory=dict, max_length=40)
+    response_summary: dict[str, Any] = Field(default_factory=dict, max_length=40)
+    selected_pmids: list[str] = Field(default_factory=list, max_length=200)
+    rejected_pmids: list[str] = Field(default_factory=list, max_length=200)
+    preferred_entity_ids: list[str] = Field(default_factory=list, max_length=200)
+    active_queries: list[str] = Field(default_factory=list, max_length=50)
+    successful_queries: list[str] = Field(default_factory=list, max_length=100)
+    failed_queries: list[str] = Field(default_factory=list, max_length=100)
+    selected_passage_ids: list[str] = Field(default_factory=list, max_length=500)
+    audit_passage_ids: list[str] = Field(default_factory=list, max_length=500)
+    open_questions: list[dict[str, Any]] = Field(default_factory=list, max_length=50)
+    user_decisions: list[dict[str, Any]] = Field(default_factory=list, max_length=100)
+    last_next_commands: list[dict[str, Any]] = Field(default_factory=list, max_length=20)
+    stable_citation_keys: dict[str, str] = Field(default_factory=dict, max_length=500)
+    cache_key: str | None = Field(default=None, max_length=500)
+    token_estimate: int | None = Field(default=None, ge=0)
+    event_type: ReviewLlmContextEventType
+    summary: str | None = Field(default=None, max_length=4000)
+    pmids: list[str] = Field(default_factory=list, max_length=200)
+    passage_ids: list[str] = Field(default_factory=list, max_length=500)
+    queries: list[str] = Field(default_factory=list, max_length=100)
+    decision: dict[str, Any] | None = Field(default=None, max_length=40)
+    payload: dict[str, Any] = Field(default_factory=dict, max_length=40)
+    created_by: str | None = Field(default=None, max_length=200)
+
+
+class RecordReviewContextResponse(BaseModel):
+    success: bool = True
+    context: ReviewLlmContext
+    event: ReviewLlmContextEvent
 
 
 class ReviewAuditBundle(BaseModel):

@@ -7,6 +7,7 @@ import pytest
 from pubtator_link.models.review_rerag import (
     FailedSourceSummary,
     PreparationStatus,
+    RecordReviewContextRequest,
     ResearchSessionCandidate,
     ReviewIndexInventoryItem,
     ReviewIndexTotals,
@@ -1124,11 +1125,148 @@ async def test_delete_review_index_deletes_children_before_review() -> None:
     assert "delete from review_research_session_candidates" in statements[0]
     assert "delete from review_research_sessions" in statements[1]
     assert "delete from review_audit_events" in statements[2]
-    assert "delete from review_evidence_certainty" in statements[3]
-    assert "delete from full_text_retrieval_attempts" in statements[4]
-    assert "delete from review_passages" in statements[5]
-    assert "delete from review_preparation_jobs" in statements[6]
-    assert "delete from reviews" in statements[7]
+    assert "delete from review_llm_context_events" in statements[3]
+    assert "delete from review_llm_context" in statements[4]
+    assert "delete from review_evidence_certainty" in statements[5]
+    assert "delete from full_text_retrieval_attempts" in statements[6]
+    assert "delete from review_passages" in statements[7]
+    assert "delete from review_preparation_jobs" in statements[8]
+    assert "delete from reviews" in statements[9]
+
+
+@pytest.mark.asyncio
+async def test_record_llm_context_event_inserts_snapshot_and_event_in_transaction() -> None:
+    connection = FakeConnection()
+    connection.fetchrow_rows = [
+        {
+            "context_id": "00000000-0000-0000-0000-000000000001",
+            "review_id": "review-1",
+            "session_id": "session-1",
+            "kind": "retrieval_context",
+            "topic": "MEFV therapy",
+            "research_question": "Does colchicine prevent FMF flares?",
+            "question_hash": None,
+            "request": {"tool": "retrieve_review_context"},
+            "response_summary": {"answer_summary": "Colchicine reduced flare frequency."},
+            "selected_pmids": ["40234174"],
+            "rejected_pmids": [],
+            "preferred_entity_ids": [],
+            "active_queries": [],
+            "successful_queries": ["MEFV colchicine"],
+            "failed_queries": [],
+            "selected_passage_ids": ["PMID:40234174:abstract:0"],
+            "audit_passage_ids": ["PMID:40234174:abstract:0"],
+            "open_questions": [{"question": "Dose response?"}],
+            "user_decisions": [{"decision": "include"}],
+            "last_next_commands": [{"tool": "pubtator.retrieve_review_context"}],
+            "stable_citation_keys": {"PMID:40234174:abstract:0": "PMID:40234174"},
+            "cache_key": "review-1:session-1",
+            "token_estimate": 1200,
+            "created_by": "agent",
+            "created_at": "2026-05-03T00:00:00Z",
+            "updated_at": "2026-05-03T00:01:00Z",
+        },
+        {
+            "event_id": "00000000-0000-0000-0000-000000000002",
+            "context_id": "00000000-0000-0000-0000-000000000001",
+            "review_id": "review-1",
+            "session_id": "session-1",
+            "event_type": "decision_recorded",
+            "summary": "User selected the key abstract passage.",
+            "pmids": ["40234174"],
+            "passage_ids": ["PMID:40234174:abstract:0"],
+            "queries": ["MEFV colchicine"],
+            "decision": {"decision": "include"},
+            "payload": {"source": "unit-test"},
+            "created_by": "agent",
+            "created_at": "2026-05-03T00:01:00Z",
+        },
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    response = await repository.record_llm_context_event(
+        "review-1",
+        RecordReviewContextRequest(
+            session_id="session-1",
+            topic="MEFV therapy",
+            research_question="Does colchicine prevent FMF flares?",
+            event_type="decision_recorded",
+            summary="User selected the key abstract passage.",
+            request={"tool": "retrieve_review_context"},
+            response_summary={"answer_summary": "Colchicine reduced flare frequency."},
+            selected_pmids=["40234174"],
+            successful_queries=["MEFV colchicine"],
+            selected_passage_ids=["PMID:40234174:abstract:0"],
+            audit_passage_ids=["PMID:40234174:abstract:0"],
+            open_questions=[{"question": "Dose response?"}],
+            user_decisions=[{"decision": "include"}],
+            last_next_commands=[{"tool": "pubtator.retrieve_review_context"}],
+            stable_citation_keys={"PMID:40234174:abstract:0": "PMID:40234174"},
+            cache_key="review-1:session-1",
+            token_estimate=1200,
+            pmids=["40234174"],
+            passage_ids=["PMID:40234174:abstract:0"],
+            queries=["MEFV colchicine"],
+            decision={"decision": "include"},
+            payload={"source": "unit-test"},
+            created_by="agent",
+        ),
+    )
+
+    assert response.context.context_id == "00000000-0000-0000-0000-000000000001"
+    assert response.event.event_type == "decision_recorded"
+    assert connection.transaction_calls == [{}]
+    statements = [sql.lower() for sql, _args in connection.executed]
+    assert "insert into reviews" in statements[0]
+    assert "insert into review_llm_context" in statements[1]
+    assert "insert into review_llm_context_events" in statements[2]
+    assert "update reviews" in statements[3]
+
+
+@pytest.mark.asyncio
+async def test_get_latest_llm_context_filters_by_optional_session() -> None:
+    connection = FakeConnection()
+    connection.fetchrow_rows = [
+        {
+            "context_id": "00000000-0000-0000-0000-000000000001",
+            "review_id": "review-1",
+            "session_id": "session-1",
+            "kind": "retrieval_context",
+            "topic": "MEFV therapy",
+            "research_question": None,
+            "question_hash": None,
+            "request": {},
+            "response_summary": {"answer_summary": "Compact only."},
+            "selected_pmids": ["40234174"],
+            "rejected_pmids": [],
+            "preferred_entity_ids": [],
+            "active_queries": [],
+            "successful_queries": [],
+            "failed_queries": [],
+            "selected_passage_ids": ["PMID:40234174:abstract:0"],
+            "audit_passage_ids": [],
+            "open_questions": [],
+            "user_decisions": [],
+            "last_next_commands": [],
+            "stable_citation_keys": {},
+            "cache_key": None,
+            "token_estimate": 300,
+            "created_by": None,
+            "created_at": "2026-05-03T00:00:00Z",
+            "updated_at": "2026-05-03T00:01:00Z",
+        }
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    context = await repository.get_latest_llm_context("review-1", session_id="session-1")
+
+    assert context is not None
+    assert context.session_id == "session-1"
+    assert context.response_summary == {"answer_summary": "Compact only."}
+    sql, args = connection.executed[0]
+    assert "from review_llm_context" in sql.lower()
+    assert "order by updated_at desc" in sql.lower()
+    assert args == ("review-1", "session-1")
 
 
 @pytest.mark.asyncio

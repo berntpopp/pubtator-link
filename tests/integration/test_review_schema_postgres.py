@@ -36,7 +36,9 @@ async def test_review_schema_applies_to_postgres() -> None:
                 'reviews',
                 'review_preparation_jobs',
                 'full_text_retrieval_attempts',
-                'review_passages'
+                'review_passages',
+                'review_llm_context',
+                'review_llm_context_events'
               )
             """
         )
@@ -48,6 +50,8 @@ async def test_review_schema_applies_to_postgres() -> None:
         "review_preparation_jobs",
         "full_text_retrieval_attempts",
         "review_passages",
+        "review_llm_context",
+        "review_llm_context_events",
     }
 
 
