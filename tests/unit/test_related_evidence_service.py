@@ -341,7 +341,7 @@ async def test_related_evidence_enriches_match_reasons_for_intents_and_access() 
 
 
 @pytest.mark.asyncio
-async def test_metadata_full_text_pmc_candidate_emits_open_access_reason() -> None:
+async def test_metadata_full_text_pmc_candidate_does_not_imply_open_access_reason() -> None:
     service = RelatedEvidenceService(
         discovery_service=IntentDiscovery(),
         metadata_service=IntentMetadata(),
@@ -358,4 +358,6 @@ async def test_metadata_full_text_pmc_candidate_emits_open_access_reason() -> No
 
     reasons = set(response.candidates[0].match_reasons)
     assert "full_text_available" in reasons
-    assert "open_access_available" in reasons
+    assert "open_access_available" not in reasons
+    assert response.candidates[0].paper.availability.has_pmc_full_text is True
+    assert response.candidates[0].paper.availability.is_open_access is False

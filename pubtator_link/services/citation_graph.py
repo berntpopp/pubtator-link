@@ -30,6 +30,7 @@ from pubtator_link.services.literature_identifier_resolution import (
     DoiPmidResolver,
     DoiResolutionResult,
 )
+from pubtator_link.services.literature_paper_resolution import paper_from_publication_metadata
 from pubtator_link.services.literature_providers import (
     CROSSREF_PROVIDER,
     EUROPE_PMC_PROVIDER,
@@ -370,15 +371,7 @@ class CitationGraphService:
             if request.resolve_metadata:
                 metadata = await self._metadata_for_pmid(request.pmid)
                 if metadata is not None:
-                    return LiteraturePaper(
-                        pmid=metadata.pmid,
-                        doi=metadata.doi,
-                        pmcid=metadata.pmcid,
-                        title=metadata.title,
-                        journal=metadata.journal,
-                        year=metadata.pub_year,
-                        publication_types=metadata.publication_types,
-                    )
+                    return paper_from_publication_metadata(metadata)
             return LiteraturePaper(pmid=request.pmid)
         if request.doi:
             pmid = await self._pmid_for_doi(request.doi)
@@ -386,15 +379,10 @@ class CitationGraphService:
                 if request.resolve_metadata:
                     metadata = await self._metadata_for_pmid(pmid)
                     if metadata is not None:
-                        return LiteraturePaper(
-                            pmid=metadata.pmid,
-                            doi=metadata.doi or request.doi,
-                            pmcid=metadata.pmcid,
-                            title=metadata.title,
-                            journal=metadata.journal,
-                            year=metadata.pub_year,
-                            publication_types=metadata.publication_types,
-                        )
+                        paper = paper_from_publication_metadata(metadata)
+                        if paper.doi:
+                            return paper
+                        return paper.model_copy(update={"doi": request.doi})
                 return LiteraturePaper(pmid=pmid, doi=request.doi)
             return LiteraturePaper(doi=request.doi)
         raise ValueError("exactly one of pmid or doi is required")

@@ -6,8 +6,6 @@ from collections.abc import Iterable
 from typing import Any
 
 from pubtator_link.models.literature_graph import (
-    LiteratureAvailability,
-    LiteratureGraphProvenance,
     LiteratureGraphResponseMeta,
     LiteraturePaper,
     ProviderWarning,
@@ -21,6 +19,7 @@ from pubtator_link.services.literature_graph_compact import (
     coalesced_provider_warnings,
     json_size_class,
 )
+from pubtator_link.services.literature_paper_resolution import paper_from_publication_metadata
 
 
 class RelatedEvidenceService:
@@ -201,22 +200,7 @@ class RelatedEvidenceService:
 
 
 def _paper_from_metadata(metadata: Any) -> LiteraturePaper:
-    has_full_text = metadata.coverage == "full_text" or bool(metadata.pmcid)
-    return LiteraturePaper(
-        pmid=metadata.pmid,
-        doi=metadata.doi,
-        pmcid=metadata.pmcid,
-        title=metadata.title,
-        journal=metadata.journal,
-        year=metadata.pub_year,
-        publication_types=metadata.publication_types,
-        availability=LiteratureAvailability(
-            has_pmc_full_text=has_full_text,
-            is_open_access=bool(metadata.pmcid),
-        ),
-        status="resolved_full_text_candidate" if has_full_text else "resolved_metadata_only",
-        provenance=[LiteratureGraphProvenance(provider="pubmed_metadata")],
-    )
+    return paper_from_publication_metadata(metadata)
 
 
 def _matches_filters(paper: LiteraturePaper, request: RelatedEvidenceCandidatesRequest) -> bool:

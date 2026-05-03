@@ -8,8 +8,6 @@ from collections.abc import Sequence
 from typing import Any, Protocol
 
 from pubtator_link.models.literature_graph import (
-    LiteratureAuthor,
-    LiteratureAvailability,
     LiteratureCandidateSummary,
     LiteratureEntity,
     LiteratureGraphEdge,
@@ -17,7 +15,6 @@ from pubtator_link.models.literature_graph import (
     LiteratureGraphProvenance,
     LiteratureGraphResponseMeta,
     LiteraturePaper,
-    LiteraturePaperStatus,
     LiteratureQueryRelevance,
     ProviderWarning,
     PublicationCitationGraphRequest,
@@ -36,6 +33,10 @@ from pubtator_link.services.literature_graph_compact import (
     intent_flags_for_query,
     json_size_class,
     normalize_query_text,
+)
+from pubtator_link.services.literature_paper_resolution import (
+    merge_literature_availability,
+    paper_from_publication_metadata,
 )
 
 
@@ -397,24 +398,7 @@ def _pmids_from_search(raw: dict[str, Any]) -> list[str]:
 
 
 def _paper_from_metadata(metadata: Any) -> LiteraturePaper:
-    has_full_text = metadata.coverage == "full_text" or bool(metadata.pmcid)
-    return LiteraturePaper(
-        pmid=metadata.pmid,
-        doi=metadata.doi,
-        pmcid=metadata.pmcid,
-        title=metadata.title,
-        journal=metadata.journal,
-        year=metadata.pub_year,
-        publication_types=metadata.publication_types,
-        authors=[
-            LiteratureAuthor(name=author.display_name)
-            for author in metadata.authors
-            if author.display_name
-        ],
-        availability=LiteratureAvailability(has_pmc_full_text=has_full_text),
-        status="resolved_full_text_candidate" if has_full_text else "resolved_metadata_only",
-        provenance=[LiteratureGraphProvenance(provider="pubmed_metadata")],
-    )
+    return paper_from_publication_metadata(metadata, include_authors=True)
 
 
 def _entities_from_metadata(metadata: Any) -> list[LiteratureEntity]:
@@ -445,36 +429,7 @@ def _prefer_metadata_paper(
 def _merge_missing_paper_fields(
     primary: LiteraturePaper, fallback: LiteraturePaper
 ) -> LiteraturePaper:
-    availability = primary.availability.model_copy(
-        update={
-            "has_pmc_full_text": (
-                primary.availability.has_pmc_full_text or fallback.availability.has_pmc_full_text
-            ),
-            "is_open_access": primary.availability.is_open_access
-            or fallback.availability.is_open_access,
-            "has_pdf": primary.availability.has_pdf or fallback.availability.has_pdf,
-            "full_text_url": primary.availability.full_text_url
-            or fallback.availability.full_text_url,
-            "oa_status": primary.availability.oa_status or fallback.availability.oa_status,
-            "license_or_access_hint": primary.availability.license_or_access_hint
-            or fallback.availability.license_or_access_hint,
-        }
-    )
-    return primary.model_copy(
-        update={
-            "doi": primary.doi or fallback.doi,
-            "pmcid": primary.pmcid or fallback.pmcid,
-            "openalex_id": primary.openalex_id or fallback.openalex_id,
-            "title": primary.title or fallback.title,
-            "journal": primary.journal or fallback.journal,
-            "year": primary.year or fallback.year,
-            "publication_types": primary.publication_types or fallback.publication_types,
-            "authors": primary.authors or fallback.authors,
-            "availability": availability,
-            "status": _best_status(primary, fallback),
-            "provenance": [*primary.provenance, *fallback.provenance],
-        }
-    )
+    return merge_literature_availability(primary, fallback)
 
 
 def _paper_richness(paper: LiteraturePaper) -> int:
@@ -497,19 +452,6 @@ def _paper_richness(paper: LiteraturePaper) -> int:
     score += int(paper.availability.has_pdf)
     score += int(bool(paper.availability.full_text_url))
     return score
-
-
-def _best_status(primary: LiteraturePaper, fallback: LiteraturePaper) -> LiteraturePaperStatus:
-    if (
-        primary.status == "resolved_full_text_candidate"
-        or fallback.status == "resolved_full_text_candidate"
-    ):
-        return "resolved_full_text_candidate"
-    if primary.status == "resolved_metadata_only" or fallback.status == "resolved_metadata_only":
-        return "resolved_metadata_only"
-    if primary.status == "publisher_entitlement_required":
-        return primary.status
-    return fallback.status
 
 
 def _author_edges(papers: list[LiteraturePaper]) -> list[LiteratureGraphEdge]:

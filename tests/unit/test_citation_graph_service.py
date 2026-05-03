@@ -129,6 +129,26 @@ class FakeMetadata:
         return PublicationMetadataResponse(metadata=[], failed_pmids={})
 
 
+class MetadataWithPmcid:
+    async def get_metadata(self, request):
+        from pubtator_link.models.publication_metadata import PublicationMetadata
+
+        return PublicationMetadataResponse(
+            metadata=[
+                PublicationMetadata(
+                    pmid="28386255",
+                    doi="10.3389/fimmu.2017.00253",
+                    pmcid="PMC5362626",
+                    title="Familial Mediterranean Fever",
+                    journal="Frontiers in Immunology",
+                    pub_year=2017,
+                    coverage="full_text",
+                )
+            ],
+            failed_pmids={},
+        )
+
+
 class RecordingMetadata:
     def __init__(self) -> None:
         self.called = False
@@ -222,6 +242,26 @@ async def test_pmid_cited_by_direction_returns_europe_pmc_citations() -> None:
     assert response.source.pmid == "40562663"
     assert response.cited_by[0].pmid == "40600001"
     assert response.candidate_pmids == ["40600001"]
+
+
+@pytest.mark.asyncio
+async def test_citation_graph_source_uses_shared_metadata_availability() -> None:
+    service = CitationGraphService(
+        discovery_service=FakeDiscovery(),
+        metadata_service=MetadataWithPmcid(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            pmid="28386255",
+            direction="cited_by",
+            response_mode="compact",
+        )
+    )
+
+    assert response.source.pmcid == "PMC5362626"
+    assert response.source.availability.has_pmc_full_text is True
+    assert response.source.availability.is_open_access is False
 
 
 @pytest.mark.asyncio
