@@ -65,6 +65,14 @@ the final corpus.
 
 Recommended review workflow:
 
+For standard grounded research questions, prefer `pubtator.ground_question`
+when the server is allowed to index review evidence. It returns selected PMIDs,
+preparation state, coverage summary, and compact retrieved context in one call.
+Use the explicit chain (`pubtator.search_literature` ->
+`pubtator.preflight_review_sources` -> `pubtator.index_review_evidence` ->
+`pubtator.inspect_review_index` -> `pubtator.retrieve_review_context_batch`)
+when you need manual corpus control.
+
 In the default lean profile, build a review with search/preflight/index/inspect,
 then retrieve with `pubtator.retrieve_review_context_batch`. In the full
 profile, `pubtator.review_quickstart` is available for casual one-shot setup.
@@ -79,6 +87,10 @@ profile, `pubtator.review_quickstart` is available for casual one-shot setup.
 8. In the full profile, `pubtator.export_review_audit_bundle` before synthesis/reporting to capture passage IDs, source coverage, resolver attempts, and stable citation keys.
 
 Use `pubtator.fetch_publication_annotations` with `full=true` only when raw BioC is intentionally needed. Compact passage tools are safer for routine grounding. The full research-use limitation is exposed once in `pubtator.get_server_capabilities` and `pubtator://research-use`.
+
+Compact search results return `first_author_et_al` by default. Request
+`metadata="full"` or `response_mode="standard"`/`"full"` only when full author
+arrays or full citation metadata are needed.
 
 All public MCP tools use flat top-level arguments. If a client still displays old `_v2` aliases, refresh the MCP/tool cache and reconnect. Current public tools use canonical names only.
 

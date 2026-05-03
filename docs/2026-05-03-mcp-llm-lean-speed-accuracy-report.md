@@ -3,6 +3,14 @@
 Date: 2026-05-03
 Revision: 2 (deep review against actual codebase and MCP 2025-06-18 spec)
 
+> Status note, 2026-05-03: The MCP modernization branch now includes lean/full/
+> readonly profiles, generated tool catalog, review resource templates, durable
+> LLM context, compact search author summaries, minimum diagnostics workflow,
+> hosted HTTP safety controls, typed MCP error mapping, and
+> `pubtator.ground_question`. Remaining larger work is OAuth/public auth,
+> OpenTelemetry, cursor pagination, optional elicitation, and hybrid retrieval
+> quality upgrades.
+
 ## Verification Status
 
 This report was re-verified against the live repository on 2026-05-03. Claims

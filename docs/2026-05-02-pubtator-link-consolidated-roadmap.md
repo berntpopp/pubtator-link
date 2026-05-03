@@ -6,6 +6,14 @@ This document consolidates the prior maintainability, competitor, MCP
 engineering, LLM-consumer, concurrency, and observability reviews. The source
 reviews are archived under `docs/archive/reviews/`.
 
+> Status note, 2026-05-03: The MCP modernization branch now includes lean/full/
+> readonly profiles, generated tool catalog, review resource templates, durable
+> LLM context, compact search author summaries, minimum diagnostics workflow,
+> hosted HTTP safety controls, typed MCP error mapping, and
+> `pubtator.ground_question`. Remaining larger work is OAuth/public auth,
+> OpenTelemetry, cursor pagination, optional elicitation, and hybrid retrieval
+> quality upgrades.
+
 ## Executive Summary
 
 PubTator-Link has completed the original reliability and evidence-grounding
