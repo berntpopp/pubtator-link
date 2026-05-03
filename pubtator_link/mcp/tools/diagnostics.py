@@ -23,7 +23,7 @@ def register_diagnostics_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def diagnostics() -> dict[str, Any]:
-        """Use this to check PubTator-Link subsystem status and recovery commands."""
+        """Use this when a client needs PubTator-Link subsystem status and recovery commands."""
         service = await get_diagnostics_service()
         return await run_mcp_tool(
             "pubtator.diagnostics",

@@ -42,7 +42,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
         prefer_guidelines: bool = True,
         include_metadata: bool = True,
     ) -> dict[str, Any]:
-        """Suggest a compact, review-feeding PMID corpus for a research question. Returns candidate PMIDs, roles, coverage hints, metadata, and next commands."""
+        """Use this when a user needs a compact, review-feeding PMID corpus for a research question. Returns candidate PMIDs, roles, coverage hints, metadata, and next commands."""
 
         async def call() -> dict[str, Any]:
             service = await get_corpus_suggestion_service()

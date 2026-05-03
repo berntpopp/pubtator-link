@@ -121,7 +121,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         limit: int = 50,
         offset: int = 0,
     ) -> dict[str, Any]:
-        """Use this to list persisted review indexes with preparation status, source counts, passage counts, and approximate storage size."""
+        """Use this when a user needs persisted review indexes with preparation status, source counts, passage counts, and approximate storage size."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_index_lifecycle_service()
@@ -138,7 +138,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_review_index_summary(review_id: str) -> dict[str, Any]:
-        """Use this to inspect one persisted review index summary without loading passage samples."""
+        """Use this when a user needs one persisted review index summary without loading passage samples."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_index_lifecycle_service()
@@ -169,7 +169,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         created_by: str | None = None,
         validate_passages: bool = False,
     ) -> dict[str, Any]:
-        """Use this to store a user-supplied GRADE-style evidence certainty judgment linked to prepared passage IDs. The backend stores the judgment; it does not compute certainty."""
+        """Use this when a user needs to store a user-supplied GRADE-style evidence certainty judgment linked to prepared passage IDs. The backend stores the judgment; it does not compute certainty."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_evidence_certainty_service()
@@ -202,7 +202,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def list_evidence_certainty(review_id: str) -> dict[str, Any]:
-        """Use this to list user-supplied evidence certainty judgments for a review."""
+        """Use this when a user needs user-supplied evidence certainty judgments for a review."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_evidence_certainty_service()
@@ -219,7 +219,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_evidence_certainty(review_id: str, certainty_id: str) -> dict[str, Any]:
-        """Use this to retrieve one user-supplied evidence certainty judgment."""
+        """Use this when a user needs one user-supplied evidence certainty judgment."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_evidence_certainty_service()
@@ -243,7 +243,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
     async def preflight_review_sources(
         pmids: list[str],
     ) -> dict[str, Any]:
-        """Use this before indexing review evidence to estimate PMID source coverage, PMC fallback availability, and likely full-text versus abstract-only retrieval."""
+        """Use this when a user needs PMID source coverage, PMC fallback availability, and likely full-text versus abstract-only retrieval before indexing review evidence."""
 
         async def call() -> dict[str, Any]:
             service = await get_source_preflight_service()
@@ -273,7 +273,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         max_candidates: Annotated[int, Field(ge=1, le=100)] = 20,
         stage_full_text: bool = True,
     ) -> dict[str, Any]:
-        """Use this after search planning to stage candidate PMIDs with coverage hints and queued review preparation."""
+        """Use this when a user needs to stage candidate PMIDs with coverage hints and queued review preparation after search planning."""
 
         async def call() -> dict[str, Any]:
             service = await get_research_session_service()
@@ -315,7 +315,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         wait_until_ready: bool = False,
         timeout_ms: Annotated[int, Field(ge=0, le=120_000)] = 0,
     ) -> dict[str, Any]:
-        """Use this one-shot entry point for casual review setup: search topic, stage/index up to n_pmids, inspect coverage, and return review_id/session_id for retrieve_review_context_batch."""
+        """Use this when a user wants one-shot casual review setup: search topic, stage/index up to n_pmids, inspect coverage, and return review_id/session_id for retrieve_review_context_batch."""
 
         async def call() -> dict[str, Any]:
             stage_service = await get_research_session_service()
@@ -342,7 +342,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_research_session_status(review_id: str, session_id: str) -> dict[str, Any]:
-        """Use this to poll staged candidate, coverage, and preparation status for a research session."""
+        """Use this when a user needs staged candidate, coverage, and preparation status for a research session."""
 
         async def call() -> dict[str, Any]:
             service = await get_research_session_service()
@@ -363,7 +363,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def list_research_sessions(review_id: str) -> dict[str, Any]:
-        """Use this to list staged research sessions for one review ID."""
+        """Use this when a user needs staged research sessions for one review ID."""
 
         async def call() -> dict[str, Any]:
             service = await get_research_session_service()
@@ -486,7 +486,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         session_id: str | None = None,
         max_chars_per_passage: int = 2200,
     ) -> dict[str, Any]:
-        """Use this to retrieve exact prepared review passages by stable passage IDs from prior context packs or audit bundles. This only reads the review index and does not call upstream APIs."""
+        """Use this when a user needs exact prepared review passages by stable passage IDs from prior context packs or audit bundles. This only reads the review index and does not call upstream APIs."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_context_service()
@@ -515,7 +515,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         session_id: str | None = None,
         max_chars_per_passage: int = 500,
     ) -> dict[str, Any]:
-        """Use this to return a copy-ready audit block for selected prepared review passage IDs without calling upstream APIs."""
+        """Use this when a user needs a copy-ready audit block for selected prepared review passage IDs without calling upstream APIs."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_context_service()
@@ -546,7 +546,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         same_section: bool = True,
         max_chars_per_passage: int = 2200,
     ) -> dict[str, Any]:
-        """Use this to retrieve prepared review passages near a cited stable passage ID for local context expansion. This only reads the review index and does not call upstream APIs."""
+        """Use this when a user needs prepared review passages near a cited stable passage ID for local context expansion. This only reads the review index and does not call upstream APIs."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_context_service()
@@ -576,7 +576,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         export_path: str | None = None,
         fallback_inline: bool = False,
     ) -> dict[str, Any]:
-        """Use this to export review preparation status, source coverage, resolver attempts, retrieval runs, passage IDs, and stable citation keys for scientific auditability."""
+        """Use this when a user needs to export review preparation status, source coverage, resolver attempts, retrieval runs, passage IDs, and stable citation keys for scientific auditability."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_audit_service()
@@ -679,7 +679,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         include_resolver_trace: bool = False,
         ctx: Context | None = None,
     ) -> dict[str, Any]:
-        """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode uses query_fair budgeting: merged passages plus per-query summaries, a fair first-pass budget across queries before overflow, and next_steps for zero-result queries. Use response_mode="quotes" for short citable snippets without long passage windows. Use dry_run to get diagnostics and predicted hit counts without returning passage text. Opt into source_fair or scarcity_first to give each PMID/source first-pass representation before overflow. Use diagnostics for query refinement and full only when per-query passage text is needed."""
+        """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode uses query_fair budgeting, merged passages, per-query summaries, and next_steps for zero-result queries. Use response_mode="quotes" for short citable snippets or dry_run for diagnostics without passage text."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_context_service()
@@ -733,7 +733,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         session_id: Annotated[str | None, Field(min_length=1)] = None,
         note: str | None = None,
     ) -> dict[str, Any]:
-        """Use this to record selected review passage IDs used as context in a research answer."""
+        """Use this when a user needs to record selected review passage IDs used as context in a research answer."""
 
         async def call() -> dict[str, Any]:
             service = await get_review_context_service()

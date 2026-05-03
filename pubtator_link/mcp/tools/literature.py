@@ -60,7 +60,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         coverage: SearchCoverageMode = "none",
         metadata: SearchMetadataMode = "basic",
     ) -> dict[str, Any]:
-        """Use this when a user needs PubMed literature search through PubTator3. Use short biomedical queries, optional sort such as 'score desc' or 'date desc', flat publication/year filters, raw filters JSON, optional section filters, and coverage='preflight' when source coverage should be visible before indexing. If preflight_error_code is coverage_preflight_internal_error, retryable=false means do not retry blindly; continue with search results or inspect diagnostics."""
+        """Use this when a user needs PubMed literature search through PubTator3. Supports short biomedical queries, flat filters, optional section filters, and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false means continue with results or inspect diagnostics."""
 
         async def call() -> dict[str, Any]:
             preflight_service = (
@@ -217,7 +217,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         max_literature_pmids: Annotated[int, Field(ge=0, le=100)] = 20,
         include_citations: bool = True,
     ) -> dict[str, Any]:
-        """Look up source-attributed variant records and literature evidence for a gene and variant. Does not compute clinical classification."""
+        """Use this when a user needs source-attributed variant records and literature evidence for a gene and variant. Does not compute clinical classification."""
 
         async def call() -> dict[str, Any]:
             service = await get_variant_evidence_service()
