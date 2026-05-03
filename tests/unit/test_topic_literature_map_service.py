@@ -15,7 +15,10 @@ from pubtator_link.models.publication_metadata import (
     PublicationMetadata,
     PublicationMetadataResponse,
 )
-from pubtator_link.services.topic_literature_map import TopicLiteratureMapService
+from pubtator_link.services.topic_literature_map import (
+    TopicLiteratureMapService,
+    rank_topic_candidates,
+)
 
 
 class FakeSearchClient:
@@ -293,3 +296,49 @@ async def test_build_map_degrades_with_provider_warnings() -> None:
         "citation_graph",
         "related_evidence",
     }
+
+
+def test_topic_ranker_promotes_guideline_and_pediatric_colchicine_records() -> None:
+    papers = [
+        LiteraturePaper(
+            pmid="33778981",
+            title="Veterinary clinical pathology annual meeting abstracts",
+            publication_types=["Congress"],
+        ),
+        LiteraturePaper(
+            pmid="40616106",
+            title="Behcet disease and trisomy 8 case report",
+            publication_types=["Case Reports"],
+        ),
+        LiteraturePaper(
+            pmid="28386255",
+            title="EULAR recommendations for the management of familial Mediterranean fever",
+            publication_types=["Guideline"],
+            year=2016,
+        ),
+        LiteraturePaper(
+            pmid="36680425",
+            title=(
+                "PREDICT-crFMF score in children with colchicine-resistant familial "
+                "Mediterranean fever"
+            ),
+            publication_types=["Journal Article"],
+            year=2023,
+        ),
+    ]
+
+    ranked = rank_topic_candidates(
+        papers,
+        query="familial Mediterranean fever MEFV colchicine guideline Turkey child variant",
+        seed_pmids=[],
+        candidate_pmids=[paper.pmid for paper in papers if paper.pmid],
+        accessible_pmids=[],
+        bias_toward=["guideline", "pediatric"],
+    )
+
+    by_pmid = {candidate.pmid: candidate for candidate in ranked}
+    assert [candidate.pmid for candidate in ranked[:3]] == ["28386255", "36680425", "33778981"]
+    assert "conference_abstract_collection" in by_pmid["33778981"].demotion_reasons
+    assert "low_query_overlap" in by_pmid["40616106"].demotion_reasons
+    assert by_pmid["28386255"].relevance_to_query is not None
+    assert "guideline_intent" in by_pmid["28386255"].relevance_to_query.matched_intents

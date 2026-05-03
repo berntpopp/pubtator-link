@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from collections.abc import Sequence
 from typing import Any, Protocol
@@ -9,6 +10,7 @@ from typing import Any, Protocol
 from pubtator_link.models.literature_graph import (
     LiteratureAuthor,
     LiteratureAvailability,
+    LiteratureCandidateSummary,
     LiteratureEntity,
     LiteratureGraphEdge,
     LiteratureGraphNode,
@@ -16,6 +18,7 @@ from pubtator_link.models.literature_graph import (
     LiteratureGraphResponseMeta,
     LiteraturePaper,
     LiteraturePaperStatus,
+    LiteratureQueryRelevance,
     ProviderWarning,
     PublicationCitationGraphRequest,
     RelatedEvidenceCandidatesRequest,
@@ -26,6 +29,11 @@ from pubtator_link.models.literature_graph import (
     dedupe_papers,
 )
 from pubtator_link.models.publication_metadata import PublicationMetadataRequest
+from pubtator_link.services.literature_graph_compact import (
+    candidate_summary,
+    intent_flags_for_query,
+    normalize_query_text,
+)
 
 
 class TopicSearchClient(Protocol):
@@ -606,3 +614,198 @@ def _provider_failed_warning(provider: str, exc: Exception) -> ProviderWarning:
         retryable=True,
         message=str(exc) or exc.__class__.__name__,
     )
+
+
+def rank_topic_candidates(
+    papers: list[LiteraturePaper],
+    *,
+    query: str | None,
+    seed_pmids: list[str],
+    candidate_pmids: list[str],
+    accessible_pmids: list[str],
+    bias_toward: list[str] | None = None,
+) -> list[LiteratureCandidateSummary]:
+    intents = intent_flags_for_query(query)
+    query_terms = _query_terms(query)
+    seed_set = set(seed_pmids)
+    candidate_set = set(candidate_pmids)
+    accessible_set = set(accessible_pmids)
+    ranked: list[LiteratureCandidateSummary] = []
+    for paper in dedupe_papers(papers):
+        score, rank_reasons, demotion_reasons, matched_terms = _topic_candidate_score(
+            paper=paper,
+            query_terms=query_terms,
+            intents=intents,
+            seed_set=seed_set,
+            candidate_set=candidate_set,
+            accessible_set=accessible_set,
+            bias_toward=set(bias_toward or []),
+        )
+        relevance = LiteratureQueryRelevance(
+            score=max(0.0, min(1.0, score / 20.0)),
+            matched_terms=matched_terms[:8],
+            matched_intents=sorted(intents),
+            reasons=rank_reasons[:8],
+        )
+        ranked.append(
+            candidate_summary(
+                paper,
+                score=score,
+                relevance_to_query=relevance,
+                rank_reasons=rank_reasons,
+                demotion_reasons=demotion_reasons,
+                source_tools=(
+                    ["topic_search"]
+                    if paper.pmid in seed_set
+                    else ["topic_search", "related_evidence"]
+                ),
+            )
+        )
+    return sorted(
+        ranked,
+        key=lambda candidate: (
+            -float(candidate.score or 0),
+            int("missing_pmid" in candidate.demotion_reasons),
+            int("low_query_overlap" in candidate.demotion_reasons),
+            candidate.year or 0,
+            candidate.pmid or candidate.doi or candidate.title or "",
+        ),
+        reverse=False,
+    )
+
+
+def _topic_candidate_score(
+    *,
+    paper: LiteraturePaper,
+    query_terms: list[str],
+    intents: set[str],
+    seed_set: set[str],
+    candidate_set: set[str],
+    accessible_set: set[str],
+    bias_toward: set[str],
+) -> tuple[float, list[str], list[str], list[str]]:
+    score = 1.0
+    rank_reasons: list[str] = []
+    demotion_reasons = _topic_demotion_reasons(paper)
+
+    if paper.pmid:
+        if paper.pmid in seed_set:
+            score += 5.0
+            rank_reasons.append("seed_paper")
+        if paper.pmid in candidate_set:
+            score += 3.0
+            rank_reasons.append("candidate_paper")
+        if paper.pmid in accessible_set:
+            score += 2.0
+            rank_reasons.append("accessible_full_text")
+    else:
+        demotion_reasons.append("missing_pmid")
+        if paper.doi:
+            demotion_reasons.append("doi_only_unresolved")
+
+    searchable_text = normalize_query_text(
+        " ".join(
+            value
+            for value in [
+                paper.title or "",
+                paper.journal or "",
+                _publication_type_text(paper),
+            ]
+            if value
+        )
+    )
+    matched_terms = [term for term in query_terms if term in searchable_text]
+    if matched_terms:
+        score += len(matched_terms) * 1.5
+        rank_reasons.append("query_term_overlap")
+
+    publication_type_text = _publication_type_text(paper)
+    title = normalize_query_text(paper.title)
+    if "guideline_intent" in intents and (
+        "guideline" in publication_type_text
+        or "recommendation" in title
+        or "recommendations" in title
+    ):
+        score += 7.0
+        rank_reasons.append("guideline_intent")
+    if ("guideline" in bias_toward) and (
+        "guideline" in publication_type_text or "recommendation" in title
+    ):
+        score += 3.0
+        rank_reasons.append("guideline_bias")
+    if "pediatric_intent" in intents and any(
+        term in title for term in ("child", "children", "pediatric", "paediatric")
+    ):
+        score += 5.0
+        rank_reasons.append("pediatric_intent")
+    if ("pediatric" in bias_toward) and any(
+        term in title for term in ("child", "children", "pediatric", "paediatric")
+    ):
+        score += 2.0
+        rank_reasons.append("pediatric_bias")
+    if "treatment_intent" in intents and any(
+        term in title for term in ("colchicine", "treatment", "management")
+    ):
+        score += 2.5
+        rank_reasons.append("treatment_intent")
+    if "variant_intent" in intents and any(
+        term in title for term in ("variant", "genotype", "phenotype")
+    ):
+        score += 1.5
+        rank_reasons.append("variant_intent")
+
+    if (
+        query_terms
+        and len(matched_terms) < 2
+        and "conference_abstract_collection" not in demotion_reasons
+    ):
+        demotion_reasons.append("low_query_overlap")
+    if paper.status == "resolved_metadata_only" and not paper.title:
+        demotion_reasons.append("metadata_only")
+
+    score -= _demotion_penalty(demotion_reasons)
+    return score, _dedupe(rank_reasons), _dedupe(demotion_reasons), matched_terms
+
+
+def _query_terms(query: str | None) -> list[str]:
+    normalized = normalize_query_text(query)
+    terms = re.findall(r"[a-z0-9]+", normalized)
+    stop_words = {"and", "or", "the", "for", "with", "of", "in", "a", "an", "to"}
+    return _dedupe([term for term in terms if len(term) > 1 and term not in stop_words])
+
+
+def _publication_type_text(paper: LiteraturePaper) -> str:
+    return normalize_query_text(" ".join(paper.publication_types))
+
+
+def _topic_demotion_reasons(paper: LiteraturePaper) -> list[str]:
+    text = " ".join(
+        value
+        for value in [paper.title or "", paper.journal or "", _publication_type_text(paper)]
+        if value
+    )
+    normalized = normalize_query_text(text)
+    reasons: list[str] = []
+    if any(signal in normalized for signal in ("abstract", "meeting", "conference", "congress")):
+        reasons.append("conference_abstract_collection")
+    if "supplement" in normalized:
+        reasons.append("supplement_collection")
+    if "annual" in normalized:
+        reasons.append("annual_review_collection")
+    if any(signal in normalized for signal in ("veterinary", "highlights", "trisomy 8")):
+        reasons.append("off_topic_title")
+    return reasons
+
+
+def _demotion_penalty(demotion_reasons: list[str]) -> float:
+    penalties = {
+        "missing_pmid": 4.0,
+        "doi_only_unresolved": 1.0,
+        "conference_abstract_collection": 2.0,
+        "supplement_collection": 2.0,
+        "annual_review_collection": 1.0,
+        "off_topic_title": 4.0,
+        "low_query_overlap": 4.0,
+        "metadata_only": 1.0,
+    }
+    return sum(penalties[reason] for reason in demotion_reasons if reason in penalties)
