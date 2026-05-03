@@ -252,6 +252,73 @@ def test_record_mcp_error_sanitizes_stored_message() -> None:
     assert "db.internal" in errors[-1]["raw_message"]
 
 
+def test_mcp_output_validation_error_is_actionable_and_recorded() -> None:
+    from pubtator_link.mcp.errors import clear_recent_mcp_errors, get_recent_mcp_errors
+    from pubtator_link.mcp.output_validation import actionable_output_validation_error
+
+    clear_recent_mcp_errors()
+
+    payload = actionable_output_validation_error(
+        tool_name="pubtator.retrieve_review_context_batch",
+        arguments={"response_mode": "compact"},
+        message="Output validation error: 'explanation' is a required property",
+    )
+
+    errors = get_recent_mcp_errors()
+    assert payload["success"] is False
+    assert payload["error_code"] == "output_validation_failed"
+    assert payload["error_field"] == "explanation"
+    assert payload["fallback_response_mode"] == "quotes"
+    assert payload["suggested_action"].startswith("Retry")
+    assert errors[-1]["tool_name"] == "pubtator.retrieve_review_context_batch"
+    assert errors[-1]["error_code"] == "output_validation_failed"
+    assert (
+        errors[-1]["message"] == "The tool response did not match its declared MCP output schema."
+    )
+
+
+@pytest.mark.asyncio
+async def test_installed_mcp_output_validation_handler_replaces_bare_sdk_error() -> None:
+    from fastmcp import FastMCP
+    from mcp import types
+
+    from pubtator_link.mcp.errors import clear_recent_mcp_errors, get_recent_mcp_errors
+    from pubtator_link.mcp.output_validation import install_output_validation_error_handler
+
+    mcp = FastMCP(name="test")
+
+    @mcp.tool(
+        name="pubtator.retrieve_review_context_batch",
+        output_schema={
+            "type": "object",
+            "properties": {"explanation": {"type": "string"}},
+            "required": ["explanation"],
+        },
+    )
+    async def broken_tool(response_mode: str = "compact") -> dict[str, object]:
+        return {"ok": True}
+
+    install_output_validation_error_handler(mcp)
+    clear_recent_mcp_errors()
+
+    handler = mcp._mcp_server.request_handlers[types.CallToolRequest]
+    result = await handler(
+        types.CallToolRequest(
+            params=types.CallToolRequestParams(
+                name="pubtator.retrieve_review_context_batch",
+                arguments={"response_mode": "compact"},
+            )
+        )
+    )
+    payload = json.loads(result.root.content[0].text)
+
+    assert result.root.isError is True
+    assert payload["error_code"] == "output_validation_failed"
+    assert payload["error_field"] == "explanation"
+    assert payload["fallback_response_mode"] == "quotes"
+    assert get_recent_mcp_errors()[-1]["error_code"] == "output_validation_failed"
+
+
 @pytest.mark.asyncio
 async def test_mcp_error_wrapper_raises_tool_error() -> None:
     from pubtator_link.mcp.errors import run_mcp_tool

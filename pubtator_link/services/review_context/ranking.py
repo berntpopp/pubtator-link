@@ -1,8 +1,32 @@
 from __future__ import annotations
 
-from pubtator_link.models.review_rerag import ReviewPassageRow
+from pubtator_link.models.review_rerag import ReviewPassageRow, SampleSectionPolicy
 
 SECTION_PRIORITY = {
+    "results": 0,
+    "result": 0,
+    "discussion": 1,
+    "discuss": 1,
+    "conclusion": 2,
+    "conclusions": 2,
+    "concl": 2,
+    "abstract": 3,
+    "abstr": 3,
+    "summary": 4,
+    "title": 6,
+    "body": 7,
+    "introduction": 8,
+    "intro": 8,
+    "background": 8,
+    "methods": 9,
+    "method": 9,
+    "materials and methods": 9,
+    "table": 9,
+    "ref": 50,
+    "references": 50,
+}
+
+ORIGINAL_SECTION_PRIORITY = {
     "title": 0,
     "abstract": 1,
     "abstr": 1,
@@ -45,10 +69,17 @@ SOURCE_COVERAGE_SCARCITY_PRIORITY = {
 }
 
 
-def rerank_key(row: ReviewPassageRow) -> tuple[float, int, int, str, str]:
+def rerank_key(
+    row: ReviewPassageRow,
+    *,
+    section_policy: SampleSectionPolicy = "evidence_first",
+) -> tuple[float, int, int, str, str]:
+    section_priority = (
+        ORIGINAL_SECTION_PRIORITY if section_policy == "original_order" else SECTION_PRIORITY
+    )
     return (
         -row.lexical_rank,
-        SECTION_PRIORITY.get(row.section.strip().lower(), 100),
+        section_priority.get(row.section.strip().lower(), 100),
         SOURCE_PRIORITY.get(row.source_kind, 100),
         row.pmid or "",
         row.passage_id,

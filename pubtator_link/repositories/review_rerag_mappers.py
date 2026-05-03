@@ -260,6 +260,11 @@ def _parse_execute_count(result: str) -> int:
 
 
 def _recall_tsquery(query: str) -> str:
+    tokens = _recall_terms(query)
+    return " | ".join(tokens) or "review"
+
+
+def _recall_terms(query: str) -> list[str]:
     tokens = []
     seen: set[str] = set()
     for token in re.findall(r"[a-zA-Z0-9]+", query.lower()):
@@ -269,4 +274,4 @@ def _recall_tsquery(query: str) -> str:
         tokens.append(token)
         if len(tokens) >= 12:
             break
-    return " | ".join(tokens) or "review"
+    return tokens

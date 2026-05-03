@@ -17,6 +17,8 @@ def quotes_from_passages(passages: Sequence[ContextPassage]) -> list[ReviewQuote
             passage_id=passage.passage_id,
             section=passage.section,
             quote=_quote_text_for_passage(passage),
+            truncated=passage.quote.truncated if passage.quote is not None else False,
+            tail_preview=passage.quote.tail_preview if passage.quote is not None else None,
             matched_queries=passage.matched_queries,
             coverage_status=_coverage_status_for_passage(passage),
         )

@@ -251,6 +251,32 @@ def test_merge_batch_context_quotes_mode_enforces_quote_payload_budget() -> None
     assert quote_payload_chars <= request.max_response_chars
 
 
+def test_merge_batch_context_quotes_mode_prefers_claim_dense_passages() -> None:
+    request = RetrieveReviewContextBatchRequest(
+        queries=["familial Mediterranean fever colchicine pediatric recommendation"],
+        response_mode="quotes",
+        max_total_passages=1,
+        max_chars=50000,
+        max_response_chars=2000,
+    )
+    background = _passage(
+        "background",
+        "Familial Mediterranean fever is caused by mutations in the MEFV gene located on chromosome 16.",
+    )
+    recommendation = _passage(
+        "recommendation",
+        "EULAR recommendations state that colchicine therapy should be started as soon as a clinical diagnosis is made.",
+    )
+
+    merged = merge_batch_context(
+        request=request,
+        query_results=[_result("q1", [background, recommendation])],
+        coverage_by_source={},
+    )
+
+    assert [passage.passage_id for passage in merged.passages] == ["recommendation"]
+
+
 def test_merge_batch_context_diagnostics_mode_skips_merged_passages() -> None:
     request = RetrieveReviewContextBatchRequest(
         queries=["q1"],

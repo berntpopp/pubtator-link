@@ -59,6 +59,7 @@ def sanitize_error_message(message: str) -> str:
     """Map raw backend messages to safe, LLM-actionable summaries."""
     safe_messages = {
         "Invalid MCP arguments.",
+        "The tool response did not match its declared MCP output schema.",
         "Review database schema is not current.",
         "Review database operation failed.",
         "The upstream service timed out.",

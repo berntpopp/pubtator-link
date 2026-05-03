@@ -5,6 +5,7 @@ from fastmcp import FastMCP
 from pubtator_link.config import settings
 from pubtator_link.mcp.compat import install_inspection_managers
 from pubtator_link.mcp.metadata import register_metadata
+from pubtator_link.mcp.output_validation import install_output_validation_error_handler
 from pubtator_link.mcp.profiles import MCPToolProfile, normalize_mcp_profile
 from pubtator_link.mcp.resources import RESEARCH_USE_NOTICE
 from pubtator_link.mcp.tools.diagnostics import register_diagnostics_tools
@@ -46,4 +47,5 @@ def create_pubtator_mcp(profile: MCPToolProfile | str | None = None) -> FastMCP:
     register_text_annotation_tools(mcp, profile=selected_profile)
     register_review_tools(mcp, profile=selected_profile)
     install_inspection_managers(mcp)
+    install_output_validation_error_handler(mcp)
     return mcp

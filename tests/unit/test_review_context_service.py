@@ -458,7 +458,7 @@ async def test_retrieve_context_packs_deterministic_diverse_context() -> None:
     assert [passage.passage_id for passage in response.context_pack.passages] == [
         "p-high-same-pmid",
         "p-other-pmid",
-        "p-abstract-tie",
+        "p-results-tie",
     ]
     assert [passage.citation_key for passage in response.context_pack.passages] == [
         "S1",
@@ -468,7 +468,7 @@ async def test_retrieve_context_packs_deterministic_diverse_context() -> None:
     assert response.context_pack.citation_map == {
         "S1": "p-high-same-pmid",
         "S2": "p-other-pmid",
-        "S3": "p-abstract-tie",
+        "S3": "p-results-tie",
     }
     assert response.index_snapshot_date is not None
     assert response.preparation_status.queued == 1
@@ -1275,6 +1275,10 @@ async def test_batch_quotes_mode_returns_short_quotes_without_merged_passages() 
     assert response.quotes[0].coverage_status == "abstract_only"
     assert all(len(item.quote) <= 350 for item in response.quotes)
     assert response.merged_context_pack.passages == []
+    assert (
+        response.merged_context_pack.stable_citation_map[response.quotes[0].stable_citation_key]
+        == response.quotes[0].passage_id
+    )
 
 
 @pytest.mark.asyncio

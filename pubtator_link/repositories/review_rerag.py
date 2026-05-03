@@ -34,6 +34,7 @@ from pubtator_link.repositories.review_rerag_mappers import (
     _passage_from_row,
     _passage_sample_from_row,
     _preparation_status_from_row,
+    _recall_terms,
     _recall_tsquery,
     _research_session_candidate_from_row,
     _review_index_totals_from_row,
@@ -726,13 +727,69 @@ class PostgresReviewReragRepository:
         pmid_filter = _filter_or_none(pmids)
         section_filter = _filter_or_none(sections)
         recall_query = _recall_tsquery(query)
+        recall_terms = _recall_terms(query)
         async with self._acquire() as connection:
             rows = await connection.fetch(
                 """
                 with query as (
                     select
+                        phraseto_tsquery('english', $2) as phrase_query,
                         websearch_to_tsquery('english', $2) as strict_query,
                         to_tsquery('english', $7) as recall_query
+                ),
+                ranked as (
+                select
+                    passage_id,
+                    review_id,
+                    source_id,
+                    source_kind,
+                    pmid,
+                    pmcid,
+                    doi,
+                    url,
+                    section,
+                    heading_path,
+                    page,
+                    text,
+                    entity_ids,
+                    relation_types,
+                    screening_status,
+                    source_metadata,
+                    ts_rank_cd(search_vector, query.phrase_query) as phrase_rank,
+                    ts_rank_cd(search_vector, query.strict_query) as strict_rank,
+                    ts_rank_cd(search_vector, query.recall_query) as recall_rank,
+                    (
+                        select count(*)
+                        from (
+                            select distinct token
+                            from regexp_split_to_table(
+                                lower(review_passages.text),
+                                '[^a-zA-Z0-9]+'
+                            ) as token
+                            where length(token) >= 3
+                        ) passage_terms
+                        where passage_terms.token = any($9::text[])
+                    ) as recall_overlap_count
+                from review_passages, query
+                where review_id = $1
+                  and (
+                      search_vector @@ query.phrase_query
+                      or search_vector @@ query.strict_query
+                      or search_vector @@ query.recall_query
+                  )
+                  and ($3::text[] is null or entity_ids && $3::text[])
+                  and ($4::text[] is null or pmid = any($4::text[]))
+                  and ($5::text[] is null or section = any($5::text[]))
+                  and (
+                      $8::text is null
+                      or exists (
+                          select 1
+                          from review_session_sources rss
+                          where rss.review_id = review_passages.review_id
+                            and rss.session_id = $8
+                            and rss.source_id = review_passages.source_id
+                      )
+                  )
                 )
                 select
                     passage_id,
@@ -752,25 +809,20 @@ class PostgresReviewReragRepository:
                     screening_status,
                     source_metadata,
                     (
-                        ts_rank_cd(search_vector, query.strict_query) * 2.0
-                        + ts_rank_cd(search_vector, query.recall_query)
-                    ) as lexical_rank
-                from review_passages, query
-                where review_id = $1
-                  and (search_vector @@ query.strict_query or search_vector @@ query.recall_query)
-                  and ($3::text[] is null or entity_ids && $3::text[])
-                  and ($4::text[] is null or pmid = any($4::text[]))
-                  and ($5::text[] is null or section = any($5::text[]))
-                  and (
-                      $8::text is null
-                      or exists (
-                          select 1
-                          from review_session_sources rss
-                          where rss.review_id = review_passages.review_id
-                            and rss.session_id = $8
-                            and rss.source_id = review_passages.source_id
-                      )
-                  )
+                        phrase_rank * 3.0
+                        + strict_rank * 2.0
+                        + recall_rank
+                    )
+                    * case
+                        when phrase_rank = 0
+                          and strict_rank = 0
+                          and recall_rank > 0
+                          and array_length(regexp_split_to_array($2, E'\\s+'), 1) >= 4
+                          and recall_overlap_count <= 1
+                        then least(1.0, greatest(0.25, char_length(text)::double precision / 400.0))
+                        else 1.0
+                      end as lexical_rank
+                from ranked
                 order by lexical_rank desc, passage_id asc
                 limit $6
                 """,
@@ -782,6 +834,7 @@ class PostgresReviewReragRepository:
                 limit,
                 recall_query,
                 session_id,
+                recall_terms,
             )
         return [_passage_from_row(row) for row in rows]
 

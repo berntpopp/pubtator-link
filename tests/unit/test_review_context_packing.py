@@ -6,6 +6,7 @@ from pubtator_link.services.review_context.packing import (
     context_passage_from_row,
     excerpt_text,
     pack_passages,
+    passage_quote,
 )
 
 
@@ -106,6 +107,24 @@ def test_context_passage_quote_offsets_use_returned_and_original_text() -> None:
     assert passage.quote.passage_end_char == (
         passage.start_char + passage.quote.returned_end_offset
     )
+
+
+def test_passage_quote_marks_long_sentence_truncation() -> None:
+    text = "Colchicine therapy should be started at low doses and dose should " + (
+        "be increased carefully during follow-up " * 12
+    )
+
+    quote = passage_quote(
+        text,
+        passage_start_char=0,
+        query_tokens=["colchicine", "therapy"],
+    )
+
+    assert quote is not None
+    assert quote.truncated is True
+    assert quote.tail_preview
+    assert quote.text.endswith("...")
+    assert not quote.text.endswith("shoul")
 
 
 def test_context_passage_confidence_explains_low_truncated_unknown_source() -> None:

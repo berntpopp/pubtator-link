@@ -125,6 +125,14 @@ def normalize_retrieve_review_context_batch_args(
             allowed_values={"off", "preview", "full"},
         )
     )
+    field_errors.extend(
+        _normalize_enum_casing(
+            normalized,
+            warnings,
+            field="section_policy",
+            allowed_values={"evidence_first", "original_order"},
+        )
+    )
 
     if field_errors:
         raise InputNormalizationError(

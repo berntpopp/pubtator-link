@@ -361,6 +361,7 @@ class RetrieveReviewContextRequest(BaseModel):
     include_tables: bool = False
     include_references: bool = False
     table_mode: ReviewTableMode = "preview"
+    section_policy: SampleSectionPolicy = "evidence_first"
     allow_truncated_passages: bool = True
     max_chars_per_passage: int = Field(default=2200, ge=300, le=10000)
 
@@ -438,6 +439,8 @@ class PassageQuote(BaseModel):
     """Citation-ready quote with returned-text and original-passage offsets."""
 
     text: str
+    truncated: bool = False
+    tail_preview: str | None = None
     returned_start_offset: int = Field(ge=0)
     returned_end_offset: int = Field(ge=0)
     passage_start_char: int = Field(ge=0)
@@ -507,7 +510,10 @@ class ContextPassage(BaseModel):
                 data.pop(key)
         confidence = self.confidence_for_grounding
         if confidence is not None:
-            data["confidence_for_grounding"] = {"level": confidence.level}
+            data["confidence_for_grounding"] = {
+                "level": confidence.level,
+                "explanation": confidence.explanation,
+            }
         return data
 
 
@@ -623,6 +629,8 @@ class ReviewQuote(BaseModel):
     passage_id: str
     section: str
     quote: str = Field(max_length=350)
+    truncated: bool = False
+    tail_preview: str | None = None
     matched_queries: list[str] = Field(default_factory=list)
     coverage_status: SourceCoverage = "unknown"
 
@@ -657,6 +665,7 @@ class RetrieveReviewContextBatchRequest(BaseModel):
     include_tables: bool = False
     include_references: bool = False
     table_mode: ReviewTableMode = "preview"
+    section_policy: SampleSectionPolicy = "evidence_first"
     allow_truncated_passages: bool = True
     max_chars_per_passage: int = Field(default=2200, ge=300, le=10000)
     dry_run: bool = False

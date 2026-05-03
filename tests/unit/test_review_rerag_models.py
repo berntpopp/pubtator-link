@@ -1,4 +1,5 @@
 import pytest
+from jsonschema import validate
 from pydantic import ValidationError
 
 from pubtator_link.models.review_rerag import (
@@ -111,7 +112,30 @@ def test_context_passage_compact_serialization_strips_nulls_and_confidence_facto
     assert "tail_preview" not in dumped
     assert "next_window_token" not in dumped
     assert "score" not in dumped
-    assert dumped["confidence_for_grounding"] == {"level": "high"}
+    assert dumped["confidence_for_grounding"] == {
+        "level": "high",
+        "explanation": "High lexical match in an abstract passage.",
+    }
+
+
+def test_context_passage_compact_serialization_matches_json_schema() -> None:
+    passage = ContextPassage(
+        citation_key="S1",
+        passage_id="PMID:1:abstract:0",
+        section="abstract",
+        text="MEFV variants respond to colchicine in this cohort.",
+        confidence_for_grounding=GroundingConfidence(
+            level="high",
+            score=0.84,
+            factors={"lexical_match": 0.9, "section_weight": 0.8},
+            match_mode="strict_and_relaxed",
+            explanation="High lexical match in an abstract passage.",
+        ),
+    )
+
+    dumped = passage.model_dump(mode="json")
+
+    validate(instance=dumped, schema=ContextPassage.model_json_schema())
 
 
 def test_context_pack_accepts_structured_dropped_summary_and_recovery() -> None:
@@ -302,6 +326,7 @@ def test_batch_request_defaults_to_compact_context_safe_mode() -> None:
     assert request.include_tables is False
     assert request.include_references is False
     assert request.table_mode == "preview"
+    assert request.section_policy == "evidence_first"
 
 
 def test_batch_response_accepts_quotes_mode() -> None:

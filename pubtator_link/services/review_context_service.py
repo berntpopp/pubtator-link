@@ -189,7 +189,10 @@ class ReviewContextService:
         candidates: Sequence[ReviewPassageRow],
         snapshot: ReviewRetrievalSnapshot | None = None,
     ) -> RetrieveReviewContextResponse:
-        sorted_candidates = sorted(candidates, key=rerank_key)
+        sorted_candidates = sorted(
+            candidates,
+            key=lambda row: rerank_key(row, section_policy=request.section_policy),
+        )
         packed = pack_passages(sorted_candidates, request)
         selected = packed.selected
         dropped = packed.dropped
@@ -305,6 +308,7 @@ class ReviewContextService:
                         include_tables=request.include_tables,
                         include_references=request.include_references,
                         table_mode=request.table_mode,
+                        section_policy=request.section_policy,
                         allow_truncated_passages=request.allow_truncated_passages,
                         max_chars_per_passage=request.max_chars_per_passage,
                     ),
@@ -421,6 +425,11 @@ class ReviewContextService:
         )
         quotes = quotes_from_passages(merged.passages) if request.response_mode == "quotes" else []
         merged_passages = [] if request.response_mode == "quotes" else merged.passages
+        stable_citation_map = {
+            passage.stable_citation_key: passage.passage_id
+            for passage in merged.passages
+            if passage.stable_citation_key is not None
+        }
         return RetrieveReviewContextBatchResponse(
             review_id=review_id,
             response_mode=request.response_mode,
@@ -434,6 +443,7 @@ class ReviewContextService:
                 question="\n".join(request.queries),
                 passages=merged_passages,
                 citation_map=citation_map,
+                stable_citation_map=stable_citation_map,
                 total_chars=merged.text_chars,
                 estimated_tokens=merged.estimated_tokens,
                 budget=budget,

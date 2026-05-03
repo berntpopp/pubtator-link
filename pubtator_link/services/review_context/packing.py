@@ -197,19 +197,27 @@ def passage_quote(
     sentence_start = returned_text.rfind(".", 0, match_index) + 1
     sentence_start = max(0, sentence_start)
     sentence_end = returned_text.find(".", match_index)
+    truncated = False
     if sentence_end < 0:
         sentence_end = min(len(returned_text), sentence_start + QUOTE_MAX_CHARS)
+        truncated = sentence_end < len(returned_text)
     else:
         sentence_end = min(len(returned_text), sentence_end + 1)
     if sentence_end - sentence_start > QUOTE_MAX_CHARS:
         sentence_end = sentence_start + QUOTE_MAX_CHARS
+        truncated = True
     quote_window = returned_text[sentence_start:sentence_end]
     quote_text = quote_window.strip()
+    tail_preview = returned_text[sentence_end : sentence_end + 120].strip() or None
+    if truncated and len(quote_text) >= 3:
+        quote_text = quote_text[: QUOTE_MAX_CHARS - 3].rstrip() + "..."
     leading_trim = len(quote_window) - len(quote_window.lstrip())
     returned_start = sentence_start + leading_trim
     returned_end = returned_start + len(quote_text)
     return PassageQuote(
         text=quote_text,
+        truncated=truncated,
+        tail_preview=tail_preview if truncated else None,
         returned_start_offset=returned_start,
         returned_end_offset=returned_end,
         passage_start_char=passage_start_char + returned_start,

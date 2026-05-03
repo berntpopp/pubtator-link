@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 
@@ -23,6 +24,22 @@ from pubtator_link.services.review_context.ranking import SOURCE_COVERAGE_SCARCI
 MAX_DROPPED_ITEMS = 10
 QUOTE_MAX_CHARS = 350
 QUOTE_PAYLOAD_OVERHEAD_CHARS = 180
+_CLAIM_SIGNAL_RE = re.compile(
+    r"\b("
+    r"recommend(?:ation|ed|s)?|guideline|should|must|therapy|treatment|dose|"
+    r"efficacy|response|remission|attack|risk|compared|versus|higher|lower|"
+    r"significant|children|pediatric|patient|cohort"
+    r")\b",
+    re.IGNORECASE,
+)
+_BACKGROUND_STUB_RE = re.compile(
+    r"\b("
+    r"located on chromosome|caused by mutations|most common monogenic|"
+    r"is the most frequent|is the oldest|gene located"
+    r")\b",
+    re.IGNORECASE,
+)
+_WORD_RE = re.compile(r"[a-zA-Z][a-zA-Z0-9_-]*")
 
 
 @dataclass
@@ -272,7 +289,12 @@ def merge_batch_context(
         if request.budget_strategy == "query_fair":
             reserve_limit = max(1, request.max_chars // len(request.queries))
             for query_index, result in enumerate(query_results):
-                for passage_index, passage in enumerate(result.context_pack.passages):
+                passages = _ordered_passages_for_mode(
+                    request=request,
+                    query_index=query_index,
+                    passages=result.context_pack.passages,
+                )
+                for passage_index, passage in passages:
                     try_merge_passage(
                         query_index,
                         passage_index,
@@ -280,7 +302,12 @@ def merge_batch_context(
                         reserve_limit=reserve_limit,
                     )
             for query_index, result in enumerate(query_results):
-                for passage_index, passage in enumerate(result.context_pack.passages):
+                passages = _ordered_passages_for_mode(
+                    request=request,
+                    query_index=query_index,
+                    passages=result.context_pack.passages,
+                )
+                for passage_index, passage in passages:
                     try_merge_passage(
                         query_index,
                         passage_index,
@@ -422,6 +449,45 @@ def quote_payload_chars(
         + quote_chars
         + sum(len(query) for query in queries)
     )
+
+
+def _ordered_passages_for_mode(
+    *,
+    request: RetrieveReviewContextBatchRequest,
+    query_index: int,
+    passages: list[ContextPassage],
+) -> list[tuple[int, ContextPassage]]:
+    indexed = list(enumerate(passages))
+    if request.response_mode != "quotes":
+        return indexed
+    query = request.queries[query_index] if query_index < len(request.queries) else ""
+    return sorted(
+        indexed,
+        key=lambda item: (
+            -_claim_density_score(item[1], query=query),
+            item[0],
+        ),
+    )
+
+
+def _claim_density_score(passage: ContextPassage, *, query: str) -> float:
+    quote = passage.quote.text if passage.quote is not None else passage.text
+    text = " ".join(quote.split())
+    lowered = text.lower()
+    score = 0.0
+    if _CLAIM_SIGNAL_RE.search(text):
+        score += 2.0
+    if any(char.isdigit() for char in text):
+        score += 1.5
+    if _BACKGROUND_STUB_RE.search(text):
+        score -= 3.0
+    content_terms = {token.lower() for token in _WORD_RE.findall(lowered) if len(token) > 2}
+    query_terms = {token.lower() for token in _WORD_RE.findall(query.lower()) if len(token) > 2}
+    if content_terms:
+        query_dominance = len(content_terms.intersection(query_terms)) / len(content_terms)
+        if query_dominance > 0.5:
+            score -= 2.0
+    return score
 
 
 def build_dropped_summary(

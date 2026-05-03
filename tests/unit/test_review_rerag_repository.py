@@ -464,6 +464,7 @@ async def test_search_passages_maps_rows_and_uses_none_for_empty_filters() -> No
         8,
         "when | start | colchicine",
         None,
+        ["when", "start", "colchicine"],
     )
 
 
@@ -520,13 +521,27 @@ async def test_search_passages_uses_relaxed_or_query_for_candidate_recall() -> N
     sql, args = connection.executed[0]
     normalized_sql = " ".join(sql.split())
     assert "strict_query" in sql
+    assert "phrase_query" in sql
     assert "recall_query" in sql
+    assert "phraseto_tsquery" in sql
     assert "websearch_to_tsquery" in sql
     assert "to_tsquery('english', $7)" in sql
-    assert "search_vector @@ query.strict_query or search_vector @@ query.recall_query" in (
-        normalized_sql
-    )
-    assert args[-2] == "should | colchicine | start | after | clinical | diagnosis | fmf | children"
+    assert "search_vector @@ query.phrase_query" in normalized_sql
+    assert "search_vector @@ query.strict_query" in normalized_sql
+    assert "search_vector @@ query.recall_query" in normalized_sql
+    assert "recall_overlap_count" in normalized_sql
+    assert "char_length(text)" in normalized_sql
+    assert args[-3] == "should | colchicine | start | after | clinical | diagnosis | fmf | children"
+    assert args[-1] == [
+        "should",
+        "colchicine",
+        "start",
+        "after",
+        "clinical",
+        "diagnosis",
+        "fmf",
+        "children",
+    ]
 
 
 @pytest.mark.asyncio
