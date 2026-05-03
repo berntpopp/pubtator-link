@@ -15,6 +15,8 @@ from pubtator_link.models.review_rerag import (
 )
 from pubtator_link.services.review_state import index_snapshot_date, retry_after_ms_for_status
 
+DEFAULT_WAIT_TIMEOUT_MS = 120_000
+
 NBK_RE = re.compile(r"\bNBK\d+\b", re.IGNORECASE)
 
 
@@ -104,14 +106,18 @@ class ReviewIndexingService:
         if wait_for_status is None and request.wait_for_completion:
             wait_for_status = "complete_or_partial"
 
-        if wait_for_status is not None and request.timeout_ms > 0:
+        effective_timeout_ms = request.timeout_ms
+        if wait_for_status is not None and effective_timeout_ms == 0:
+            effective_timeout_ms = DEFAULT_WAIT_TIMEOUT_MS
+
+        if wait_for_status is not None and effective_timeout_ms > 0:
             started = time.monotonic()
             while not _status_satisfies(status, wait_for_status):
                 waited_ms = int((time.monotonic() - started) * 1000)
-                if waited_ms >= request.timeout_ms:
+                if waited_ms >= effective_timeout_ms:
                     timed_out = True
                     break
-                await asyncio.sleep(min(self.poll_interval_ms, request.timeout_ms) / 1000)
+                await asyncio.sleep(min(self.poll_interval_ms, effective_timeout_ms) / 1000)
                 status = await self.repository.preparation_status(
                     review_id, session_id=request.session_id
                 )

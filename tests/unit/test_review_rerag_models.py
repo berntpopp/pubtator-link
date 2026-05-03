@@ -91,6 +91,29 @@ def test_context_passage_serializes_quote_and_grounding_confidence() -> None:
     assert dumped["stable_citation_key"].startswith("c_")
 
 
+def test_context_passage_compact_serialization_strips_nulls_and_confidence_factors() -> None:
+    passage = ContextPassage(
+        citation_key="S1",
+        passage_id="PMID:1:abstract:0",
+        section="abstract",
+        text="MEFV variants respond to colchicine in this cohort.",
+        confidence_for_grounding=GroundingConfidence(
+            level="high",
+            score=0.84,
+            factors={"lexical_match": 0.9, "section_weight": 0.8},
+            match_mode="strict_and_relaxed",
+            explanation="High lexical match in an abstract passage.",
+        ),
+    )
+
+    dumped = passage.model_dump(mode="json")
+
+    assert "tail_preview" not in dumped
+    assert "next_window_token" not in dumped
+    assert "score" not in dumped
+    assert dumped["confidence_for_grounding"] == {"level": "high"}
+
+
 def test_context_pack_accepts_structured_dropped_summary_and_recovery() -> None:
     pack = ContextPack(
         question="MEFV colchicine",

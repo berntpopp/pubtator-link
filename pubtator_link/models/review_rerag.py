@@ -483,6 +483,17 @@ class ContextPassage(BaseModel):
             self.stable_citation_key = stable_citation_key_for_passage(self.passage_id)
         return self
 
+    @model_serializer(mode="wrap")
+    def serialize_compact(self, handler: Any) -> dict[str, Any]:
+        data = cast(dict[str, Any], handler(self))
+        for key in list(data):
+            if data[key] in (None, [], {}):
+                data.pop(key)
+        confidence = self.confidence_for_grounding
+        if confidence is not None:
+            data["confidence_for_grounding"] = {"level": confidence.level}
+        return data
+
 
 class ContextPack(BaseModel):
     """Fresh per-request retrieval result."""

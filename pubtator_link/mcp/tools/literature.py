@@ -52,7 +52,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         year_max: int | None = None,
         sections: list[str] | None = None,
         response_mode: SearchResponseMode = "compact",
-        include_citations: IncludeCitations = "nlm",
+        include_citations: IncludeCitations = "none",
         text_hl_format: TextHighlightFormat = "plain",
         limit: Annotated[int | None, Field(ge=1, le=20)] = 5,
         entity_ids: list[str] | None = None,

@@ -171,6 +171,22 @@ async def test_wait_for_terminal_times_out_with_retry_after() -> None:
 
 
 @pytest.mark.asyncio
+async def test_wait_for_completion_uses_default_timeout_when_timeout_omitted() -> None:
+    repository = FakeIndexRepository(existing={"PMID:1": "queued"})
+    queue = FakeQueue(result="already_queued")
+    service = ReviewIndexingService(repository=repository, queue=queue, poll_interval_ms=1)
+
+    response = await service.index_review_evidence(
+        "review-1",
+        IndexReviewEvidenceRequest(pmids=["1"], wait_for_completion=True, timeout_ms=0),
+    )
+
+    assert repository.status_calls == 2
+    assert response.preparation_status.complete == 1
+    assert response.timed_out is False
+
+
+@pytest.mark.asyncio
 async def test_index_links_sources_to_session() -> None:
     repository = FakeIndexRepository()
     queue = FakeQueue()
