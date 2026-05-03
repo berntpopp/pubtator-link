@@ -1,3 +1,5 @@
+import pytest
+
 from pubtator_link.config import ReviewReragConfig, ServerSettings
 
 
@@ -31,6 +33,25 @@ def test_europe_pmc_fallback_is_disabled_by_default() -> None:
     assert config.enable_europe_pmc_fallback is False
     assert config.europe_pmc_rate_limit_per_second <= 1.0
     assert config.europe_pmc_max_concurrency == 1
+
+
+def test_review_embedding_rerank_defaults_disabled() -> None:
+    settings = ServerSettings()
+    config = ReviewReragConfig.from_settings(settings)
+    assert config.embedding_rerank_enabled is False
+    assert config.embedding_model == "BAAI/bge-small-en-v1.5"
+    assert config.embedding_dim == 384
+    assert config.embedding_top_k == 50
+    assert config.embedding_rrf_k == 60
+
+
+def test_review_embedding_rerank_env_parses(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PUBTATOR_LINK_REVIEW_EMBEDDING_RERANK_ENABLED", "true")
+    monkeypatch.setenv("PUBTATOR_LINK_REVIEW_EMBEDDING_TOP_K", "40")
+    settings = ServerSettings()
+    config = ReviewReragConfig.from_settings(settings)
+    assert config.embedding_rerank_enabled is True
+    assert config.embedding_top_k == 40
 
 
 def test_review_rerag_config_reads_prefixed_env(monkeypatch) -> None:
