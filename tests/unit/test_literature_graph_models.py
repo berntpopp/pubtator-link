@@ -3,11 +3,15 @@ from pydantic import ValidationError
 
 from pubtator_link.models.literature_graph import (
     LiteratureAuthor,
+    LiteratureCandidateSummary,
     LiteratureEntity,
     LiteratureGraphEdge,
     LiteratureGraphNode,
     LiteratureGraphProvenance,
+    LiteratureGraphResponseMeta,
     LiteraturePaper,
+    LiteratureProviderStatus,
+    LiteratureQueryRelevance,
     PublicationCitationGraphRequest,
     PublicationCitationGraphResponse,
     RelatedEvidenceCandidatesRequest,
@@ -189,3 +193,61 @@ def test_response_meta_serializes_with_alias_and_validates_by_name() -> None:
     assert "_meta" in related.model_dump()
     assert "meta" not in related.model_dump()
     assert topic.meta.research_use_only is False
+
+
+def test_candidate_summary_access_flags_and_source_tool_vocab() -> None:
+    candidate = LiteratureCandidateSummary(
+        pmid="28386255",
+        title="EULAR recommendations for familial Mediterranean fever",
+        access="full_text",
+        access_flags={
+            "has_pmc_full_text": True,
+            "is_open_access": True,
+            "has_pdf": False,
+        },
+        relevance_to_query=LiteratureQueryRelevance(
+            score=0.9,
+            matched_terms=["familial mediterranean fever", "colchicine"],
+            matched_intents=["guideline_intent", "treatment_intent"],
+            reasons=["title_query_overlap", "guideline_or_consensus_match"],
+        ),
+        source_tools=["topic_search", "citation_graph"],
+    )
+
+    dumped = candidate.model_dump()
+    assert dumped["access"] == "full_text"
+    assert dumped["access_flags"]["has_pmc_full_text"] is True
+    assert dumped["relevance_to_query"]["matched_intents"] == [
+        "guideline_intent",
+        "treatment_intent",
+    ]
+    assert dumped["source_tools"] == ["topic_search", "citation_graph"]
+
+
+def test_provider_status_result_count_defaults_to_zero() -> None:
+    status = LiteratureProviderStatus(
+        provider="unpaywall",
+        operation="open_access",
+        status="disabled",
+        message="UNPAYWALL_EMAIL is not configured.",
+    )
+
+    assert status.result_count == 0
+
+
+def test_graph_response_meta_tracks_budget_cache_and_ranking() -> None:
+    meta = LiteratureGraphResponseMeta(
+        response_mode="compact",
+        response_size_class="medium",
+        truncated=True,
+        omitted_counts={"reference_candidates": 3},
+        budget_advice="Reduce max_results or request response_mode='full'.",
+        cache_key="citation:40562663:compact",
+        snapshot_date="2026-05-03",
+        source_versions={"ranker": "topic_map_ranker_v1"},
+        ranking_version="topic_map_ranker_v1",
+    )
+
+    assert meta.response_mode == "compact"
+    assert meta.response_size_class == "medium"
+    assert meta.omitted_counts == {"reference_candidates": 3}

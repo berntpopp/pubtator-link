@@ -8,8 +8,8 @@ from typing import Any
 from pubtator_link.models.literature_graph import (
     LiteratureAvailability,
     LiteratureGraphProvenance,
+    LiteratureGraphResponseMeta,
     LiteraturePaper,
-    LiteratureResponseMeta,
     ProviderWarning,
     PublicationCitationGraphRequest,
     RelatedEvidenceCandidate,
@@ -93,7 +93,7 @@ class RelatedEvidenceService:
             source=LiteraturePaper(pmid=request.pmid),
             candidates=candidates,
             candidate_pmids=ordered_pmids,
-            _meta=LiteratureResponseMeta(
+            _meta=LiteratureGraphResponseMeta(
                 warnings=warnings,
                 next_commands=_next_commands(ordered_pmids),
             ),

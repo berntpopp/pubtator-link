@@ -7,8 +7,8 @@ from typing import Any, Protocol
 
 from pubtator_link.models.literature_graph import (
     LiteratureAvailability,
+    LiteratureGraphResponseMeta,
     LiteraturePaper,
-    LiteratureResponseMeta,
     ProviderWarning,
     PublicationCitationGraphRequest,
     PublicationCitationGraphResponse,
@@ -142,7 +142,7 @@ class CitationGraphService:
             cited_by=cited_by,
             candidate_pmids=candidate_pmids,
             metadata_only=_metadata_only([*references, *cited_by]),
-            _meta=LiteratureResponseMeta(
+            _meta=LiteratureGraphResponseMeta(
                 warnings=warnings,
                 next_commands=_next_commands(candidate_pmids),
             ),

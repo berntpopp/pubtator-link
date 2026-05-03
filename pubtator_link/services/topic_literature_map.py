@@ -13,9 +13,9 @@ from pubtator_link.models.literature_graph import (
     LiteratureGraphEdge,
     LiteratureGraphNode,
     LiteratureGraphProvenance,
+    LiteratureGraphResponseMeta,
     LiteraturePaper,
     LiteraturePaperStatus,
-    LiteratureResponseMeta,
     ProviderWarning,
     PublicationCitationGraphRequest,
     RelatedEvidenceCandidatesRequest,
@@ -146,7 +146,7 @@ class TopicLiteratureMapService:
             nodes=nodes,
             edges=deduped_edges,
             candidate_retrieval_hints=hints,
-            _meta=LiteratureResponseMeta(warnings=warnings, next_commands=hints),
+            _meta=LiteratureGraphResponseMeta(warnings=warnings, next_commands=hints),
         )
 
     async def _seed_pmids(

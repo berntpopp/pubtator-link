@@ -7,6 +7,25 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 CitationGraphDirection = Literal["references", "cited_by", "both"]
+LiteratureGraphResponseMode = Literal["compact", "nodes_edges", "full"]
+LiteratureResponseSizeClass = Literal["small", "medium", "large"]
+LiteratureCandidateAccess = Literal["full_text", "open_access", "metadata_only", "unresolved"]
+LiteratureSourceTool = Literal[
+    "topic_search",
+    "citation_graph",
+    "related_evidence",
+    "doi_resolution",
+    "metadata_backfill",
+]
+LiteratureProviderStatusValue = Literal[
+    "not_requested",
+    "skipped",
+    "success",
+    "empty",
+    "partial",
+    "failed",
+    "disabled",
+]
 LiteratureNodeType = Literal["paper", "author", "entity"]
 LiteratureEdgeType = Literal[
     "cites",
@@ -195,6 +214,46 @@ class ProviderWarning(BaseModel):
     message: str
 
 
+class LiteratureQueryRelevance(BaseModel):
+    """Bounded query relevance signals for candidate ranking only."""
+
+    score: float = Field(ge=0.0, le=1.0)
+    matched_terms: list[str] = Field(default_factory=list)
+    matched_mesh: list[str] = Field(default_factory=list)
+    matched_intents: list[str] = Field(default_factory=list)
+    reasons: list[str] = Field(default_factory=list)
+
+
+class LiteratureCandidateSummary(BaseModel):
+    """Compact publication summary for LLM candidate triage."""
+
+    pmid: str | None = None
+    doi: str | None = None
+    title: str | None = None
+    journal: str | None = None
+    year: int | None = None
+    publication_types: list[str] = Field(default_factory=list)
+    access: LiteratureCandidateAccess
+    access_flags: dict[str, bool] = Field(default_factory=dict)
+    score: float | None = None
+    relevance_to_query: LiteratureQueryRelevance | None = None
+    rank_reasons: list[str] = Field(default_factory=list)
+    demotion_reasons: list[str] = Field(default_factory=list)
+    source_tools: list[LiteratureSourceTool] = Field(default_factory=list)
+    next_actions: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class LiteratureProviderStatus(BaseModel):
+    """Structured provider status for a graph direction or enrichment operation."""
+
+    provider: str
+    operation: str
+    status: LiteratureProviderStatusValue
+    result_count: int = 0
+    retryable: bool = False
+    message: str | None = None
+
+
 class LiteratureResponseMeta(BaseModel):
     """Transparent metadata for literature graph responses."""
 
@@ -208,6 +267,30 @@ class LiteratureResponseMeta(BaseModel):
     )
     warnings: list[ProviderWarning] = Field(default_factory=list)
     next_commands: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class LiteratureGraphResponseMeta(LiteratureResponseMeta):
+    """Mode, budget, cache, and ranking metadata for graph responses."""
+
+    response_mode: LiteratureGraphResponseMode = "full"
+    response_size_class: LiteratureResponseSizeClass = "small"
+    truncated: bool = False
+    omitted_counts: dict[str, int] = Field(default_factory=dict)
+    budget_advice: str | None = None
+    cache_key: str | None = None
+    snapshot_date: str | None = None
+    source_versions: dict[str, str] = Field(default_factory=dict)
+    ranking_version: str | None = None
+    provider_status: list[LiteratureProviderStatus] = Field(default_factory=list)
+
+
+def _coerce_graph_response_meta(value: Any) -> Any:
+    if isinstance(value, LiteratureResponseMeta) and not isinstance(
+        value,
+        LiteratureGraphResponseMeta,
+    ):
+        return LiteratureGraphResponseMeta(**value.model_dump())
+    return value
 
 
 class PublicationCitationGraphRequest(BaseModel):
@@ -247,7 +330,15 @@ class PublicationCitationGraphResponse(BaseModel):
     cited_by: list[LiteraturePaper] = Field(default_factory=list)
     candidate_pmids: list[str] = Field(default_factory=list)
     metadata_only: list[LiteraturePaper] = Field(default_factory=list)
-    meta: LiteratureResponseMeta = Field(default_factory=LiteratureResponseMeta, alias="_meta")
+    meta: LiteratureGraphResponseMeta = Field(
+        default_factory=LiteratureGraphResponseMeta,
+        alias="_meta",
+    )
+
+    @field_validator("meta", mode="before")
+    @classmethod
+    def coerce_legacy_meta(cls, value: Any) -> Any:
+        return _coerce_graph_response_meta(value)
 
 
 class RelatedEvidenceCandidatesRequest(BaseModel):
@@ -289,7 +380,15 @@ class RelatedEvidenceCandidatesResponse(BaseModel):
         "Related candidates are not substitutes and require passage-level review before use as "
         "evidence."
     )
-    meta: LiteratureResponseMeta = Field(default_factory=LiteratureResponseMeta, alias="_meta")
+    meta: LiteratureGraphResponseMeta = Field(
+        default_factory=LiteratureGraphResponseMeta,
+        alias="_meta",
+    )
+
+    @field_validator("meta", mode="before")
+    @classmethod
+    def coerce_legacy_meta(cls, value: Any) -> Any:
+        return _coerce_graph_response_meta(value)
 
 
 class TopicLiteratureMapRequest(BaseModel):
@@ -351,7 +450,15 @@ class TopicLiteratureMapResponse(BaseModel):
     nodes: list[LiteratureGraphNode] = Field(default_factory=list)
     edges: list[LiteratureGraphEdge] = Field(default_factory=list)
     candidate_retrieval_hints: list[dict[str, Any]] = Field(default_factory=list)
-    meta: LiteratureResponseMeta = Field(default_factory=LiteratureResponseMeta, alias="_meta")
+    meta: LiteratureGraphResponseMeta = Field(
+        default_factory=LiteratureGraphResponseMeta,
+        alias="_meta",
+    )
+
+    @field_validator("meta", mode="before")
+    @classmethod
+    def coerce_legacy_meta(cls, value: Any) -> Any:
+        return _coerce_graph_response_meta(value)
 
 
 def _paper_dedupe_keys(paper: LiteraturePaper) -> set[str]:
