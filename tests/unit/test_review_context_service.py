@@ -21,8 +21,8 @@ from pubtator_link.models.review_rerag import (
     ReviewPassageSample,
     ReviewSourceSummary,
 )
-from pubtator_link.services.review_context_service import ReviewContextService
 from pubtator_link.services.review_context.embeddings import EmbeddingProviderUnavailableError
+from pubtator_link.services.review_context_service import ReviewContextService
 
 
 class FakeReviewContextRepository:
@@ -768,7 +768,9 @@ async def test_embedding_rerank_promotes_semantic_evidence_above_lexical_table()
 async def test_embedding_rerank_keeps_ref_below_evidence() -> None:
     repository = FakeReviewContextRepository(
         [
-            _passage("semantic-ref", pmid="111", text="Reference text.", lexical_rank=10.0, section="REF"),
+            _passage(
+                "semantic-ref", pmid="111", text="Reference text.", lexical_rank=10.0, section="REF"
+            ),
             _passage(
                 "semantic-evidence",
                 pmid="222",

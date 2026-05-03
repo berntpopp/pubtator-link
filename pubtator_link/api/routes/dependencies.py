@@ -769,9 +769,7 @@ def _build_embedding_provider() -> EmbeddingProvider | None:
         return None
     try:
         return SentenceTransformerEmbeddingProvider(
-            model_name=getattr(
-                review_rerag_config, "embedding_model", "BAAI/bge-small-en-v1.5"
-            ),
+            model_name=getattr(review_rerag_config, "embedding_model", "BAAI/bge-small-en-v1.5"),
             dim=getattr(review_rerag_config, "embedding_dim", 384),
             device=getattr(review_rerag_config, "embedding_device", "auto"),
         )

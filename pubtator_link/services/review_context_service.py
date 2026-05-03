@@ -33,11 +33,6 @@ from pubtator_link.models.review_rerag import (
     stable_citation_key_for_passage,
 )
 from pubtator_link.services.provenance import corpus_snapshot_date, stable_cache_key
-from pubtator_link.services.review_context.embeddings import (
-    EmbeddingProvider,
-    text_hash,
-)
-from pubtator_link.services.review_context.embedding_rerank import rerank_with_embeddings
 from pubtator_link.services.review_context.batch_budgeting import merge_batch_context
 from pubtator_link.services.review_context.budgets import (
     REVIEW_BATCH_DEFAULT_MAX_CHARS,
@@ -50,6 +45,11 @@ from pubtator_link.services.review_context.diagnostics import (
     build_diagnostics,
     query_summary,
     recovery_from_query_summary,
+)
+from pubtator_link.services.review_context.embedding_rerank import rerank_with_embeddings
+from pubtator_link.services.review_context.embeddings import (
+    EmbeddingProvider,
+    text_hash,
 )
 from pubtator_link.services.review_context.packing import (
     context_budget,
@@ -1013,12 +1013,12 @@ def _review_batch_cache_key(
 
 
 def _cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
-    pairs = list(zip(left, right, strict=False))
+    pairs: list[tuple[float, float]] = list(zip(left, right, strict=False))
     if not pairs:
         return 0.0
-    dot = sum(left_value * right_value for left_value, right_value in pairs)
-    left_norm = sum(left_value * left_value for left_value, _right_value in pairs) ** 0.5
-    right_norm = sum(right_value * right_value for _left_value, right_value in pairs) ** 0.5
+    dot: float = sum(left_value * right_value for left_value, right_value in pairs)
+    left_norm: float = sum(left_value * left_value for left_value, _right_value in pairs) ** 0.5
+    right_norm: float = sum(right_value * right_value for _left_value, right_value in pairs) ** 0.5
     if left_norm == 0 or right_norm == 0:
         return 0.0
     return dot / (left_norm * right_norm)

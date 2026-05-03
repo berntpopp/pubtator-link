@@ -15,11 +15,9 @@ class EmbeddingProvider(Protocol):
     model_name: str
     dim: int
 
-    async def embed_query(self, text: str) -> list[float]:
-        ...
+    async def embed_query(self, text: str) -> list[float]: ...
 
-    async def embed_passages(self, texts: list[str]) -> list[list[float]]:
-        ...
+    async def embed_passages(self, texts: list[str]) -> list[list[float]]: ...
 
 
 def text_hash(text: str) -> str:

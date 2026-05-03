@@ -19,13 +19,11 @@ class EmbeddingBackfillRepository(Protocol):
         *,
         model_name: str,
         limit: int,
-    ) -> list[ReviewPassageRow]:
-        ...
+    ) -> list[ReviewPassageRow]: ...
 
     async def upsert_passage_embeddings(
         self, records: Sequence[ReviewPassageEmbeddingRecord]
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 @dataclass(frozen=True)

@@ -26,9 +26,7 @@ class FakeEmbeddingBackfillRepository:
         self.calls.append({"review_id": review_id, "model_name": model_name, "limit": limit})
         return self.missing
 
-    async def upsert_passage_embeddings(
-        self, records: list[ReviewPassageEmbeddingRecord]
-    ) -> None:
+    async def upsert_passage_embeddings(self, records: list[ReviewPassageEmbeddingRecord]) -> None:
         self.upserted.extend(records)
 
 

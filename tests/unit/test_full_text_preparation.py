@@ -331,9 +331,7 @@ async def test_prepare_pmid_embeds_newly_indexed_passages_when_enabled() -> None
         ]
     )
     base_config = _config()
-    config = ReviewReragConfig(
-        **{**base_config.__dict__, "embedding_rerank_enabled": True}
-    )
+    config = ReviewReragConfig(**{**base_config.__dict__, "embedding_rerank_enabled": True})
     service = FullTextPreparationService(
         config=config,
         repository=repository,
@@ -379,9 +377,7 @@ async def test_prepare_pmid_embedding_provider_failure_does_not_fail_indexing() 
         ]
     )
     base_config = _config()
-    config = ReviewReragConfig(
-        **{**base_config.__dict__, "embedding_rerank_enabled": True}
-    )
+    config = ReviewReragConfig(**{**base_config.__dict__, "embedding_rerank_enabled": True})
     service = FullTextPreparationService(
         config=config,
         repository=repository,
@@ -392,9 +388,7 @@ async def test_prepare_pmid_embedding_provider_failure_does_not_fail_indexing() 
     status = await service.prepare_pmid(review_id="review-1", pmid="40234174")
 
     assert status == "complete"
-    assert [passage.passage_id for passage in repository.passages] == [
-        "PMID:40234174:abstract:0"
-    ]
+    assert [passage.passage_id for passage in repository.passages] == ["PMID:40234174:abstract:0"]
     assert repository.embedding_records == []
     assert repository.attempts[-1]["status"] == "success"
 

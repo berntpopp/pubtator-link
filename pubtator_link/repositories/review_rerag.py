@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 from uuid import uuid4
 
-from pubtator_link.services.review_context.embeddings import text_hash
 from pubtator_link.models.review_rerag import (
     EvidenceCertaintyRecord,
     FailedSourceSummary,
@@ -43,6 +42,7 @@ from pubtator_link.repositories.review_rerag_mappers import (
     _review_inventory_item_from_row,
     _source_summary_from_row,
 )
+from pubtator_link.services.review_context.embeddings import text_hash
 
 SHORT_SAMPLE_WARNING = "Only short sample passages were available for this PMID."
 
