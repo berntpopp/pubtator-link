@@ -567,6 +567,20 @@ class RetrieveReviewContextResponse(BaseModel):
     recovery: RecoveryHint | None = None
 
 
+class EmbeddingRerankDiagnostics(BaseModel):
+    """Diagnostics for optional embedding-based review context reranking."""
+
+    enabled: bool = False
+    active: bool = False
+    model_name: str | None = None
+    embedding_dim: int | None = None
+    candidate_count: int = Field(default=0, ge=0)
+    embedded_candidate_count: int = Field(default=0, ge=0)
+    missing_embedding_count: int = Field(default=0, ge=0)
+    strategy: str | None = None
+    fallback_reason: str | None = None
+
+
 class RetrieveReviewDiagnostics(BaseModel):
     """Actionable diagnostics for review context retrieval."""
 
@@ -580,6 +594,7 @@ class RetrieveReviewDiagnostics(BaseModel):
     failed_sources: list["FailedSourceSummary"] = Field(default_factory=list)
     filter_summary: dict[str, list[str]] = Field(default_factory=dict)
     suggested_queries: list[str] = Field(default_factory=list)
+    embedding_rerank: EmbeddingRerankDiagnostics | None = None
     message: str
 
 
