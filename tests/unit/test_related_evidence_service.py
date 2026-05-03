@@ -120,6 +120,49 @@ class CitationGraphWithReviewCandidate:
         )
 
 
+class IntentDiscovery:
+    async def find_related_article_scores(
+        self,
+        pmids: list[str],
+        limit: int,
+    ) -> list[RelatedArticleScoreRecord]:
+        assert pmids == ["1"]
+        assert 25 <= limit <= 100
+        return [
+            RelatedArticleScoreRecord(
+                source_pmid="1",
+                pmid="444",
+                neighbor_score=900,
+            )
+        ]
+
+
+class IntentMetadata:
+    async def get_metadata(self, request):
+        return PublicationMetadataResponse(
+            metadata=[
+                PublicationMetadata(
+                    pmid=pmid,
+                    title="Pediatric colchicine resistance in familial Mediterranean fever",
+                    pub_year=2024,
+                    publication_types=["Guideline"],
+                    coverage="full_text",
+                    pmcid="PMC1",
+                )
+                for pmid in request.pmids
+            ],
+        )
+
+
+class IntentCitationGraph:
+    async def get_citation_graph(self, request):
+        assert request.pmid == "1"
+        return PublicationCitationGraphResponse(
+            source=LiteraturePaper(pmid=request.pmid),
+            candidate_pmids=[],
+        )
+
+
 @pytest.mark.asyncio
 async def test_ranks_full_text_candidate_when_neighbor_scores_tie() -> None:
     service = RelatedEvidenceService(
@@ -157,7 +200,9 @@ async def test_filters_publication_type_and_year_without_citation_neighbors() ->
     assert response.candidate_pmids == ["111"]
     assert response.candidates[0].match_reasons == [
         "pubmed_neighbor_score",
+        "shared_publication_type",
         "requested_publication_type",
+        "year_window_match",
     ]
     assert response.candidates[0].paper.provenance[0].provider == "pubmed_metadata"
 
@@ -240,3 +285,51 @@ async def test_metadata_failure_degrades_to_bare_candidates_with_warning() -> No
         warning.provider == "pubmed_metadata" and warning.status == "provider_failed"
         for warning in response.meta.warnings
     )
+
+
+@pytest.mark.asyncio
+async def test_related_evidence_enriches_match_reasons_for_intents_and_access() -> None:
+    service = RelatedEvidenceService(
+        discovery_service=IntentDiscovery(),
+        metadata_service=IntentMetadata(),
+        citation_graph_service=IntentCitationGraph(),
+    )
+
+    response = await service.find_candidates(
+        RelatedEvidenceCandidatesRequest(
+            pmid="1",
+            max_results=5,
+            publication_types=["Guideline"],
+            response_mode="compact",
+        )
+    )
+
+    reasons = set(response.candidates[0].match_reasons)
+    assert "pubmed_neighbor_score" in reasons
+    assert "full_text_available" in reasons
+    assert "shared_publication_type" in reasons
+    assert "guideline_or_consensus_match" in reasons
+    assert "pediatric_match" in reasons
+    assert "treatment_match" in reasons
+    assert response.meta.response_mode == "compact"
+
+
+@pytest.mark.asyncio
+async def test_metadata_full_text_pmc_candidate_emits_open_access_reason() -> None:
+    service = RelatedEvidenceService(
+        discovery_service=IntentDiscovery(),
+        metadata_service=IntentMetadata(),
+        citation_graph_service=IntentCitationGraph(),
+    )
+
+    response = await service.find_candidates(
+        RelatedEvidenceCandidatesRequest(
+            pmid="1",
+            max_results=5,
+            include_citation_neighbors=False,
+        )
+    )
+
+    reasons = set(response.candidates[0].match_reasons)
+    assert "full_text_available" in reasons
+    assert "open_access_available" in reasons

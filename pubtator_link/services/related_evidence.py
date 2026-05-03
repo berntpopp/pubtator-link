@@ -94,6 +94,7 @@ class RelatedEvidenceService:
             candidates=candidates,
             candidate_pmids=ordered_pmids,
             _meta=LiteratureGraphResponseMeta(
+                response_mode=request.response_mode,
                 warnings=warnings,
                 next_commands=_next_commands(ordered_pmids),
             ),
@@ -183,7 +184,10 @@ def _paper_from_metadata(metadata: Any) -> LiteraturePaper:
         journal=metadata.journal,
         year=metadata.pub_year,
         publication_types=metadata.publication_types,
-        availability=LiteratureAvailability(has_pmc_full_text=has_full_text),
+        availability=LiteratureAvailability(
+            has_pmc_full_text=has_full_text,
+            is_open_access=bool(metadata.pmcid),
+        ),
         status="resolved_full_text_candidate" if has_full_text else "resolved_metadata_only",
         provenance=[LiteratureGraphProvenance(provider="pubmed_metadata")],
     )
@@ -215,11 +219,31 @@ def _match_reasons(
         reasons.append("citation_neighbor")
     if _has_full_text(paper):
         reasons.append("full_text_available")
+    if paper.availability.is_open_access:
+        reasons.append("open_access_available")
     if request.publication_types and _publication_type_matches(
         paper.publication_types,
         request.publication_types,
     ):
+        reasons.append("shared_publication_type")
         reasons.append("requested_publication_type")
+    title_type_text = f"{paper.title or ''} {' '.join(paper.publication_types)}".casefold()
+    if any(
+        term in title_type_text for term in ("guideline", "recommendation", "consensus", "delphi")
+    ):
+        reasons.append("guideline_or_consensus_match")
+    if any(term in title_type_text for term in ("child", "children", "pediatric", "paediatric")):
+        reasons.append("pediatric_match")
+    if any(term in title_type_text for term in ("turkey", "turkish", "mediterranean")):
+        reasons.append("population_match")
+    if any(term in title_type_text for term in ("variant", "genotype", "phenotype", "penetrance")):
+        reasons.append("variant_or_genotype_match")
+    if any(
+        term in title_type_text for term in ("colchicine", "treatment", "resistance", "management")
+    ):
+        reasons.append("treatment_match")
+    if request.year_min is not None or request.year_max is not None:
+        reasons.append("year_window_match")
     return reasons
 
 

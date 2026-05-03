@@ -357,6 +357,7 @@ class RelatedEvidenceCandidatesRequest(BaseModel):
 
     pmid: str
     max_results: int = Field(default=25, ge=1, le=100)
+    response_mode: LiteratureGraphResponseMode = "compact"
     prefer_full_text: bool = True
     include_pubtator_search: bool = True
     include_citation_neighbors: bool = True
