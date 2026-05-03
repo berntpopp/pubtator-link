@@ -52,7 +52,9 @@ class ReviewAuditRepository(Protocol):
     ) -> list[str]:
         """Return stable passage IDs for a review."""
 
-    async def list_review_audit_events(self, review_id: str) -> list[Mapping[str, Any]]:
+    async def list_review_audit_events(
+        self, review_id: str, *, limit: int | None = None
+    ) -> list[Mapping[str, Any]]:
         """Return recorded audit events for a review."""
 
     async def list_evidence_certainty(self, review_id: str) -> list[EvidenceCertaintyRecord]:
@@ -119,6 +121,25 @@ class ReviewAuditService:
             },
             index_snapshot_date=index_snapshot_date(),
         )
+
+    async def get_resource_summary(self, review_id: str) -> dict[str, Any]:
+        preparation_status = await self.repository.preparation_status(review_id, session_id=None)
+        if isinstance(preparation_status, PreparationStatus):
+            preparation_payload = preparation_status.model_dump()
+        else:
+            preparation_payload = dict(preparation_status)
+        totals = await self.repository.review_index_totals(review_id, session_id=None)
+        events = await self.repository.list_review_audit_events(review_id, limit=20)
+        search_runs, retrieval_runs = self._runs_from_events(events)
+        return {
+            "success": True,
+            "review_id": review_id,
+            "generated_at": datetime.now(UTC).isoformat(),
+            "preparation_status": preparation_payload,
+            "totals": totals.model_dump(),
+            "search_runs": [run.model_dump() for run in search_runs[:20]],
+            "retrieval_runs": [run.model_dump() for run in retrieval_runs[:20]],
+        }
 
     @staticmethod
     def _runs_from_events(

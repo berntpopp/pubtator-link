@@ -20,6 +20,13 @@ RESEARCH_USE_NOTICE = (
     "submit identifiable patient data to public demo instances."
 )
 
+
+def get_tool_detail_resource(tool_name: str) -> dict[str, Any]:
+    from pubtator_link.mcp.review_resources import get_tool_detail_resource as get_detail
+
+    return get_detail(tool_name)
+
+
 def _tool_key_name(value: str) -> str:
     return value.split(":", maxsplit=1)[0]
 
@@ -688,6 +695,8 @@ def get_text_processing_resource() -> dict[str, Any]:
 
 
 def get_workflow_help_resource(profile: MCPToolProfile = "full") -> dict[str, Any]:
-    return WorkflowHelpService(profile=profile).get_help("clinical_genetics_review").model_dump(
-        by_alias=True
+    return (
+        WorkflowHelpService(profile=profile)
+        .get_help("clinical_genetics_review")
+        .model_dump(by_alias=True)
     )

@@ -81,6 +81,36 @@ from pubtator_link.services.search_shaping import (
 from pubtator_link.services.source_preflight import SourcePreflightService
 
 INLINE_AUDIT_BUNDLE_MAX_BYTES = 1_000_000
+RESOURCE_LIST_LIMIT = 50
+
+
+def _dump_mapping(value: Any) -> dict[str, Any]:
+    if hasattr(value, "model_dump"):
+        try:
+            return cast(dict[str, Any], value.model_dump(mode="json"))
+        except TypeError:
+            return cast(dict[str, Any], value.model_dump())
+    return dict(value)
+
+
+def _bounded_mapping(value: Any, allowed_keys: set[str]) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return {key: value[key] for key in allowed_keys if key in value}
+
+
+def _bounded_list(
+    values: Any, allowed_keys: set[str], *, limit: int = RESOURCE_LIST_LIMIT
+) -> list[Any]:
+    if not isinstance(values, list):
+        return []
+    bounded: list[Any] = []
+    for value in values[:limit]:
+        if isinstance(value, dict):
+            bounded.append(_bounded_mapping(value, allowed_keys))
+        else:
+            bounded.append(value)
+    return bounded
 
 
 def _strip_resolver_trace(result: dict[str, Any]) -> dict[str, Any]:
@@ -705,6 +735,199 @@ async def get_research_session_status_impl(
 async def list_research_sessions_impl(*, service: Any, review_id: str) -> dict[str, Any]:
     result = (await service.list_sessions(review_id=review_id)).model_dump(by_alias=True)
     return cast(dict[str, Any], result)
+
+
+async def review_summary_resource_impl(*, service: Any, review_id: str) -> dict[str, Any]:
+    response = _dump_mapping(await service.get_summary(review_id))
+    return {
+        "success": bool(response.get("success", True)),
+        "review_id": review_id,
+        "index": _bounded_mapping(
+            response.get("index"),
+            {
+                "review_id",
+                "created_at",
+                "updated_at",
+                "expires_at",
+                "preparation_status",
+                "pmid_count",
+                "source_count",
+                "passage_count",
+                "failed_source_count",
+                "approximate_bytes",
+            },
+        )
+        if response.get("index") is not None
+        else None,
+    }
+
+
+async def review_sessions_resource_impl(*, service: Any, review_id: str) -> dict[str, Any]:
+    response = _dump_mapping(await service.list_sessions(review_id=review_id))
+    return {
+        "success": bool(response.get("success", True)),
+        "review_id": review_id,
+        "sessions": _bounded_list(
+            response.get("sessions"),
+            {
+                "review_id",
+                "session_id",
+                "query",
+                "created_at",
+                "updated_at",
+                "candidate_count",
+                "preparation_status",
+                "coverage_summary",
+            },
+        ),
+    }
+
+
+async def review_session_detail_resource_impl(
+    *,
+    service: Any,
+    review_id: str,
+    session_id: str,
+) -> dict[str, Any]:
+    response = _dump_mapping(await service.get_status(review_id=review_id, session_id=session_id))
+    return {
+        "success": bool(response.get("success", True)),
+        "review_id": review_id,
+        "session_id": session_id,
+        "session": _bounded_mapping(
+            response.get("manifest"),
+            {
+                "review_id",
+                "session_id",
+                "query",
+                "created_at",
+                "updated_at",
+                "candidate_count",
+                "candidates",
+                "preparation_status",
+                "coverage_summary",
+            },
+        ),
+    }
+
+
+async def review_passage_resource_impl(
+    *,
+    service: Any,
+    review_id: str,
+    passage_id: str,
+) -> dict[str, Any]:
+    response = _dump_mapping(
+        await service.get_passages_by_id(
+            review_id=review_id,
+            passage_ids=[passage_id],
+            session_id=None,
+            max_chars_per_passage=2200,
+        )
+    )
+    passages = _bounded_list(
+        response.get("passages"),
+        {
+            "passage_id",
+            "review_id",
+            "source_id",
+            "source_kind",
+            "section",
+            "text",
+            "pmid",
+            "pmcid",
+            "doi",
+            "url",
+            "heading_path",
+            "page",
+            "entity_ids",
+            "relation_types",
+            "screening_status",
+        },
+        limit=1,
+    )
+    return {
+        "success": bool(response.get("success", True)),
+        "review_id": review_id,
+        "passage_id": passage_id,
+        "passage": passages[0] if passages else None,
+        "not_found": response.get("not_found", []),
+    }
+
+
+async def review_audit_resource_impl(*, service: Any, review_id: str) -> dict[str, Any]:
+    get_resource_summary = getattr(service, "get_resource_summary", None)
+    if get_resource_summary is not None:
+        response = _dump_mapping(await get_resource_summary(review_id))
+        return {
+            "success": bool(response.get("success", True)),
+            "review_id": review_id,
+            "generated_at": response.get("generated_at"),
+            "preparation_status": response.get("preparation_status"),
+            "totals": response.get("totals"),
+            "search_runs": _bounded_list(
+                response.get("search_runs"),
+                {"query", "filters", "source", "returned_count", "created_at"},
+            ),
+            "retrieval_runs": _bounded_list(
+                response.get("retrieval_runs"),
+                {"queries", "passage_ids", "created_at"},
+            ),
+        }
+
+    response = _dump_mapping(
+        await service.get_audit_trail(
+            review_id=review_id,
+            passage_ids=[],
+            session_id=None,
+            max_chars_per_passage=500,
+        )
+    )
+    return {
+        "success": bool(response.get("success", True)),
+        "review_id": review_id,
+        "items": _bounded_list(
+            response.get("items"),
+            {"passage_id", "stable_citation_key", "section", "quote", "char_count"},
+        ),
+        "audit_block": response.get("audit_block", ""),
+    }
+
+
+async def review_passage_audit_resource_impl(
+    *,
+    service: Any,
+    review_id: str,
+    passage_id: str,
+) -> dict[str, Any]:
+    response = _dump_mapping(
+        await service.get_audit_trail(
+            review_id=review_id,
+            passage_ids=[passage_id],
+            session_id=None,
+            max_chars_per_passage=500,
+        )
+    )
+    return {
+        "success": bool(response.get("success", True)),
+        "review_id": review_id,
+        "passage_id": passage_id,
+        "items": _bounded_list(
+            response.get("items"),
+            {"passage_id", "stable_citation_key", "section", "quote", "char_count"},
+        ),
+        "audit_block": response.get("audit_block", ""),
+    }
+
+
+def review_llm_context_resource_impl(*, review_id: str, latest: bool = False) -> dict[str, Any]:
+    return {
+        "success": True,
+        "review_id": review_id,
+        "latest": latest,
+        "context": [],
+        "message": "LLM context resources are reserved for Task 7.",
+    }
 
 
 async def inspect_review_index_impl(

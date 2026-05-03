@@ -5,6 +5,12 @@ from typing import Any
 from fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field
 
+from pubtator_link.api.routes.dependencies import (
+    get_research_session_service,
+    get_review_audit_service,
+    get_review_context_service,
+    get_review_index_lifecycle_service,
+)
 from pubtator_link.mcp.annotations import READ_ONLY_CLOSED_WORLD
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.profiles import MCPToolProfile
@@ -22,6 +28,16 @@ from pubtator_link.mcp.resources import (
     get_research_use_resource,
     get_text_processing_resource,
     get_workflow_help_resource,
+)
+from pubtator_link.mcp.review_resources import (
+    get_review_audit_resource,
+    get_review_llm_context_resource,
+    get_review_passage_audit_resource,
+    get_review_passage_resource,
+    get_review_session_detail_resource,
+    get_review_sessions_resource,
+    get_review_summary_resource,
+    get_tool_detail_resource,
 )
 from pubtator_link.models.workflow_help import WorkflowHelpResponse, WorkflowTask
 from pubtator_link.services.workflow_help import WorkflowHelpService
@@ -100,6 +116,60 @@ def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
     @mcp.resource("pubtator://compliance/research-use")
     def research_use() -> dict[str, str]:
         return get_research_use_resource()
+
+    @mcp.resource("pubtator://reviews/{review_id}")
+    async def review_summary(review_id: str) -> dict[str, Any]:
+        service = await get_review_index_lifecycle_service()
+        return await get_review_summary_resource(service=service, review_id=review_id)
+
+    @mcp.resource("pubtator://reviews/{review_id}/sessions")
+    async def review_sessions(review_id: str) -> dict[str, Any]:
+        service = await get_research_session_service()
+        return await get_review_sessions_resource(service=service, review_id=review_id)
+
+    @mcp.resource("pubtator://reviews/{review_id}/sessions/{session_id}")
+    async def review_session_detail(review_id: str, session_id: str) -> dict[str, Any]:
+        service = await get_research_session_service()
+        return await get_review_session_detail_resource(
+            service=service,
+            review_id=review_id,
+            session_id=session_id,
+        )
+
+    @mcp.resource("pubtator://reviews/{review_id}/passages/{passage_id}")
+    async def review_passage(review_id: str, passage_id: str) -> dict[str, Any]:
+        service = await get_review_context_service()
+        return await get_review_passage_resource(
+            service=service,
+            review_id=review_id,
+            passage_id=passage_id,
+        )
+
+    @mcp.resource("pubtator://reviews/{review_id}/audit")
+    async def review_audit(review_id: str) -> dict[str, Any]:
+        service = await get_review_audit_service()
+        return await get_review_audit_resource(service=service, review_id=review_id)
+
+    @mcp.resource("pubtator://reviews/{review_id}/audit/{passage_id}")
+    async def review_passage_audit(review_id: str, passage_id: str) -> dict[str, Any]:
+        service = await get_review_context_service()
+        return await get_review_passage_audit_resource(
+            service=service,
+            review_id=review_id,
+            passage_id=passage_id,
+        )
+
+    @mcp.resource("pubtator://reviews/{review_id}/llm-context")
+    def review_llm_context(review_id: str) -> dict[str, Any]:
+        return get_review_llm_context_resource(review_id=review_id)
+
+    @mcp.resource("pubtator://reviews/{review_id}/llm-context/latest")
+    def review_latest_llm_context(review_id: str) -> dict[str, Any]:
+        return get_review_llm_context_resource(review_id=review_id, latest=True)
+
+    @mcp.resource("pubtator://capabilities/tools/{tool_name}")
+    def tool_detail(tool_name: str) -> dict[str, Any]:
+        return get_tool_detail_resource(tool_name)
 
     @mcp.prompt(name="search_biomedical_literature", title="Search Biomedical Literature")
     def search_literature_prompt() -> str:

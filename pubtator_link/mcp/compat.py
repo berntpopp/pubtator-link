@@ -19,6 +19,11 @@ def install_inspection_managers(mcp: FastMCP) -> None:
         for key, component in components.items()
         if key.startswith("resource:")
     }
+    templates = {
+        str(component.uri_template): component
+        for key, component in components.items()
+        if key.startswith("template:")
+    }
     prompts = {
         component.name: component
         for key, component in components.items()
@@ -27,5 +32,5 @@ def install_inspection_managers(mcp: FastMCP) -> None:
 
     inspectable_mcp = cast(Any, mcp)
     inspectable_mcp._tool_manager = SimpleNamespace(_tools=tools)
-    inspectable_mcp._resource_manager = SimpleNamespace(_resources=resources)
+    inspectable_mcp._resource_manager = SimpleNamespace(_resources=resources, _templates=templates)
     inspectable_mcp._prompt_manager = SimpleNamespace(_prompts=prompts)

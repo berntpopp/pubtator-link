@@ -51,7 +51,7 @@ class FakeAuditRepository:
     ) -> list[str]:
         return ["PMID:1:title:0", "PMID:1:abstract:1"]
 
-    async def list_review_audit_events(self, review_id: str):
+    async def list_review_audit_events(self, review_id: str, *, limit: int | None = None):
         return [
             {
                 "event_type": "search_run",
@@ -113,6 +113,24 @@ async def test_review_audit_bundle_exports_sources_attempts_events_and_citation_
     assert bundle.passage_ids == ["PMID:1:title:0", "PMID:1:abstract:1"]
     assert bundle.stable_citation_keys["PMID:1:title:0"].startswith("c_")
     assert bundle.index_snapshot_date is not None
+
+
+@pytest.mark.asyncio
+async def test_review_audit_resource_summary_uses_bounded_events() -> None:
+    class BoundedEventRepository(FakeAuditRepository):
+        seen_limit: int | None = None
+
+        async def list_review_audit_events(self, review_id: str, *, limit: int | None = None):
+            self.seen_limit = limit
+            return []
+
+    repository = BoundedEventRepository()
+
+    summary = await ReviewAuditService(repository).get_resource_summary("review-1")
+
+    assert summary["success"] is True
+    assert summary["review_id"] == "review-1"
+    assert repository.seen_limit == 20
 
 
 @pytest.mark.asyncio

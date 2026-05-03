@@ -184,7 +184,9 @@ class ReviewReragRepository(Protocol):
     ) -> None:
         """Record an append-only review audit event."""
 
-    async def list_review_audit_events(self, review_id: str) -> list[Mapping[str, object]]:
+    async def list_review_audit_events(
+        self, review_id: str, *, limit: int | None = None
+    ) -> list[Mapping[str, object]]:
         """Return append-only review audit events."""
 
     async def list_review_indexes(
@@ -1379,17 +1381,21 @@ class PostgresReviewReragRepository:
             )
             await self._touch_review_on_connection(connection, review_id)
 
-    async def list_review_audit_events(self, review_id: str) -> list[Mapping[str, object]]:
+    async def list_review_audit_events(
+        self, review_id: str, *, limit: int | None = None
+    ) -> list[Mapping[str, object]]:
         async with self._acquire() as connection:
-            rows = await connection.fetch(
-                """
+            query = """
                 select event_type, payload, created_at
                 from review_audit_events
                 where review_id = $1
                 order by created_at asc
-                """,
-                review_id,
-            )
+                """
+            args: list[object] = [review_id]
+            if limit is not None:
+                query += " limit $2"
+                args.append(limit)
+            rows = await connection.fetch(query, *args)
         return [
             {
                 "event_type": row["event_type"],
