@@ -186,3 +186,6 @@ cython_debug/
 CLAUDE.md
 PLAN.md
 TODO.md
+
+# benchmark folders
+benchmarks/

@@ -9,12 +9,14 @@ reviews are archived under `docs/archive/reviews/`.
 ## Executive Summary
 
 PubTator-Link has completed the original reliability and evidence-grounding
-roadmap. The current system already has the hard pieces that differentiate it
-from raw PubMed/PubTator wrappers: review-scoped indexing, coverage preflight,
-resolver attempt auditing, retry/backoff, bounded concurrency, typed MCP output
-schemas, stable citation keys, passage addressability, research-session staging,
-review-feeding discovery tools, GRADE-style certainty storage, review audit
-bundles, Prometheus metrics, readiness checks, and MCP lifecycle logs.
+roadmap, plus the 2026-05-02 MCP best-practices cleanup. The current system
+already has the hard pieces that differentiate it from raw PubMed/PubTator
+wrappers: review-scoped indexing, coverage preflight, resolver attempt
+auditing, retry/backoff, bounded concurrency, typed MCP output schemas, stable
+citation keys, passage addressability, research-session staging, review-feeding
+discovery tools, GRADE-style certainty storage, review audit bundles,
+Prometheus metrics, readiness checks, MCP lifecycle logs, compact capability
+discovery, tolerant MCP input normalization, and quote-mode review retrieval.
 
 The remaining work is no longer a broad feature rescue. It is a focused
 hardening phase:
@@ -24,8 +26,8 @@ hardening phase:
 2. Close the highest-risk hosted/security gaps: inbound rate limits, request
    size limits, tighter CORS, content-type checks, blocking container scans, and
    action pinning policy.
-3. Modernize the MCP surface with resource templates, parameterized prompts,
-   success `_meta`, cursor pagination, and selected elicitation flows.
+3. Modernize the remaining MCP protocol surface with resource templates,
+   parameterized prompts, cursor pagination, and selected elicitation flows.
 4. Finish production observability with traces, alerts, error tracking, and the
    promoted concurrency stress tests.
 5. Reduce maintenance risk in the remaining complex internals and generate
@@ -63,6 +65,16 @@ source or documentation:
 | Concurrency critical fixes | Shipped | rate limiter, shared client, DB acquire timeout, ASGI middleware, httpx limits |
 | Container scan and SBOM | Shipped but non-blocking | Trivy workflow creates artifacts with `exit-code: "0"` |
 | Release validation workflow | Shipped validation only | tag workflow builds and validates, but does not publish/sign |
+| MCP capability discovery cleanup | Shipped | slim default `get_server_capabilities`, opt-in details, preferred tool-name policy |
+| Read-only literature discovery | Shipped | `search_literature` defaults to `coverage="none"` with review-index handoff guidance |
+| Recent MCP failure diagnostics | Shipped | bounded recent-error recorder and degraded diagnostics for review-tool failures |
+| LLM input normalization | Shipped at adapter boundary | query/limit aliases, singleton lists, enum casing, and structured field errors |
+| GeneReviews/NBK recovery | Shipped | NBK extraction, lookup recovery hints, and Bookshelf URL rejection before indexing |
+| Early review source coverage summary | Shipped as optional repository hook | `index_review_evidence` response summary/message/warnings |
+| Batch retrieval compaction | Shipped | passage dedupe with `matched_queries`, collapsed diagnostics, `include_diagnostics=False` default |
+| Quote-mode review retrieval | Shipped | `response_mode="quotes"` with bounded citable snippets and no long merged passages |
+| Audit export ergonomics | Shipped | field errors, bounded inline JSON fallback, safer exclusive file export |
+| Guideline-search clarification | Shipped | `search_guidelines` documented as filtered/boosted `search_literature` wrapper |
 
 ## What Is Left
 
