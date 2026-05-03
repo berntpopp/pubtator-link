@@ -419,6 +419,38 @@ async def test_diagnostics_response_includes_minimum_workflow() -> None:
     assert result.minimum_workflow["workflow_resource"] == "pubtator://workflow-help"
 
 
+@pytest.mark.asyncio
+async def test_readonly_diagnostics_minimum_workflow_only_advertises_registered_tools() -> None:
+    from pubtator_link.mcp.profiles import tool_names_for_profile
+    from pubtator_link.mcp.tools.diagnostics import _diagnostics_impl
+    from pubtator_link.models.responses import DiagnosticsResponse
+
+    class Service:
+        async def get_diagnostics(self) -> DiagnosticsResponse:
+            return DiagnosticsResponse(
+                success=True,
+                status="ready",
+                minimum_workflow={
+                    "grounded_review": [
+                        "pubtator.search_literature",
+                        "pubtator.preflight_review_sources",
+                        "pubtator.index_review_evidence",
+                        "pubtator.inspect_review_index",
+                        "pubtator.retrieve_review_context_batch",
+                    ],
+                    "workflow_resource": "pubtator://workflow-help",
+                },
+            )
+
+    result = await _diagnostics_impl(Service(), profile="readonly")
+
+    readonly_tools = tool_names_for_profile("readonly")
+    assert set(result["minimum_workflow"]["grounded_review"]) <= readonly_tools
+    assert "pubtator.index_review_evidence" not in result["minimum_workflow"][
+        "grounded_review"
+    ]
+
+
 def test_research_session_tools_are_registered(mcp_tool_names) -> None:
     assert "pubtator.stage_research_session" in mcp_tool_names
     assert "pubtator.get_research_session_status" in mcp_tool_names
