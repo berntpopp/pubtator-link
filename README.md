@@ -172,6 +172,8 @@ curl "http://127.0.0.1:8000/api/annotations/abc123def456"
 
 PubTator-Link exposes a curated Streamable HTTP MCP endpoint at `/mcp` in unified mode. Hosted MCP tools are research-oriented and must not be used for diagnosis, treatment, triage, patient management, or clinical decision support.
 
+Literature graph tools are candidate-discovery aids: graph relatedness does not imply claim support, and passage-level review is still required for grounded biomedical conclusions.
+
 ### Recommended HTTP Setup
 
 ```json
@@ -212,6 +214,9 @@ hosted research deployments that should not expose write/export operations.
 | `pubtator.suggest_corpus` | Suggest a compact, role-labeled candidate PMID corpus from a research question |
 | `pubtator.get_publication_metadata` | Fetch citation-grade PMID metadata, publication types, MeSH terms, and coverage hints |
 | `pubtator.get_publication_passages` | Fetch compact citable passages for PubMed IDs |
+| `pubtator.get_publication_citation_graph` | Explore references and cited-by neighbors for one PMID or DOI |
+| `pubtator.find_related_evidence_candidates` | Find transparent related evidence candidates for one seed PMID |
+| `pubtator.build_topic_literature_map` | Build a bounded topic graph across papers, authors, citations, and entities |
 | `pubtator.estimate_publication_context` | Estimate compact publication context before fetching |
 | `pubtator.inspect_review_index` | Inspect indexed PMIDs, sections, counts, failures, and useful samples with `min_sample_chars=80` |
 | `pubtator.retrieve_review_context_batch` | Preferred review retrieval path; try multiple queries and merge compact citable context |
