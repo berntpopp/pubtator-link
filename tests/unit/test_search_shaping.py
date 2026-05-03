@@ -47,11 +47,44 @@ def test_shaped_search_response_can_merge_basic_metadata() -> None:
     )
 
     result = shaped.results[0]
-    assert result.authors[0].display_name == "Kavrul Kayaalp GK"
+    assert result.authors == []
+    assert result.first_author_et_al == "Kavrul Kayaalp GK"
     assert result.journal == "Rheumatology International"
     assert result.pub_year == 2022
     assert result.pub_date == "2022 Jan"
     assert result.volume is None
+
+
+def test_shaped_search_response_full_metadata_keeps_author_array() -> None:
+    shaped = shaped_search_response(
+        raw={"total": 1, "results": [{"pmid": "33454820", "title": "Title"}]},
+        query="MEFV",
+        page=1,
+        sort=None,
+        filters=None,
+        sections=None,
+        response_mode="compact",
+        include_citations="none",
+        text_hl_format="plain",
+        limit=None,
+        guideline_boost=False,
+        metadata="full",
+        metadata_by_pmid={
+            "33454820": {
+                "authors": [
+                    {"display_name": "Kavrul Kayaalp GK"},
+                    {"display_name": "Ozen S"},
+                ],
+            }
+        },
+    )
+
+    result = shaped.results[0]
+    assert [author.display_name for author in result.authors] == [
+        "Kavrul Kayaalp GK",
+        "Ozen S",
+    ]
+    assert result.first_author_et_al == "Kavrul Kayaalp GK et al."
 
 
 def test_shaped_search_response_full_metadata_includes_mesh_and_citations() -> None:

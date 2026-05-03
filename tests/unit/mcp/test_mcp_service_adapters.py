@@ -1090,6 +1090,31 @@ async def test_search_literature_adapter_maps_client_results() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_literature_meta_uses_short_next_tool_hints() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "results": [{"pmid": "1", "title": "FMF guideline"}],
+                "count": 1,
+                "total_pages": 1,
+                "page_size": 10,
+            }
+
+    result = await search_literature_impl(client=FakeClient(), text="FMF")
+
+    meta = result["_meta"]
+    assert meta["next_tools"] == [
+        "pubtator.preflight_review_sources",
+        "pubtator.index_review_evidence",
+    ]
+    assert meta["workflow"] == "search -> preflight -> index -> inspect -> retrieve"
+    assert meta["details_resource"] == "pubtator://workflow-help"
+    assert "next_commands" not in meta
+
+
+@pytest.mark.asyncio
 async def test_search_literature_default_does_not_require_preflight_service() -> None:
     from pubtator_link.mcp.service_adapters import search_literature_impl
 
@@ -1114,17 +1139,11 @@ async def test_search_literature_default_does_not_require_preflight_service() ->
     assert result["results"]
     assert "review database unavailable" not in str(result).lower()
     assert result["_meta"]["coverage_note"].startswith("Search is read-only metadata discovery.")
-    assert result["_meta"]["next_commands"] == [
-        {
-            "tool": "pubtator.preflight_review_sources",
-            "arguments": {"pmids": ["123"]},
-        },
-        {
-            "tool": "pubtator.index_review_evidence",
-            "arguments": {"review_id": "<review_id>", "pmids": ["123"]},
-            "requires": ["review_id"],
-        },
+    assert result["_meta"]["next_tools"] == [
+        "pubtator.preflight_review_sources",
+        "pubtator.index_review_evidence",
     ]
+    assert "next_commands" not in result["_meta"]
 
 
 @pytest.mark.asyncio
@@ -1199,7 +1218,8 @@ async def test_search_literature_impl_enriches_basic_metadata() -> None:
         metadata_service=FakeMetadata(),
     )
 
-    assert result["results"][0]["authors"][0]["display_name"] == "Kavrul Kayaalp GK"
+    assert result["results"][0]["authors"] == []
+    assert result["results"][0]["first_author_et_al"] == "Kavrul Kayaalp GK"
 
 
 @pytest.mark.asyncio

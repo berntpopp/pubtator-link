@@ -151,6 +151,10 @@ class SearchResult(BaseModel):
 
     abstract: str | None = Field(default=None, description="Article abstract")
     authors: list[PublicationAuthor] = Field(default_factory=list, description="Authors")
+    first_author_et_al: str | None = Field(
+        default=None,
+        description="Compact first-author citation label",
+    )
     pub_year: int | None = Field(default=None, description="Publication year")
     journal: str | None = Field(default=None, description="Journal name")
     pub_date: str | None = Field(default=None, description="Publication date")

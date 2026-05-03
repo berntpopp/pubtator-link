@@ -101,13 +101,14 @@ def shaped_search_result(
 ) -> SearchResult:
     rank_features = _guideline_rank_features(item) if guideline_boost else None
     include_text_hl = text_hl_format != "none"
+    raw_authors = _shape_authors(item.get("authors", []))
+    include_author_array = response_mode in {"standard", "full"}
     shaped = SearchResult(
         pmid=item.get("pmid", ""),
         title=item.get("title", ""),
         abstract=item.get("abstract") if response_mode in {"standard", "full"} else None,
-        authors=(
-            _shape_authors(item.get("authors", [])) if response_mode in {"standard", "full"} else []
-        ),
+        authors=raw_authors if include_author_array else [],
+        first_author_et_al=_author_summary(raw_authors),
         journal=item.get("journal"),
         pub_date=item.get("pub_date") or item.get("meta_date_publication") or item.get("date"),
         annotations=item.get("annotations", []) if response_mode == "full" else [],
@@ -138,8 +139,11 @@ def _merge_metadata_fields(
     if metadata == "none" or metadata_item is None:
         return
 
+    metadata_authors = _shape_authors(metadata_item.get("authors", []))
+    if shaped.first_author_et_al is None:
+        shaped.first_author_et_al = _author_summary(metadata_authors)
+
     basic_fields = (
-        "authors",
         "journal",
         "pub_year",
         "pub_date",
@@ -150,7 +154,7 @@ def _merge_metadata_fields(
         "pmcid",
         "publication_types",
     )
-    full_fields = (*basic_fields, "mesh_headings", "nlm_citation", "bibtex")
+    full_fields = ("authors", *basic_fields, "mesh_headings", "nlm_citation", "bibtex")
     for field_name in full_fields if metadata == "full" else basic_fields:
         if _has_metadata_value(getattr(shaped, field_name)):
             continue
@@ -177,8 +181,25 @@ def _shape_authors(authors: Any) -> list[PublicationAuthor]:
             if stripped:
                 shaped.append(PublicationAuthor(collective_name=stripped))
         elif isinstance(author, dict):
+            if (
+                author.get("display_name")
+                and not author.get("last_name")
+                and not author.get("fore_name")
+                and not author.get("initials")
+                and not author.get("collective_name")
+            ):
+                author = {**author, "collective_name": author["display_name"]}
             shaped.append(PublicationAuthor.model_validate(author))
     return shaped
+
+
+def _author_summary(authors: list[PublicationAuthor]) -> str | None:
+    if not authors:
+        return None
+    first: str | None = authors[0].display_name or authors[0].collective_name
+    if not first:
+        return None
+    return f"{first} et al." if len(authors) > 1 else first
 
 
 def search_cache_key(
