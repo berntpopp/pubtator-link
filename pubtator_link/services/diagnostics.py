@@ -70,9 +70,21 @@ class DiagnosticsService:
         else:
             status = "ready"
 
+        minimum_workflow: dict[str, Any] = {
+            "grounded_review": [
+                "pubtator.search_literature",
+                "pubtator.preflight_review_sources",
+                "pubtator.index_review_evidence",
+                "pubtator.inspect_review_index",
+                "pubtator.retrieve_review_context_batch",
+            ],
+            "workflow_resource": "pubtator://workflow-help",
+        }
+
         return DiagnosticsResponse(
             success=True,
             status=status,
             subsystems=subsystems,
             recovery=recovery,
+            minimum_workflow=minimum_workflow,
         )

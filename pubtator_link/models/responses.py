@@ -38,6 +38,7 @@ class DiagnosticsResponse(BaseResponse):
     status: str = Field(..., description="ready, degraded, or not_ready")
     subsystems: dict[str, dict[str, Any]] = Field(default_factory=dict)
     recovery: list[str] = Field(default_factory=list)
+    minimum_workflow: dict[str, Any] = Field(default_factory=dict)
 
 
 class PublicationAnnotation(BaseModel):

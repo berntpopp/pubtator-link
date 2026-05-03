@@ -377,6 +377,48 @@ def test_diagnostics_tool_is_registered() -> None:
     assert "pubtator.diagnostics" in mcp._tool_manager._tools
 
 
+def test_diagnostics_schema_exposes_minimum_workflow() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp()._tool_manager._tools["pubtator.diagnostics"]
+    schema = tool.output_schema
+
+    assert "minimum_workflow" in schema["properties"]
+
+
+@pytest.mark.asyncio
+async def test_diagnostics_response_includes_minimum_workflow() -> None:
+    from pubtator_link.db.migrate import ReviewSchemaDiagnostics
+    from pubtator_link.services.diagnostics import DiagnosticsService
+
+    async def inspect_schema() -> ReviewSchemaDiagnostics:
+        return ReviewSchemaDiagnostics(
+            connected=True,
+            current=True,
+            applied_versions=[],
+            missing_tables=[],
+            missing_columns=[],
+            error=None,
+        )
+
+    service = DiagnosticsService(
+        inspect_schema=inspect_schema,
+        review_queue_available=lambda: True,
+        europe_pmc_enabled=lambda: False,
+    )
+
+    result = await service.get_diagnostics()
+
+    assert result.minimum_workflow["grounded_review"] == [
+        "pubtator.search_literature",
+        "pubtator.preflight_review_sources",
+        "pubtator.index_review_evidence",
+        "pubtator.inspect_review_index",
+        "pubtator.retrieve_review_context_batch",
+    ]
+    assert result.minimum_workflow["workflow_resource"] == "pubtator://workflow-help"
+
+
 def test_research_session_tools_are_registered(mcp_tool_names) -> None:
     assert "pubtator.stage_research_session" in mcp_tool_names
     assert "pubtator.get_research_session_status" in mcp_tool_names
