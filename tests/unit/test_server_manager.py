@@ -348,6 +348,25 @@ def test_server_settings_parse_csv_cors_lists(monkeypatch: pytest.MonkeyPatch) -
     ]
 
 
+def test_server_settings_parse_json_cors_lists(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pubtator_link.config import ServerSettings
+
+    monkeypatch.setenv("PUBTATOR_LINK_CORS_ALLOW_METHODS", '["GET","POST","OPTIONS"]')
+    monkeypatch.setenv(
+        "PUBTATOR_LINK_CORS_ALLOW_HEADERS",
+        '["Authorization","Content-Type","MCP-Protocol-Version"]',
+    )
+
+    parsed = ServerSettings(_env_file=None)
+
+    assert parsed.cors_allow_methods == ["GET", "POST", "OPTIONS"]
+    assert parsed.cors_allow_headers == [
+        "Authorization",
+        "Content-Type",
+        "MCP-Protocol-Version",
+    ]
+
+
 @pytest.mark.asyncio
 async def test_inbound_rate_limit_prunes_stale_client_entries() -> None:
     from pubtator_link.server_manager import InboundRateLimitMiddleware

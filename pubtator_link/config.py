@@ -1,5 +1,6 @@
 """Configuration management for PubTator-Link server."""
 
+import json
 from dataclasses import dataclass, field
 from typing import Annotated, Any, Literal
 
@@ -175,6 +176,11 @@ class ServerSettings(BaseSettings):
     @classmethod
     def parse_csv_list(cls, v: Any) -> list[str]:
         if isinstance(v, str):
+            stripped = v.strip()
+            if stripped.startswith("["):
+                loaded = json.loads(stripped)
+                if isinstance(loaded, list):
+                    return [str(item).strip() for item in loaded if str(item).strip()]
             return [item.strip() for item in v.split(",") if item.strip()]
         return v  # type: ignore[no-any-return]
 
