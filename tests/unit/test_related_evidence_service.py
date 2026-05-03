@@ -58,6 +58,18 @@ class FilterWindowDiscovery:
         ]
 
 
+class ScoreRangeDiscovery:
+    async def find_related_article_scores(
+        self,
+        pmids: list[str],
+        limit: int,
+    ) -> list[RelatedArticleScoreRecord]:
+        return [
+            RelatedArticleScoreRecord(source_pmid="123", pmid="111", neighbor_score=10),
+            RelatedArticleScoreRecord(source_pmid="123", pmid="222", neighbor_score=30),
+        ]
+
+
 class FakeMetadata:
     async def get_metadata(self, request):
         assert request.pmids
@@ -361,3 +373,25 @@ async def test_metadata_full_text_pmc_candidate_does_not_imply_open_access_reaso
     assert "open_access_available" not in reasons
     assert response.candidates[0].paper.availability.has_pmc_full_text is True
     assert response.candidates[0].paper.availability.is_open_access is False
+
+
+@pytest.mark.asyncio
+async def test_related_evidence_adds_normalized_neighbor_score_and_signals() -> None:
+    service = RelatedEvidenceService(
+        discovery_service=ScoreRangeDiscovery(),
+        metadata_service=FakeMetadata(),
+        citation_graph_service=FakeCitationGraph(),
+    )
+
+    response = await service.find_candidates(
+        RelatedEvidenceCandidatesRequest(
+            pmid="123",
+            include_citation_neighbors=False,
+            max_results=2,
+        )
+    )
+
+    by_pmid = {candidate.paper.pmid: candidate for candidate in response.candidates}
+    assert by_pmid["222"].normalized_neighbor_score == 1.0
+    assert by_pmid["111"].normalized_neighbor_score == 0.0
+    assert by_pmid["222"].signals == by_pmid["222"].match_reasons

@@ -224,6 +224,19 @@ def test_candidate_summary_access_flags_and_source_tool_vocab() -> None:
     assert dumped["source_tools"] == ["topic_search", "citation_graph"]
 
 
+def test_literature_candidate_summary_serializes_signals() -> None:
+    candidate = LiteratureCandidateSummary(
+        pmid="123",
+        access="metadata_only",
+        signals=["pubmed_neighbor_score", "full_text_available"],
+    )
+
+    assert candidate.model_dump()["signals"] == [
+        "pubmed_neighbor_score",
+        "full_text_available",
+    ]
+
+
 def test_provider_status_result_count_defaults_to_zero() -> None:
     status = LiteratureProviderStatus(
         provider="unpaywall",

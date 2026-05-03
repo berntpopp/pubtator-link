@@ -17,6 +17,7 @@ from pubtator_link.models.literature_graph import (
     LiteratureSourceTool,
     ProviderWarning,
 )
+from pubtator_link.services.literature_paper_resolution import deduped_signals
 
 COMPACT_BUDGET_BYTES = 12 * 1024
 NODES_EDGES_BUDGET_BYTES = 40 * 1024
@@ -102,6 +103,11 @@ def candidate_summary(
     demotion_reasons: list[str] | None = None,
     source_tools: list[LiteratureSourceTool] | None = None,
 ) -> LiteratureCandidateSummary:
+    signals = deduped_signals(
+        relevance_to_query.reasons if relevance_to_query is not None else [],
+        rank_reasons or [],
+        demotion_reasons or [],
+    )
     return LiteratureCandidateSummary(
         pmid=paper.pmid,
         doi=paper.doi,
@@ -115,6 +121,7 @@ def candidate_summary(
         relevance_to_query=relevance_to_query,
         rank_reasons=rank_reasons or [],
         demotion_reasons=demotion_reasons or [],
+        signals=signals,
         source_tools=source_tools or [],
         next_actions=(
             [{"tool": "pubtator.get_publication_passages", "arguments": {"pmids": [paper.pmid]}}]

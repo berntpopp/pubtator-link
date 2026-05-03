@@ -22,6 +22,19 @@ from pubtator_link.services.topic_literature_map import (
 )
 
 
+def _summary_paper_count(summary: object) -> int:
+    return sum(
+        len(getattr(summary, field))
+        for field in (
+            "central_papers",
+            "recent_connected_papers",
+            "bridge_papers",
+            "accessible_full_text_candidates",
+            "closed_central_sources",
+        )
+    )
+
+
 class FakeSearchClient:
     async def search_publications(
         self,
@@ -346,14 +359,14 @@ def test_topic_ranker_promotes_guideline_and_pediatric_colchicine_records() -> N
 
 
 @pytest.mark.asyncio
-async def test_topic_map_compact_omits_topology_and_uses_pmid_indexes() -> None:
+async def test_topic_map_compact_keeps_summary_papers_and_candidate_signals() -> None:
     response = await _service().build_map(
         TopicLiteratureMapRequest(
             query="FMF colchicine guideline child",
             max_seed_papers=2,
             max_neighbors_per_paper=2,
             response_mode="compact",
-            max_candidates=1,
+            max_candidates=3,
             max_demoted=1,
         )
     )
@@ -361,19 +374,39 @@ async def test_topic_map_compact_omits_topology_and_uses_pmid_indexes() -> None:
     assert response.meta.response_mode == "compact"
     assert response.nodes == []
     assert response.edges == []
+    assert response.summary.central_papers
+    assert response.summary.recent_connected_papers
+    assert response.summary.bridge_papers
+    assert len(response.summary.central_papers) <= 5
+    assert len(response.summary.recent_connected_papers) <= 5
+    assert len(response.summary.bridge_papers) <= 5
     assert response.top_candidates
-    assert len(response.top_candidates) <= 1
-    assert response.summary.central_papers == []
-    assert response.summary.recent_connected_papers == []
-    assert response.summary.bridge_papers == []
-    assert response.summary.accessible_full_text_candidates == []
-    assert response.summary.closed_central_sources == []
-    assert isinstance(response.accessible_full_text_pmids, list)
-    assert isinstance(response.closed_central_pmids, list)
-    assert len(response.demoted_candidate_pmids) <= 1
-    assert response.recommended_next_pmids == [
-        pmid for pmid in response.recommended_next_pmids if pmid
-    ]
+    assert response.top_candidates[0].signals
+    assert len(response.top_candidates[0].signals) == len(set(response.top_candidates[0].signals))
+
+
+@pytest.mark.asyncio
+async def test_topic_map_compact_omitted_summary_papers_count_only_hidden_papers() -> None:
+    request_args = {
+        "query": "FMF colchicine guideline child",
+        "max_seed_papers": 2,
+        "max_neighbors_per_paper": 2,
+        "max_candidates": 3,
+        "max_demoted": 1,
+    }
+
+    full_response = await _service().build_map(
+        TopicLiteratureMapRequest(**request_args, response_mode="full")
+    )
+    compact_response = await _service().build_map(
+        TopicLiteratureMapRequest(**request_args, response_mode="compact")
+    )
+
+    assert compact_response.meta.omitted_counts["summary_papers"] == max(
+        0,
+        _summary_paper_count(full_response.summary)
+        - _summary_paper_count(compact_response.summary),
+    )
 
 
 @pytest.mark.asyncio

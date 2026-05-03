@@ -176,11 +176,14 @@ class TopicLiteratureMapService:
         if request.response_mode == "compact":
             response_nodes = []
             response_edges = []
-            response_summary = _summary_without_papers(summary, recommended_next_pmids)
+            response_summary = _compact_summary(summary, recommended_next_pmids)
             omitted_counts = {
                 "nodes": len(nodes),
                 "edges": len(deduped_edges),
-                "summary_papers": _summary_paper_count(summary),
+                "summary_papers": max(
+                    0,
+                    _summary_paper_count(summary) - _summary_paper_count(response_summary),
+                ),
                 "top_candidates": max(0, len(ranked_candidates) - len(top_candidates)),
             }
         elif request.response_mode == "nodes_edges":
@@ -659,7 +662,27 @@ def _summary_without_papers(
     recommended_next_pmids: list[str],
 ) -> TopicLiteratureMapSummary:
     return TopicLiteratureMapSummary(
+        central_papers=[],
+        recent_connected_papers=[],
+        bridge_papers=[],
         dominant_author_groups=summary.dominant_author_groups,
+        accessible_full_text_candidates=[],
+        closed_central_sources=[],
+        recommended_next_pmids=recommended_next_pmids,
+    )
+
+
+def _compact_summary(
+    summary: TopicLiteratureMapSummary,
+    recommended_next_pmids: list[str],
+) -> TopicLiteratureMapSummary:
+    return TopicLiteratureMapSummary(
+        central_papers=summary.central_papers[:5],
+        recent_connected_papers=summary.recent_connected_papers[:5],
+        bridge_papers=summary.bridge_papers[:5],
+        dominant_author_groups=summary.dominant_author_groups,
+        accessible_full_text_candidates=[],
+        closed_central_sources=summary.closed_central_sources[:5],
         recommended_next_pmids=recommended_next_pmids,
     )
 

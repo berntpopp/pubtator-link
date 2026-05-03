@@ -239,6 +239,7 @@ class LiteratureCandidateSummary(BaseModel):
     relevance_to_query: LiteratureQueryRelevance | None = None
     rank_reasons: list[str] = Field(default_factory=list)
     demotion_reasons: list[str] = Field(default_factory=list)
+    signals: list[str] = Field(default_factory=list)
     source_tools: list[LiteratureSourceTool] = Field(default_factory=list)
     next_actions: list[dict[str, Any]] = Field(default_factory=list)
 
@@ -338,6 +339,10 @@ class PublicationCitationGraphResponse(BaseModel):
     reference_candidates: list[LiteratureCandidateSummary] = Field(default_factory=list)
     cited_by_candidates: list[LiteratureCandidateSummary] = Field(default_factory=list)
     candidate_pmids: list[str] = Field(default_factory=list)
+    actionable_pmid_count: int = 0
+    metadata_only_count: int = 0
+    unresolved_doi_count: int = 0
+    compact_status: dict[str, str] = Field(default_factory=dict)
     metadata_only: list[LiteraturePaper] = Field(default_factory=list)
     references_status: list[LiteratureProviderStatus] = Field(default_factory=list)
     cited_by_status: list[LiteratureProviderStatus] = Field(default_factory=list)
@@ -380,6 +385,8 @@ class RelatedEvidenceCandidate(BaseModel):
     score: float = 0.0
     match_reasons: list[str] = Field(default_factory=list)
     pubmed_neighbor_score: int | None = None
+    normalized_neighbor_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    signals: list[str] = Field(default_factory=list)
 
 
 class RelatedEvidenceCandidatesResponse(BaseModel):

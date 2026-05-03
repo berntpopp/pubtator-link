@@ -19,7 +19,10 @@ from pubtator_link.services.literature_graph_compact import (
     coalesced_provider_warnings,
     json_size_class,
 )
-from pubtator_link.services.literature_paper_resolution import paper_from_publication_metadata
+from pubtator_link.services.literature_paper_resolution import (
+    deduped_signals,
+    paper_from_publication_metadata,
+)
 
 
 class RelatedEvidenceService:
@@ -92,6 +95,7 @@ class RelatedEvidenceService:
         warnings.extend(metadata_warnings)
         candidates.sort(key=lambda candidate: _ranking_key(candidate, request))
         candidates = candidates[: request.max_results]
+        _attach_normalized_scores(candidates)
         ordered_pmids = [candidate.paper.pmid for candidate in candidates if candidate.paper.pmid]
 
         response = RelatedEvidenceCandidatesResponse(
@@ -269,6 +273,30 @@ def _ranking_key(
     )
     year_rank = paper.year or 0
     return (-candidate.score, -full_text_rank, -type_rank, -year_rank, paper.pmid or paper.key)
+
+
+def _attach_normalized_scores(candidates: list[RelatedEvidenceCandidate]) -> None:
+    raw_scores = [
+        candidate.pubmed_neighbor_score
+        for candidate in candidates
+        if candidate.pubmed_neighbor_score is not None
+    ]
+    if not raw_scores:
+        for candidate in candidates:
+            candidate.signals = deduped_signals(candidate.match_reasons)
+        return
+    low = min(raw_scores)
+    high = max(raw_scores)
+    span = high - low
+    for candidate in candidates:
+        raw = candidate.pubmed_neighbor_score
+        normalized = (
+            1.0
+            if span == 0 and raw is not None
+            else ((raw - low) / span if raw is not None else None)
+        )
+        candidate.normalized_neighbor_score = normalized
+        candidate.signals = deduped_signals(candidate.match_reasons)
 
 
 def _has_full_text(paper: LiteraturePaper) -> bool:

@@ -580,6 +580,11 @@ async def test_citation_graph_compact_returns_candidates_status_and_no_metadata_
     assert response.reference_candidates
     assert response.cited_by_candidates
     assert response.candidate_pmids == ["40600001"]
+    assert response.actionable_pmid_count == len(response.candidate_pmids)
+    assert response.metadata_only_count == 3
+    assert response.unresolved_doi_count == 2
+    assert response.compact_status["references"] == "candidates_only"
+    assert response.compact_status["cited_by"] == "candidates_only"
     assert any(status.operation == "references" for status in response.references_status)
     assert any(status.operation == "cited_by" for status in response.cited_by_status)
     assert len([s for s in response.open_access_status if s.provider == "unpaywall"]) == 1
@@ -588,6 +593,29 @@ async def test_citation_graph_compact_returns_candidates_status_and_no_metadata_
     ]
     assert len(unpaywall_warnings) == 1
     assert "repeated" in unpaywall_warnings[0].message
+
+
+@pytest.mark.asyncio
+async def test_citation_graph_compact_status_marks_unrequested_direction() -> None:
+    service = CitationGraphService(
+        crossref=FakeCrossref(),
+        europe_pmc=FakeEuropePmc(),
+        discovery_service=ResolvingDiscovery(),
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            doi="10.1016/j.ard.2025.05.020",
+            direction="references",
+            response_mode="compact",
+        )
+    )
+
+    assert response.reference_candidates
+    assert response.cited_by_candidates == []
+    assert response.compact_status["references"] == "candidates_only"
+    assert response.compact_status["cited_by"] == "not_requested"
 
 
 @pytest.mark.asyncio

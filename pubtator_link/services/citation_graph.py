@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
 from pubtator_link.models.literature_graph import (
+    CitationGraphDirection,
     LiteratureAvailability,
     LiteratureCandidateSummary,
     LiteratureGraphEdge,
@@ -318,14 +319,23 @@ class CitationGraphService:
                 warnings,
                 open_access_status,
             )
-        candidate_pmids = _candidate_pmids([*references, *cited_by])
+        all_neighbors = [*references, *cited_by]
+        candidate_pmids = _candidate_pmids(all_neighbors)
+        actionable_pmid_count = len(candidate_pmids)
+        metadata_only_count = len(_metadata_only(all_neighbors))
+        unresolved_doi_count = sum(1 for paper in all_neighbors if paper.doi and not paper.pmid)
+        compact_status = (
+            _compact_status_for_direction(request.direction)
+            if request.response_mode == "compact"
+            else {}
+        )
         reference_candidates = _citation_candidates(references, "source_reference")
         cited_by_candidates = _citation_candidates(cited_by, "source_cited_by")
         response_references = references
         response_cited_by = cited_by
         response_reference_candidates = reference_candidates
         response_cited_by_candidates = cited_by_candidates
-        response_metadata_only = _metadata_only([*references, *cited_by])
+        response_metadata_only = _metadata_only(all_neighbors)
         response_nodes: list[LiteratureGraphNode] = []
         response_edges: list[LiteratureGraphEdge] = []
         if request.response_mode == "compact":
@@ -354,6 +364,10 @@ class CitationGraphService:
             reference_candidates=response_reference_candidates,
             cited_by_candidates=response_cited_by_candidates,
             candidate_pmids=candidate_pmids,
+            actionable_pmid_count=actionable_pmid_count,
+            metadata_only_count=metadata_only_count,
+            unresolved_doi_count=unresolved_doi_count,
+            compact_status=compact_status,
             metadata_only=response_metadata_only,
             references_status=references_status,
             cited_by_status=cited_by_status,
@@ -668,6 +682,15 @@ def _citation_candidates(
             )
         )
     return candidates
+
+
+def _compact_status_for_direction(direction: CitationGraphDirection) -> dict[str, str]:
+    return {
+        "references": (
+            "candidates_only" if direction in {"references", "both"} else "not_requested"
+        ),
+        "cited_by": ("candidates_only" if direction in {"cited_by", "both"} else "not_requested"),
+    }
 
 
 def _citation_nodes_edges(
