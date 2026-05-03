@@ -1113,6 +1113,71 @@ async def test_retrieve_review_context_batch_adapter_accepts_auto_budget_and_ver
 
 
 @pytest.mark.asyncio
+async def test_retrieve_review_context_batch_adapter_preserves_embedding_diagnostics() -> None:
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        EmbeddingRerankDiagnostics,
+        PreparationStatus,
+        RetrieveReviewContextBatchResponse,
+        RetrieveReviewContextResponse,
+        RetrieveReviewDiagnostics,
+    )
+
+    class FakeService:
+        async def retrieve_context_batch(self, review_id, request):
+            return RetrieveReviewContextBatchResponse(
+                review_id=review_id,
+                results=[
+                    RetrieveReviewContextResponse(
+                        review_id=review_id,
+                        context_pack=ContextPack(
+                            question=request.queries[0],
+                            passages=[],
+                            citation_map={},
+                        ),
+                        preparation_status=PreparationStatus(complete=1),
+                        diagnostics=RetrieveReviewDiagnostics(
+                            query=request.queries[0],
+                            query_tokens=["colchicine"],
+                            candidate_count=2,
+                            selected_count=1,
+                            message="ok",
+                            embedding_rerank=EmbeddingRerankDiagnostics(
+                                enabled=True,
+                                active=True,
+                                model_name="BAAI/bge-small-en-v1.5",
+                                embedding_dim=384,
+                                candidate_count=2,
+                                embedded_candidate_count=2,
+                                strategy="lexical_top_k_dense_rrf",
+                            ),
+                        ),
+                    )
+                ],
+                merged_context_pack=ContextPack(
+                    question=request.queries[0],
+                    passages=[],
+                    citation_map={},
+                ),
+                preparation_status=PreparationStatus(complete=1),
+                include_diagnostics=True,
+            )
+
+    result = await retrieve_review_context_batch_impl(
+        service=FakeService(),
+        review_id="rev_123",
+        queries=["colchicine"],
+        include_diagnostics=True,
+    )
+
+    embedding = result["results"][0]["diagnostics"]["embedding_rerank"]
+    assert embedding["active"] is True
+    assert embedding["model_name"] == "BAAI/bge-small-en-v1.5"
+    assert embedding["strategy"] == "lexical_top_k_dense_rrf"
+
+
+@pytest.mark.asyncio
 async def test_retrieve_review_context_batch_adapter_builds_request_from_flat_args() -> None:
     from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
     from pubtator_link.models.review_rerag import (

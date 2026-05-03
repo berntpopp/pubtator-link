@@ -207,6 +207,19 @@ Use stdio only for local desktop workflows that cannot connect to HTTP MCP endpo
 | `pubtator.record_review_context` | Persist durable review decisions and selected evidence IDs |
 | `pubtator.get_server_capabilities` | Discover formats, bioconcepts, relation types, and limitations |
 
+### Optional Local Embedding Rerank
+
+Private deployments can enable local dense reranking for review retrieval:
+
+```bash
+PUBTATOR_LINK_REVIEW_EMBEDDING_RERANK_ENABLED=true
+PUBTATOR_LINK_REVIEW_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+PUBTATOR_LINK_REVIEW_EMBEDDING_DIM=384
+```
+
+The server keeps lexical retrieval as the fallback when embeddings are missing,
+the model is unavailable, or `pgvector` is not installed.
+
 ### LLM Driver Ergonomics
 
 For review-grounded work, start with `pubtator.workflow_help` or
