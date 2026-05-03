@@ -427,6 +427,7 @@ async def test_upsert_passage_embeddings_writes_embedding_records() -> None:
     assert len(connection.executemany_calls) == 1
     sql, args = connection.executemany_calls[0]
     assert "insert into review_passage_embeddings" in sql.lower()
+    assert "$6::vector" in sql
     assert "on conflict (review_id, passage_id, model_name)" in sql.lower()
     assert args == [
         (
@@ -435,7 +436,7 @@ async def test_upsert_passage_embeddings_writes_embedding_records() -> None:
             "BAAI/bge-small-en-v1.5",
             384,
             "hash-1",
-            [0.1, 0.2, 0.3],
+            "[0.1,0.2,0.3]",
         )
     ]
 
@@ -459,6 +460,23 @@ async def test_get_passage_embeddings_returns_vectors_by_passage_id() -> None:
     sql, args = connection.executed[0]
     assert "from review_passage_embeddings" in sql.lower()
     assert args == ("review-1", ["passage-1", "passage-2"], "BAAI/bge-small-en-v1.5")
+
+
+@pytest.mark.asyncio
+async def test_get_passage_embeddings_decodes_pgvector_text_values() -> None:
+    connection = FakeConnection()
+    connection.fetched_rows = [
+        {"passage_id": "passage-1", "text_hash": "hash-1", "embedding": "[0.1,0.2]"}
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    embeddings = await repository.get_passage_embeddings(
+        "review-1",
+        ["passage-1"],
+        model_name="BAAI/bge-small-en-v1.5",
+    )
+
+    assert embeddings == {"passage-1": [0.1, 0.2]}
 
 
 @pytest.mark.asyncio

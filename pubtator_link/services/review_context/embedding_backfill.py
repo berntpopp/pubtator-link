@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
@@ -10,6 +12,8 @@ from pubtator_link.services.review_context.embeddings import (
     EmbeddingProvider,
     text_hash,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingBackfillRepository(Protocol):
@@ -44,6 +48,7 @@ async def backfill_review_passage_embeddings(
     batch_size: int,
     limit: int,
 ) -> EmbeddingBackfillResult:
+    started = time.monotonic()
     passages = await repository.list_passages_missing_embeddings(
         review_id,
         model_name=model_name,
@@ -57,6 +62,19 @@ async def backfill_review_passage_embeddings(
             vectors = await provider.embed_passages([passage.text for passage in batch])
         except Exception as exc:
             failed_count += len(batch)
+            logger.warning(
+                "review_embedding_backfill_failed",
+                extra={
+                    "review_id": review_id,
+                    "model_name": model_name,
+                    "embedding_dim": embedding_dim,
+                    "missing_count": len(passages),
+                    "embedded_count": embedded_count,
+                    "failed_count": failed_count,
+                    "batch_size": len(batch),
+                    "elapsed_ms": round((time.monotonic() - started) * 1000, 2),
+                },
+            )
             return EmbeddingBackfillResult(
                 review_id=review_id,
                 embedded_count=embedded_count,
@@ -78,6 +96,19 @@ async def backfill_review_passage_embeddings(
         await repository.upsert_passage_embeddings(records)
         embedded_count += len(records)
 
+    logger.info(
+        "review_embedding_backfill_completed",
+        extra={
+            "review_id": review_id,
+            "model_name": model_name,
+            "embedding_dim": embedding_dim,
+            "missing_count": len(passages),
+            "embedded_count": embedded_count,
+            "failed_count": failed_count,
+            "batch_size": batch_size,
+            "elapsed_ms": round((time.monotonic() - started) * 1000, 2),
+        },
+    )
     return EmbeddingBackfillResult(
         review_id=review_id,
         embedded_count=embedded_count,

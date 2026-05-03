@@ -1,6 +1,8 @@
 """Service for retrieving review-scoped context passages."""
 
 import asyncio
+import logging
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -197,10 +199,12 @@ class ReviewContextService:
         embedding_dim: int = 384,
         embedding_top_k: int = 50,
         embedding_rrf_k: int = 60,
+        logger: logging.Logger | None = None,
     ) -> None:
         self.repository = repository
         self.metadata_service = metadata_service
         self.retrieval_concurrency = retrieval_concurrency
+        self.logger = logger or logging.getLogger(__name__)
         self.embedding_provider = embedding_provider
         self.embedding_rerank_enabled = embedding_rerank_enabled
         self.embedding_model = embedding_model
@@ -548,6 +552,7 @@ class ReviewContextService:
         candidates: Sequence[ReviewPassageRow],
         section_policy: SampleSectionPolicy,
     ) -> tuple[list[ReviewPassageRow], EmbeddingRerankDiagnostics | None]:
+        started = time.monotonic()
         lexical_candidates = sorted(
             candidates,
             key=lambda row: rerank_key(row, section_policy=section_policy),
@@ -563,9 +568,11 @@ class ReviewContextService:
         )
         if not candidates:
             diagnostics.fallback_reason = "no_candidates"
+            self._log_embedding_rerank_fallback(review_id, diagnostics, started)
             return lexical_candidates, diagnostics
         if self.embedding_provider is None:
             diagnostics.fallback_reason = "provider_unavailable"
+            self._log_embedding_rerank_fallback(review_id, diagnostics, started)
             return lexical_candidates, diagnostics
 
         passage_ids = [row.passage_id for row in lexical_candidates]
@@ -579,18 +586,21 @@ class ReviewContextService:
             )
         except Exception:
             diagnostics.fallback_reason = "embedding_fetch_failed"
+            self._log_embedding_rerank_fallback(review_id, diagnostics, started)
             return lexical_candidates, diagnostics
 
         diagnostics.embedded_candidate_count = len(embeddings)
         diagnostics.missing_embedding_count = len(candidates) - len(embeddings)
         if not embeddings:
             diagnostics.fallback_reason = "missing_embeddings"
+            self._log_embedding_rerank_fallback(review_id, diagnostics, started)
             return lexical_candidates, diagnostics
 
         try:
             query_embedding = await self.embedding_provider.embed_query(query)
         except Exception:
             diagnostics.fallback_reason = "query_embedding_failed"
+            self._log_embedding_rerank_fallback(review_id, diagnostics, started)
             return lexical_candidates, diagnostics
 
         dense_scores = {
@@ -604,7 +614,41 @@ class ReviewContextService:
         )
         rerank_diagnostics.model_name = self.embedding_model
         rerank_diagnostics.embedding_dim = self.embedding_dim
+        self.logger.info(
+            "review_embedding_rerank_completed",
+            extra={
+                "review_id": review_id,
+                "model_name": self.embedding_model,
+                "embedding_dim": self.embedding_dim,
+                "candidate_count": rerank_diagnostics.candidate_count,
+                "embedded_candidate_count": rerank_diagnostics.embedded_candidate_count,
+                "missing_embedding_count": rerank_diagnostics.missing_embedding_count,
+                "active": rerank_diagnostics.active,
+                "strategy": rerank_diagnostics.strategy,
+                "elapsed_ms": round((time.monotonic() - started) * 1000, 2),
+            },
+        )
         return reranked, rerank_diagnostics
+
+    def _log_embedding_rerank_fallback(
+        self,
+        review_id: str,
+        diagnostics: EmbeddingRerankDiagnostics,
+        started: float,
+    ) -> None:
+        self.logger.info(
+            "review_embedding_rerank_fallback",
+            extra={
+                "review_id": review_id,
+                "model_name": diagnostics.model_name,
+                "embedding_dim": diagnostics.embedding_dim,
+                "candidate_count": diagnostics.candidate_count,
+                "embedded_candidate_count": diagnostics.embedded_candidate_count,
+                "missing_embedding_count": diagnostics.missing_embedding_count,
+                "fallback_reason": diagnostics.fallback_reason,
+                "elapsed_ms": round((time.monotonic() - started) * 1000, 2),
+            },
+        )
 
     async def inspect_review_index(
         self,

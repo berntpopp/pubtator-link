@@ -271,6 +271,7 @@ class FullTextPreparationService:
         ):
             return
 
+        started = time.monotonic()
         try:
             vectors = await self.embedding_provider.embed_passages(
                 [passage.text for passage in passages]
@@ -278,7 +279,13 @@ class FullTextPreparationService:
         except EmbeddingProviderUnavailableError as exc:
             self.logger.warning(
                 "Review passage embedding generation skipped",
-                extra={"reason": str(exc), "passage_count": len(passages)},
+                extra={
+                    "reason": str(exc),
+                    "passage_count": len(passages),
+                    "model_name": self.embedding_model,
+                    "embedding_dim": self.embedding_dim,
+                    "elapsed_ms": round((time.monotonic() - started) * 1000, 2),
+                },
             )
             return
 
@@ -294,6 +301,15 @@ class FullTextPreparationService:
             for passage, vector in zip(passages, vectors, strict=True)
         ]
         await self.repository.upsert_passage_embeddings(records)
+        self.logger.info(
+            "Review passage embedding generation completed",
+            extra={
+                "passage_count": len(passages),
+                "model_name": self.embedding_model,
+                "embedding_dim": self.embedding_dim,
+                "elapsed_ms": round((time.monotonic() - started) * 1000, 2),
+            },
+        )
 
     async def _coverage_hint_for_pmid(self, pmid: str) -> SourceCoverageHint | None:
         if self.source_preflight_service is None:

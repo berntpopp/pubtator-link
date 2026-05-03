@@ -75,6 +75,21 @@ def _json_value(value: Any, fallback: Any) -> Any:
     return value
 
 
+def _vector_literal(values: Sequence[float]) -> str:
+    return "[" + ",".join(str(float(value)) for value in values) + "]"
+
+
+def _embedding_vector_from_value(value: Any) -> list[float]:
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            stripped = stripped[1:-1]
+        if not stripped:
+            return []
+        return [float(item) for item in stripped.split(",")]
+    return [float(item) for item in value]
+
+
 def _llm_context_from_row(row: Mapping[str, Any]) -> ReviewLlmContext:
     return ReviewLlmContext(
         context_id=str(row["context_id"]),
@@ -768,7 +783,7 @@ class PostgresReviewReragRepository:
                 record.model_name,
                 record.embedding_dim,
                 record.text_hash,
-                record.embedding,
+                _vector_literal(record.embedding),
             )
             for record in records
         ]
@@ -783,7 +798,7 @@ class PostgresReviewReragRepository:
                     text_hash,
                     embedding
                 )
-                values ($1, $2, $3, $4, $5, $6)
+                values ($1, $2, $3, $4, $5, $6::vector)
                 on conflict (review_id, passage_id, model_name) do update
                 set embedding_dim = excluded.embedding_dim,
                     text_hash = excluded.text_hash,
@@ -828,7 +843,7 @@ class PostgresReviewReragRepository:
                 and passage_text_hashes.get(passage_id) != row["text_hash"]
             ):
                 continue
-            embeddings[passage_id] = [float(value) for value in row["embedding"]]
+            embeddings[passage_id] = _embedding_vector_from_value(row["embedding"])
         return embeddings
 
     async def list_passages_missing_embeddings(

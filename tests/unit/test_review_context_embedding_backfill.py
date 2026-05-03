@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+import pytest
 
 from pubtator_link.models.review_rerag import ReviewPassageRow
 from pubtator_link.repositories.review_rerag import ReviewPassageEmbeddingRecord
@@ -53,7 +56,13 @@ def passage(passage_id: str) -> ReviewPassageRow:
     )
 
 
-async def test_backfill_embeds_missing_passages_in_batches() -> None:
+async def test_backfill_embeds_missing_passages_in_batches(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(
+        logging.INFO,
+        logger="pubtator_link.services.review_context.embedding_backfill",
+    )
     repository = FakeEmbeddingBackfillRepository(missing=[passage("p1")])
     provider = FakeEmbeddingProvider(dim=384)
 
@@ -78,9 +87,24 @@ async def test_backfill_embeds_missing_passages_in_batches() -> None:
     ]
     assert repository.upserted[0].passage_id == "p1"
     assert repository.upserted[0].embedding_dim == 384
+    records = [
+        record
+        for record in caplog.records
+        if record.message == "review_embedding_backfill_completed"
+    ]
+    assert records
+    assert records[0].review_id == "r1"
+    assert records[0].embedded_count == 1
+    assert records[0].elapsed_ms >= 0
 
 
-async def test_backfill_reports_provider_failure_without_raising() -> None:
+async def test_backfill_reports_provider_failure_without_raising(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(
+        logging.WARNING,
+        logger="pubtator_link.services.review_context.embedding_backfill",
+    )
     repository = FakeEmbeddingBackfillRepository(missing=[passage("p1")])
     provider = FailingEmbeddingProvider()
 
@@ -98,3 +122,9 @@ async def test_backfill_reports_provider_failure_without_raising() -> None:
     assert result.failed_count == 1
     assert result.error is not None
     assert repository.upserted == []
+    records = [
+        record for record in caplog.records if record.message == "review_embedding_backfill_failed"
+    ]
+    assert records
+    assert records[0].failed_count == 1
+    assert records[0].elapsed_ms >= 0

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import Sequence
 
 import pytest
@@ -717,7 +718,10 @@ async def test_reference_passages_rank_after_body_sections_when_scores_tie() -> 
 
 
 @pytest.mark.asyncio
-async def test_embedding_rerank_promotes_semantic_evidence_above_lexical_table() -> None:
+async def test_embedding_rerank_promotes_semantic_evidence_above_lexical_table(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="pubtator_link.services.review_context_service")
     repository = FakeReviewContextRepository(
         [
             _passage(
@@ -762,6 +766,14 @@ async def test_embedding_rerank_promotes_semantic_evidence_above_lexical_table()
     assert response.diagnostics.embedding_rerank is not None
     assert response.diagnostics.embedding_rerank.active is True
     assert response.diagnostics.embedding_rerank.strategy == "lexical_top_k_dense_rrf"
+    records = [
+        record for record in caplog.records if record.message == "review_embedding_rerank_completed"
+    ]
+    assert records
+    assert records[0].candidate_count == 2
+    assert records[0].embedded_candidate_count == 1
+    assert records[0].active is True
+    assert records[0].elapsed_ms >= 0
 
 
 @pytest.mark.asyncio
@@ -808,7 +820,10 @@ async def test_embedding_rerank_keeps_ref_below_evidence() -> None:
 
 
 @pytest.mark.asyncio
-async def test_embedding_rerank_missing_embeddings_falls_back_to_lexical_diagnostics() -> None:
+async def test_embedding_rerank_missing_embeddings_falls_back_to_lexical_diagnostics(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="pubtator_link.services.review_context_service")
     repository = FakeReviewContextRepository(
         [
             _passage("lexical-first", pmid="111", text="Lexical first.", lexical_rank=10.0),
@@ -835,6 +850,13 @@ async def test_embedding_rerank_missing_embeddings_falls_back_to_lexical_diagnos
     assert response.diagnostics.embedding_rerank is not None
     assert response.diagnostics.embedding_rerank.active is False
     assert response.diagnostics.embedding_rerank.fallback_reason == "missing_embeddings"
+    records = [
+        record for record in caplog.records if record.message == "review_embedding_rerank_fallback"
+    ]
+    assert records
+    assert records[0].fallback_reason == "missing_embeddings"
+    assert records[0].candidate_count == 2
+    assert records[0].elapsed_ms >= 0
 
 
 @pytest.mark.asyncio

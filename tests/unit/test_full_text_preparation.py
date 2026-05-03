@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 import pytest
@@ -308,7 +309,10 @@ async def test_prepare_pmid_falls_back_to_abstract_and_records_passages() -> Non
 
 
 @pytest.mark.asyncio
-async def test_prepare_pmid_embeds_newly_indexed_passages_when_enabled() -> None:
+async def test_prepare_pmid_embeds_newly_indexed_passages_when_enabled(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="pubtator_link.services.full_text_preparation")
     repository = RecordingRepository()
     embedding_provider = RecordingEmbeddingProvider()
     pubtator_client = RecordingPubTatorClient(
@@ -351,10 +355,22 @@ async def test_prepare_pmid_embeds_newly_indexed_passages_when_enabled() -> None
     assert record.embedding_dim == 384
     assert record.text_hash == text_hash("Colchicine should start after diagnosis.")
     assert record.embedding == [1.0, 0.5]
+    records = [
+        record
+        for record in caplog.records
+        if record.message == "Review passage embedding generation completed"
+    ]
+    assert records
+    assert records[0].passage_count == 1
+    assert records[0].embedding_dim == 384
+    assert records[0].elapsed_ms >= 0
 
 
 @pytest.mark.asyncio
-async def test_prepare_pmid_embedding_provider_failure_does_not_fail_indexing() -> None:
+async def test_prepare_pmid_embedding_provider_failure_does_not_fail_indexing(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.WARNING, logger="pubtator_link.services.full_text_preparation")
     repository = RecordingRepository()
     embedding_provider = RecordingEmbeddingProvider(fail=True)
     pubtator_client = RecordingPubTatorClient(
@@ -391,6 +407,14 @@ async def test_prepare_pmid_embedding_provider_failure_does_not_fail_indexing() 
     assert [passage.passage_id for passage in repository.passages] == ["PMID:40234174:abstract:0"]
     assert repository.embedding_records == []
     assert repository.attempts[-1]["status"] == "success"
+    records = [
+        record
+        for record in caplog.records
+        if record.message == "Review passage embedding generation skipped"
+    ]
+    assert records
+    assert records[0].passage_count == 1
+    assert records[0].elapsed_ms >= 0
 
 
 @pytest.mark.asyncio
