@@ -20,6 +20,7 @@ def _passage(
     text: str,
     pmid: str = "1",
     section: str = "abstract",
+    publication_types: list[str] | None = None,
 ) -> ContextPassage:
     return ContextPassage(
         citation_key="S1",
@@ -30,6 +31,7 @@ def _passage(
         section=section,
         text=text,
         source_kind="pubtator_abstract",
+        publication_types=publication_types or [],
     )
 
 
@@ -336,6 +338,40 @@ def test_batch_budgeting_honors_min_passages_per_pmid() -> None:
     assert {passage.pmid for passage in merged.passages} == {"1", "2"}
 
 
+def test_batch_budgeting_auto_prioritizes_practice_guideline_pmids() -> None:
+    request = RetrieveReviewContextBatchRequest(
+        queries=["q1"],
+        max_total_passages=1,
+        max_chars=1000,
+        min_passages_per_pmid=1,
+    )
+
+    merged = merge_batch_context(
+        request=request,
+        query_results=[
+            _result(
+                "q1",
+                [
+                    _passage("regular", "regular abstract", pmid="1"),
+                    _passage(
+                        "guideline",
+                        "practice guideline abstract",
+                        pmid="2",
+                        publication_types=["Practice Guideline"],
+                    ),
+                ],
+            )
+        ],
+        coverage_by_source={},
+    )
+
+    assert [passage.passage_id for passage in merged.passages] == ["guideline"]
+    guideline_summary = next(
+        summary for summary in merged.pmid_status_summary if summary.pmid == "2"
+    )
+    assert guideline_summary.prioritized is True
+
+
 def test_batch_response_includes_pmid_status_summary() -> None:
     request = RetrieveReviewContextBatchRequest(
         queries=["q1"],
@@ -386,16 +422,16 @@ def test_budget_advice_reports_tokens_and_dropped_priority_pmids() -> None:
     request = RetrieveReviewContextBatchRequest(
         queries=["MEFV colchicine"],
         max_total_passages=5,
-        max_chars=900,
+        max_chars=500,
         max_response_chars=100000,
         prioritize_pmids=["222", "333"],
     )
     result = _result(
         "MEFV colchicine",
         [
-            _passage("p1", "A" * 700, pmid="111"),
-            _passage("p2", "B" * 300, pmid="222"),
-            _passage("p3", "C" * 300, pmid="333"),
+            _passage("p1", "A" * 100, pmid="111"),
+            _passage("p2", "B" * 600, pmid="222"),
+            _passage("p3", "C" * 600, pmid="333"),
         ],
     )
 

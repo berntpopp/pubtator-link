@@ -114,8 +114,28 @@ def test_context_passage_compact_serialization_strips_nulls_and_confidence_facto
     assert "score" not in dumped
     assert dumped["confidence_for_grounding"] == {
         "level": "high",
-        "explanation": "High lexical match in an abstract passage.",
+        "basis": ["lexical", "section"],
     }
+
+
+def test_context_pack_serialization_omits_duplicate_stable_citation_map() -> None:
+    pack = ContextPack(
+        question="MEFV colchicine",
+        passages=[
+            ContextPassage(
+                citation_key="S1",
+                passage_id="PMID:1:abstract:0",
+                section="abstract",
+                text="MEFV variants respond to colchicine in this cohort.",
+            )
+        ],
+        citation_map={"S1": "PMID:1:abstract:0"},
+    )
+
+    dumped = pack.model_dump(mode="json")
+
+    assert pack.stable_citation_map == {pack.passages[0].stable_citation_key: "PMID:1:abstract:0"}
+    assert "stable_citation_map" not in dumped
 
 
 def test_context_passage_compact_serialization_matches_json_schema() -> None:

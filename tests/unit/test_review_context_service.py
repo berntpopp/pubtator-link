@@ -415,6 +415,7 @@ def _passage(
     section: str = "results",
     source_kind: str = "pubtator_full_bioc",
     source_id: str | None = None,
+    source_metadata: dict[str, object] | None = None,
 ) -> ReviewPassageRow:
     return ReviewPassageRow(
         passage_id=passage_id,
@@ -425,6 +426,7 @@ def _passage(
         text=text,
         pmid=pmid,
         lexical_rank=lexical_rank,
+        source_metadata=source_metadata or {},
     )
 
 
@@ -1391,6 +1393,7 @@ async def test_batch_retrieval_returns_next_context_resource_links() -> None:
         ),
     )
 
+    assert len(result.next_context_options) == 3
     options = {option.kind: option for option in result.next_context_options}
     assert options["passage"].resource == (
         "pubtator://reviews/review%201/passages/p%201%2Ffrag?session_id=session+1"
@@ -1401,6 +1404,27 @@ async def test_batch_retrieval_returns_next_context_resource_links() -> None:
     assert options["audit"].resource == (
         "pubtator://reviews/review%201/audit/p%201%2Ffrag?session_id=session+1"
     )
+
+
+@pytest.mark.asyncio
+async def test_batch_retrieval_caps_next_context_options_to_three_total() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage(f"p{index}", pmid=str(index), text=f"evidence {index}", lexical_rank=9.0)
+            for index in range(5)
+        ]
+    )
+    service = ReviewContextService(repository)
+
+    result = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["evidence"],
+            max_total_passages=5,
+        ),
+    )
+
+    assert len(result.next_context_options) == 3
 
 
 @pytest.mark.asyncio
@@ -1769,7 +1793,7 @@ async def test_batch_dry_run_returns_diagnostics_without_passage_text() -> None:
 
 
 @pytest.mark.asyncio
-async def test_batch_context_pack_includes_stable_citation_map() -> None:
+async def test_batch_context_pack_serialization_omits_stable_citation_map() -> None:
     repository = FakeReviewContextRepository(
         [
             _passage(
@@ -1790,7 +1814,48 @@ async def test_batch_context_pack_includes_stable_citation_map() -> None:
     assert response.merged_context_pack.stable_citation_map == {
         passage.stable_citation_key: passage.passage_id
     }
+    dumped = response.model_dump(mode="json")
+    assert "stable_citation_map" not in dumped["merged_context_pack"]
     assert response.index_snapshot_date is not None
+
+
+@pytest.mark.asyncio
+async def test_batch_retrieval_auto_prioritizes_practice_guidelines() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage(
+                "regular",
+                pmid="111",
+                text="regular colchicine abstract",
+                lexical_rank=10.0,
+            ),
+            _passage(
+                "guideline",
+                pmid="222",
+                text="practice guideline colchicine abstract",
+                lexical_rank=1.0,
+                source_metadata={"publication_types": ["Practice Guideline"]},
+            ),
+        ]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["colchicine"],
+            max_total_passages=1,
+            min_passages_per_pmid=1,
+        ),
+    )
+
+    assert [passage.passage_id for passage in response.merged_context_pack.passages] == [
+        "guideline"
+    ]
+    guideline_summary = next(
+        summary for summary in response.pmid_status_summary if summary.pmid == "222"
+    )
+    assert guideline_summary.prioritized is True
 
 
 @pytest.mark.asyncio

@@ -328,6 +328,7 @@ class ReviewContextService:
         request: RetrieveReviewContextBatchRequest,
     ) -> RetrieveReviewContextBatchResponse:
         """Retrieve multiple query variants and merge selected passages."""
+        started = time.monotonic()
         await self._ensure_session_exists(review_id, request.session_id)
         if (
             isinstance(request.max_response_chars, str)
@@ -407,6 +408,7 @@ class ReviewContextService:
             if request.response_mode == "full":
                 results.append(result)
 
+        query_phase_ms = round((time.monotonic() - started) * 1000, 2)
         coverage_by_source = {}
         if request.budget_strategy != "query_fair":
             coverage_by_source = _source_coverage_by_key(snapshot.source_summaries)
@@ -418,6 +420,7 @@ class ReviewContextService:
             query_results=query_results,
             coverage_by_source=coverage_by_source,
         )
+        merge_phase_ms = round((time.monotonic() - started) * 1000 - query_phase_ms, 2)
         next_context_options = _next_context_options(
             review_id,
             merged.passages,
@@ -445,6 +448,28 @@ class ReviewContextService:
                 if hint is not None
             ),
             None,
+        )
+        prioritized_count = sum(1 for summary in merged.pmid_status_summary if summary.prioritized)
+        self.logger.info(
+            "review_context_batch_retrieved",
+            extra={
+                "review_id": review_id,
+                "session_id": request.session_id,
+                "query_count": len(request.queries),
+                "response_mode": request.response_mode,
+                "budget_strategy": request.budget_strategy,
+                "dry_run": request.dry_run,
+                "query_phase_ms": query_phase_ms,
+                "merge_phase_ms": merge_phase_ms,
+                "elapsed_ms": round((time.monotonic() - started) * 1000, 2),
+                "returned_passage_count": len(merged.passages),
+                "dropped_passage_count": merged.dropped_summary.total_dropped,
+                "text_chars": merged.text_chars,
+                "estimated_tokens": merged.estimated_tokens,
+                "next_context_option_count": len(next_context_options),
+                "prioritized_pmid_count": prioritized_count,
+                "explicit_prioritize_pmid_count": len(request.prioritize_pmids),
+            },
         )
         if request.dry_run:
             dry_run_budget = context_budget(
@@ -1075,7 +1100,7 @@ def _next_context_options(
     session_id: str | None = None,
 ) -> list[NextContextOption]:
     options: list[NextContextOption] = []
-    for passage in passages[:5]:
+    for passage in passages:
         passage_resource = _review_resource_uri(
             review_id,
             f"passages/{passage.passage_id}",
@@ -1111,6 +1136,8 @@ def _next_context_options(
                 ),
             ]
         )
+        if len(options) >= 3:
+            return options[:3]
     return options
 
 
