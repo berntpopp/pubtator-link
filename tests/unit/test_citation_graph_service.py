@@ -147,6 +147,29 @@ async def test_doi_references_direction_returns_crossref_references() -> None:
 
 
 @pytest.mark.asyncio
+async def test_doi_references_direction_reports_empty_identifier_resolution_status() -> None:
+    service = CitationGraphService(
+        crossref=FakeCrossref(),
+        discovery_service=FakeDiscovery(),
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            doi="10.1016/j.ard.2025.05.020",
+            direction="references",
+        )
+    )
+
+    assert any(
+        status.provider == "identifier_resolution"
+        and status.operation == "doi_to_pmid"
+        and status.status == "empty"
+        for status in response.identifier_resolution_status
+    )
+
+
+@pytest.mark.asyncio
 async def test_pmid_cited_by_direction_returns_europe_pmc_citations() -> None:
     service = CitationGraphService(
         crossref=FakeCrossref(),
@@ -162,6 +185,53 @@ async def test_pmid_cited_by_direction_returns_europe_pmc_citations() -> None:
     assert response.source.pmid == "40562663"
     assert response.cited_by[0].pmid == "40600001"
     assert response.candidate_pmids == ["40600001"]
+
+
+@pytest.mark.asyncio
+async def test_pmid_references_direction_reports_doi_required_reference_providers_skipped() -> None:
+    service = CitationGraphService(
+        crossref=FakeCrossref(),
+        openalex=FakeOpenAlex(),
+        discovery_service=FakeDiscovery(),
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(pmid="40562663", direction="references")
+    )
+
+    skipped = [
+        status
+        for status in response.references_status
+        if status.operation == "references" and status.status == "skipped"
+    ]
+
+    assert {(status.provider, status.message) for status in skipped} == {
+        ("crossref", "DOI required"),
+        ("openalex", "DOI required"),
+    }
+
+
+@pytest.mark.asyncio
+async def test_pmid_cited_by_direction_reports_openalex_doi_required_skipped() -> None:
+    service = CitationGraphService(
+        europe_pmc=FakeEuropePmc(),
+        openalex=FakeOpenAlex(),
+        discovery_service=FakeDiscovery(),
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(pmid="40562663", direction="cited_by")
+    )
+
+    assert any(
+        status.provider == "openalex"
+        and status.operation == "cited_by"
+        and status.status == "skipped"
+        and status.message == "DOI required"
+        for status in response.cited_by_status
+    )
 
 
 @pytest.mark.asyncio
@@ -284,6 +354,46 @@ async def test_openalex_fallback_and_unpaywall_enrichment_are_wired() -> None:
     assert response.cited_by[0].status == "resolved_full_text_candidate"
 
 
+class CountingUnpaywall:
+    async def get_oa_status(self, doi: str):
+        return LiteratureAvailability(
+            is_open_access=True,
+            full_text_url=f"https://example.org/{doi}",
+            oa_status="green",
+        )
+
+
+@pytest.mark.asyncio
+async def test_open_access_status_counts_multiple_successful_unpaywall_lookups() -> None:
+    service = CitationGraphService(
+        crossref=FakeCrossref(),
+        europe_pmc=FakeEuropePmc(),
+        openalex=FakeOpenAlex(),
+        unpaywall=CountingUnpaywall(),
+        discovery_service=ResolvingDiscovery(),
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            doi="10.1016/j.ard.2025.05.020",
+            direction="both",
+            include_open_access_status=True,
+        )
+    )
+
+    unpaywall_status = [
+        status
+        for status in response.open_access_status
+        if status.provider == "unpaywall"
+        and status.operation == "open_access"
+        and status.status == "success"
+    ]
+
+    assert len(unpaywall_status) == 1
+    assert unpaywall_status[0].result_count == 3
+
+
 @pytest.mark.asyncio
 async def test_include_open_access_status_false_skips_unpaywall() -> None:
     service = CitationGraphService(
@@ -303,3 +413,70 @@ async def test_include_open_access_status_false_skips_unpaywall() -> None:
     )
 
     assert response.references[0].availability.is_open_access is False
+
+
+class DisabledUnpaywall:
+    async def get_oa_status(self, doi: str):
+        from pubtator_link.models.literature_graph import ProviderWarning
+
+        return ProviderWarning(
+            provider="unpaywall",
+            status="provider_disabled",
+            retryable=False,
+            message="UNPAYWALL_EMAIL is not configured.",
+        )
+
+
+@pytest.mark.asyncio
+async def test_citation_graph_compact_returns_candidates_status_and_no_metadata_duplicates() -> (
+    None
+):
+    service = CitationGraphService(
+        crossref=FakeCrossref(),
+        europe_pmc=FakeEuropePmc(),
+        openalex=FakeOpenAlex(),
+        unpaywall=DisabledUnpaywall(),
+        discovery_service=ResolvingDiscovery(),
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            doi="10.1016/j.ard.2025.05.020",
+            direction="both",
+            response_mode="compact",
+        )
+    )
+
+    assert response.meta.response_mode == "compact"
+    assert response.references == []
+    assert response.cited_by == []
+    assert response.metadata_only == []
+    assert response.reference_candidates
+    assert response.cited_by_candidates
+    assert response.candidate_pmids == ["40600001"]
+    assert any(status.operation == "references" for status in response.references_status)
+    assert any(status.operation == "cited_by" for status in response.cited_by_status)
+    assert len([s for s in response.open_access_status if s.provider == "unpaywall"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_citation_graph_full_preserves_existing_arrays() -> None:
+    service = CitationGraphService(
+        crossref=FakeCrossref(),
+        europe_pmc=FakeEuropePmc(),
+        discovery_service=ResolvingDiscovery(),
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            doi="10.1016/j.ard.2025.05.020",
+            direction="both",
+            response_mode="full",
+        )
+    )
+
+    assert response.references
+    assert response.cited_by
+    assert response.meta.response_mode == "full"

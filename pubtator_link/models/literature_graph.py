@@ -299,7 +299,11 @@ class PublicationCitationGraphRequest(BaseModel):
     pmid: str | None = None
     doi: str | None = None
     direction: CitationGraphDirection = "both"
+    response_mode: LiteratureGraphResponseMode = "full"
     resolve_metadata: bool = True
+    resolve_reference_pmids: bool = True
+    max_reference_resolution: int = Field(default=20, ge=0, le=100)
+    include_provider_status: bool = True
     include_open_access_status: bool = True
     max_results: int = Field(default=50, ge=1, le=100)
 
@@ -328,8 +332,15 @@ class PublicationCitationGraphResponse(BaseModel):
     source: LiteraturePaper
     references: list[LiteraturePaper] = Field(default_factory=list)
     cited_by: list[LiteraturePaper] = Field(default_factory=list)
+    response_mode: LiteratureGraphResponseMode = "full"
+    reference_candidates: list[LiteratureCandidateSummary] = Field(default_factory=list)
+    cited_by_candidates: list[LiteratureCandidateSummary] = Field(default_factory=list)
     candidate_pmids: list[str] = Field(default_factory=list)
     metadata_only: list[LiteraturePaper] = Field(default_factory=list)
+    references_status: list[LiteratureProviderStatus] = Field(default_factory=list)
+    cited_by_status: list[LiteratureProviderStatus] = Field(default_factory=list)
+    identifier_resolution_status: list[LiteratureProviderStatus] = Field(default_factory=list)
+    open_access_status: list[LiteratureProviderStatus] = Field(default_factory=list)
     meta: LiteratureGraphResponseMeta = Field(
         default_factory=LiteratureGraphResponseMeta,
         alias="_meta",
