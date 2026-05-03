@@ -17,6 +17,10 @@ from pubtator_link.services.ncbi_discovery import DiscoveryService, NcbiDiscover
 from tests.fixtures.literature_graph import NCBI_ELINK_NEIGHBOR_SCORE
 
 
+def assert_no_prepare_mode(payload: object) -> None:
+    assert "prepare_mode" not in str(payload)
+
+
 class MockTransport:
     def __init__(self, payload: dict[str, object]) -> None:
         self.payload = payload
@@ -104,8 +108,9 @@ async def test_convert_article_ids_adds_candidates_and_next_commands() -> None:
     assert response.meta.next_commands[0]["arguments"] == {"pmids": ["123"]}
     assert response.meta.next_commands[1] == {
         "tool": "pubtator.index_review_evidence",
-        "arguments": {"pmids": ["123"], "prepare_mode": "selected"},
+        "arguments": {"pmids": ["123"]},
     }
+    assert_no_prepare_mode(response.meta.next_commands)
 
 
 @pytest.mark.asyncio
@@ -379,8 +384,8 @@ async def test_lookup_citation_deduplicates_candidate_pmids() -> None:
     assert response.meta.next_commands[0]["arguments"] == {"pmids": ["123"]}
     assert response.meta.next_commands[1]["arguments"] == {
         "pmids": ["123"],
-        "prepare_mode": "selected",
     }
+    assert_no_prepare_mode(response.meta.next_commands)
 
 
 @pytest.mark.asyncio
@@ -393,8 +398,8 @@ async def test_find_related_articles_deduplicates_candidates() -> None:
     assert response.meta.next_commands[0]["arguments"] == {"pmids": ["456", "789"]}
     assert response.meta.next_commands[1]["arguments"] == {
         "pmids": ["456", "789"],
-        "prepare_mode": "selected",
     }
+    assert_no_prepare_mode(response.meta.next_commands)
     assert response.unresolved == ["999"]
 
 

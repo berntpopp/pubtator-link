@@ -595,7 +595,7 @@ def _candidate_meta(candidate_pmids: list[str]) -> DiscoveryMeta:
             },
             {
                 "tool": "pubtator.index_review_evidence",
-                "arguments": {"pmids": candidate_pmids, "prepare_mode": "selected"},
+                "arguments": {"pmids": candidate_pmids},
             },
         ]
     return DiscoveryMeta(

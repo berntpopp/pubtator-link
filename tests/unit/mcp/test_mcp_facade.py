@@ -407,6 +407,23 @@ def test_capabilities_document_new_budget_and_stable_citation_fields() -> None:
     assert capabilities["budgeting_defaults"]["batch_budget_source"] == "auto_fit_when_omitted"
 
 
+def test_capabilities_expose_literature_graph_workflow_bundle() -> None:
+    from pubtator_link.mcp.resources import get_capabilities_resource
+
+    payload = get_capabilities_resource(profile="full")
+
+    bundle = payload["workflow_bundles"]["literature_graph"]
+    assert bundle["tools"] == [
+        "pubtator.search_literature",
+        "pubtator.build_topic_literature_map",
+        "pubtator.get_publication_citation_graph",
+        "pubtator.find_related_evidence_candidates",
+        "pubtator.index_review_evidence",
+        "pubtator.retrieve_review_context_batch",
+    ]
+    assert "host" in bundle["boundary_note"].casefold()
+
+
 def test_capabilities_document_error_recovery_and_compact_search() -> None:
     import json
 

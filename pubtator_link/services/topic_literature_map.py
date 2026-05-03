@@ -588,7 +588,7 @@ def _retrieval_hints(pmids: list[str]) -> list[dict[str, Any]]:
         },
         {
             "tool": "pubtator.index_review_evidence",
-            "arguments": {"pmids": pmids, "prepare_mode": "selected"},
+            "arguments": {"pmids": pmids},
         },
     ]
 

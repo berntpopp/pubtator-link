@@ -71,6 +71,11 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         category="publication",
         profiles=("full",),
         stability="advanced",
+        purpose=(
+            "Use this when a user needs a topic literature graph. Compact mode returns "
+            "candidate lanes and bounded summaries; full can be large. Returns "
+            "response_size_class."
+        ),
         do_not_use_for=("claim-level evidence support", "substitute evidence selection"),
         example='{"query":"familial Mediterranean fever colchicine","max_seed_papers":10}',
         next_tools=(
@@ -139,6 +144,11 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         category="publication",
         profiles=("lean", "full", "readonly"),
         stability="lean",
+        purpose=(
+            "Use this when a user has one PMID and needs related evidence candidates. "
+            "Compact mode returns candidate lanes and bounded summaries; full can be "
+            "large. Returns response_size_class."
+        ),
         do_not_use_for=("claim-level evidence support", "substitute evidence selection"),
         example='{"pmid":"40562663","max_results":25,"prefer_full_text":true}',
         next_tools=("pubtator.get_publication_passages",),
@@ -172,6 +182,11 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         category="publication",
         profiles=("lean", "full", "readonly"),
         stability="lean",
+        purpose=(
+            "Use this when a user needs reference or cited-by neighborhoods for one "
+            "publication. Compact mode returns candidate lanes and bounded summaries; "
+            "full can be large. Returns response_size_class."
+        ),
         do_not_use_for=("claim-level evidence support", "publisher full-text retrieval"),
         example='{"pmid":"40562663","direction":"both","max_results":50}',
         next_tools=(
@@ -236,8 +251,9 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         profiles=("lean", "full"),
         stability="lean",
         purpose=(
-            "One-call grounded research workflow that searches literature, indexes "
-            "candidate PMIDs, inspects readiness, and retrieves compact citable context."
+            "Use this when a user needs a one-call grounded research workflow that "
+            "searches literature, indexes candidate PMIDs, inspects readiness, and "
+            "retrieves compact citable context."
         ),
         do_not_use_for=("clinical decision support", "uncited answer generation"),
         example='{"question":"Does colchicine prevent FMF flares?","max_pmids":8}',
@@ -457,7 +473,7 @@ def build_tool_catalog(
             category=supplement.category,
             profiles=supplement.profiles,
             stability=supplement.stability,
-            description=getattr(tool, "description", "") or "",
+            description=supplement.purpose or getattr(tool, "description", "") or "",
             do_not_use_for=supplement.do_not_use_for,
             example=supplement.example,
             next_tools=tuple(

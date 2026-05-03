@@ -13,6 +13,10 @@ from pubtator_link.models.publication_metadata import PublicationMetadataRespons
 from pubtator_link.services.citation_graph import CitationGraphService
 
 
+def assert_no_prepare_mode(payload: object) -> None:
+    assert "prepare_mode" not in str(payload)
+
+
 class FakeCrossref:
     async def get_work(self, doi: str) -> dict[str, str]:
         assert doi == "10.1016/j.ard.2025.05.020"
@@ -585,6 +589,7 @@ async def test_citation_graph_compact_returns_candidates_status_and_no_metadata_
     assert response.unresolved_doi_count == 2
     assert response.compact_status["references"] == "candidates_only"
     assert response.compact_status["cited_by"] == "candidates_only"
+    assert_no_prepare_mode(response.meta.next_commands)
     assert any(status.operation == "references" for status in response.references_status)
     assert any(status.operation == "cited_by" for status in response.cited_by_status)
     assert len([s for s in response.open_access_status if s.provider == "unpaywall"]) == 1

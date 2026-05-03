@@ -40,7 +40,7 @@ from pubtator_link.mcp.review_resources import (
     get_review_summary_resource,
     get_tool_detail_resource,
 )
-from pubtator_link.models.workflow_help import WorkflowHelpResponse, WorkflowTask
+from pubtator_link.models.workflow_help import WorkflowHelpResponse
 from pubtator_link.services.workflow_help import WorkflowHelpService
 
 
@@ -81,7 +81,7 @@ def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
         annotations=READ_ONLY_CLOSED_WORLD,
     )
     async def workflow_help(
-        task: WorkflowTask = "clinical_genetics_review",
+        task: str = "clinical_genetics_review",
     ) -> dict[str, Any]:
         """Use this when a fresh context needs the canonical PubTator-Link research workflow."""
 

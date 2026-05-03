@@ -80,3 +80,14 @@ def test_literature_graph_tools_expose_response_mode_and_size_guidance() -> None
         assert "response_mode" in tool.input_schema["properties"]
         assert "response_size_class" in tool.description
         assert "full can be large" in tool.description
+
+
+def test_workflow_help_task_schema_accepts_free_form_aliases() -> None:
+    from pubtator_link.mcp.catalog import build_tool_catalog
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    catalog = build_tool_catalog(create_pubtator_mcp(profile="full"), profile="full")
+    task_schema = catalog["pubtator.workflow_help"].input_schema["properties"]["task"]
+
+    assert task_schema["type"] == "string"
+    assert "enum" not in task_schema

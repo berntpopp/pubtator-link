@@ -22,6 +22,10 @@ from pubtator_link.services.topic_literature_map import (
 )
 
 
+def assert_no_prepare_mode(payload: object) -> None:
+    assert "prepare_mode" not in str(payload)
+
+
 def _summary_paper_count(summary: object) -> int:
     return sum(
         len(getattr(summary, field))
@@ -383,6 +387,7 @@ async def test_topic_map_compact_keeps_summary_papers_and_candidate_signals() ->
     assert response.top_candidates
     assert response.top_candidates[0].signals
     assert len(response.top_candidates[0].signals) == len(set(response.top_candidates[0].signals))
+    assert_no_prepare_mode(response.candidate_retrieval_hints)
 
 
 @pytest.mark.asyncio

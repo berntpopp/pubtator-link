@@ -25,7 +25,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `publication`
 - Profiles: `full`
 - Stability: `advanced`
-- Description: Use this when a user needs a bounded topic-level literature map from a query or seed PMIDs. Returns response_size_class. response_mode='compact' is for LLM candidate selection; response_mode full can be large and is for legacy/debug graph inspection. Next: pubtator.get_publication_passages.
+- Description: Use this when a user needs a topic literature graph. Compact mode returns candidate lanes and bounded summaries; full can be large. Returns response_size_class.
 - Do not use for: `claim-level evidence support`, `substitute evidence selection`
 - Example: `{"query":"familial Mediterranean fever colchicine","max_seed_papers":10}`
 - Next tools by profile: full: `pubtator.get_publication_passages`, `pubtator.index_review_evidence`
@@ -160,7 +160,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `publication`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user has one PMID and needs related full-text-preferred candidates. Returns response_size_class. response_mode='compact' is for LLM candidate selection; response_mode full can be large and is for legacy/debug graph inspection. Next: pubtator.get_publication_passages.
+- Description: Use this when a user has one PMID and needs related evidence candidates. Compact mode returns candidate lanes and bounded summaries; full can be large. Returns response_size_class.
 - Do not use for: `claim-level evidence support`, `substitute evidence selection`
 - Example: `{"pmid":"40562663","max_results":25,"prefer_full_text":true}`
 - Next tools by profile: lean: `pubtator.get_publication_passages`; full: `pubtator.get_publication_passages`; readonly: `pubtator.get_publication_passages`
@@ -205,7 +205,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `publication`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user needs reference or cited-by neighbors for one publication. Returns response_size_class. response_mode='compact' is for LLM candidate selection; response_mode full can be large and is for legacy/debug graph inspection. Next: pubtator.get_publication_passages.
+- Description: Use this when a user needs reference or cited-by neighborhoods for one publication. Compact mode returns candidate lanes and bounded summaries; full can be large. Returns response_size_class.
 - Do not use for: `claim-level evidence support`, `publisher full-text retrieval`
 - Example: `{"pmid":"40562663","direction":"both","max_results":50}`
 - Next tools by profile: lean: `pubtator.find_related_evidence_candidates`, `pubtator.get_publication_passages`; full: `pubtator.find_related_evidence_candidates`, `pubtator.get_publication_passages`; readonly: `pubtator.find_related_evidence_candidates`, `pubtator.get_publication_passages`
@@ -340,7 +340,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `review`
 - Profiles: `lean`, `full`
 - Stability: `lean`
-- Description: Use this when a user wants one compact grounded evidence workflow from a question: search literature, index candidate PMIDs, inspect readiness, and retrieve citable review context.
+- Description: Use this when a user needs a one-call grounded research workflow that searches literature, indexes candidate PMIDs, inspects readiness, and retrieves compact citable context.
 - Do not use for: `clinical decision support`, `uncited answer generation`
 - Example: `{"question":"Does colchicine prevent FMF flares?","max_pmids":8}`
 - Next tools by profile: lean: `pubtator.record_review_context`, `pubtator.get_review_audit_trail`; full: `pubtator.record_review_context`, `pubtator.get_review_audit_trail`
@@ -525,7 +525,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"review_id":"demo","queries":["EGFR resistance","osimertinib resistance"]}`
 - Next tools by profile: lean: `pubtator.record_review_context`, `pubtator.get_review_audit_trail`; full: `pubtator.record_review_context`, `pubtator.get_review_audit_trail`; readonly: `pubtator.get_review_audit_trail`
 - Resource links: `pubtator://reviews/{review_id}/llm-context`
-- Input schema: `review_id` (string); `queries` (array); `session_id` (string | null; default: `None`); `pmids` (array | null; default: `None`); `entity_ids` (array | null; default: `None`); `sections` (array | null; default: `None`); `response_mode` (string; enum: `compact`, `merged_only`, `full`, `diagnostics`, `quotes`; default: `compact`); `max_passages_per_query` (integer; default: `8`); `max_total_passages` (integer; default: `20`); `max_chars` (integer; default: `12000`); `max_response_chars` (integer; default: `24000`); `deduplicate_passages` (boolean; default: `True`); `budget_strategy` (string | null; enum: `query_fair`, `source_fair`, `scarcity_first`; default: `query_fair`); `min_passages_per_source` (integer; default: `1`); `min_passages_per_pmid` (integer; default: `0`); `prioritize_pmids` (array | null; default: `None`); `include_diagnostics` (boolean; default: `False`); `include_tables` (boolean; default: `False`); `include_references` (boolean; default: `False`); `table_mode` (string; enum: `off`, `preview`, `full`; default: `preview`); `section_policy` (string; enum: `evidence_first`, `original_order`; default: `evidence_first`); `allow_truncated_passages` (boolean; default: `True`); `max_chars_per_passage` (integer; default: `2200`); `dry_run` (boolean; default: `False`); `include_resolver_trace` (boolean; default: `False`)
+- Input schema: `review_id` (string); `queries` (array); `session_id` (string | null; default: `None`); `pmids` (array | null; default: `None`); `entity_ids` (array | null; default: `None`); `sections` (array | null; default: `None`); `response_mode` (string; enum: `compact`, `merged_only`, `full`, `diagnostics`, `quotes`; default: `compact`); `max_passages_per_query` (integer; default: `8`); `max_total_passages` (integer; default: `20`); `max_chars` (integer | null; default: `None`); `max_response_chars` (integer | null; default: `None`); `deduplicate_passages` (boolean; default: `True`); `budget_strategy` (string | null; enum: `query_fair`, `source_fair`, `scarcity_first`; default: `query_fair`); `min_passages_per_source` (integer; default: `1`); `min_passages_per_pmid` (integer; default: `0`); `prioritize_pmids` (array | null; default: `None`); `include_diagnostics` (boolean; default: `False`); `include_tables` (boolean; default: `False`); `include_references` (boolean; default: `False`); `table_mode` (string; enum: `off`, `preview`, `full`; default: `preview`); `section_policy` (string; enum: `evidence_first`, `original_order`; default: `evidence_first`); `allow_truncated_passages` (boolean; default: `True`); `max_chars_per_passage` (integer; default: `2200`); `dry_run` (boolean; default: `False`); `include_resolver_trace` (boolean; default: `False`)
 - Output schema: `RetrieveReviewContextBatchResponse`; has_output_schema: `yes`
 
 ## `pubtator.review_quickstart`
@@ -645,5 +645,5 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"task":"clinical_genetics_review"}`
 - Next tools by profile: lean: `pubtator.search_literature`; full: `pubtator.search_literature`; readonly: `pubtator.search_literature`
 - Resource links: `pubtator://workflow-help`
-- Input schema: `task` (string; enum: `clinical_genetics_review`, `literature_review`, `citation_audit`, `entity_discovery`; default: `clinical_genetics_review`)
+- Input schema: `task` (string; default: `clinical_genetics_review`)
 - Output schema: `WorkflowHelpResponse`; has_output_schema: `yes`
