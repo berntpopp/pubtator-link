@@ -214,6 +214,7 @@ def test_create_app_uses_explicit_cors_methods_and_headers() -> None:
         "Authorization",
         "Content-Type",
         "Mcp-Session-Id",
+        "MCP-Protocol-Version",
         "Last-Event-ID",
         "X-Request-ID",
     ]
@@ -258,3 +259,120 @@ def test_inbound_rate_limit_returns_stable_429(monkeypatch: pytest.MonkeyPatch) 
     assert response.status_code == 429
     assert response.json()["error_code"] == "rate_limited"
     assert response.json()["retryable"] is True
+
+
+def test_request_size_limit_response_includes_cors_headers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("pubtator_link.server_manager.settings.http_max_request_bytes", 8)
+    monkeypatch.setattr(
+        "pubtator_link.server_manager.settings.cors_origins", ["http://localhost:3000"]
+    )
+
+    manager = UnifiedServerManager(logger=LoggerDouble())
+    app = manager.create_app(include_mcp=False)
+
+    @app.post("/echo")
+    async def echo() -> dict[str, bool]:
+        return {"ok": True}
+
+    response = TestClient(app).post(
+        "/echo",
+        content=b"0123456789",
+        headers={"Origin": "http://localhost:3000"},
+    )
+
+    assert response.status_code == 413
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+
+def test_cors_preflight_accepts_mcp_protocol_version_header() -> None:
+    manager = UnifiedServerManager(logger=LoggerDouble())
+    app = manager.create_app(include_mcp=False)
+
+    response = TestClient(app).options(
+        "/mcp",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "MCP-Protocol-Version",
+        },
+    )
+
+    assert response.status_code == 200
+
+
+def test_cors_preflight_does_not_consume_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("pubtator_link.server_manager.settings.enable_inbound_rate_limit", True)
+    monkeypatch.setattr("pubtator_link.server_manager.settings.inbound_rate_limit_per_minute", 1)
+
+    manager = UnifiedServerManager(logger=LoggerDouble())
+    app = manager.create_app(include_mcp=False)
+
+    @app.get("/limited")
+    async def limited() -> dict[str, bool]:
+        return {"ok": True}
+
+    client = TestClient(app)
+    preflight = client.options(
+        "/limited",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    response = client.get("/limited")
+
+    assert preflight.status_code == 200
+    assert response.status_code == 200
+
+
+def test_server_settings_parse_csv_cors_lists(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pubtator_link.config import ServerSettings
+
+    monkeypatch.setenv("PUBTATOR_LINK_CORS_ALLOW_METHODS", "GET,POST,OPTIONS")
+    monkeypatch.setenv(
+        "PUBTATOR_LINK_CORS_ALLOW_HEADERS",
+        "Authorization,Content-Type,MCP-Protocol-Version",
+    )
+
+    parsed = ServerSettings(_env_file=None)
+
+    assert parsed.cors_allow_methods == ["GET", "POST", "OPTIONS"]
+    assert parsed.cors_allow_headers == [
+        "Authorization",
+        "Content-Type",
+        "MCP-Protocol-Version",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_inbound_rate_limit_prunes_stale_client_entries() -> None:
+    from pubtator_link.server_manager import InboundRateLimitMiddleware
+
+    async def app(scope: dict[str, Any], receive: Any, send: Any) -> None:
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    middleware = InboundRateLimitMiddleware(app, requests_per_minute=1)
+    middleware.requests["stale"].append(time_marker := 0.0)
+    assert time_marker == 0.0
+
+    sent: list[dict[str, Any]] = []
+
+    async def receive() -> dict[str, Any]:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: dict[str, Any]) -> None:
+        sent.append(message)
+
+    await middleware(
+        {"type": "http", "method": "GET", "client": ("new", 1234)},
+        receive,
+        send,
+    )
+
+    assert "stale" not in middleware.requests
+    assert sent[0]["status"] == 200

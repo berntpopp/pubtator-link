@@ -1,10 +1,10 @@
 """Configuration management for PubTator-Link server."""
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class ServerSettings(BaseSettings):
@@ -53,15 +53,16 @@ class ServerSettings(BaseSettings):
         default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"],
         description="CORS allowed origins",
     )
-    cors_allow_methods: list[str] = Field(
+    cors_allow_methods: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["GET", "POST", "OPTIONS"],
         description="CORS allowed HTTP methods",
     )
-    cors_allow_headers: list[str] = Field(
+    cors_allow_headers: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "Authorization",
             "Content-Type",
             "Mcp-Session-Id",
+            "MCP-Protocol-Version",
             "Last-Event-ID",
             "X-Request-ID",
         ],

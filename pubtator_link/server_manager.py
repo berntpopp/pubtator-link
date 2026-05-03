@@ -147,8 +147,12 @@ class InboundRateLimitMiddleware:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
+        if scope.get("method") == "OPTIONS":
+            await self.app(scope, receive, send)
+            return
 
         now = time.monotonic()
+        self._prune_stale_clients(now)
         client = scope.get("client")
         client_ip = client[0] if client else "unknown"
         timestamps = self.requests[client_ip]
@@ -172,6 +176,13 @@ class InboundRateLimitMiddleware:
 
         timestamps.append(now)
         await self.app(scope, receive, send)
+
+    def _prune_stale_clients(self, now: float) -> None:
+        for client_ip, timestamps in list(self.requests.items()):
+            while timestamps and now - timestamps[0] >= 60:
+                timestamps.popleft()
+            if not timestamps:
+                del self.requests[client_ip]
 
 
 class UnifiedServerManager:
@@ -248,14 +259,6 @@ class UnifiedServerManager:
             redoc_url="/redoc" if settings.enable_docs else None,
         )
 
-        # Add CORS middleware
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=settings.cors_origins,
-            allow_credentials=True,
-            allow_methods=settings.cors_allow_methods,
-            allow_headers=settings.cors_allow_headers,
-        )
         app.add_middleware(
             RequestSizeLimitMiddleware,
             max_bytes=settings.http_max_request_bytes,
@@ -272,6 +275,13 @@ class UnifiedServerManager:
             update_request_header=True,
             generator=lambda: str(uuid4()),
             validator=None,
+        )
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.cors_origins,
+            allow_credentials=True,
+            allow_methods=settings.cors_allow_methods,
+            allow_headers=settings.cors_allow_headers,
         )
 
         # Add basic routes
