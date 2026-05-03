@@ -65,11 +65,16 @@ Use free and legal metadata, identifier, annotation, and availability sources:
   networks, and OA/full-text flags.
 - OpenAlex Works API for work lookup, authorships, referenced works,
   cited-by URLs, related works, and OA hints.
-- Unpaywall for DOI OA status and best OA location. This must be optional or
-  config-gated if an email address is required.
+- Unpaywall for DOI OA status and best OA location. Unpaywall is enabled only
+  when `UNPAYWALL_EMAIL` is configured. Otherwise the OA-status step is skipped
+  and a `provider_disabled` warning is emitted.
 
 Provider outputs are best-effort metadata. Every normalized node and edge must
 carry provenance sufficient to explain where it came from.
+
+Provider clients that support polite pools must identify PubTator-Link when
+configured. Crossref requests use `CROSSREF_MAILTO`; OpenAlex requests use
+`OPENALEX_MAILTO`.
 
 ## Architecture
 
@@ -87,6 +92,9 @@ Add small provider clients or helpers rather than a generic graph framework:
 - `UnpaywallClient`: DOI OA status and best OA location.
 - Extend `NcbiDiscoveryClient` to support ELink `neighbor_score` parsing while
   preserving existing `find_related_articles` behavior.
+- New REST routes and MCP tools emit telemetry through the existing metrics and
+  MCP telemetry contract, including request counts, failures, and latency where
+  the current instrumentation supports those dimensions.
 
 Add three service boundaries:
 
@@ -130,9 +138,10 @@ Deduplicate papers by stable key in this order:
 3. PMCID
 4. OpenAlex ID
 
-Deduplicate edges by `(source_key, target_key, edge_type, provenance_provider)`.
-If multiple providers support the same conceptual edge, merge reasons and
-provenance without hiding the individual sources.
+Deduplicate edges by `(source_key, target_key, edge_type)`. Store provenance as
+a list on the edge. If multiple providers support the same conceptual edge,
+merge reasons and append provider-specific provenance entries without hiding the
+individual sources.
 
 ## Citation Graph Flow
 
@@ -143,7 +152,7 @@ Inputs:
 - `direction: "references" | "cited_by" | "both" = "both"`
 - `resolve_metadata: bool = true`
 - `include_open_access_status: bool = true`
-- `max_results: int = 100`
+- `max_results: int = 50`
 
 Validation requires exactly one of `pmid` or `doi`.
 
@@ -151,6 +160,9 @@ Flow:
 
 1. Resolve the source article from PMID or DOI using existing ID conversion and
    publication metadata, with Europe PMC and OpenAlex fallback.
+   Partial identifier resolution is a soft path: a DOI-resolved source without a
+   PMID can still return DOI/OpenAlex/Crossref-derived graph data, with a
+   warning that PMID-only providers were skipped.
 2. Fetch outgoing references from Crossref by DOI first, OpenAlex
    `referenced_works` second, and Europe PMC references where PMID or PMCID
    coverage exists.
@@ -177,7 +189,7 @@ Inputs:
 - `year_min: int | None = None`
 - `year_max: int | None = None`
 
-Validation requires a numeric PMID and bounded `max_results`.
+Validation requires a numeric PMID string and bounded `max_results`.
 
 Flow:
 
@@ -188,9 +200,12 @@ Flow:
 4. Optionally run bounded PubTator search from source title and entity terms.
 5. Enrich candidates with metadata, publication types, availability, and shared
    entities when cheap.
-6. Rank deterministically:
-   ELink score, full-text availability boost when `prefer_full_text=true`,
-   shared entity boost, requested publication type boost, and recency tiebreaker.
+6. Rank deterministically with a lexicographic ordering rather than opaque
+   weighted scoring:
+   ELink score descending, full-text availability when `prefer_full_text=true`,
+   shared-entity count descending, requested publication type match,
+   publication year descending, and PMID ascending as the final stable
+   tiebreaker.
 7. Emit match reasons and caution text. Do not label candidates as substitutes
    or claim-supporting articles.
 
@@ -200,8 +215,8 @@ Inputs:
 
 - `query: str | None`
 - `pmids: list[str] | None`
-- `max_seed_papers: int = 50`
-- `max_neighbors_per_paper: int = 20`
+- `max_seed_papers: int = 25`
+- `max_neighbors_per_paper: int = 10`
 - `include_authors: bool = true`
 - `include_citations: bool = true`
 - `include_pubtator_entities: bool = true`
@@ -220,8 +235,13 @@ Flow:
    citation edges, and related-candidate edges according to input flags.
 4. Cap expansion with `max_neighbors_per_paper`; do not recursively crawl beyond
    the first neighborhood.
-5. Compute explainable centrality from citation/related degree, seed
-   membership, shared-entity degree, author connectivity, and accessibility.
+5. Compute explainable centrality from graph-structural signals only, using a
+   lexicographic ordering:
+   seed membership, citation/related degree descending, shared-entity degree
+   descending, author connectivity descending, publication year descending, and
+   stable paper key ascending as the final tiebreaker. Treat accessibility as a
+   separate retrieval-priority signal, not as evidence that a paper is
+   structurally central.
 6. Build summary sections from deterministic selectors:
    central papers, recent connected papers, bridge papers, dominant author
    groups, accessible candidates, closed central sources, and next retrieval
@@ -261,6 +281,9 @@ Profile exposure:
   separate follow-up after payload size and latency are proven.
 
 The generated MCP catalog must include the new tools from runtime registration.
+Regenerate `docs/mcp-tool-catalog.md` with
+`uv run python scripts/generate_mcp_tool_catalog.py`, and keep
+`tests/unit/mcp/test_mcp_tool_catalog.py` passing.
 
 ## Error Handling And Degradation
 
@@ -291,10 +314,10 @@ Caching is conservative:
 
 Initial bounds:
 
-- Citation graph `max_results <= 100`.
+- Citation graph `max_results <= 100`, default 50.
 - Related evidence `max_results <= 100`, default 25.
-- Topic map `max_seed_papers <= 50`, default 50.
-- Topic map `max_neighbors_per_paper <= 20`, default 20.
+- Topic map `max_seed_papers <= 50`, default 25.
+- Topic map `max_neighbors_per_paper <= 20`, default 10.
 
 Services must avoid unbounded provider fan-out. Hosted MCP responses should
 favor compact summaries and retrieval hints over dumping every provider field.
@@ -303,6 +326,11 @@ favor compact summaries and retrieval hints over dumping every provider field.
 
 Use mocked unit tests for provider parsing and service behavior, plus route and
 MCP surface tests.
+
+Real-network integration tests and VCR-style recorded provider tests are out of
+scope for this epic. The specific DOI and PMID identifiers in acceptance
+criteria refer to mocked fixture payloads under `tests/fixtures/`, not live
+provider calls.
 
 Provider parsing tests:
 
