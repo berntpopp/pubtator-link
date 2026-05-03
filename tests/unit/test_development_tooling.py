@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,12 @@ def _workflow(path: str) -> dict[str, Any]:
 
 def _branch_protection_policy() -> dict[str, Any]:
     return json.loads(Path("docs/development/branch-protection.json").read_text())
+
+
+def _workflow_action_refs(workflow: dict[str, Any]) -> list[str]:
+    return [
+        step["uses"] for job in workflow["jobs"].values() for step in job["steps"] if "uses" in step
+    ]
 
 
 def test_python_baseline_is_modern_and_consistent() -> None:
@@ -177,6 +184,7 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
     assert quality_job["name"] == "Format, lint, typecheck, tests, and coverage"
     ci_commands = {step.get("run") for step in quality_job["steps"]}
     assert "uv sync --group dev --frozen" in ci_commands
+    assert "make ci-local" in ci_commands
     assert "make test-cov" in ci_commands
 
     assert docker["permissions"] == {"contents": "read"}
@@ -203,11 +211,40 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
         "pull-requests": "read",
     }
     security_actions = {
-        step.get("uses") for job in security["jobs"].values() for step in job["steps"]
+        step["uses"] for job in security["jobs"].values() for step in job["steps"] if "uses" in step
     }
-    assert "github/codeql-action/init@v4" in security_actions
-    assert "github/codeql-action/autobuild@v4" not in security_actions
-    assert "actions/dependency-review-action@v4" in security_actions
+    assert any(action.startswith("github/codeql-action/init@") for action in security_actions)
+    assert not any(
+        action.startswith("github/codeql-action/autobuild@") for action in security_actions
+    )
+    assert any(
+        action.startswith("actions/dependency-review-action@") for action in security_actions
+    )
+
+
+def test_github_actions_are_sha_pinned_with_uv_version() -> None:
+    workflows = [
+        _workflow(".github/workflows/ci.yml"),
+        _workflow(".github/workflows/container-security.yml"),
+        _workflow(".github/workflows/docker.yml"),
+        _workflow(".github/workflows/release.yml"),
+        _workflow(".github/workflows/security.yml"),
+    ]
+    action_ref_pattern = re.compile(r"^[^@]+@[0-9a-f]{40}$")
+    action_refs = [ref for workflow in workflows for ref in _workflow_action_refs(workflow)]
+
+    assert action_refs
+    assert all(action_ref_pattern.match(ref) for ref in action_refs)
+
+    setup_uv_steps = [
+        step
+        for workflow in workflows
+        for job in workflow["jobs"].values()
+        for step in job["steps"]
+        if str(step.get("uses", "")).startswith("astral-sh/setup-uv@")
+    ]
+    assert setup_uv_steps
+    assert all(step.get("with", {}).get("version") for step in setup_uv_steps)
 
 
 def test_pull_request_template_contains_quality_checklist() -> None:
@@ -281,14 +318,14 @@ def test_branch_protection_required_checks_match_workflow_job_names() -> None:
 def test_container_security_workflow_generates_scan_and_sbom_artifacts() -> None:
     workflow = _workflow(".github/workflows/container-security.yml")
     job = workflow["jobs"]["container-security"]
-    uses_steps = {step.get("uses") for step in job["steps"]}
+    uses_steps = {step["uses"] for step in job["steps"] if "uses" in step}
     run_steps = "\n".join(str(step.get("run", "")) for step in job["steps"])
 
     assert workflow["permissions"] == {"contents": "read"}
     assert job["name"] == "Container scan and SBOM"
     assert "aquasecurity/trivy-action" in "\n".join(str(step) for step in job["steps"])
     assert "docker build -f docker/Dockerfile -t pubtator-link:scan ." in run_steps
-    assert "actions/upload-artifact@v6" in uses_steps
+    assert any(action.startswith("actions/upload-artifact@") for action in uses_steps)
 
 
 def test_release_workflow_validates_tagged_builds_without_publishing() -> None:
@@ -313,3 +350,29 @@ def test_operations_runbook_documents_deploy_health_and_rollback() -> None:
     assert "docker compose" in runbook
     assert "rollback" in runbook.lower()
     assert "X-Request-ID" in runbook
+
+
+def test_readme_quickstart_uses_uv_and_make_not_pip_install() -> None:
+    readme = Path("README.md").read_text()
+
+    assert "make install" in readme
+    assert "make dev" in readme
+    assert 'pip install -e ".[dev]"' not in readme
+    assert "FROM python:3.11-slim" not in readme
+    assert "**Python**: 3.12+" in readme
+
+
+def test_repo_local_claude_workflows_exist_for_agentic_development() -> None:
+    workflow_paths = [
+        Path(".claude/skills/mcp-tool-change/SKILL.md"),
+        Path(".claude/skills/fastapi-route-change/SKILL.md"),
+        Path(".claude/skills/database-migration/SKILL.md"),
+        Path(".claude/skills/ci-failure-triage/SKILL.md"),
+        Path(".claude/skills/release-readiness/SKILL.md"),
+    ]
+
+    for path in workflow_paths:
+        assert path.exists()
+        content = path.read_text()
+        assert "make ci-local" in content
+        assert "AGENTS.md" in content

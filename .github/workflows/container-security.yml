@@ -22,13 +22,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Build Docker image
         run: docker build -f docker/Dockerfile -t pubtator-link:scan .
 
       - name: Run Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: pubtator-link:scan
           format: table
@@ -36,7 +36,7 @@ jobs:
           exit-code: "0"
 
       - name: Generate SBOM
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: pubtator-link:scan
           format: cyclonedx
@@ -44,7 +44,7 @@ jobs:
           exit-code: "0"
 
       - name: Upload scan artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: container-security-artifacts
           path: |

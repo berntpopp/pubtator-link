@@ -13,11 +13,13 @@ Primary areas:
 - `tests/` - unit and integration tests
 - `docker/` - Dockerfile and Compose deployment files
 - `docs/superpowers/plans/` - implementation plans for agentic workers
+- `.claude/skills/` - repo-local Claude Code workflows for recurring tasks
 
 ## Source Of Truth
 
 - Use this file for shared repo-wide agent guidance.
 - Keep `CLAUDE.md` lean and Claude-specific; it should reference this file.
+- Use repo-local `.claude/skills/` workflows when a task matches their scope.
 - Prefer `Makefile` targets over ad hoc commands.
 - Use `uv.lock` as the dependency lock source of truth.
 

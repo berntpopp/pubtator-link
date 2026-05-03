@@ -21,12 +21,8 @@ A unified server for the PubTator3 biomedical literature API with MCP integratio
 git clone <repository-url>
 cd pubtator-link
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: .\venv\Scripts\activate
-
-# Install with development dependencies
-pip install -e ".[dev]"
+# Install the locked development environment
+make install
 
 # Create environment configuration
 cp .env.example .env
@@ -63,13 +59,13 @@ CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 
 ```bash
 # Unified mode (REST API + MCP)
-python server.py --transport unified
+make dev
 
 # HTTP-only mode (REST API only)
-python server.py --transport http
+uv run python server.py --transport http
 
 # STDIO mode (MCP only)
-python server.py --transport stdio
+make mcp-serve
 ```
 
 ## 📋 REST API Endpoints
@@ -190,7 +186,7 @@ PubTator-Link exposes a curated Streamable HTTP MCP endpoint at `/mcp` in unifie
 ```
 
 ```bash
-python server.py --transport unified
+make dev
 claude mcp add --transport http pubtator-link http://127.0.0.1:8000/mcp
 ```
 
@@ -356,14 +352,14 @@ loads the lean `CLAUDE.md` entrypoint.
 
 ```bash
 # Run all tests
-pytest
+make test
 
 # Run with coverage
-pytest --cov=pubtator_link
+make test-cov
 
 # Run specific test categories
-pytest -m "not slow"        # Exclude slow tests
-pytest -m integration       # Only integration tests
+make test-unit        # Exclude integration and slow tests
+make test-integration # Only integration tests
 ```
 
 ### Code Quality
@@ -406,17 +402,10 @@ The caching system uses async LRU caching with configurable size and TTL:
 
 ### Docker
 
-```dockerfile
-FROM python:3.11-slim
-
-WORKDIR /app
-COPY . .
-
-RUN pip install -e .
-
-EXPOSE 8000
-
-CMD ["python", "server.py", "--transport", "unified", "--host", "0.0.0.0"]
+```bash
+make docker-prod-config
+make docker-build
+make docker-up
 ```
 
 ### Health Monitoring
@@ -483,4 +472,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Status**: Production Ready | **Version**: 1.0.0 | **Python**: 3.11+
+**Status**: Production Ready | **Version**: 1.0.0 | **Python**: 3.12+

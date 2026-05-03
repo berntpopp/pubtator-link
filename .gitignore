@@ -181,9 +181,10 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
-# claude files
-.claude/
-CLAUDE.md
+# Claude Code local-only files
+.claude/settings.local.json
+.claude/.local/
+CLAUDE.local.md
 PLAN.md
 TODO.md
 
