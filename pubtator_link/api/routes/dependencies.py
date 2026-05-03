@@ -42,6 +42,7 @@ from ...services.publication_metadata import (
 )
 from ...services.publication_passage_service import PublicationPassageService
 from ...services.publication_service import PublicationService
+from ...services.related_evidence import RelatedEvidenceService
 from ...services.research_session import ResearchSessionSearchProvider, ResearchSessionService
 from ...services.review_audit import ReviewAuditService
 from ...services.review_context_service import ReviewContextService
@@ -65,6 +66,7 @@ _discovery_service: DiscoveryService | None = None
 _crossref_client: CrossrefClient | None = None
 _europe_pmc_literature_client: EuropePmcLiteratureClient | None = None
 _citation_graph_service: CitationGraphService | None = None
+_related_evidence_service: RelatedEvidenceService | None = None
 _logger: FilteringBoundLogger | None = None
 _review_pool: asyncpg.Pool | None = None
 _review_repository: PostgresReviewReragRepository | None = None
@@ -97,6 +99,7 @@ class AppResources:
     crossref_client: CrossrefClient | None = None
     europe_pmc_literature_client: EuropePmcLiteratureClient | None = None
     citation_graph_service: CitationGraphService | None = None
+    related_evidence_service: RelatedEvidenceService | None = None
     europe_pmc_client: EuropePmcClient | None = None
     review_pool: asyncpg.Pool | None = None
     review_repository: PostgresReviewReragRepository | None = None
@@ -198,6 +201,11 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             discovery_service=discovery_service,
             metadata_service=publication_metadata_service,
         )
+        related_evidence_service = RelatedEvidenceService(
+            discovery_service=discovery_service,
+            metadata_service=publication_metadata_service,
+            citation_graph_service=citation_graph_service,
+        )
         clinvar_service = ClinVarService()
         variant_evidence_service = VariantEvidenceService(
             clinvar=clinvar_service,
@@ -276,6 +284,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             crossref_client=crossref_client,
             europe_pmc_literature_client=europe_pmc_literature_client,
             citation_graph_service=citation_graph_service,
+            related_evidence_service=related_evidence_service,
             europe_pmc_client=europe_pmc_client,
             source_preflight_service=source_preflight_service,
             review_pool=review_pool,
@@ -456,6 +465,27 @@ async def get_citation_graph_service() -> CitationGraphService:
             metadata_service=await get_publication_metadata_service(),
         )
     return _citation_graph_service
+
+
+async def get_related_evidence_service() -> RelatedEvidenceService:
+    """Get related evidence candidate service."""
+    global _related_evidence_service
+    resources = current_app_resources()
+    if resources is not None:
+        if resources.related_evidence_service is None:
+            resources.related_evidence_service = RelatedEvidenceService(
+                discovery_service=await get_discovery_service(),
+                metadata_service=await get_publication_metadata_service(),
+                citation_graph_service=await get_citation_graph_service(),
+            )
+        return resources.related_evidence_service
+    if _related_evidence_service is None:
+        _related_evidence_service = RelatedEvidenceService(
+            discovery_service=await get_discovery_service(),
+            metadata_service=await get_publication_metadata_service(),
+            citation_graph_service=await get_citation_graph_service(),
+        )
+    return _related_evidence_service
 
 
 async def get_clinvar_service() -> ClinVarService:
@@ -889,6 +919,7 @@ PublicationMetadataServiceDep = Annotated[
     PublicationMetadataService, Depends(get_publication_metadata_service)
 ]
 CitationGraphServiceDep = Annotated[CitationGraphService, Depends(get_citation_graph_service)]
+RelatedEvidenceServiceDep = Annotated[RelatedEvidenceService, Depends(get_related_evidence_service)]
 CorpusSuggestionServiceDep = Annotated[
     CorpusSuggestionService, Depends(get_corpus_suggestion_service)
 ]
@@ -1040,6 +1071,7 @@ async def cleanup_dependencies() -> None:
     global _discovery_service, _ncbi_discovery_client, _ncbi_publication_metadata_client
     global _publication_metadata_service
     global _citation_graph_service, _crossref_client, _europe_pmc_literature_client
+    global _related_evidence_service
     global _llm_review_context_service, _review_context_service, _review_pool
     global _review_queue, _review_repository
     global _review_evidence_certainty_service
@@ -1091,6 +1123,7 @@ async def cleanup_dependencies() -> None:
     _clinvar_service = None
     _variant_evidence_service = None
     _citation_graph_service = None
+    _related_evidence_service = None
     _discovery_service = None
     _publication_passage_service = None
     _publication_metadata_service = None

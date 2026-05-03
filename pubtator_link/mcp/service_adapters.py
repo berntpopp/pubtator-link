@@ -16,7 +16,10 @@ from pubtator_link.mcp.input_normalization import (
     normalize_retrieve_review_context_batch_args,
 )
 from pubtator_link.models.corpus_suggestion import CorpusSuggestionRequest
-from pubtator_link.models.literature_graph import PublicationCitationGraphRequest
+from pubtator_link.models.literature_graph import (
+    PublicationCitationGraphRequest,
+    RelatedEvidenceCandidatesRequest,
+)
 from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 from pubtator_link.models.publication_passages import (
     PublicationContextEstimateRequest,
@@ -66,6 +69,7 @@ from pubtator_link.services.entity_matching import (
 from pubtator_link.services.publication_metadata import PublicationMetadataService
 from pubtator_link.services.publication_passage_service import PublicationPassageService
 from pubtator_link.services.publication_service import PublicationService
+from pubtator_link.services.related_evidence import RelatedEvidenceService
 from pubtator_link.services.review_audit import ReviewAuditService
 from pubtator_link.services.review_context_service import ReviewContextService
 from pubtator_link.services.review_evidence_certainty import ReviewEvidenceCertaintyService
@@ -263,6 +267,33 @@ async def get_publication_citation_graph_impl(
             resolve_metadata=resolve_metadata,
             include_open_access_status=include_open_access_status,
             max_results=max_results,
+        )
+    )
+    return response.model_dump(by_alias=True)
+
+
+async def find_related_evidence_candidates_impl(
+    *,
+    service: RelatedEvidenceService,
+    pmid: str,
+    max_results: int = 25,
+    prefer_full_text: bool = True,
+    include_pubtator_search: bool = True,
+    include_citation_neighbors: bool = True,
+    publication_types: list[str] | None = None,
+    year_min: int | None = None,
+    year_max: int | None = None,
+) -> dict[str, Any]:
+    response = await service.find_candidates(
+        RelatedEvidenceCandidatesRequest(
+            pmid=pmid,
+            max_results=max_results,
+            prefer_full_text=prefer_full_text,
+            include_pubtator_search=include_pubtator_search,
+            include_citation_neighbors=include_citation_neighbors,
+            publication_types=publication_types,
+            year_min=year_min,
+            year_max=year_max,
         )
     )
     return response.model_dump(by_alias=True)

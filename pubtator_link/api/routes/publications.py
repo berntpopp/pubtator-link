@@ -8,6 +8,8 @@ from ...config import api_config
 from ...models.literature_graph import (
     PublicationCitationGraphRequest,
     PublicationCitationGraphResponse,
+    RelatedEvidenceCandidatesRequest,
+    RelatedEvidenceCandidatesResponse,
 )
 from ...models.publication_metadata import PublicationMetadataRequest, PublicationMetadataResponse
 from ...models.publication_passages import (
@@ -23,6 +25,7 @@ from .dependencies import (
     PublicationMetadataServiceDep,
     PublicationPassageServiceDep,
     PublicationServiceDep,
+    RelatedEvidenceServiceDep,
     handle_api_errors,
     validate_pmcids,
     validate_pmids,
@@ -90,6 +93,21 @@ async def get_publication_citation_graph(
 ) -> PublicationCitationGraphResponse:
     """Return citation-neighbor metadata for one PMID or DOI."""
     return await service.get_citation_graph(request)
+
+
+@router.post(
+    "/related-evidence",
+    response_model=RelatedEvidenceCandidatesResponse,
+    operation_id="find_related_evidence_candidates",
+    summary="Find related evidence candidates",
+)
+@handle_api_errors
+async def find_related_evidence_candidates(
+    request: RelatedEvidenceCandidatesRequest,
+    service: RelatedEvidenceServiceDep,
+) -> RelatedEvidenceCandidatesResponse:
+    """Return related candidate papers for passage-level evidence review."""
+    return await service.find_candidates(request)
 
 
 @router.get(

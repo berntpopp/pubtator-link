@@ -17,6 +17,7 @@ LEAN_TOOLS: tuple[str, ...] = (
     "pubtator.get_publication_metadata",
     "pubtator.get_publication_passages",
     "pubtator.get_publication_citation_graph",
+    "pubtator.find_related_evidence_candidates",
     "pubtator.preflight_review_sources",
     "pubtator.index_review_evidence",
     "pubtator.inspect_review_index",

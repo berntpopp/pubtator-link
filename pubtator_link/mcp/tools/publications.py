@@ -10,6 +10,7 @@ from pubtator_link.api.routes.dependencies import (
     get_publication_metadata_service,
     get_publication_passage_service,
     get_publication_service,
+    get_related_evidence_service,
 )
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from pubtator_link.mcp.errors import run_mcp_tool
@@ -18,11 +19,15 @@ from pubtator_link.mcp.service_adapters import (
     estimate_publication_context_impl,
     fetch_pmc_annotations_impl,
     fetch_publication_annotations_impl,
+    find_related_evidence_candidates_impl,
     get_publication_citation_graph_impl,
     get_publication_metadata_impl,
     get_publication_passages_impl,
 )
-from pubtator_link.models.literature_graph import PublicationCitationGraphResponse
+from pubtator_link.models.literature_graph import (
+    PublicationCitationGraphResponse,
+    RelatedEvidenceCandidatesResponse,
+)
 from pubtator_link.models.publication_metadata import PublicationMetadataResponse
 from pubtator_link.models.publication_passages import (
     PublicationContextEstimateResponse,
@@ -158,6 +163,44 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             "pubtator.get_publication_citation_graph",
             call,
             pmids=[pmid] if pmid else None,
+        )
+
+    @mcp.tool(
+        name="pubtator.find_related_evidence_candidates",
+        title="Find Related Evidence Candidates",
+        output_schema=RelatedEvidenceCandidatesResponse.model_json_schema(),
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def find_related_evidence_candidates(
+        pmid: str,
+        max_results: Annotated[int, Field(ge=1, le=100)] = 25,
+        prefer_full_text: bool = True,
+        include_pubtator_search: bool = True,
+        include_citation_neighbors: bool = True,
+        publication_types: list[str] | None = None,
+        year_min: int | None = None,
+        year_max: int | None = None,
+    ) -> dict[str, Any]:
+        """Use this when a user has one PMID and needs related full-text-preferred candidates for passage-level evidence review. Do not use this as direct claim support; use pubtator.get_publication_passages on selected candidates. Next: pubtator.get_publication_passages."""
+
+        async def call() -> dict[str, Any]:
+            service = await get_related_evidence_service()
+            return await find_related_evidence_candidates_impl(
+                service=service,
+                pmid=pmid,
+                max_results=max_results,
+                prefer_full_text=prefer_full_text,
+                include_pubtator_search=include_pubtator_search,
+                include_citation_neighbors=include_citation_neighbors,
+                publication_types=publication_types,
+                year_min=year_min,
+                year_max=year_max,
+            )
+
+        return await run_mcp_tool(
+            "pubtator.find_related_evidence_candidates",
+            call,
+            pmids=[pmid],
         )
 
     if profile != "lean":

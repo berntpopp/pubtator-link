@@ -91,7 +91,6 @@ class RecordingMetadata:
         return PublicationMetadataResponse(metadata=[], failed_pmids={})
 
 
-
 @pytest.mark.asyncio
 async def test_doi_references_direction_returns_crossref_references() -> None:
     service = CitationGraphService(

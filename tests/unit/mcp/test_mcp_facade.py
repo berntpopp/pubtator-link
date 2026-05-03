@@ -20,6 +20,7 @@ EXPECTED_PUBLIC_TOOL_NAMES = {
     "pubtator.get_publication_metadata",
     "pubtator.get_publication_passages",
     "pubtator.get_publication_citation_graph",
+    "pubtator.find_related_evidence_candidates",
     "pubtator.estimate_publication_context",
     "pubtator.fetch_pmc_annotations",
     "pubtator.search_biomedical_entities",
@@ -164,6 +165,26 @@ def test_citation_graph_tool_schema_is_flat() -> None:
     assert "doi" in properties
     assert "request" not in properties
     assert tool.output_schema["title"] == "PublicationCitationGraphResponse"
+
+
+def test_related_evidence_tool_schema_is_flat() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator.find_related_evidence_candidates"
+    ]
+    properties = tool.parameters["properties"]
+
+    assert "pmid" in properties
+    assert "max_results" in properties
+    assert "prefer_full_text" in properties
+    assert "include_pubtator_search" in properties
+    assert "include_citation_neighbors" in properties
+    assert "publication_types" in properties
+    assert "year_min" in properties
+    assert "year_max" in properties
+    assert "request" not in properties
+    assert tool.output_schema["title"] == "RelatedEvidenceCandidatesResponse"
 
 
 def test_review_retrieval_schema_hides_resolver_trace_by_default() -> None:

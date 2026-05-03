@@ -123,6 +123,14 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         example='{"pmids":["12345"],"mode":"similar","limit":20}',
         next_tools=("pubtator.preflight_review_sources",),
     ),
+    "pubtator.find_related_evidence_candidates": ToolCatalogSupplement(
+        category="publication",
+        profiles=("lean", "full", "readonly"),
+        stability="lean",
+        do_not_use_for=("claim-level evidence support", "substitute evidence selection"),
+        example='{"pmid":"40562663","max_results":25,"prefer_full_text":true}',
+        next_tools=("pubtator.get_publication_passages",),
+    ),
     "pubtator.get_evidence_certainty": ToolCatalogSupplement(
         category="review",
         profiles=("full", "readonly"),
@@ -154,7 +162,10 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         stability="lean",
         do_not_use_for=("claim-level evidence support", "publisher full-text retrieval"),
         example='{"pmid":"40562663","direction":"both","max_results":50}',
-        next_tools=("pubtator.get_publication_passages",),
+        next_tools=(
+            "pubtator.find_related_evidence_candidates",
+            "pubtator.get_publication_passages",
+        ),
     ),
     "pubtator.get_publication_passages": ToolCatalogSupplement(
         category="publication",

@@ -129,6 +129,20 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Resource links: None
 - Output schema: `RelatedArticlesResponse`; has_output_schema: `yes`
 
+## `pubtator.find_related_evidence_candidates`
+
+- Name: `pubtator.find_related_evidence_candidates`
+- Title: Find Related Evidence Candidates
+- Category: `publication`
+- Profiles: `lean`, `full`, `readonly`
+- Stability: `lean`
+- Description: Use this when a user has one PMID and needs related full-text-preferred candidates for passage-level evidence review. Do not use this as direct claim support; use pubtator.get_publication_passages on selected candidates. Next: pubtator.get_publication_passages.
+- Do not use for: `claim-level evidence support`, `substitute evidence selection`
+- Example: `{"pmid":"40562663","max_results":25,"prefer_full_text":true}`
+- Next tools by profile: lean: `pubtator.get_publication_passages`; full: `pubtator.get_publication_passages`; readonly: `pubtator.get_publication_passages`
+- Resource links: None
+- Output schema: `RelatedEvidenceCandidatesResponse`; has_output_schema: `yes`
+
 ## `pubtator.get_evidence_certainty`
 
 - Name: `pubtator.get_evidence_certainty`
@@ -167,7 +181,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Description: Use this when a user needs reference or cited-by neighbors for one publication. Do not use this for claim-level evidence support or publisher full-text retrieval; use pubtator.get_publication_passages. Next: pubtator.get_publication_passages.
 - Do not use for: `claim-level evidence support`, `publisher full-text retrieval`
 - Example: `{"pmid":"40562663","direction":"both","max_results":50}`
-- Next tools by profile: lean: `pubtator.get_publication_passages`; full: `pubtator.get_publication_passages`; readonly: `pubtator.get_publication_passages`
+- Next tools by profile: lean: `pubtator.find_related_evidence_candidates`, `pubtator.get_publication_passages`; full: `pubtator.find_related_evidence_candidates`, `pubtator.get_publication_passages`; readonly: `pubtator.find_related_evidence_candidates`, `pubtator.get_publication_passages`
 - Resource links: None
 - Output schema: `PublicationCitationGraphResponse`; has_output_schema: `yes`
 
