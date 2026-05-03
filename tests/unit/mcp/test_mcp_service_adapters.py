@@ -2098,3 +2098,27 @@ async def test_get_text_annotation_results_adapter_maps_completed_results() -> N
     assert result["success"] is True
     assert result["status"] == "completed"
     assert result["annotations"][0]["entity_id"] == "@GENE_672"
+
+
+async def test_citation_graph_adapter_accepts_compact_response_mode() -> None:
+    from pubtator_link.mcp.service_adapters import get_publication_citation_graph_impl
+    from pubtator_link.models.literature_graph import (
+        LiteraturePaper,
+        PublicationCitationGraphResponse,
+    )
+
+    class Service:
+        async def get_citation_graph(self, request):
+            assert request.response_mode == "compact"
+            return PublicationCitationGraphResponse(
+                source=LiteraturePaper(pmid="1"),
+                response_mode="compact",
+            )
+
+    result = await get_publication_citation_graph_impl(
+        service=Service(),
+        pmid="1",
+        response_mode="compact",
+    )
+
+    assert result["response_mode"] == "compact"

@@ -96,6 +96,30 @@ from pubtator_link.services.topic_literature_map import TopicLiteratureMapServic
 
 INLINE_AUDIT_BUNDLE_MAX_BYTES = 1_000_000
 RESOURCE_LIST_LIMIT = 50
+LiteratureGraphResponseModeArg = Literal["compact", "nodes_edges", "full"]
+LiteratureGraphBias = Literal[
+    "guideline",
+    "cohort",
+    "genotype_phenotype",
+    "treatment",
+    "pediatric",
+    "population",
+]
+
+
+def _add_mcp_response_mode_warning(result: dict[str, Any]) -> dict[str, Any]:
+    result.setdefault("_meta", {}).setdefault("warnings", []).append(
+        {
+            "provider": "mcp",
+            "status": "response_mode_deprecation",
+            "retryable": False,
+            "message": (
+                "Future MCP default will be response_mode='compact'; pass response_mode='full' "
+                "for legacy nodes/edges arrays."
+            ),
+        }
+    )
+    return result
 
 
 def _dump_mapping(value: Any) -> dict[str, Any]:
@@ -257,21 +281,33 @@ async def get_publication_citation_graph_impl(
     pmid: str | None = None,
     doi: str | None = None,
     direction: Literal["references", "cited_by", "both"] = "both",
+    response_mode: LiteratureGraphResponseModeArg | None = None,
     resolve_metadata: bool = True,
+    resolve_reference_pmids: bool = True,
+    max_reference_resolution: int = 20,
+    include_provider_status: bool = True,
     include_open_access_status: bool = True,
     max_results: int = 50,
 ) -> dict[str, Any]:
+    effective_response_mode = response_mode or "full"
     response = await service.get_citation_graph(
         PublicationCitationGraphRequest(
             pmid=pmid,
             doi=doi,
             direction=direction,
+            response_mode=effective_response_mode,
             resolve_metadata=resolve_metadata,
+            resolve_reference_pmids=resolve_reference_pmids,
+            max_reference_resolution=max_reference_resolution,
+            include_provider_status=include_provider_status,
             include_open_access_status=include_open_access_status,
             max_results=max_results,
         )
     )
-    return response.model_dump(by_alias=True)
+    result = response.model_dump(by_alias=True)
+    if response_mode is None:
+        _add_mcp_response_mode_warning(result)
+    return result
 
 
 async def find_related_evidence_candidates_impl(
@@ -279,6 +315,7 @@ async def find_related_evidence_candidates_impl(
     service: RelatedEvidenceService,
     pmid: str,
     max_results: int = 25,
+    response_mode: LiteratureGraphResponseModeArg | None = None,
     prefer_full_text: bool = True,
     include_pubtator_search: bool = True,
     include_citation_neighbors: bool = True,
@@ -286,10 +323,12 @@ async def find_related_evidence_candidates_impl(
     year_min: int | None = None,
     year_max: int | None = None,
 ) -> dict[str, Any]:
+    effective_response_mode = response_mode or "full"
     response = await service.find_candidates(
         RelatedEvidenceCandidatesRequest(
             pmid=pmid,
             max_results=max_results,
+            response_mode=effective_response_mode,
             prefer_full_text=prefer_full_text,
             include_pubtator_search=include_pubtator_search,
             include_citation_neighbors=include_citation_neighbors,
@@ -298,7 +337,10 @@ async def find_related_evidence_candidates_impl(
             year_max=year_max,
         )
     )
-    return response.model_dump(by_alias=True)
+    result = response.model_dump(by_alias=True)
+    if response_mode is None:
+        _add_mcp_response_mode_warning(result)
+    return result
 
 
 async def build_topic_literature_map_impl(
@@ -308,6 +350,13 @@ async def build_topic_literature_map_impl(
     pmids: list[str] | None = None,
     max_seed_papers: int = 25,
     max_neighbors_per_paper: int = 10,
+    response_mode: LiteratureGraphResponseModeArg | None = None,
+    max_candidates: int = 12,
+    include_demoted: bool = True,
+    max_demoted: int = 3,
+    bias_toward: list[LiteratureGraphBias] | None = None,
+    max_graph_nodes: int = 30,
+    max_graph_edges: int = 60,
     include_authors: bool = True,
     include_citations: bool = True,
     include_pubtator_entities: bool = True,
@@ -316,12 +365,20 @@ async def build_topic_literature_map_impl(
     year_max: int | None = None,
     prefer_full_text: bool = True,
 ) -> dict[str, Any]:
+    effective_response_mode = response_mode or "full"
     response = await service.build_map(
         TopicLiteratureMapRequest(
             query=query,
             pmids=pmids,
             max_seed_papers=max_seed_papers,
             max_neighbors_per_paper=max_neighbors_per_paper,
+            response_mode=effective_response_mode,
+            max_candidates=max_candidates,
+            include_demoted=include_demoted,
+            max_demoted=max_demoted,
+            bias_toward=bias_toward,
+            max_graph_nodes=max_graph_nodes,
+            max_graph_edges=max_graph_edges,
             include_authors=include_authors,
             include_citations=include_citations,
             include_pubtator_entities=include_pubtator_entities,
@@ -331,7 +388,10 @@ async def build_topic_literature_map_impl(
             prefer_full_text=prefer_full_text,
         )
     )
-    return response.model_dump(by_alias=True)
+    result = response.model_dump(by_alias=True)
+    if response_mode is None:
+        _add_mcp_response_mode_warning(result)
+    return result
 
 
 async def suggest_corpus_impl(

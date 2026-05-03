@@ -45,6 +45,7 @@ async def test_citation_graph_route_returns_response_and_passes_request() -> Non
         source=LiteraturePaper(pmid="40562663"),
         cited_by=[LiteraturePaper(pmid="40600001", title="Citing study")],
         candidate_pmids=["40600001"],
+        response_mode="full",
     )
     app.dependency_overrides[get_citation_graph_service] = lambda: service
 
@@ -112,6 +113,7 @@ async def test_topic_literature_map_route_returns_response_and_passes_request() 
         query="FMF",
         seed_pmids=["111"],
         summary=TopicLiteratureMapSummary(recommended_next_pmids=["111"]),
+        response_mode="full",
     )
     app.dependency_overrides[get_topic_literature_map_service] = lambda: service
 
@@ -146,3 +148,25 @@ async def test_topic_literature_map_route_rejects_empty_body_without_calling_ser
 
     assert response.status_code == 422
     service.build_map.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_citation_graph_route_defaults_to_full_for_rest() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.get_citation_graph.return_value = PublicationCitationGraphResponse(
+        source=LiteraturePaper(pmid="40562663"),
+        response_mode="full",
+    )
+    app.dependency_overrides[get_citation_graph_service] = lambda: service
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/publications/citation-graph",
+            json={"pmid": "40562663"},
+        )
+
+    assert response.status_code == 200
+    request = service.get_citation_graph.call_args.args[0]
+    assert request.response_mode == "full"

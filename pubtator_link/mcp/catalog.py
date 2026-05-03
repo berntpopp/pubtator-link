@@ -32,6 +32,7 @@ class ToolCatalogEntry:
     example: str
     next_tools: tuple[str, ...]
     resource_links: tuple[str, ...]
+    input_schema: dict[str, Any]
     output_schema_name: str | None
     has_output_schema: bool
 
@@ -431,6 +432,11 @@ def _tool_output_schema(tool: object) -> dict[str, Any] | None:
     return schema if isinstance(schema, dict) else None
 
 
+def _tool_input_schema(tool: object) -> dict[str, Any]:
+    schema = getattr(tool, "parameters", None)
+    return schema if isinstance(schema, dict) else {}
+
+
 def build_tool_catalog(
     mcp: Any,
     *,
@@ -458,6 +464,7 @@ def build_tool_catalog(
                 tool for tool in supplement.next_tools if tool in registered_tool_names
             ),
             resource_links=supplement.resource_links,
+            input_schema=_tool_input_schema(tool),
             output_schema_name=output_schema_name if isinstance(output_schema_name, str) else None,
             has_output_schema=output_schema is not None,
         )

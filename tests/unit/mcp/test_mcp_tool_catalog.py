@@ -64,3 +64,19 @@ def test_rendered_catalog_shows_profile_specific_next_tools() -> None:
         "`pubtator.get_review_audit_trail`; full: `pubtator.record_review_context`, "
         "`pubtator.get_review_audit_trail`; readonly: `pubtator.get_review_audit_trail`"
     ) in rendered
+
+
+def test_literature_graph_tools_expose_response_mode_and_size_guidance() -> None:
+    from pubtator_link.mcp.catalog import build_tool_catalog
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    catalog = build_tool_catalog(create_pubtator_mcp(profile="full"), profile="full")
+    for name in (
+        "pubtator.get_publication_citation_graph",
+        "pubtator.find_related_evidence_candidates",
+        "pubtator.build_topic_literature_map",
+    ):
+        tool = catalog[name]
+        assert "response_mode" in tool.input_schema["properties"]
+        assert "response_size_class" in tool.description
+        assert "full can be large" in tool.description
