@@ -66,6 +66,17 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         example='{"ids":["PMC123456","10.1000/example"],"source":"auto"}',
         next_tools=("pubtator.get_publication_metadata",),
     ),
+    "pubtator.build_topic_literature_map": ToolCatalogSupplement(
+        category="publication",
+        profiles=("full",),
+        stability="advanced",
+        do_not_use_for=("claim-level evidence support", "substitute evidence selection"),
+        example='{"query":"familial Mediterranean fever colchicine","max_seed_papers":10}',
+        next_tools=(
+            "pubtator.get_publication_passages",
+            "pubtator.index_review_evidence",
+        ),
+    ),
     "pubtator.diagnostics": ToolCatalogSupplement(
         category="diagnostics",
         profiles=("lean", "full", "readonly"),

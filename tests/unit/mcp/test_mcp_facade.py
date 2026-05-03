@@ -14,6 +14,7 @@ EXPECTED_PUBLIC_TOOL_NAMES = {
     "pubtator.lookup_citation",
     "pubtator.find_related_articles",
     "pubtator.suggest_corpus",
+    "pubtator.build_topic_literature_map",
     "pubtator.diagnostics",
     "pubtator.search_guidelines",
     "pubtator.fetch_publication_annotations",
@@ -185,6 +186,29 @@ def test_related_evidence_tool_schema_is_flat() -> None:
     assert "year_max" in properties
     assert "request" not in properties
     assert tool.output_schema["title"] == "RelatedEvidenceCandidatesResponse"
+
+
+def test_topic_literature_map_tool_schema_is_flat() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator.build_topic_literature_map"
+    ]
+    properties = tool.parameters["properties"]
+
+    assert "query" in properties
+    assert "pmids" in properties
+    assert "max_seed_papers" in properties
+    assert "max_neighbors_per_paper" in properties
+    assert "include_authors" in properties
+    assert "include_citations" in properties
+    assert "include_pubtator_entities" in properties
+    assert "include_related_candidates" in properties
+    assert "year_min" in properties
+    assert "year_max" in properties
+    assert "prefer_full_text" in properties
+    assert "request" not in properties
+    assert tool.output_schema["title"] == "TopicLiteratureMapResponse"
 
 
 def test_review_retrieval_schema_hides_resolver_trace_by_default() -> None:

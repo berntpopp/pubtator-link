@@ -50,6 +50,7 @@ from ...services.review_evidence_certainty import ReviewEvidenceCertaintyService
 from ...services.review_index_lifecycle import ReviewIndexLifecycleService
 from ...services.review_preparation_queue import ReviewPreparationQueue
 from ...services.source_preflight import SourcePreflightService
+from ...services.topic_literature_map import TopicLiteratureMapService
 from ...services.variant_evidence import VariantEvidenceService
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,7 @@ _crossref_client: CrossrefClient | None = None
 _europe_pmc_literature_client: EuropePmcLiteratureClient | None = None
 _citation_graph_service: CitationGraphService | None = None
 _related_evidence_service: RelatedEvidenceService | None = None
+_topic_literature_map_service: TopicLiteratureMapService | None = None
 _logger: FilteringBoundLogger | None = None
 _review_pool: asyncpg.Pool | None = None
 _review_repository: PostgresReviewReragRepository | None = None
@@ -100,6 +102,7 @@ class AppResources:
     europe_pmc_literature_client: EuropePmcLiteratureClient | None = None
     citation_graph_service: CitationGraphService | None = None
     related_evidence_service: RelatedEvidenceService | None = None
+    topic_literature_map_service: TopicLiteratureMapService | None = None
     europe_pmc_client: EuropePmcClient | None = None
     review_pool: asyncpg.Pool | None = None
     review_repository: PostgresReviewReragRepository | None = None
@@ -206,6 +209,12 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             metadata_service=publication_metadata_service,
             citation_graph_service=citation_graph_service,
         )
+        topic_literature_map_service = TopicLiteratureMapService(
+            search_client=_TopicLiteratureMapSearchClient(api_client),
+            metadata_service=publication_metadata_service,
+            citation_graph_service=citation_graph_service,
+            related_evidence_service=related_evidence_service,
+        )
         clinvar_service = ClinVarService()
         variant_evidence_service = VariantEvidenceService(
             clinvar=clinvar_service,
@@ -285,6 +294,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             europe_pmc_literature_client=europe_pmc_literature_client,
             citation_graph_service=citation_graph_service,
             related_evidence_service=related_evidence_service,
+            topic_literature_map_service=topic_literature_map_service,
             europe_pmc_client=europe_pmc_client,
             source_preflight_service=source_preflight_service,
             review_pool=review_pool,
@@ -488,6 +498,29 @@ async def get_related_evidence_service() -> RelatedEvidenceService:
     return _related_evidence_service
 
 
+async def get_topic_literature_map_service() -> TopicLiteratureMapService:
+    """Get topic-level literature map service."""
+    global _topic_literature_map_service
+    resources = current_app_resources()
+    if resources is not None:
+        if resources.topic_literature_map_service is None:
+            resources.topic_literature_map_service = TopicLiteratureMapService(
+                search_client=_TopicLiteratureMapSearchClient(resources.api_client),
+                metadata_service=await get_publication_metadata_service(),
+                citation_graph_service=await get_citation_graph_service(),
+                related_evidence_service=await get_related_evidence_service(),
+            )
+        return resources.topic_literature_map_service
+    if _topic_literature_map_service is None:
+        _topic_literature_map_service = TopicLiteratureMapService(
+            search_client=_TopicLiteratureMapSearchClient(await get_api_client()),
+            metadata_service=await get_publication_metadata_service(),
+            citation_graph_service=await get_citation_graph_service(),
+            related_evidence_service=await get_related_evidence_service(),
+        )
+    return _topic_literature_map_service
+
+
 async def get_clinvar_service() -> ClinVarService:
     """Get ClinVar lookup service."""
     global _clinvar_service
@@ -564,6 +597,20 @@ class _CorpusSuggestionSearchClient:
         raw = await self.client.search_publications(text=query, page=1, sort=sort)
         results = list(raw.get("results", []))
         return {**raw, "results": results[:limit]}
+
+
+class _TopicLiteratureMapSearchClient:
+    def __init__(self, client: PubTator3Client) -> None:
+        self.client = client
+
+    async def search_publications(
+        self,
+        text: str,
+        *,
+        page: int = 1,
+        sort: str | None = None,
+    ) -> dict[str, Any]:
+        return await self.client.search_publications(text=text, page=page, sort=sort)
 
 
 def _build_diagnostics_service(resources: AppResources | None) -> DiagnosticsService:
@@ -920,6 +967,10 @@ PublicationMetadataServiceDep = Annotated[
 ]
 CitationGraphServiceDep = Annotated[CitationGraphService, Depends(get_citation_graph_service)]
 RelatedEvidenceServiceDep = Annotated[RelatedEvidenceService, Depends(get_related_evidence_service)]
+TopicLiteratureMapServiceDep = Annotated[
+    TopicLiteratureMapService,
+    Depends(get_topic_literature_map_service),
+]
 CorpusSuggestionServiceDep = Annotated[
     CorpusSuggestionService, Depends(get_corpus_suggestion_service)
 ]
@@ -1071,7 +1122,7 @@ async def cleanup_dependencies() -> None:
     global _discovery_service, _ncbi_discovery_client, _ncbi_publication_metadata_client
     global _publication_metadata_service
     global _citation_graph_service, _crossref_client, _europe_pmc_literature_client
-    global _related_evidence_service
+    global _related_evidence_service, _topic_literature_map_service
     global _llm_review_context_service, _review_context_service, _review_pool
     global _review_queue, _review_repository
     global _review_evidence_certainty_service
@@ -1124,6 +1175,7 @@ async def cleanup_dependencies() -> None:
     _variant_evidence_service = None
     _citation_graph_service = None
     _related_evidence_service = None
+    _topic_literature_map_service = None
     _discovery_service = None
     _publication_passage_service = None
     _publication_metadata_service = None

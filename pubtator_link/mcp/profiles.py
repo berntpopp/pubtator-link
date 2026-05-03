@@ -34,6 +34,7 @@ FULL_ONLY_TOOLS: tuple[str, ...] = (
     "pubtator.lookup_citation",
     "pubtator.find_related_articles",
     "pubtator.suggest_corpus",
+    "pubtator.build_topic_literature_map",
     "pubtator.fetch_publication_annotations",
     "pubtator.estimate_publication_context",
     "pubtator.fetch_pmc_annotations",
@@ -67,6 +68,7 @@ READONLY_TOOLS: tuple[str, ...] = tuple(
         "pubtator.add_evidence_certainty",
         "pubtator.stage_research_session",
         "pubtator.review_quickstart",
+        "pubtator.build_topic_literature_map",
         "pubtator.fetch_publication_annotations",
         "pubtator.fetch_pmc_annotations",
     }

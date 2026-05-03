@@ -17,6 +17,20 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Resource links: `pubtator://reviews/{review_id}/audit`
 - Output schema: `EvidenceCertaintyResponse`; has_output_schema: `yes`
 
+## `pubtator.build_topic_literature_map`
+
+- Name: `pubtator.build_topic_literature_map`
+- Title: Build Topic Literature Map
+- Category: `publication`
+- Profiles: `full`
+- Stability: `advanced`
+- Description: Use this when a user needs a bounded topic-level literature map from a query or seed PMIDs. Do not use this as claim support; use pubtator.get_publication_passages on recommended PMIDs. Next: pubtator.get_publication_passages.
+- Do not use for: `claim-level evidence support`, `substitute evidence selection`
+- Example: `{"query":"familial Mediterranean fever colchicine","max_seed_papers":10}`
+- Next tools by profile: full: `pubtator.get_publication_passages`, `pubtator.index_review_evidence`
+- Resource links: None
+- Output schema: `TopicLiteratureMapResponse`; has_output_schema: `yes`
+
 ## `pubtator.convert_article_ids`
 
 - Name: `pubtator.convert_article_ids`

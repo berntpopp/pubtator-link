@@ -10,6 +10,8 @@ from ...models.literature_graph import (
     PublicationCitationGraphResponse,
     RelatedEvidenceCandidatesRequest,
     RelatedEvidenceCandidatesResponse,
+    TopicLiteratureMapRequest,
+    TopicLiteratureMapResponse,
 )
 from ...models.publication_metadata import PublicationMetadataRequest, PublicationMetadataResponse
 from ...models.publication_passages import (
@@ -26,6 +28,7 @@ from .dependencies import (
     PublicationPassageServiceDep,
     PublicationServiceDep,
     RelatedEvidenceServiceDep,
+    TopicLiteratureMapServiceDep,
     handle_api_errors,
     validate_pmcids,
     validate_pmids,
@@ -108,6 +111,21 @@ async def find_related_evidence_candidates(
 ) -> RelatedEvidenceCandidatesResponse:
     """Return related candidate papers for passage-level evidence review."""
     return await service.find_candidates(request)
+
+
+@router.post(
+    "/topic-literature-map",
+    response_model=TopicLiteratureMapResponse,
+    operation_id="build_topic_literature_map",
+    summary="Build topic literature map",
+)
+@handle_api_errors
+async def build_topic_literature_map(
+    request: TopicLiteratureMapRequest,
+    service: TopicLiteratureMapServiceDep,
+) -> TopicLiteratureMapResponse:
+    """Return a bounded topic-level literature graph for query or seed PMIDs."""
+    return await service.build_map(request)
 
 
 @router.get(

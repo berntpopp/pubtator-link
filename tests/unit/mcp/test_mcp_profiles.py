@@ -96,3 +96,17 @@ def test_related_evidence_is_lean_full_and_readonly() -> None:
     assert tool_name in _tool_names("lean")
     assert tool_name in _tool_names("full")
     assert tool_name in _tool_names("readonly")
+
+
+def test_topic_literature_map_is_full_only() -> None:
+    tool_name = "pubtator.build_topic_literature_map"
+
+    assert tool_name not in _tool_names("lean")
+    assert tool_name in _tool_names("full")
+    assert tool_name not in _tool_names("readonly")
+
+
+def test_topic_literature_map_is_not_advertised_in_readonly_profile_metadata() -> None:
+    from pubtator_link.mcp.profiles import tool_names_for_profile
+
+    assert "pubtator.build_topic_literature_map" not in tool_names_for_profile("readonly")

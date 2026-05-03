@@ -19,6 +19,7 @@ from pubtator_link.models.corpus_suggestion import CorpusSuggestionRequest
 from pubtator_link.models.literature_graph import (
     PublicationCitationGraphRequest,
     RelatedEvidenceCandidatesRequest,
+    TopicLiteratureMapRequest,
 )
 from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 from pubtator_link.models.publication_passages import (
@@ -91,6 +92,7 @@ from pubtator_link.services.search_shaping import (
     shaped_search_response,
 )
 from pubtator_link.services.source_preflight import SourcePreflightService
+from pubtator_link.services.topic_literature_map import TopicLiteratureMapService
 
 INLINE_AUDIT_BUNDLE_MAX_BYTES = 1_000_000
 RESOURCE_LIST_LIMIT = 50
@@ -294,6 +296,39 @@ async def find_related_evidence_candidates_impl(
             publication_types=publication_types,
             year_min=year_min,
             year_max=year_max,
+        )
+    )
+    return response.model_dump(by_alias=True)
+
+
+async def build_topic_literature_map_impl(
+    *,
+    service: TopicLiteratureMapService,
+    query: str | None = None,
+    pmids: list[str] | None = None,
+    max_seed_papers: int = 25,
+    max_neighbors_per_paper: int = 10,
+    include_authors: bool = True,
+    include_citations: bool = True,
+    include_pubtator_entities: bool = True,
+    include_related_candidates: bool = True,
+    year_min: int | None = None,
+    year_max: int | None = None,
+    prefer_full_text: bool = True,
+) -> dict[str, Any]:
+    response = await service.build_map(
+        TopicLiteratureMapRequest(
+            query=query,
+            pmids=pmids,
+            max_seed_papers=max_seed_papers,
+            max_neighbors_per_paper=max_neighbors_per_paper,
+            include_authors=include_authors,
+            include_citations=include_citations,
+            include_pubtator_entities=include_pubtator_entities,
+            include_related_candidates=include_related_candidates,
+            year_min=year_min,
+            year_max=year_max,
+            prefer_full_text=prefer_full_text,
         )
     )
     return response.model_dump(by_alias=True)

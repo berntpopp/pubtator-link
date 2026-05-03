@@ -8,11 +8,14 @@ from httpx import ASGITransport, AsyncClient
 from pubtator_link.api.routes.dependencies import (
     get_citation_graph_service,
     get_related_evidence_service,
+    get_topic_literature_map_service,
 )
 from pubtator_link.models.literature_graph import (
     LiteraturePaper,
     PublicationCitationGraphResponse,
     RelatedEvidenceCandidatesResponse,
+    TopicLiteratureMapResponse,
+    TopicLiteratureMapSummary,
 )
 from pubtator_link.server_manager import UnifiedServerManager
 
@@ -99,3 +102,47 @@ async def test_related_evidence_route_rejects_nonnumeric_pmid_without_calling_se
 
     assert response.status_code == 422
     service.find_candidates.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_topic_literature_map_route_returns_response_and_passes_request() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.build_map.return_value = TopicLiteratureMapResponse(
+        query="FMF",
+        seed_pmids=["111"],
+        summary=TopicLiteratureMapSummary(recommended_next_pmids=["111"]),
+    )
+    app.dependency_overrides[get_topic_literature_map_service] = lambda: service
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/publications/topic-literature-map",
+            json={"query": "FMF"},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["query"] == "FMF"
+    assert payload["seed_pmids"] == ["111"]
+    assert payload["summary"]["recommended_next_pmids"] == ["111"]
+    request = service.build_map.call_args.args[0]
+    assert request.query == "FMF"
+
+
+@pytest.mark.asyncio
+async def test_topic_literature_map_route_rejects_empty_body_without_calling_service() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    app.dependency_overrides[get_topic_literature_map_service] = lambda: service
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/publications/topic-literature-map",
+            json={},
+        )
+
+    assert response.status_code == 422
+    service.build_map.assert_not_called()
