@@ -116,16 +116,35 @@ docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 ## Nginx Proxy Manager Deployment
 
-1. Copy `docker/.env.npm.example` to `docker/.env.npm` and set your domain.
+1. Copy `.env.docker.example` to `.env.docker` and set your domain and PostgreSQL password.
 2. Ensure the NPM Docker network exists. The default is `npm_default`.
 3. Start PubTator-Link without publishing host ports:
 
 ```bash
-docker compose --env-file docker/.env.npm \
-  -f docker/docker-compose.yml \
+docker compose -f docker/docker-compose.yml \
   -f docker/docker-compose.prod.yml \
   -f docker/docker-compose.npm.yml \
+  --env-file .env.docker \
   up -d --build
+```
+
+For the Strato VPS manager in `strato_v6_docker_npm`, configure the project with
+multiple compose files so the base service, production hardening, and NPM network
+override are all loaded:
+
+```yaml
+compose_files:
+  - docker/docker-compose.yml
+  - docker/docker-compose.prod.yml
+  - docker/docker-compose.npm.yml
+env_file: .env.docker
+containers:
+  - pubtator_link_server
+  - pubtator_link_postgres
+health_check:
+  endpoint: /health
+  container: pubtator_link_server
+  port: 8000
 ```
 
 4. In Nginx Proxy Manager, create a Proxy Host:
