@@ -453,6 +453,7 @@ async def test_readonly_diagnostics_minimum_workflow_only_advertises_registered_
                         "pubtator.retrieve_review_context_batch",
                     ],
                     "workflow_resource": "pubtator://workflow-help",
+                    "one_call": "pubtator.ground_question",
                 },
             )
 
@@ -461,6 +462,7 @@ async def test_readonly_diagnostics_minimum_workflow_only_advertises_registered_
     readonly_tools = tool_names_for_profile("readonly")
     assert set(result["minimum_workflow"]["grounded_review"]) <= readonly_tools
     assert "pubtator.index_review_evidence" not in result["minimum_workflow"]["grounded_review"]
+    assert "one_call" not in result["minimum_workflow"]
 
 
 def test_research_session_tools_are_registered(mcp_tool_names) -> None:

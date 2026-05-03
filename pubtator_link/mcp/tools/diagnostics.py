@@ -40,9 +40,12 @@ async def _diagnostics_impl(
     workflow = payload.get("minimum_workflow")
     if isinstance(workflow, dict):
         grounded_review = workflow.get("grounded_review")
+        allowed_tools = tool_names_for_profile(profile)
         if isinstance(grounded_review, list):
-            allowed_tools = tool_names_for_profile(profile)
             workflow["grounded_review"] = [
                 tool_name for tool_name in grounded_review if tool_name in allowed_tools
             ]
+        one_call = workflow.get("one_call")
+        if isinstance(one_call, str) and one_call not in allowed_tools:
+            workflow.pop("one_call", None)
     return payload

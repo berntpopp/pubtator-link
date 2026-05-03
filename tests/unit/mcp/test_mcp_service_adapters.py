@@ -621,6 +621,7 @@ async def test_ground_question_adapter_chains_search_index_inspect_retrieve() ->
         PreparationStatus,
         RetrieveReviewContextBatchResponse,
         ReviewIndexTotals,
+        ReviewSourceSummary,
     )
 
     class FakeClient:
@@ -668,7 +669,16 @@ async def test_ground_question_adapter_chains_search_index_inspect_retrieve() ->
             return InspectReviewIndexResponse(
                 review_id=review_id,
                 preparation_status=PreparationStatus(complete=2),
-                sources=[],
+                sources=[
+                    ReviewSourceSummary(
+                        source_id="PMID:11111111",
+                        pmid="11111111",
+                        source_kind="pubtator_abstract",
+                        job_status="complete",
+                        passage_count=1,
+                        coverage="abstract_only",
+                    )
+                ],
                 totals=ReviewIndexTotals(passage_count=2),
                 failed_sources=[],
                 coverage_summary={"full_text": 2},

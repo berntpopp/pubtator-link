@@ -10,6 +10,7 @@ from pubtator_link.mcp.errors import (
     McpErrorContext,
     error_code_for_exception,
     mcp_tool_error,
+    run_mcp_tool,
     sanitize_error_message,
 )
 from pubtator_link.services.errors import (
@@ -98,6 +99,25 @@ def test_ground_question_error_uses_selected_pmids_for_fallback() -> None:
     )
 
     payload = json.loads(str(error))
+
+    assert payload["fallback_tool"] == "pubtator.get_publication_passages"
+    assert payload["fallback_args"] == {
+        "pmids": ["11111111", "22222222"],
+        "mode": "compact_passages",
+    }
+
+
+@pytest.mark.asyncio
+async def test_ground_question_wrapper_uses_selected_pmids_for_fallback() -> None:
+    async def failing() -> dict[str, object]:
+        error = RuntimeError("review database unavailable")
+        error.pmids = ["11111111", "22222222"]  # type: ignore[attr-defined]
+        raise error
+
+    with pytest.raises(ToolError) as exc_info:
+        await run_mcp_tool("pubtator.ground_question", failing)
+
+    payload = json.loads(str(exc_info.value))
 
     assert payload["fallback_tool"] == "pubtator.get_publication_passages"
     assert payload["fallback_args"] == {

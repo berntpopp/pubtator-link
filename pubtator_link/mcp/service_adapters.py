@@ -840,10 +840,7 @@ def _ground_question_sources_ready(inspect_response: Any, selected_pmids: list[s
         passage_count = int(getattr(source, "passage_count", 0) or 0)
         if pmid in selected and (passage_count > 0 or coverage in ready_coverages):
             ready_pmids.add(pmid)
-    if ready_pmids:
-        return True
-    status = getattr(inspect_response, "preparation_status", None)
-    return bool(status and (int(status.complete or 0) > 0 or int(status.partial or 0) > 0))
+    return bool(ready_pmids)
 
 
 def _review_indexing_service_from_factory(factory: Any, queue: ReviewPreparationQueue) -> Any:
