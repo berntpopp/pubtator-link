@@ -15,6 +15,12 @@ from fastmcp.exceptions import ToolError
 from pubtator_link.mcp.input_normalization import InputNormalizationError
 from pubtator_link.observability.metrics import record_mcp_tool_call
 from pubtator_link.services.degradation import DegradedMode
+from pubtator_link.services.errors import (
+    ReviewIndexUnavailableError,
+    ReviewSchemaStaleError,
+    UpstreamUnavailableError,
+    ValidationFailureError,
+)
 from pubtator_link.services.mcp_diagnostics import bounded_diagnostics_snapshot
 
 logger = logging.getLogger(__name__)
@@ -103,6 +109,14 @@ def clear_recent_mcp_errors() -> None:
 
 def error_code_for_exception(exc: Exception) -> str:
     """Return a stable code suitable for deterministic LLM branching."""
+    if isinstance(exc, ReviewSchemaStaleError):
+        return "review_schema_not_current"
+    if isinstance(exc, ReviewIndexUnavailableError):
+        return "review_index_unavailable"
+    if isinstance(exc, UpstreamUnavailableError):
+        return "upstream_unavailable"
+    if isinstance(exc, ValidationFailureError):
+        return "validation_failed"
     message = str(exc).lower()
     if "updated_at" in message and "reviews" in message:
         return "review_schema_not_current"

@@ -8,8 +8,15 @@ from fastmcp.exceptions import ToolError
 
 from pubtator_link.mcp.errors import (
     McpErrorContext,
+    error_code_for_exception,
     mcp_tool_error,
     sanitize_error_message,
+)
+from pubtator_link.services.errors import (
+    ReviewIndexUnavailableError,
+    ReviewSchemaStaleError,
+    UpstreamUnavailableError,
+    ValidationFailureError,
 )
 
 
@@ -34,6 +41,23 @@ def test_mcp_tool_error_serializes_recovery_envelope() -> None:
     assert payload["fallback_tool"] == "pubtator.get_publication_passages"
     assert payload["fallback_args"]["pmids"] == ["39540697"]
     assert "updated_at" not in payload["message"]
+
+
+def test_error_code_for_typed_review_errors() -> None:
+    assert error_code_for_exception(ReviewSchemaStaleError("schema stale")) == (
+        "review_schema_not_current"
+    )
+    assert error_code_for_exception(ReviewIndexUnavailableError("db unavailable")) == (
+        "review_index_unavailable"
+    )
+    assert error_code_for_exception(UpstreamUnavailableError("timeout")) == ("upstream_unavailable")
+    assert error_code_for_exception(ValidationFailureError("bad input")) == ("validation_failed")
+
+
+def test_error_code_legacy_schema_text_fallback_still_works() -> None:
+    assert error_code_for_exception(RuntimeError("column updated_at missing from reviews")) == (
+        "review_schema_not_current"
+    )
 
 
 def test_mcp_tool_error_includes_bounded_diagnostics_snapshot() -> None:

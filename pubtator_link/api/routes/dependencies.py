@@ -29,6 +29,7 @@ from ...repositories.review_rerag import PostgresReviewReragRepository
 from ...services.clinvar import ClinVarService
 from ...services.corpus_suggestion import CorpusSuggestionService
 from ...services.diagnostics import DiagnosticsService
+from ...services.errors import ReviewSchemaStaleError
 from ...services.europe_pmc import EuropePmcClient
 from ...services.full_text_preparation import FullTextPreparationService
 from ...services.llm_review_context import LlmReviewContextService
@@ -205,7 +206,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
                 missing = ", ".join(
                     [*schema_diagnostics.missing_tables, *schema_diagnostics.missing_columns]
                 )
-                raise RuntimeError(f"Review database schema is not current: {missing}")
+                raise ReviewSchemaStaleError(f"Review database schema is not current: {missing}")
             review_pool = await asyncpg.create_pool(**review_pool_kwargs())
             review_repository = PostgresReviewReragRepository(review_pool)
             preparation = _build_full_text_preparation(
