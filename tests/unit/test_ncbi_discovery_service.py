@@ -60,6 +60,9 @@ class FakeDiscoveryClient:
             ),
         ]
 
+    async def find_pmid_by_doi(self, doi: str) -> str | None:
+        return None
+
     async def lookup_mesh(self, query: str, limit: int, exact: bool) -> list[MeshDescriptor]:
         return [
             MeshDescriptor(
@@ -193,6 +196,24 @@ async def test_ncbi_client_sends_idtype_for_explicit_source() -> None:
     assert records[0].status == "resolved"
     assert transport.requests[0].url.params["ids"] == "PMC123"
     assert transport.requests[0].url.params["idtype"] == "pmcid"
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_ncbi_client_finds_pmid_by_doi_with_article_identifier_search() -> None:
+    transport = MockTransport({"esearchresult": {"idlist": ["26802180"]}})
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = NcbiDiscoveryClient(http_client=http_client)
+
+    pmid = await client.find_pmid_by_doi("10.1136/annrheumdis-2015-208690")
+
+    assert pmid == "26802180"
+    assert transport.requests[0].url.path.endswith("/esearch.fcgi")
+    assert transport.requests[0].url.params["db"] == "pubmed"
+    assert transport.requests[0].url.params["term"] == "10.1136/annrheumdis-2015-208690[AID]"
+    assert transport.requests[0].url.params["retmode"] == "json"
+    assert transport.requests[0].url.params["retmax"] == "1"
+    assert transport.requests[0].url.params["tool"] == "pubtator-link"
     await client.close()
 
 

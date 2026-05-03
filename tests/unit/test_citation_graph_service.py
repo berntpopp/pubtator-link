@@ -88,6 +88,18 @@ class FakeOpenAlex:
         ][:limit]
 
 
+class EularOpenAlexFallback:
+    async def get_work_by_doi(self, doi: str) -> LiteraturePaper:
+        assert doi == "10.1136/annrheumdis-2015-208690"
+        return LiteraturePaper(doi=doi, pmid="26802180")
+
+    async def get_references(self, doi: str, *, limit: int) -> list[LiteraturePaper]:
+        return []
+
+    async def get_cited_by(self, doi: str, *, limit: int) -> list[LiteraturePaper]:
+        return []
+
+
 class FakeUnpaywall:
     async def get_oa_status(self, doi: str):
         assert doi in {"10.1000/primary-study", "10.1000/openalex-citing"}
@@ -101,6 +113,9 @@ class FakeUnpaywall:
 class FakeDiscovery:
     async def convert_article_ids(self, ids: list[str], source: str = "auto"):
         return type("ArticleIdConversionResponse", (), {"records": []})()
+
+    async def find_pmid_by_doi(self, doi: str) -> str | None:
+        return None
 
 
 class ResolvingDiscovery:
@@ -122,6 +137,9 @@ class ResolvingDiscovery:
                 ]
             },
         )()
+
+    async def find_pmid_by_doi(self, doi: str) -> str | None:
+        return None
 
 
 class FakeMetadata:
@@ -179,6 +197,9 @@ class BatchResolvingDiscovery:
                 ]
             },
         )()
+
+    async def find_pmid_by_doi(self, doi: str) -> str | None:
+        return None
 
 
 @pytest.mark.asyncio
@@ -380,6 +401,33 @@ async def test_doi_both_direction_uses_resolved_pmid_for_cited_by() -> None:
     assert response.source.doi == "10.1016/j.ard.2025.05.020"
     assert response.cited_by[0].pmid == "40600001"
     assert not response.meta.warnings
+
+
+@pytest.mark.asyncio
+async def test_citation_graph_resolves_eular_doi_with_openalex_fallback() -> None:
+    service = CitationGraphService(
+        openalex=EularOpenAlexFallback(),
+        discovery_service=FakeDiscovery(),
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            doi="10.1136/annrheumdis-2015-208690",
+            direction="cited_by",
+            resolve_metadata=False,
+        )
+    )
+
+    assert response.source.pmid == "26802180"
+    assert response.source.doi == "10.1136/annrheumdis-2015-208690"
+    assert any(
+        status.provider == "openalex"
+        and status.operation == "doi_to_pmid"
+        and status.status == "success"
+        and status.result_count == 1
+        for status in response.identifier_resolution_status
+    )
 
 
 @pytest.mark.asyncio

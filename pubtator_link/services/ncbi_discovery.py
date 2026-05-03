@@ -58,6 +58,9 @@ class NcbiDiscoveryClientProtocol(Protocol):
     ) -> list[ArticleIdConversionRecord]:
         """Convert article identifiers to PubMed-centered records."""
 
+    async def find_pmid_by_doi(self, doi: str) -> str | None:
+        """Resolve a DOI to a PMID via PubMed search."""
+
     async def lookup_mesh(self, query: str, limit: int, exact: bool) -> list[MeshDescriptor]:
         """Look up MeSH descriptors for a query."""
 
@@ -163,6 +166,28 @@ class NcbiDiscoveryClient:
             )
             for requested in ids
         ]
+
+    async def find_pmid_by_doi(self, doi: str) -> str | None:
+        response = await self._get(
+            "esearch.fcgi",
+            {
+                "db": "pubmed",
+                "term": f"{doi}[AID]",
+                "retmode": "json",
+                "retmax": "1",
+                "tool": "pubtator-link",
+            },
+        )
+        payload = response.json()
+        if not isinstance(payload, dict):
+            return None
+        esearch_result = payload.get("esearchresult")
+        idlist_payload = (
+            esearch_result.get("idlist", []) if isinstance(esearch_result, dict) else []
+        )
+        if not isinstance(idlist_payload, list | tuple) or not idlist_payload:
+            return None
+        return str(idlist_payload[0])
 
     async def lookup_mesh(self, query: str, limit: int, exact: bool) -> list[MeshDescriptor]:
         term = f'"{query}"[MeSH Terms]' if exact else query
@@ -403,6 +428,9 @@ class DiscoveryService:
             unresolved=unresolved,
             _meta=_candidate_meta(candidate_pmids),
         )
+
+    async def find_pmid_by_doi(self, doi: str) -> str | None:
+        return await self.client.find_pmid_by_doi(doi)
 
     async def lookup_mesh(
         self,

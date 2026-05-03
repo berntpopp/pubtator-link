@@ -59,6 +59,9 @@ class EuropePmcCitationProvider(Protocol):
 class OpenAlexCitationProvider(Protocol):
     """OpenAlex citation fallback behavior needed by the citation graph service."""
 
+    async def get_work_by_doi(self, doi: str) -> LiteraturePaper:
+        """Fetch one OpenAlex work by DOI."""
+
     async def get_references(self, doi: str, *, limit: int) -> list[LiteraturePaper]:
         """Fetch referenced works for a DOI."""
 
@@ -92,20 +95,26 @@ class CitationGraphService:
         self.unpaywall = unpaywall
         self.discovery_service = discovery_service
         self.metadata_service = metadata_service
-        self.doi_resolver = DoiPmidResolver(discovery_service=discovery_service)
+        self.doi_resolver = DoiPmidResolver(
+            discovery_service=discovery_service,
+            openalex_service=openalex,
+            pubmed_service=discovery_service,
+        )
 
     async def get_citation_graph(
         self, request: PublicationCitationGraphRequest
     ) -> PublicationCitationGraphResponse:
         """Return citation neighbors for one PMID or DOI source."""
         warnings: list[ProviderWarning] = []
-        source = await self._source_paper(request)
+        source, source_resolution_result = await self._source_paper(request)
         references: list[LiteraturePaper] = []
         cited_by: list[LiteraturePaper] = []
         references_status: list[LiteratureProviderStatus] = []
         cited_by_status: list[LiteratureProviderStatus] = []
         identifier_resolution_status: list[LiteratureProviderStatus] = []
         open_access_status: list[LiteratureProviderStatus] = []
+        if source_resolution_result is not None:
+            identifier_resolution_status.extend(_doi_resolution_statuses(source_resolution_result))
 
         if request.doi and not source.pmid:
             if request.direction in {"both", "cited_by"}:
@@ -292,13 +301,12 @@ class CitationGraphService:
         references = dedupe_papers(references)[: request.max_results]
         cited_by = dedupe_papers(cited_by)[: request.max_results]
         if request.resolve_reference_pmids and request.max_reference_resolution > 0:
-            references, cited_by, neighbor_status = await self._resolve_neighbor_dois(
+            references, cited_by, neighbor_statuses = await self._resolve_neighbor_dois(
                 references,
                 cited_by,
                 max_ids=request.max_reference_resolution,
             )
-            if neighbor_status is not None:
-                identifier_resolution_status.append(neighbor_status)
+            identifier_resolution_status.extend(neighbor_statuses)
         if request.include_open_access_status:
             references = await self._with_open_access_status(
                 references,
@@ -366,41 +374,34 @@ class CitationGraphService:
         response.meta.response_size_class = json_size_class(response.model_dump(by_alias=True))
         return response
 
-    async def _source_paper(self, request: PublicationCitationGraphRequest) -> LiteraturePaper:
+    async def _source_paper(
+        self,
+        request: PublicationCitationGraphRequest,
+    ) -> tuple[LiteraturePaper, DoiResolutionResult | None]:
         if request.pmid:
             if request.resolve_metadata:
                 metadata = await self._metadata_for_pmid(request.pmid)
                 if metadata is not None:
-                    return paper_from_publication_metadata(metadata)
-            return LiteraturePaper(pmid=request.pmid)
+                    return paper_from_publication_metadata(metadata), None
+            return LiteraturePaper(pmid=request.pmid), None
         if request.doi:
-            pmid = await self._pmid_for_doi(request.doi)
+            resolution_result = await self.doi_resolver.resolve([request.doi], max_ids=1)
+            pmid = next(iter(resolution_result.resolved.values()), None)
             if pmid is not None:
                 if request.resolve_metadata:
                     metadata = await self._metadata_for_pmid(pmid)
                     if metadata is not None:
                         paper = paper_from_publication_metadata(metadata)
                         if paper.doi:
-                            return paper
-                        return paper.model_copy(update={"doi": request.doi})
-                return LiteraturePaper(pmid=pmid, doi=request.doi)
-            return LiteraturePaper(doi=request.doi)
+                            return paper, resolution_result
+                        return paper.model_copy(update={"doi": request.doi}), resolution_result
+                return LiteraturePaper(pmid=pmid, doi=request.doi), resolution_result
+            return LiteraturePaper(doi=request.doi), resolution_result
         raise ValueError("exactly one of pmid or doi is required")
 
     async def _pmid_for_doi(self, doi: str) -> str | None:
-        if self.discovery_service is None:
-            return None
-        try:
-            records = await self.discovery_service.convert_article_ids([doi], source="doi")
-        except Exception:
-            return None
-        if hasattr(records, "records"):
-            records = records.records
-        for record in records:
-            pmid = getattr(record, "pmid", None)
-            if pmid:
-                return str(pmid)
-        return None
+        result = await self.doi_resolver.resolve([doi], max_ids=1)
+        return next(iter(result.resolved.values()), None)
 
     async def _metadata_for_pmid(self, pmid: str) -> Any | None:
         if self.metadata_service is None:
@@ -428,12 +429,12 @@ class CitationGraphService:
         cited_by: list[LiteraturePaper],
         *,
         max_ids: int,
-    ) -> tuple[list[LiteraturePaper], list[LiteraturePaper], LiteratureProviderStatus | None]:
+    ) -> tuple[list[LiteraturePaper], list[LiteraturePaper], list[LiteratureProviderStatus]]:
         doi_only_papers = [
             paper for paper in [*references, *cited_by] if paper.doi and not paper.pmid
         ]
         if not doi_only_papers:
-            return references, cited_by, None
+            return references, cited_by, []
 
         result = await self.doi_resolver.resolve(
             [paper.doi for paper in doi_only_papers if paper.doi],
@@ -442,7 +443,7 @@ class CitationGraphService:
         return (
             [_paper_with_resolved_pmid(paper, result) for paper in references],
             [_paper_with_resolved_pmid(paper, result) for paper in cited_by],
-            _doi_resolution_status(result),
+            _doi_resolution_statuses(result),
         )
 
     async def _with_open_access_status(
@@ -547,7 +548,7 @@ def _paper_with_resolved_pmid(
             "provenance": [
                 *paper.provenance,
                 LiteratureGraphProvenance(
-                    provider="ncbi_idconv",
+                    provider=result.resolution_sources.get(paper.doi, "ncbi_idconv"),
                     source_id=paper.doi,
                     raw_status="resolved_pmid_from_doi",
                 ),
@@ -556,29 +557,55 @@ def _paper_with_resolved_pmid(
     )
 
 
-def _doi_resolution_status(result: DoiResolutionResult) -> LiteratureProviderStatus:
-    if result.timeout_count or result.failed_count:
-        status: LiteratureProviderStatusValue = "partial" if result.resolved else "failed"
-    elif result.resolved and (result.unresolved or result.skipped_count):
-        status = "partial"
-    elif result.resolved:
-        status = "success"
-    elif result.skipped_count and not result.unresolved:
-        status = "skipped"
-    else:
-        status = "empty"
-    return LiteratureProviderStatus(
-        provider="ncbi_idconv",
-        operation="doi_to_pmid",
-        status=status,
-        result_count=result.resolved_count,
-        retryable=bool(result.timeout_count or result.failed_count),
-        message=(
-            f"resolved={result.resolved_count} unresolved={result.unresolved_count} "
-            f"cached={result.cached_count} skipped={result.skipped_count} "
-            f"failed={result.failed_count} timeout={result.timeout_count}"
-        ),
-    )
+def _doi_resolution_statuses(result: DoiResolutionResult) -> list[LiteratureProviderStatus]:
+    statuses: list[LiteratureProviderStatus] = []
+    for provider in ("ncbi_idconv", OPENALEX_PROVIDER, "pubmed_esearch"):
+        result_count = result.provider_result_counts.get(provider, 0)
+        no_match_count = result.provider_no_match_counts.get(provider, 0)
+        failed_count = result.provider_failed_counts.get(provider, 0)
+        timeout_count = result.provider_timeout_counts.get(provider, 0)
+        if result_count == 0 and no_match_count == 0 and failed_count == 0 and timeout_count == 0:
+            continue
+        if failed_count or timeout_count:
+            status: LiteratureProviderStatusValue = (
+                "partial" if result_count or no_match_count else "failed"
+            )
+        elif result_count and no_match_count:
+            status = "partial"
+        elif result_count:
+            status = "success"
+        else:
+            status = "empty"
+        statuses.append(
+            LiteratureProviderStatus(
+                provider=provider,
+                operation="doi_to_pmid",
+                status=status,
+                result_count=result_count,
+                retryable=bool(failed_count or timeout_count),
+                message=(
+                    f"resolved={result_count} no_match={no_match_count} "
+                    f"cached={result.cached_count} skipped={result.skipped_count} "
+                    f"failed={failed_count} timeout={timeout_count}"
+                ),
+            )
+        )
+    if not statuses and (result.skipped_count or result.failed_count or result.timeout_count):
+        status = "skipped" if result.skipped_count and not result.failed_count else "failed"
+        statuses.append(
+            LiteratureProviderStatus(
+                provider="ncbi_idconv",
+                operation="doi_to_pmid",
+                status=status,
+                retryable=bool(result.failed_count or result.timeout_count),
+                message=(
+                    f"resolved={result.resolved_count} unresolved={result.unresolved_count} "
+                    f"cached={result.cached_count} skipped={result.skipped_count} "
+                    f"failed={result.failed_count} timeout={result.timeout_count}"
+                ),
+            )
+        )
+    return statuses
 
 
 def _provider_status(
@@ -627,9 +654,7 @@ def _citation_candidates(
         if paper.pmid:
             rank_reasons.append("has_pmid")
             if any(
-                provenance.provider == "ncbi_idconv"
-                and provenance.raw_status == "resolved_pmid_from_doi"
-                for provenance in paper.provenance
+                provenance.raw_status == "resolved_pmid_from_doi" for provenance in paper.provenance
             ):
                 rank_reasons.append("resolved_pmid_from_doi")
         else:
