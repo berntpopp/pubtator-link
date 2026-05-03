@@ -197,3 +197,64 @@ async def test_start_stdio_server_binds_lifespan_resources(
     assert dependencies.current_app_resources() is None
     assert client.closed is True
     assert manager.resources is None
+
+
+def test_create_app_uses_explicit_cors_methods_and_headers() -> None:
+    manager = UnifiedServerManager(logger=LoggerDouble())
+    app = manager.create_app()
+
+    cors_middleware = next(
+        middleware
+        for middleware in app.user_middleware
+        if middleware.cls.__name__ == "CORSMiddleware"
+    )
+
+    assert cors_middleware.kwargs["allow_methods"] == ["GET", "POST", "OPTIONS"]
+    assert cors_middleware.kwargs["allow_headers"] == [
+        "Authorization",
+        "Content-Type",
+        "Mcp-Session-Id",
+        "Last-Event-ID",
+        "X-Request-ID",
+    ]
+
+
+def test_post_request_size_limit_returns_stable_413(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("pubtator_link.server_manager.settings.http_max_request_bytes", 8)
+
+    manager = UnifiedServerManager(logger=LoggerDouble())
+    app = manager.create_app(include_mcp=False)
+
+    @app.post("/echo")
+    async def echo() -> dict[str, bool]:
+        return {"ok": True}
+
+    response = TestClient(app).post("/echo", content=b"0123456789")
+
+    assert response.status_code == 413
+    assert response.json() == {
+        "success": False,
+        "error_code": "request_too_large",
+        "message": "Request body exceeds configured maximum size.",
+        "retryable": False,
+    }
+
+
+def test_inbound_rate_limit_returns_stable_429(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("pubtator_link.server_manager.settings.enable_inbound_rate_limit", True)
+    monkeypatch.setattr("pubtator_link.server_manager.settings.inbound_rate_limit_per_minute", 1)
+
+    manager = UnifiedServerManager(logger=LoggerDouble())
+    app = manager.create_app(include_mcp=False)
+
+    @app.get("/limited")
+    async def limited() -> dict[str, bool]:
+        return {"ok": True}
+
+    client = TestClient(app)
+    assert client.get("/limited").status_code == 200
+    response = client.get("/limited")
+
+    assert response.status_code == 429
+    assert response.json()["error_code"] == "rate_limited"
+    assert response.json()["retryable"] is True

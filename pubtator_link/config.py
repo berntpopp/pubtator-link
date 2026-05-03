@@ -53,6 +53,34 @@ class ServerSettings(BaseSettings):
         default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"],
         description="CORS allowed origins",
     )
+    cors_allow_methods: list[str] = Field(
+        default_factory=lambda: ["GET", "POST", "OPTIONS"],
+        description="CORS allowed HTTP methods",
+    )
+    cors_allow_headers: list[str] = Field(
+        default_factory=lambda: [
+            "Authorization",
+            "Content-Type",
+            "Mcp-Session-Id",
+            "Last-Event-ID",
+            "X-Request-ID",
+        ],
+        description="CORS allowed request headers",
+    )
+    http_max_request_bytes: int = Field(
+        default=2 * 1024 * 1024,
+        ge=1024,
+        description="Maximum inbound HTTP request body size in bytes",
+    )
+    enable_inbound_rate_limit: bool = Field(
+        default=False,
+        description="Enable simple per-client inbound HTTP rate limiting",
+    )
+    inbound_rate_limit_per_minute: int = Field(
+        default=120,
+        ge=1,
+        description="Maximum requests per client per minute when inbound rate limiting is enabled",
+    )
 
     # Logging configuration
     log_level: str = Field(default="INFO", description="Logging level")
@@ -140,6 +168,13 @@ class ServerSettings(BaseSettings):
         """Parse CORS origins from string or list."""
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v  # type: ignore[no-any-return]
+
+    @field_validator("cors_allow_methods", "cors_allow_headers", mode="before")
+    @classmethod
+    def parse_csv_list(cls, v: Any) -> list[str]:
+        if isinstance(v, str):
+            return [item.strip() for item in v.split(",") if item.strip()]
         return v  # type: ignore[no-any-return]
 
 

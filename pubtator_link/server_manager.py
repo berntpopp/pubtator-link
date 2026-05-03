@@ -1,5 +1,8 @@
 """Unified server manager for PubTator-Link."""
 
+import json
+import time
+from collections import defaultdict, deque
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import asdict
@@ -11,7 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastmcp import FastMCP
 from starlette.responses import Response
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from structlog.typing import FilteringBoundLogger
 
 from .api.routes import (
@@ -40,6 +43,27 @@ from .mcp.facade import create_pubtator_mcp
 from .observability.metrics import CONTENT_TYPE_LATEST, metrics_payload
 
 
+async def _json_error_response(
+    status_code: int,
+    payload: dict[str, object],
+    send: Send,
+) -> None:
+    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    headers = [
+        (b"content-type", b"application/json"),
+        (b"content-length", str(len(body)).encode("ascii")),
+    ]
+
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status_code,
+            "headers": headers,
+        }
+    )
+    await send({"type": "http.response.body", "body": body})
+
+
 class PubTatorResourcesMiddleware:
     """Bind app resources to request context without BaseHTTPMiddleware."""
 
@@ -62,6 +86,92 @@ class PubTatorResourcesMiddleware:
             await self.app(scope, receive, send)
         finally:
             reset_app_resources(token)
+
+
+class RequestSizeLimitMiddleware:
+    """Reject oversized inbound HTTP request bodies."""
+
+    def __init__(self, app: ASGIApp, *, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["method"] not in {"POST", "PUT", "PATCH"}:
+            await self.app(scope, receive, send)
+            return
+
+        body_size = 0
+        messages: deque[Message] = deque()
+        while True:
+            message = await receive()
+            messages.append(message)
+            if message["type"] != "http.request":
+                break
+
+            body_size += len(message.get("body", b""))
+            if body_size > self.max_bytes:
+                await _json_error_response(
+                    413,
+                    {
+                        "success": False,
+                        "error_code": "request_too_large",
+                        "message": "Request body exceeds configured maximum size.",
+                        "retryable": False,
+                    },
+                    send,
+                )
+                while message.get("more_body", False):
+                    message = await receive()
+                return
+
+            if not message.get("more_body", False):
+                break
+
+        async def replay_receive() -> Message:
+            if messages:
+                return messages.popleft()
+            return await receive()
+
+        await self.app(scope, replay_receive, send)
+
+
+class InboundRateLimitMiddleware:
+    """Apply a simple per-client 60-second inbound HTTP request limit."""
+
+    def __init__(self, app: ASGIApp, *, requests_per_minute: int) -> None:
+        self.app = app
+        self.requests_per_minute = requests_per_minute
+        self.requests: defaultdict[str, deque[float]] = defaultdict(deque)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        now = time.monotonic()
+        client = scope.get("client")
+        client_ip = client[0] if client else "unknown"
+        timestamps = self.requests[client_ip]
+        while timestamps and now - timestamps[0] >= 60:
+            timestamps.popleft()
+
+        if len(timestamps) >= self.requests_per_minute:
+            retry_after_seconds = max(1, int(60 - (now - timestamps[0])))
+            await _json_error_response(
+                429,
+                {
+                    "success": False,
+                    "error_code": "rate_limited",
+                    "message": "Inbound request rate limit exceeded.",
+                    "retryable": True,
+                    "retry_after_seconds": retry_after_seconds,
+                },
+                send,
+            )
+            return
+
+        timestamps.append(now)
+        await self.app(scope, receive, send)
 
 
 class UnifiedServerManager:
@@ -143,9 +253,18 @@ class UnifiedServerManager:
             CORSMiddleware,
             allow_origins=settings.cors_origins,
             allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
+            allow_methods=settings.cors_allow_methods,
+            allow_headers=settings.cors_allow_headers,
         )
+        app.add_middleware(
+            RequestSizeLimitMiddleware,
+            max_bytes=settings.http_max_request_bytes,
+        )
+        if settings.enable_inbound_rate_limit:
+            app.add_middleware(
+                InboundRateLimitMiddleware,
+                requests_per_minute=settings.inbound_rate_limit_per_minute,
+            )
         app.add_middleware(PubTatorResourcesMiddleware)
         app.add_middleware(
             CorrelationIdMiddleware,
