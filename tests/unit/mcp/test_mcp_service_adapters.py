@@ -613,6 +613,172 @@ async def test_review_quickstart_adapter_returns_retrieval_handoff() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ground_question_adapter_chains_search_index_inspect_retrieve() -> None:
+    from pubtator_link.mcp import service_adapters
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        InspectReviewIndexResponse,
+        PreparationStatus,
+        RetrieveReviewContextBatchResponse,
+        ReviewIndexTotals,
+    )
+
+    class FakeClient:
+        search_kwargs: ClassVar[dict[str, object] | None] = None
+
+        async def search_publications(self, **kwargs):
+            self.search_kwargs = kwargs
+            return {
+                "count": 4,
+                "page": 1,
+                "results": [
+                    {"pmid": "11111111", "title": "First"},
+                    {"pmid": "11111111", "title": "Duplicate"},
+                    {"pmid": "22222222", "title": "Second"},
+                    {"pmid": "33333333", "title": "Third"},
+                ],
+            }
+
+    class FakeQueue:
+        repository = object()
+
+    indexing_services = []
+
+    class FakeIndexingService:
+        def __init__(self, **kwargs):
+            self.init_kwargs = kwargs
+            self.review_id = None
+            self.request = None
+            indexing_services.append(self)
+
+        async def index_review_evidence(self, review_id, request):
+            self.review_id = review_id
+            self.request = request
+            return {"success": True}
+
+    class FakeContextService:
+        inspect_review_id = None
+        inspect_request = None
+        retrieve_review_id = None
+        retrieve_request = None
+
+        async def inspect_review_index(self, review_id, request):
+            self.inspect_review_id = review_id
+            self.inspect_request = request
+            return InspectReviewIndexResponse(
+                review_id=review_id,
+                preparation_status=PreparationStatus(complete=2),
+                sources=[],
+                totals=ReviewIndexTotals(passage_count=2),
+                failed_sources=[],
+                coverage_summary={"full_text": 2},
+            )
+
+        async def retrieve_context_batch(self, review_id, request):
+            self.retrieve_review_id = review_id
+            self.retrieve_request = request
+            return RetrieveReviewContextBatchResponse(
+                review_id=review_id,
+                response_mode=request.response_mode,
+                results=[],
+                merged_context_pack=ContextPack(
+                    question=request.queries[0],
+                    passages=[],
+                    citation_map={},
+                ),
+                preparation_status=PreparationStatus(complete=2),
+            )
+
+    queue = FakeQueue()
+    context_service = FakeContextService()
+    result = await service_adapters.ground_question_impl(
+        client=FakeClient(),
+        queue=queue,
+        context_service=context_service,
+        question=" Does colchicine prevent FMF flares? ",
+        max_pmids=3,
+        entity_ids=["@CHEMICAL_colchicine"],
+        wait_until_ready=True,
+        review_indexing_service_factory=FakeIndexingService,
+    )
+
+    assert result["success"] is True
+    assert result["question"] == "Does colchicine prevent FMF flares?"
+    assert result["selected_pmids"] == ["11111111", "22222222"]
+    assert len(result["selected_pmids"]) <= 3
+    assert len(result["selected_pmids"]) == len(set(result["selected_pmids"]))
+    assert result["search_total_results"] == 4
+    assert result["ready_to_retrieve"] is True
+    assert result["coverage_summary"] == {"full_text": 2}
+    assert result["next_tools"] == [
+        "pubtator.retrieve_review_context_batch",
+        "pubtator.record_review_context",
+    ]
+    assert "_meta" not in result
+
+    indexing_service = indexing_services[0]
+    assert indexing_service.init_kwargs == {
+        "repository": queue.repository,
+        "queue": queue,
+    }
+    assert indexing_service.request.pmids == ["11111111", "22222222"]
+    assert indexing_service.request.wait_for_completion is True
+    assert indexing_service.request.wait_for_status == "complete_or_partial"
+    assert context_service.inspect_request.pmids == ["11111111", "22222222"]
+    assert context_service.retrieve_request.queries == ["Does colchicine prevent FMF flares?"]
+    assert context_service.retrieve_request.pmids == ["11111111", "22222222"]
+    assert context_service.retrieve_request.entity_ids == ["@CHEMICAL_colchicine"]
+    assert context_service.retrieve_request.max_total_passages == 8
+    assert context_service.retrieve_request.max_response_chars == 12000
+    assert context_service.retrieve_request.response_mode == "compact"
+    assert context_service.retrieve_request.include_diagnostics is False
+    assert result["context"]["merged_context_pack"]["question"] == (
+        "Does colchicine prevent FMF flares?"
+    )
+
+
+@pytest.mark.asyncio
+async def test_ground_question_adapter_no_pmids_returns_search_recovery() -> None:
+    from pubtator_link.mcp import service_adapters
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {"count": 0, "page": 1, "results": []}
+
+    class FakeQueue:
+        repository = object()
+
+    class FakeContextService:
+        async def inspect_review_index(self, review_id, request):
+            raise AssertionError("inspect should not be called without selected PMIDs")
+
+        async def retrieve_context_batch(self, review_id, request):
+            raise AssertionError("retrieve should not be called without selected PMIDs")
+
+    def fail_indexing_service_factory(**kwargs):
+        raise AssertionError("index should not be called without selected PMIDs")
+
+    result = await service_adapters.ground_question_impl(
+        client=FakeClient(),
+        queue=FakeQueue(),
+        context_service=FakeContextService(),
+        question="No matching biomedical literature",
+        max_pmids=8,
+        review_indexing_service_factory=fail_indexing_service_factory,
+    )
+
+    assert result["success"] is True
+    assert result["selected_pmids"] == []
+    assert result["ready_to_retrieve"] is False
+    assert result["context"] is None
+    assert result["next_tools"] == ["pubtator.search_literature"]
+    assert result["recovery"] == [
+        "Refine the search query or provide candidate PMIDs explicitly.",
+    ]
+    assert "_meta" not in result
+
+
+@pytest.mark.asyncio
 async def test_index_review_evidence_adapter_returns_lifecycle_guidance() -> None:
     from pubtator_link.mcp.service_adapters import index_review_evidence_impl
     from pubtator_link.models.review_rerag import PreparationStatus

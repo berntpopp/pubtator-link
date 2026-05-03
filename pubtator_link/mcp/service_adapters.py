@@ -35,6 +35,7 @@ from pubtator_link.models.responses import (
 )
 from pubtator_link.models.review_rerag import (
     BudgetStrategy,
+    GroundQuestionResponse,
     IndexReviewEvidenceRequest,
     InspectReviewIndexRequest,
     McpReviewAuditBundleResponse,
@@ -42,6 +43,7 @@ from pubtator_link.models.review_rerag import (
     RecordReviewContextRequest,
     RecordReviewContextResponse,
     RetrieveReviewContextBatchRequest,
+    RetrieveReviewContextBatchResponse,
     RetrieveReviewContextRequest,
     ReviewAuditTrailResponse,
     ReviewBatchResponseMode,
@@ -711,6 +713,125 @@ async def review_quickstart_impl(
         warnings=warnings,
     )
     return response.model_dump(mode="json")
+
+
+async def ground_question_impl(
+    *,
+    client: PubTator3Client,
+    queue: ReviewPreparationQueue,
+    context_service: ReviewContextService,
+    question: str,
+    max_pmids: int = 8,
+    review_id: str | None = None,
+    entity_ids: list[str] | None = None,
+    guideline_boost: bool = True,
+    wait_until_ready: bool = True,
+    timeout_ms: int = 30_000,
+    review_indexing_service_factory: Any = ReviewIndexingService,
+) -> dict[str, Any]:
+    normalized_question = question.strip()
+    selected_review_id = review_id or _quickstart_review_id(normalized_question)
+    search_result = await search_literature_impl(
+        client=client,
+        text=normalized_question,
+        limit=max_pmids,
+        entity_ids=entity_ids,
+        guideline_boost=guideline_boost,
+        response_mode="compact",
+        include_citations="none",
+        metadata="basic",
+    )
+    selected_pmids: list[str] = []
+    for item in search_result.get("results", []):
+        if not isinstance(item, dict):
+            continue
+        pmid = str(item.get("pmid") or "").strip()
+        if pmid and pmid not in selected_pmids:
+            selected_pmids.append(pmid)
+        if len(selected_pmids) >= max_pmids:
+            break
+    search_total_results = int(search_result.get("total_results") or len(selected_pmids))
+
+    if not selected_pmids:
+        return GroundQuestionResponse(
+            question=normalized_question,
+            review_id=selected_review_id,
+            selected_pmids=[],
+            search_total_results=search_total_results,
+            ready_to_retrieve=False,
+            context=None,
+            next_tools=["pubtator.search_literature"],
+            recovery=["Refine the search query or provide candidate PMIDs explicitly."],
+        ).model_dump(mode="json")
+
+    indexing_service = _review_indexing_service_from_factory(
+        review_indexing_service_factory,
+        queue,
+    )
+    await indexing_service.index_review_evidence(
+        selected_review_id,
+        IndexReviewEvidenceRequest(
+            pmids=selected_pmids,
+            wait_for_completion=wait_until_ready,
+            wait_for_status="complete_or_partial" if wait_until_ready else None,
+            timeout_ms=timeout_ms,
+        ),
+    )
+    inspect_response = await context_service.inspect_review_index(
+        review_id=selected_review_id,
+        request=InspectReviewIndexRequest(pmids=selected_pmids),
+    )
+    ready_to_retrieve = inspect_response.totals.passage_count > 0
+    context: RetrieveReviewContextBatchResponse | None = None
+    recovery: list[str] = []
+    if ready_to_retrieve:
+        context = await context_service.retrieve_context_batch(
+            review_id=selected_review_id,
+            request=RetrieveReviewContextBatchRequest(
+                queries=[normalized_question],
+                pmids=selected_pmids,
+                entity_ids=entity_ids or [],
+                response_mode="compact",
+                max_total_passages=8,
+                max_response_chars=12000,
+                include_diagnostics=False,
+            ),
+        )
+        next_tools = [
+            "pubtator.retrieve_review_context_batch",
+            "pubtator.record_review_context",
+        ]
+    else:
+        recovery.append(
+            "Indexing has not produced passages yet; inspect the review index and retry retrieval."
+        )
+        next_tools = [
+            "pubtator.inspect_review_index",
+            "pubtator.retrieve_review_context_batch",
+        ]
+
+    return GroundQuestionResponse(
+        question=normalized_question,
+        review_id=selected_review_id,
+        selected_pmids=selected_pmids,
+        search_total_results=search_total_results,
+        preparation_status=inspect_response.preparation_status,
+        coverage_summary=inspect_response.coverage_summary,
+        ready_to_retrieve=ready_to_retrieve,
+        context=context,
+        next_tools=next_tools,
+        recovery=recovery,
+    ).model_dump(mode="json")
+
+
+def _review_indexing_service_from_factory(factory: Any, queue: ReviewPreparationQueue) -> Any:
+    try:
+        return factory(repository=queue.repository, queue=queue)
+    except TypeError:
+        try:
+            return factory(queue)
+        except TypeError:
+            return factory(queue=queue)
 
 
 def _quickstart_review_id(topic: str) -> str:

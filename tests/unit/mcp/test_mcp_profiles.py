@@ -17,6 +17,7 @@ EXPECTED_LEAN_TOOLS = {
     "pubtator.preflight_review_sources",
     "pubtator.index_review_evidence",
     "pubtator.inspect_review_index",
+    "pubtator.ground_question",
     "pubtator.retrieve_review_context_batch",
     "pubtator.get_review_audit_trail",
     "pubtator.record_review_context",
@@ -64,9 +65,16 @@ def test_create_pubtator_mcp_readonly_profile_excludes_write_and_export_tools() 
     tool_names = _tool_names("readonly")
 
     assert "pubtator.index_review_evidence" not in tool_names
+    assert "pubtator.ground_question" not in tool_names
     assert "pubtator.record_review_context" not in tool_names
     assert "pubtator.export_review_audit_bundle" not in tool_names
     assert "pubtator.fetch_publication_annotations" not in tool_names
     assert "pubtator.fetch_pmc_annotations" not in tool_names
     assert "pubtator.retrieve_review_context_batch" in tool_names
     assert "pubtator.get_review_audit_trail" in tool_names
+
+
+def test_ground_question_is_lean_and_full_but_not_readonly() -> None:
+    assert "pubtator.ground_question" in _tool_names("lean")
+    assert "pubtator.ground_question" in _tool_names("full")
+    assert "pubtator.ground_question" not in _tool_names("readonly")

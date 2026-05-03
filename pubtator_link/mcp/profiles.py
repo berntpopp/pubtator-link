@@ -19,6 +19,7 @@ LEAN_TOOLS: tuple[str, ...] = (
     "pubtator.preflight_review_sources",
     "pubtator.index_review_evidence",
     "pubtator.inspect_review_index",
+    "pubtator.ground_question",
     "pubtator.retrieve_review_context_batch",
     "pubtator.get_review_audit_trail",
     "pubtator.record_review_context",
@@ -57,6 +58,7 @@ READONLY_TOOLS: tuple[str, ...] = tuple(
     if name
     not in {
         "pubtator.index_review_evidence",
+        "pubtator.ground_question",
         "pubtator.record_review_context",
         "pubtator.submit_text_annotation",
         "pubtator.export_review_audit_bundle",

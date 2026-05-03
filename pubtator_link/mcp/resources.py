@@ -19,6 +19,34 @@ RESEARCH_USE_NOTICE = (
     "treatment, triage, patient management, or clinical decision support. Do not "
     "submit identifiable patient data to public demo instances."
 )
+GROUND_QUESTION_TOOL = "pubtator.ground_question"
+
+
+def _core_workflow_tools() -> list[str]:
+    tools = list(CORE_WORKFLOW_TOOLS)
+    if GROUND_QUESTION_TOOL not in tools:
+        tools.insert(tools.index("pubtator.retrieve_review_context_batch"), GROUND_QUESTION_TOOL)
+    return tools
+
+
+def _tool_categories() -> dict[str, list[str]]:
+    categories = {name: list(tools) for name, tools in TOOL_CATEGORIES.items()}
+    review_tools = categories.setdefault("review", [])
+    if GROUND_QUESTION_TOOL not in review_tools:
+        review_tools.append(GROUND_QUESTION_TOOL)
+    return categories
+
+
+def _sample_calls() -> dict[str, dict[str, Any]]:
+    calls: dict[str, dict[str, Any]] = {}
+    for name, value in SAMPLE_CALLS.items():
+        if isinstance(value, dict):
+            calls[name] = dict(value)
+    calls[GROUND_QUESTION_TOOL] = {
+        "question": "Does colchicine prevent FMF flares?",
+        "max_pmids": 8,
+    }
+    return calls
 
 
 def get_tool_detail_resource(tool_name: str) -> dict[str, Any]:
@@ -107,6 +135,7 @@ def get_llm_driver_contract() -> dict[str, Any]:
             "pubtator.preflight_review_sources",
             "pubtator.index_review_evidence",
             "pubtator.inspect_review_index",
+            "pubtator.ground_question",
             "pubtator.retrieve_review_context_batch",
             "pubtator.retrieve_review_context",
             "pubtator.get_review_passages_by_id",
@@ -169,6 +198,7 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
             "pubtator.list_research_sessions",
             "pubtator.index_review_evidence",
             "pubtator.inspect_review_index",
+            "pubtator.ground_question",
             "pubtator.retrieve_review_context",
             "pubtator.retrieve_review_context_batch",
             "pubtator.get_review_passages_by_id",
@@ -196,6 +226,7 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
                 "pubtator.stage_research_session",
                 "pubtator.index_review_evidence",
                 "pubtator.inspect_review_index",
+                "pubtator.ground_question",
             ],
             "retrieval": [
                 "pubtator.retrieve_review_context",
@@ -217,12 +248,14 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
                 "pubtator.preflight_review_sources",
                 "pubtator.index_review_evidence",
                 "pubtator.inspect_review_index",
+                "pubtator.ground_question",
                 "pubtator.diagnostics",
                 "pubtator.retrieve_review_context_batch",
             ],
         },
         "recommended_workflows": [
             "Call pubtator.workflow_help for the canonical task-specific sequence.",
+            "For one-call grounded evidence use pubtator.ground_question.",
             "search -> preflight -> index -> inspect -> retrieve for review-grounded answers",
             "Use pubtator.get_publication_metadata when citation-grade PMID metadata is needed.",
             "After entity grounding, use pubtator.find_entity_relations to inspect relation evidence "
@@ -261,6 +294,7 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
             "pubtator.stage_research_session",
             "pubtator.index_review_evidence",
             "pubtator.inspect_review_index",
+            "pubtator.ground_question",
             "pubtator.retrieve_review_context_batch",
             "pubtator.review_quickstart",
             "pubtator.diagnostics",
@@ -339,6 +373,7 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
                 "pubtator.list_research_sessions",
                 "pubtator.index_review_evidence",
                 "pubtator.inspect_review_index",
+                "pubtator.ground_question",
                 "pubtator.retrieve_review_context",
                 "pubtator.retrieve_review_context_batch",
                 "pubtator.get_review_passages_by_id",
@@ -446,6 +481,10 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
                 "response_mode": "compact",
                 "max_chars": 12000,
                 "max_response_chars": 24000,
+            },
+            "pubtator.ground_question": {
+                "question": "Does colchicine prevent FMF flares?",
+                "max_pmids": 8,
             },
             "pubtator.workflow_help": {
                 "task": "clinical_genetics_review",
@@ -579,6 +618,7 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
             },
             "tools": [
                 "pubtator.index_review_evidence",
+                "pubtator.ground_question",
                 "pubtator.review_quickstart",
                 "pubtator.stage_research_session",
                 "pubtator.get_research_session_status",
@@ -607,6 +647,8 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
                 "preflight candidate PMIDs to estimate source coverage",
                 "for casual sessions, call review_quickstart to search, stage/index, inspect, "
                 "and return a review_id/session_id handoff",
+                "for one-call grounded evidence, call ground_question to search, index, inspect, "
+                "and retrieve compact citable context",
                 "feed discovery candidate PMIDs into stage_research_session for screening",
                 "stage live research sessions from a query or PMID list before retrieval",
                 "pass curated discovery candidate PMIDs to index_review_evidence for durable retrieval",
@@ -643,8 +685,8 @@ def get_capabilities_resource(
         "transport": "streamable_http",
         "endpoint": "/mcp",
         "research_use_only": True,
-        "core_workflow_tools": CORE_WORKFLOW_TOOLS,
-        "tool_categories": TOOL_CATEGORIES,
+        "core_workflow_tools": _core_workflow_tools(),
+        "tool_categories": _tool_categories(),
         "next_tool": "pubtator.workflow_help",
     }
     allowed_tools = tool_names_for_profile(profile) if profile is not None else None
@@ -657,7 +699,7 @@ def get_capabilities_resource(
     if profile is not None:
         rich_details["workflow_help"] = get_workflow_help_resource(profile=profile)
     detail_overrides: dict[str, Any] = {
-        "sample_calls": SAMPLE_CALLS,
+        "sample_calls": _sample_calls(),
         "schema_policy": SCHEMA_POLICY,
         "preferred_tool_names": PREFERRED_TOOL_NAMES,
     }

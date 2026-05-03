@@ -320,6 +320,22 @@ class ReviewQuickstartResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class GroundQuestionResponse(BaseModel):
+    """Composite one-call grounded question workflow response."""
+
+    success: bool = True
+    question: str
+    review_id: str
+    selected_pmids: list[str] = Field(default_factory=list)
+    search_total_results: int = 0
+    preparation_status: PreparationStatus | None = None
+    coverage_summary: dict[str, int] = Field(default_factory=dict)
+    ready_to_retrieve: bool = False
+    context: "RetrieveReviewContextBatchResponse | None" = None
+    next_tools: list[str] = Field(default_factory=list)
+    recovery: list[str] = Field(default_factory=list)
+
+
 class ResearchSessionStatusResponse(BaseModel):
     success: bool = True
     manifest: ResearchSessionManifest

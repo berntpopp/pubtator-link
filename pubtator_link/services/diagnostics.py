@@ -78,6 +78,7 @@ class DiagnosticsService:
                 "pubtator.inspect_review_index",
                 "pubtator.retrieve_review_context_batch",
             ],
+            "one_call": "pubtator.ground_question",
             "workflow_resource": "pubtator://workflow-help",
         }
 

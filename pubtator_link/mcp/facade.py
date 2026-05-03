@@ -28,6 +28,7 @@ def create_pubtator_mcp(profile: MCPToolProfile | str | None = None) -> FastMCP:
             "review-scoped RAG context, find entity relations, and submit/get text annotations. "
             "If tools are deferred, search for pubtator tools or call "
             "pubtator.get_server_capabilities. For grounded answers use "
+            "pubtator.ground_question; for explicit control use "
             "search -> preflight -> index -> inspect -> retrieve. Prefer compact passage tools before "
             "raw export because raw full BioC can be large. If retrieval returns zero "
             "passages, inspect the review index and retry shorter keyword queries or PMID "

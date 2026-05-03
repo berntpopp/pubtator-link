@@ -43,6 +43,7 @@ class ToolCatalogSupplement:
     stability: ToolStability
     do_not_use_for: tuple[str, ...]
     example: str
+    purpose: str = ""
     next_tools: tuple[str, ...] = ()
     resource_links: tuple[str, ...] = ()
 
@@ -198,6 +199,19 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         example='{"details":["tools","workflow_help"]}',
         next_tools=("pubtator.workflow_help",),
         resource_links=("pubtator://capabilities",),
+    ),
+    "pubtator.ground_question": ToolCatalogSupplement(
+        category="review",
+        profiles=("lean", "full"),
+        stability="lean",
+        purpose=(
+            "One-call grounded research workflow that searches literature, indexes "
+            "candidate PMIDs, inspects readiness, and retrieves compact citable context."
+        ),
+        do_not_use_for=("clinical decision support", "uncited answer generation"),
+        example='{"question":"Does colchicine prevent FMF flares?","max_pmids":8}',
+        next_tools=("pubtator.record_review_context", "pubtator.get_review_audit_trail"),
+        resource_links=("pubtator://workflow-help",),
     ),
     "pubtator.get_text_annotation_results": ToolCatalogSupplement(
         category="annotation",

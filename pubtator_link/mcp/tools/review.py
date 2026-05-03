@@ -7,6 +7,7 @@ from fastmcp import Context, FastMCP
 from pydantic import Field
 
 from pubtator_link.api.routes.dependencies import (
+    get_api_client,
     get_llm_review_context_service,
     get_research_session_service,
     get_review_audit_service,
@@ -32,6 +33,7 @@ from pubtator_link.mcp.service_adapters import (
     get_review_audit_trail_impl,
     get_review_index_summary_impl,
     get_review_passages_by_id_impl,
+    ground_question_impl,
     index_review_evidence_impl,
     inspect_review_index_impl,
     list_evidence_certainty_impl,
@@ -48,6 +50,7 @@ from pubtator_link.models.review_rerag import (
     BudgetStrategy,
     EvidenceCertaintyLabel,
     EvidenceCertaintyResponse,
+    GroundQuestionResponse,
     IndexReviewEvidenceResponse,
     InspectReviewIndexResponse,
     ListEvidenceCertaintyResponse,
@@ -291,6 +294,44 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
             call,
             pmids=pmids or [],
         )
+
+    @mcp_tool_for(
+        "lean",
+        "full",
+        name="pubtator.ground_question",
+        title="Ground Question",
+        output_schema=GroundQuestionResponse.model_json_schema(),
+        annotations=REVIEW_WRITE_ANNOTATIONS,
+    )
+    async def ground_question(
+        question: Annotated[str, Field(min_length=1)],
+        max_pmids: Annotated[int, Field(ge=1, le=20)] = 8,
+        review_id: Annotated[str | None, Field(min_length=1)] = None,
+        entity_ids: list[str] | None = None,
+        guideline_boost: bool = True,
+        wait_until_ready: bool = True,
+        timeout_ms: Annotated[int, Field(ge=0, le=120_000)] = 30_000,
+    ) -> dict[str, Any]:
+        """Use this when a user wants one compact grounded evidence workflow from a question: search literature, index candidate PMIDs, inspect readiness, and retrieve citable review context."""
+
+        async def call() -> dict[str, Any]:
+            client = await get_api_client()
+            queue = await get_review_queue()
+            context_service = await get_review_context_service()
+            return await ground_question_impl(
+                client=client,
+                queue=queue,
+                context_service=context_service,
+                question=question,
+                max_pmids=max_pmids,
+                review_id=review_id,
+                entity_ids=entity_ids,
+                guideline_boost=guideline_boost,
+                wait_until_ready=wait_until_ready,
+                timeout_ms=timeout_ms,
+            )
+
+        return await run_mcp_tool("pubtator.ground_question", call)
 
     @mcp_tool_for(
         "full",

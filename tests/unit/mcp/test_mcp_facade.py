@@ -29,6 +29,7 @@ EXPECTED_PUBLIC_TOOL_NAMES = {
     "pubtator.preflight_review_sources",
     "pubtator.index_review_evidence",
     "pubtator.inspect_review_index",
+    "pubtator.ground_question",
     "pubtator.retrieve_review_context",
     "pubtator.retrieve_review_context_batch",
     "pubtator.get_review_passages_by_id",
@@ -186,6 +187,19 @@ def test_review_quickstart_schema_is_flat_and_returns_retrieval_handoff() -> Non
     assert schema["properties"]["n_pmids"]["default"] == 8
     assert output_schema["properties"]["ready_to_retrieve"]
     assert output_schema["properties"]["next_commands"]
+
+
+def test_ground_question_schema_exposes_one_call_arguments() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp()._tool_manager._tools["pubtator.ground_question"]
+    properties = tool.parameters["properties"]
+
+    assert properties["question"]["type"] == "string"
+    assert properties["max_pmids"]["minimum"] == 1
+    assert properties["max_pmids"]["maximum"] == 20
+    assert properties["wait_until_ready"]["default"] is True
+    assert tool.output_schema["title"] == "GroundQuestionResponse"
 
 
 def test_index_review_evidence_schema_does_not_expose_prepare_mode() -> None:

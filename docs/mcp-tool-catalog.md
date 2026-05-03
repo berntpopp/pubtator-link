@@ -269,6 +269,20 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Resource links: None
 - Output schema: `TextAnnotationResultResponse`; has_output_schema: `yes`
 
+## `pubtator.ground_question`
+
+- Name: `pubtator.ground_question`
+- Title: Ground Question
+- Category: `review`
+- Profiles: `lean`, `full`
+- Stability: `lean`
+- Description: Use this when a user wants one compact grounded evidence workflow from a question: search literature, index candidate PMIDs, inspect readiness, and retrieve citable review context.
+- Do not use for: `clinical decision support`, `uncited answer generation`
+- Example: `{"question":"Does colchicine prevent FMF flares?","max_pmids":8}`
+- Next tools by profile: lean: `pubtator.record_review_context`, `pubtator.get_review_audit_trail`; full: `pubtator.record_review_context`, `pubtator.get_review_audit_trail`
+- Resource links: `pubtator://workflow-help`
+- Output schema: `GroundQuestionResponse`; has_output_schema: `yes`
+
 ## `pubtator.index_review_evidence`
 
 - Name: `pubtator.index_review_evidence`
