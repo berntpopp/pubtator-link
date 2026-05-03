@@ -402,6 +402,9 @@ def test_capabilities_document_new_budget_and_stable_citation_fields() -> None:
         "default": "disabled",
         "scope": "open_access_records_only",
     }
+    assert capabilities["budgeting_defaults"]["batch_max_chars"] == 24000
+    assert capabilities["budgeting_defaults"]["batch_max_response_chars"] == 48000
+    assert capabilities["budgeting_defaults"]["batch_budget_source"] == "auto_fit_when_omitted"
 
 
 def test_capabilities_document_error_recovery_and_compact_search() -> None:

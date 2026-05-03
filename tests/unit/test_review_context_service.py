@@ -891,6 +891,83 @@ async def test_batch_retrieval_deduplicates_and_preserves_per_query_diagnostics(
 
 
 @pytest.mark.asyncio
+async def test_batch_retrieval_copies_budget_source_to_response_budgets() -> None:
+    repository = FakeReviewContextRepository(
+        [_passage("p1", pmid="111", text="first passage", lexical_rank=9.0)]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["colchicine children"],
+            max_total_passages=14,
+            max_chars_per_passage=2200,
+            max_chars=30800,
+            max_response_chars=61600,
+            budget_source="auto_fit",
+        ),
+    )
+
+    assert response.budget_source == "auto_fit"
+    assert response.budget is not None
+    assert response.budget.budget_source == "auto_fit"
+    assert response.merged_context_pack.budget is not None
+    assert response.merged_context_pack.budget.budget_source == "auto_fit"
+
+
+@pytest.mark.asyncio
+async def test_batch_dry_run_copies_budget_source_to_response_budgets() -> None:
+    repository = FakeReviewContextRepository(
+        [_passage("p1", pmid="111", text="first passage", lexical_rank=9.0)]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["colchicine children"],
+            max_total_passages=14,
+            max_chars_per_passage=2200,
+            max_chars=30800,
+            max_response_chars=61600,
+            budget_source="auto_fit",
+            dry_run=True,
+        ),
+    )
+
+    assert response.budget_source == "auto_fit"
+    assert response.budget is not None
+    assert response.budget.budget_source == "auto_fit"
+    assert response.merged_context_pack.budget is not None
+    assert response.merged_context_pack.budget.budget_source == "auto_fit"
+
+
+@pytest.mark.asyncio
+async def test_batch_retrieval_ignores_spoofed_auto_fit_budget_source() -> None:
+    repository = FakeReviewContextRepository(
+        [_passage("p1", pmid="111", text="first passage", lexical_rank=9.0)]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["colchicine children"],
+            max_chars=24000,
+            max_response_chars=48000,
+            budget_source="auto_fit",
+        ),
+    )
+
+    assert response.budget_source == "default"
+    assert response.budget is not None
+    assert response.budget.budget_source == "default"
+    assert response.merged_context_pack.budget is not None
+    assert response.merged_context_pack.budget.budget_source == "default"
+
+
+@pytest.mark.asyncio
 async def test_batch_retrieval_reads_shared_state_once_per_batch() -> None:
     repository = FakeReviewContextRepository(
         [_passage("p1", pmid="111", text="first passage", lexical_rank=9.0)]

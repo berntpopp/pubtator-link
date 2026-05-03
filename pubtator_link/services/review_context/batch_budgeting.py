@@ -16,6 +16,7 @@ from pubtator_link.models.review_rerag import (
     SourceBudgetSummary,
     SourceCoverage,
     SourceDroppedSummary,
+    estimate_tokens_from_chars,
 )
 from pubtator_link.services.review_context.diagnostics import query_summary
 from pubtator_link.services.review_context.packing import context_budget, pack_totals
@@ -505,20 +506,42 @@ def build_dropped_summary(
         "passage_over_max_chars_per_passage",
     }
     budget_advice = None
-    if budget_reasons.intersection(by_reason):
+    budget_drops = [item for item in dropped if item.reason in budget_reasons]
+    if budget_drops:
+        increase_max_chars_to = min(
+            50000,
+            max(request.max_chars + 2000, int(request.max_chars * 1.5)),
+        )
+        increase_max_response_chars_to = min(
+            100000,
+            max(
+                request.max_response_chars + 4000,
+                int(request.max_response_chars * 1.5),
+            ),
+        )
+        lower_max_passages_per_query_to = max(1, request.max_passages_per_query // 2)
+        dropped_pmids = list(dict.fromkeys(item.pmid for item in budget_drops if item.pmid))
+        dropped_priority_pmids = [
+            pmid for pmid in request.prioritize_pmids if pmid in set(dropped_pmids)
+        ][:5]
+        estimated_tokens_to_unlock = estimate_tokens_from_chars(
+            sum(item.char_count or 0 for item in budget_drops)
+        )
+        retry_arguments: dict[str, object] = {
+            "max_chars": increase_max_chars_to,
+            "max_response_chars": increase_max_response_chars_to,
+            "max_passages_per_query": lower_max_passages_per_query_to,
+        }
+        if dropped_priority_pmids:
+            retry_arguments["prioritize_pmids"] = dropped_priority_pmids
         budget_advice = RecoveryBudgetAdvice(
-            increase_max_chars_to=min(
-                50000,
-                max(request.max_chars + 2000, int(request.max_chars * 1.5)),
-            ),
-            increase_max_response_chars_to=min(
-                100000,
-                max(
-                    request.max_response_chars + 4000,
-                    int(request.max_response_chars * 1.5),
-                ),
-            ),
-            lower_max_passages_per_query_to=max(1, request.max_passages_per_query // 2),
+            increase_max_chars_to=increase_max_chars_to,
+            increase_max_response_chars_to=increase_max_response_chars_to,
+            lower_max_passages_per_query_to=lower_max_passages_per_query_to,
+            estimated_tokens_to_unlock=estimated_tokens_to_unlock,
+            dropped_pmid_count=len(dropped_pmids),
+            dropped_priority_pmids=dropped_priority_pmids,
+            retry_arguments=retry_arguments,
         )
     return SourceDroppedSummary(
         total_dropped=len(dropped),

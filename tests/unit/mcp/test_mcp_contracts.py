@@ -24,6 +24,14 @@ def test_capabilities_details_are_opt_in() -> None:
     assert "singleton string" in payload["details"]["schema_policy"]["list_inputs"].lower()
 
 
+def test_batch_retrieval_sample_omits_auto_fit_budget_arguments() -> None:
+    payload = get_capabilities_resource(details=["sample_calls"])
+    sample = payload["details"]["sample_calls"]["pubtator.retrieve_review_context_batch"]
+
+    assert "max_chars" not in sample
+    assert "max_response_chars" not in sample
+
+
 def test_capabilities_document_guideline_search_as_filtered_literature_search() -> None:
     payload = get_capabilities_resource(details=["sample_calls", "schema_policy"])
     sample_call = payload["details"]["sample_calls"]["pubtator.search_guidelines"]

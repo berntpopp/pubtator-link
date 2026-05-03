@@ -48,6 +48,7 @@ CoverageReason = Literal[
     "unknown",
 ]
 BudgetStrategy = Literal["query_fair", "source_fair", "scarcity_first"]
+BudgetSource = Literal["caller", "auto_fit", "default"]
 EvidenceCertaintyLabel = Literal["high", "moderate", "low", "very_low", "not_rated"]
 ZeroResultReason = Literal[
     "review_not_indexed",
@@ -355,7 +356,7 @@ class RetrieveReviewContextRequest(BaseModel):
     entity_ids: list[str] = Field(default_factory=list)
     sections: list[str] = Field(default_factory=list)
     max_passages: int = Field(default=8, ge=1, le=30)
-    max_chars: int = Field(default=6000, ge=500, le=30000)
+    max_chars: int = Field(default=6000, ge=500, le=50000)
     max_passages_per_pmid: int = Field(default=2, ge=1, le=10)
     include_diagnostics: bool = False
     include_tables: bool = False
@@ -380,6 +381,7 @@ class ContextBudget(BaseModel):
     """Approximate context budget accounting for an MCP/REST response."""
 
     max_chars: int
+    budget_source: BudgetSource = "default"
     text_chars: int
     estimated_json_chars: int
     estimated_total_chars: int
@@ -411,6 +413,10 @@ class RecoveryBudgetAdvice(BaseModel):
     increase_max_chars_to: int | None = Field(default=None, ge=500)
     increase_max_response_chars_to: int | None = Field(default=None, ge=2000)
     lower_max_passages_per_query_to: int | None = Field(default=None, ge=1)
+    estimated_tokens_to_unlock: int | None = Field(default=None, ge=0)
+    dropped_pmid_count: int = Field(default=0, ge=0)
+    dropped_priority_pmids: list[str] = Field(default_factory=list)
+    retry_arguments: dict[str, Any] = Field(default_factory=dict)
 
 
 class RecoveryHint(BaseModel):
@@ -653,8 +659,9 @@ class RetrieveReviewContextBatchRequest(BaseModel):
     sections: list[str] = Field(default_factory=list)
     max_passages_per_query: int = Field(default=8, ge=1, le=30)
     max_total_passages: int = Field(default=20, ge=1, le=60)
-    max_chars: int = Field(default=12000, ge=500, le=50000)
-    max_response_chars: int = Field(default=24000, ge=2000, le=100000)
+    max_chars: int = Field(default=24000, ge=500, le=50000)
+    max_response_chars: int = Field(default=48000, ge=2000, le=100000)
+    budget_source: BudgetSource = "default"
     deduplicate_passages: bool = True
     budget_strategy: BudgetStrategy = "query_fair"
     min_passages_per_source: int = Field(default=1, ge=1, le=10)
@@ -686,6 +693,7 @@ class RetrieveReviewContextBatchResponse(BaseModel):
     source_budget_summaries: list[SourceBudgetSummary] = Field(default_factory=list)
     pmid_status_summary: list[PmidStatusSummary] = Field(default_factory=list)
     budget: ContextBudget | None = None
+    budget_source: BudgetSource = "default"
     cache_key: str | None = None
     corpus_snapshot_date: str | None = None
     index_snapshot_date: str | None = None

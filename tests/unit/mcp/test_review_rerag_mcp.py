@@ -49,6 +49,22 @@ def test_batch_response_mode_schema_includes_quotes() -> None:
     assert "quotes" in schema["properties"]["response_mode"]["enum"]
 
 
+def test_retrieve_review_context_batch_schema_uses_auto_fit_budget_defaults() -> None:
+    mcp = create_pubtator_mcp()
+    schema = mcp._tool_manager._tools["pubtator.retrieve_review_context_batch"].parameters
+
+    assert "max_chars" not in schema.get("required", [])
+    assert "max_response_chars" not in schema.get("required", [])
+    for field in ("max_chars", "max_response_chars"):
+        property_schema = schema["properties"][field]
+        assert property_schema.get("default") is None
+        any_of = property_schema.get("anyOf", [])
+        assert (
+            any(option.get("type") == "null" for option in any_of)
+            or property_schema.get("type") == "null"
+        )
+
+
 def test_review_tools_accept_context_without_exposing_ctx_parameter() -> None:
     mcp = create_pubtator_mcp()
     tool = mcp._tool_manager._tools["pubtator.retrieve_review_context_batch"]
