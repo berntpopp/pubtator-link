@@ -11,6 +11,7 @@ from pubtator_link.models.review_rerag import (
     BudgetSource,
     ContextPack,
     ContextPassage,
+    EmbeddingRerankDiagnostics,
     FailedSourceSummary,
     InspectReviewIndexRequest,
     InspectReviewIndexResponse,
@@ -32,6 +33,11 @@ from pubtator_link.models.review_rerag import (
     stable_citation_key_for_passage,
 )
 from pubtator_link.services.provenance import corpus_snapshot_date, stable_cache_key
+from pubtator_link.services.review_context.embeddings import (
+    EmbeddingProvider,
+    text_hash,
+)
+from pubtator_link.services.review_context.embedding_rerank import rerank_with_embeddings
 from pubtator_link.services.review_context.batch_budgeting import merge_batch_context
 from pubtator_link.services.review_context.budgets import (
     REVIEW_BATCH_DEFAULT_MAX_CHARS,
@@ -148,6 +154,16 @@ class ReviewContextRepository(Protocol):
     ) -> list[ReviewPassageRow]:
         """Return passages around an anchor passage."""
 
+    async def get_passage_embeddings(
+        self,
+        review_id: str,
+        passage_ids: Sequence[str],
+        *,
+        model_name: str,
+        passage_text_hashes: dict[str, str] | None = None,
+    ) -> dict[str, list[float]]:
+        """Return stored passage embeddings keyed by passage ID."""
+
 
 class PublicationMetadataLookup(Protocol):
     async def get_metadata(self, request: PublicationMetadataRequest) -> Any:
@@ -175,10 +191,22 @@ class ReviewContextService:
         *,
         metadata_service: PublicationMetadataLookup | None = None,
         retrieval_concurrency: int = 4,
+        embedding_provider: EmbeddingProvider | None = None,
+        embedding_rerank_enabled: bool = False,
+        embedding_model: str = "BAAI/bge-small-en-v1.5",
+        embedding_dim: int = 384,
+        embedding_top_k: int = 50,
+        embedding_rrf_k: int = 60,
     ) -> None:
         self.repository = repository
         self.metadata_service = metadata_service
         self.retrieval_concurrency = retrieval_concurrency
+        self.embedding_provider = embedding_provider
+        self.embedding_rerank_enabled = embedding_rerank_enabled
+        self.embedding_model = embedding_model
+        self.embedding_dim = embedding_dim
+        self.embedding_top_k = embedding_top_k
+        self.embedding_rrf_k = embedding_rrf_k
 
     async def retrieve_context(
         self,
@@ -194,7 +222,7 @@ class ReviewContextService:
             pmids=request.pmids,
             sections=request.sections,
             session_id=request.session_id,
-            limit=80,
+            limit=self.embedding_top_k if self.embedding_rerank_enabled else 80,
         )
         return await self._assemble_retrieval_response(
             review_id=review_id,
@@ -210,9 +238,11 @@ class ReviewContextService:
         candidates: Sequence[ReviewPassageRow],
         snapshot: ReviewRetrievalSnapshot | None = None,
     ) -> RetrieveReviewContextResponse:
-        sorted_candidates = sorted(
-            candidates,
-            key=lambda row: rerank_key(row, section_policy=request.section_policy),
+        sorted_candidates, embedding_diagnostics = await self._rank_candidates(
+            review_id=review_id,
+            query=request.question,
+            candidates=candidates,
+            section_policy=request.section_policy,
         )
         packed = pack_passages(sorted_candidates, request)
         selected = packed.selected
@@ -240,6 +270,7 @@ class ReviewContextService:
                 indexed_pmids=snapshot.indexed_pmids if snapshot is not None else None,
                 failed_sources=snapshot.failed_sources if snapshot is not None else None,
             )
+            diagnostics.embedding_rerank = embedding_diagnostics
         if snapshot is None:
             prepared_pmids, still_preparing_pmids, failed_pmids = await self._preparation_pmids(
                 review_id,
@@ -333,7 +364,7 @@ class ReviewContextService:
                     pmids=request.pmids,
                     sections=request.sections,
                     session_id=request.session_id,
-                    limit=80,
+                    limit=self.embedding_top_k if self.embedding_rerank_enabled else 80,
                 )
                 result = await self._assemble_retrieval_response(
                     review_id=review_id,
@@ -508,6 +539,72 @@ class ReviewContextService:
             quotes=quotes,
             next_context_options=next_context_options,
         )
+
+    async def _rank_candidates(
+        self,
+        *,
+        review_id: str,
+        query: str,
+        candidates: Sequence[ReviewPassageRow],
+        section_policy: SampleSectionPolicy,
+    ) -> tuple[list[ReviewPassageRow], EmbeddingRerankDiagnostics | None]:
+        lexical_candidates = sorted(
+            candidates,
+            key=lambda row: rerank_key(row, section_policy=section_policy),
+        )
+        if not self.embedding_rerank_enabled:
+            return lexical_candidates, None
+
+        diagnostics = EmbeddingRerankDiagnostics(
+            enabled=True,
+            model_name=self.embedding_model,
+            embedding_dim=self.embedding_dim,
+            candidate_count=len(candidates),
+        )
+        if not candidates:
+            diagnostics.fallback_reason = "no_candidates"
+            return lexical_candidates, diagnostics
+        if self.embedding_provider is None:
+            diagnostics.fallback_reason = "provider_unavailable"
+            return lexical_candidates, diagnostics
+
+        passage_ids = [row.passage_id for row in lexical_candidates]
+        passage_hashes = {row.passage_id: text_hash(row.text) for row in lexical_candidates}
+        try:
+            embeddings = await self.repository.get_passage_embeddings(
+                review_id,
+                passage_ids,
+                model_name=self.embedding_model,
+                passage_text_hashes=passage_hashes,
+            )
+        except Exception:
+            diagnostics.fallback_reason = "embedding_fetch_failed"
+            return lexical_candidates, diagnostics
+
+        diagnostics.embedded_candidate_count = len(embeddings)
+        diagnostics.missing_embedding_count = len(candidates) - len(embeddings)
+        if not embeddings:
+            diagnostics.fallback_reason = "missing_embeddings"
+            return lexical_candidates, diagnostics
+
+        try:
+            query_embedding = await self.embedding_provider.embed_query(query)
+        except Exception:
+            diagnostics.fallback_reason = "query_embedding_failed"
+            return lexical_candidates, diagnostics
+
+        dense_scores = {
+            passage_id: _cosine_similarity(query_embedding, embedding)
+            for passage_id, embedding in embeddings.items()
+        }
+        reranked, rerank_diagnostics = rerank_with_embeddings(
+            lexical_candidates,
+            dense_scores=dense_scores,
+            rrf_k=self.embedding_rrf_k,
+        )
+        rerank_diagnostics.model_name = self.embedding_model
+        rerank_diagnostics.embedding_dim = self.embedding_dim
+        return reranked, rerank_diagnostics
 
     async def inspect_review_index(
         self,
@@ -913,6 +1010,18 @@ def _review_batch_cache_key(
             "request": request.model_dump(mode="json"),
         },
     )
+
+
+def _cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
+    pairs = list(zip(left, right, strict=False))
+    if not pairs:
+        return 0.0
+    dot = sum(left_value * right_value for left_value, right_value in pairs)
+    left_norm = sum(left_value * left_value for left_value, _right_value in pairs) ** 0.5
+    right_norm = sum(right_value * right_value for _left_value, right_value in pairs) ** 0.5
+    if left_norm == 0 or right_norm == 0:
+        return 0.0
+    return dot / (left_norm * right_norm)
 
 
 def _next_context_options(

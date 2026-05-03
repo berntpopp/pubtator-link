@@ -22,6 +22,7 @@ from pubtator_link.models.review_rerag import (
     ReviewSourceSummary,
 )
 from pubtator_link.services.review_context_service import ReviewContextService
+from pubtator_link.services.review_context.embeddings import EmbeddingProviderUnavailableError
 
 
 class FakeReviewContextRepository:
@@ -41,6 +42,8 @@ class FakeReviewContextRepository:
         self.available_sections_value: list[str] = []
         self.indexed_pmids_value: list[str] = []
         self.session_exists = True
+        self.embeddings_by_passage_id: dict[str, list[float]] = {}
+        self.embedding_calls: list[dict[str, object]] = []
         self.calls: dict[str, int] = {
             "preparation_status": 0,
             "indexed_pmids": 0,
@@ -213,6 +216,28 @@ class FakeReviewContextRepository:
         stop = anchor_index + after + 1
         return candidates[start:stop]
 
+    async def get_passage_embeddings(
+        self,
+        review_id: str,
+        passage_ids: Sequence[str],
+        *,
+        model_name: str,
+        passage_text_hashes: dict[str, str] | None = None,
+    ) -> dict[str, list[float]]:
+        self.embedding_calls.append(
+            {
+                "review_id": review_id,
+                "passage_ids": list(passage_ids),
+                "model_name": model_name,
+                "passage_text_hashes": passage_text_hashes,
+            }
+        )
+        return {
+            passage_id: self.embeddings_by_passage_id[passage_id]
+            for passage_id in passage_ids
+            if passage_id in self.embeddings_by_passage_id
+        }
+
 
 class FakeMetadataService:
     def __init__(self) -> None:
@@ -230,6 +255,24 @@ class FakeMetadataService:
             ],
             _meta={"next_commands": []},
         )
+
+
+class StaticQueryEmbeddingProvider:
+    model_name = "BAAI/bge-small-en-v1.5"
+    dim = 2
+
+    def __init__(self, *, fail_query: bool = False) -> None:
+        self.fail_query = fail_query
+        self.queries: list[str] = []
+
+    async def embed_query(self, text: str) -> list[float]:
+        self.queries.append(text)
+        if self.fail_query:
+            raise EmbeddingProviderUnavailableError("query model unavailable")
+        return [1.0, 0.0]
+
+    async def embed_passages(self, texts: Sequence[str]) -> list[list[float]]:
+        return [[1.0, 0.0] for _text in texts]
 
 
 class QueryMappedReviewContextRepository(FakeReviewContextRepository):
@@ -671,6 +714,159 @@ async def test_reference_passages_rank_after_body_sections_when_scores_tie() -> 
         "z-discuss",
         "a-ref",
     ]
+
+
+@pytest.mark.asyncio
+async def test_embedding_rerank_promotes_semantic_evidence_above_lexical_table() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage(
+                "table-lexical",
+                pmid="111",
+                text="Table row mentions colchicine.",
+                lexical_rank=10.0,
+                section="table",
+            ),
+            _passage(
+                "semantic-evidence",
+                pmid="222",
+                text="Dose adjustment reduced attacks in responders.",
+                lexical_rank=1.0,
+                section="DISCUSS",
+            ),
+        ]
+    )
+    repository.embeddings_by_passage_id = {"semantic-evidence": [1.0, 0.0]}
+    service = ReviewContextService(
+        repository,
+        embedding_provider=StaticQueryEmbeddingProvider(),
+        embedding_rerank_enabled=True,
+        embedding_dim=2,
+    )
+
+    response = await service.retrieve_context(
+        "review-1",
+        RetrieveReviewContextRequest(
+            question="dose adjustment evidence",
+            max_passages=2,
+            include_tables=True,
+            include_diagnostics=True,
+        ),
+    )
+
+    assert [passage.passage_id for passage in response.context_pack.passages] == [
+        "semantic-evidence",
+        "table-lexical",
+    ]
+    assert response.diagnostics is not None
+    assert response.diagnostics.embedding_rerank is not None
+    assert response.diagnostics.embedding_rerank.active is True
+    assert response.diagnostics.embedding_rerank.strategy == "lexical_top_k_dense_rrf"
+
+
+@pytest.mark.asyncio
+async def test_embedding_rerank_keeps_ref_below_evidence() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage("semantic-ref", pmid="111", text="Reference text.", lexical_rank=10.0, section="REF"),
+            _passage(
+                "semantic-evidence",
+                pmid="222",
+                text="Evidence text.",
+                lexical_rank=1.0,
+                section="DISCUSS",
+            ),
+        ]
+    )
+    repository.embeddings_by_passage_id = {
+        "semantic-ref": [1.0, 0.0],
+        "semantic-evidence": [0.5, 0.0],
+    }
+    service = ReviewContextService(
+        repository,
+        embedding_provider=StaticQueryEmbeddingProvider(),
+        embedding_rerank_enabled=True,
+        embedding_dim=2,
+    )
+
+    response = await service.retrieve_context(
+        "review-1",
+        RetrieveReviewContextRequest(
+            question="dose adjustment evidence",
+            max_passages=2,
+            include_references=True,
+            include_diagnostics=True,
+        ),
+    )
+
+    assert [passage.passage_id for passage in response.context_pack.passages] == [
+        "semantic-evidence",
+        "semantic-ref",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_embedding_rerank_missing_embeddings_falls_back_to_lexical_diagnostics() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage("lexical-first", pmid="111", text="Lexical first.", lexical_rank=10.0),
+            _passage("lexical-second", pmid="222", text="Lexical second.", lexical_rank=1.0),
+        ]
+    )
+    service = ReviewContextService(
+        repository,
+        embedding_provider=StaticQueryEmbeddingProvider(),
+        embedding_rerank_enabled=True,
+        embedding_dim=2,
+    )
+
+    response = await service.retrieve_context(
+        "review-1",
+        RetrieveReviewContextRequest(question="dose", max_passages=2, include_diagnostics=True),
+    )
+
+    assert [passage.passage_id for passage in response.context_pack.passages] == [
+        "lexical-first",
+        "lexical-second",
+    ]
+    assert response.diagnostics is not None
+    assert response.diagnostics.embedding_rerank is not None
+    assert response.diagnostics.embedding_rerank.active is False
+    assert response.diagnostics.embedding_rerank.fallback_reason == "missing_embeddings"
+
+
+@pytest.mark.asyncio
+async def test_embedding_rerank_provider_unavailable_falls_back_to_lexical_diagnostics() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage("lexical-first", pmid="111", text="Lexical first.", lexical_rank=10.0),
+            _passage("semantic-second", pmid="222", text="Semantic second.", lexical_rank=1.0),
+        ]
+    )
+    repository.embeddings_by_passage_id = {
+        "lexical-first": [0.0, 1.0],
+        "semantic-second": [1.0, 0.0],
+    }
+    service = ReviewContextService(
+        repository,
+        embedding_provider=StaticQueryEmbeddingProvider(fail_query=True),
+        embedding_rerank_enabled=True,
+        embedding_dim=2,
+    )
+
+    response = await service.retrieve_context(
+        "review-1",
+        RetrieveReviewContextRequest(question="dose", max_passages=2, include_diagnostics=True),
+    )
+
+    assert [passage.passage_id for passage in response.context_pack.passages] == [
+        "lexical-first",
+        "semantic-second",
+    ]
+    assert response.diagnostics is not None
+    assert response.diagnostics.embedding_rerank is not None
+    assert response.diagnostics.embedding_rerank.active is False
+    assert response.diagnostics.embedding_rerank.fallback_reason == "query_embedding_failed"
 
 
 @pytest.mark.asyncio

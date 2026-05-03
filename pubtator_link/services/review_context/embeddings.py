@@ -62,9 +62,11 @@ class SentenceTransformerEmbeddingProvider:
         *,
         model_name: str = "BAAI/bge-small-en-v1.5",
         dim: int = 384,
+        device: str = "auto",
     ) -> None:
         self.model_name = model_name
         self.dim = dim
+        self.device = device
         self._model: Any | None = None
         self._np: Any | None = None
 
@@ -98,5 +100,6 @@ class SentenceTransformerEmbeddingProvider:
             ) from exc
 
         self._np = np
-        self._model = SentenceTransformer(self.model_name)
+        device = None if self.device == "auto" else self.device
+        self._model = SentenceTransformer(self.model_name, device=device)
         return self._model, self._np
