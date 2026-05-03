@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any, Protocol
 from urllib.parse import quote, urlencode
 
@@ -132,6 +133,18 @@ class PublicationMetadataLookup(Protocol):
         """Return publication metadata for PMIDs."""
 
 
+@dataclass(frozen=True)
+class ReviewRetrievalSnapshot:
+    preparation_status: PreparationStatus
+    prepared_pmids: list[str]
+    still_preparing_pmids: list[str]
+    failed_pmids: list[str]
+    indexed_pmids: list[str]
+    available_sections: list[str]
+    source_summaries: list[ReviewSourceSummary]
+    failed_sources: list[FailedSourceSummary]
+
+
 class ReviewContextService:
     """Retrieve, rerank, and pack review-scoped context passages."""
 
@@ -162,6 +175,20 @@ class ReviewContextService:
             session_id=request.session_id,
             limit=80,
         )
+        return await self._assemble_retrieval_response(
+            review_id=review_id,
+            request=request,
+            candidates=candidates,
+        )
+
+    async def _assemble_retrieval_response(
+        self,
+        *,
+        review_id: str,
+        request: RetrieveReviewContextRequest,
+        candidates: Sequence[ReviewPassageRow],
+        snapshot: ReviewRetrievalSnapshot | None = None,
+    ) -> RetrieveReviewContextResponse:
         sorted_candidates = sorted(candidates, key=rerank_key)
         packed = pack_passages(sorted_candidates, request)
         selected = packed.selected
@@ -185,14 +212,23 @@ class ReviewContextService:
                 request=request,
                 candidate_count=len(candidates),
                 selected_count=len(selected),
+                available_sections=snapshot.available_sections if snapshot is not None else None,
+                indexed_pmids=snapshot.indexed_pmids if snapshot is not None else None,
+                failed_sources=snapshot.failed_sources if snapshot is not None else None,
             )
-        prepared_pmids, still_preparing_pmids, failed_pmids = await self._preparation_pmids(
-            review_id,
-            session_id=request.session_id,
-        )
-        preparation_status = await self._preparation_status(
-            review_id, session_id=request.session_id
-        )
+        if snapshot is None:
+            prepared_pmids, still_preparing_pmids, failed_pmids = await self._preparation_pmids(
+                review_id,
+                session_id=request.session_id,
+            )
+            preparation_status = await self._preparation_status(
+                review_id, session_id=request.session_id
+            )
+        else:
+            prepared_pmids = snapshot.prepared_pmids
+            still_preparing_pmids = snapshot.still_preparing_pmids
+            failed_pmids = snapshot.failed_pmids
+            preparation_status = snapshot.preparation_status
         response = RetrieveReviewContextResponse(
             review_id=review_id,
             context_pack=ContextPack(
@@ -234,6 +270,9 @@ class ReviewContextService:
     ) -> RetrieveReviewContextBatchResponse:
         """Retrieve multiple query variants and merge selected passages."""
         await self._ensure_session_exists(review_id, request.session_id)
+        snapshot = await self._review_retrieval_snapshot(
+            review_id, session_id=request.session_id
+        )
         results: list[RetrieveReviewContextResponse] = []
         query_results: list[RetrieveReviewContextResponse] = []
 
@@ -244,9 +283,18 @@ class ReviewContextService:
             query: str,
         ) -> tuple[int, RetrieveReviewContextResponse]:
             async with semaphore:
-                result = await self.retrieve_context(
+                candidates = await self.repository.search_passages(
                     review_id,
-                    RetrieveReviewContextRequest(
+                    query,
+                    entity_ids=request.entity_ids,
+                    pmids=request.pmids,
+                    sections=request.sections,
+                    session_id=request.session_id,
+                    limit=80,
+                )
+                result = await self._assemble_retrieval_response(
+                    review_id=review_id,
+                    request=RetrieveReviewContextRequest(
                         question=query,
                         session_id=request.session_id,
                         pmids=request.pmids,
@@ -262,6 +310,8 @@ class ReviewContextService:
                         allow_truncated_passages=request.allow_truncated_passages,
                         max_chars_per_passage=request.max_chars_per_passage,
                     ),
+                    candidates=candidates,
+                    snapshot=snapshot,
                 )
                 return query_index, result
 
@@ -280,9 +330,7 @@ class ReviewContextService:
 
         coverage_by_source = {}
         if request.budget_strategy != "query_fair":
-            coverage_by_source = await self._source_coverage_by_key(
-                review_id, session_id=request.session_id
-            )
+            coverage_by_source = _source_coverage_by_key(snapshot.source_summaries)
         merge_request = (
             request.model_copy(update={"response_mode": "compact"}) if request.dry_run else request
         )
@@ -345,17 +393,15 @@ class ReviewContextService:
                     dropped_summary=merged.dropped_summary,
                     recovery=recovery,
                 ),
-                preparation_status=await self._preparation_status(
-                    review_id, session_id=request.session_id
-                ),
+                preparation_status=snapshot.preparation_status,
                 budget=dry_run_budget,
                 cache_key=_review_batch_cache_key(review_id, request),
                 corpus_snapshot_date=corpus_snapshot_date(),
                 index_snapshot_date=index_snapshot_date(),
                 source_versions={"review_index": "live"},
-                prepared_pmids=[],
-                still_preparing_pmids=[],
-                failed_pmids=[],
+                prepared_pmids=snapshot.prepared_pmids,
+                still_preparing_pmids=snapshot.still_preparing_pmids,
+                failed_pmids=snapshot.failed_pmids,
                 recovery=recovery,
                 next_context_options=next_context_options,
             )
@@ -377,10 +423,6 @@ class ReviewContextService:
         )
         quotes = quotes_from_passages(merged.passages) if request.response_mode == "quotes" else []
         merged_passages = [] if request.response_mode == "quotes" else merged.passages
-        prepared_pmids, still_preparing_pmids, failed_pmids = await self._preparation_pmids(
-            review_id,
-            session_id=request.session_id,
-        )
         return RetrieveReviewContextBatchResponse(
             review_id=review_id,
             response_mode=request.response_mode,
@@ -401,17 +443,15 @@ class ReviewContextService:
                 dropped_summary=merged.dropped_summary,
                 recovery=recovery,
             ),
-            preparation_status=await self._preparation_status(
-                review_id, session_id=request.session_id
-            ),
+            preparation_status=snapshot.preparation_status,
             budget=budget,
             cache_key=_review_batch_cache_key(review_id, request),
             corpus_snapshot_date=corpus_snapshot_date(),
             index_snapshot_date=index_snapshot_date(),
             source_versions={"review_index": "live"},
-            prepared_pmids=prepared_pmids,
-            still_preparing_pmids=still_preparing_pmids,
-            failed_pmids=failed_pmids,
+            prepared_pmids=snapshot.prepared_pmids,
+            still_preparing_pmids=snapshot.still_preparing_pmids,
+            failed_pmids=snapshot.failed_pmids,
             recovery=recovery,
             quotes=quotes,
             next_context_options=next_context_options,
@@ -610,20 +650,44 @@ class ReviewContextService:
             sample_per_pmid=0,
             session_id=session_id,
         )
-        coverage_by_key: dict[str, SourceCoverage] = {}
-        for source in sources:
-            source_keys = [source.source_id]
-            if source.pmid is not None:
-                source_keys.append(source.pmid)
-            for source_key in source_keys:
-                existing = coverage_by_key.get(source_key)
-                if existing is None or SOURCE_COVERAGE_SCARCITY_PRIORITY.get(
-                    source.coverage, SOURCE_COVERAGE_SCARCITY_PRIORITY["unknown"]
-                ) < SOURCE_COVERAGE_SCARCITY_PRIORITY.get(
-                    existing, SOURCE_COVERAGE_SCARCITY_PRIORITY["unknown"]
-                ):
-                    coverage_by_key[source_key] = source.coverage
-        return coverage_by_key
+        return _source_coverage_by_key(sources)
+
+    async def _review_retrieval_snapshot(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> ReviewRetrievalSnapshot:
+        (
+            preparation_status,
+            indexed_pmids,
+            available_sections,
+            source_summaries,
+            failed_sources,
+        ) = await asyncio.gather(
+            self._preparation_status(review_id, session_id=session_id),
+            self.repository.indexed_pmids(review_id, session_id=session_id),
+            self.repository.available_sections(review_id, session_id=session_id),
+            self.repository.list_review_sources(
+                review_id,
+                pmids=None,
+                include_passage_samples=False,
+                sample_per_pmid=0,
+                session_id=session_id,
+            ),
+            self.repository.list_review_failed_sources(review_id, session_id=session_id),
+        )
+        prepared_pmids, still_preparing_pmids, failed_pmids = _preparation_pmids_from_sources(
+            source_summaries,
+            failed_sources,
+        )
+        return ReviewRetrievalSnapshot(
+            preparation_status=preparation_status,
+            prepared_pmids=prepared_pmids,
+            still_preparing_pmids=still_preparing_pmids,
+            failed_pmids=failed_pmids,
+            indexed_pmids=indexed_pmids,
+            available_sections=available_sections,
+            source_summaries=source_summaries,
+            failed_sources=failed_sources,
+        )
 
     async def _preparation_status(
         self, review_id: str, *, session_id: str | None = None
@@ -653,22 +717,48 @@ class ReviewContextService:
         failed_sources = await self.repository.list_review_failed_sources(
             review_id, session_id=session_id
         )
-        prepared = sorted(
-            {
-                source.pmid
-                for source in sources
-                if source.pmid is not None and source.job_status in {"complete", "partial"}
-            }
-        )
-        still_preparing = sorted(
-            {
-                source.pmid
-                for source in sources
-                if source.pmid is not None and source.job_status in {"queued", "running"}
-            }
-        )
-        failed = sorted({source.pmid for source in failed_sources if source.pmid is not None})
-        return prepared, still_preparing, failed
+        return _preparation_pmids_from_sources(sources, failed_sources)
+
+
+def _preparation_pmids_from_sources(
+    sources: Sequence[ReviewSourceSummary],
+    failed_sources: Sequence[FailedSourceSummary],
+) -> tuple[list[str], list[str], list[str]]:
+    prepared = sorted(
+        {
+            source.pmid
+            for source in sources
+            if source.pmid is not None and source.job_status in {"complete", "partial"}
+        }
+    )
+    still_preparing = sorted(
+        {
+            source.pmid
+            for source in sources
+            if source.pmid is not None and source.job_status in {"queued", "running"}
+        }
+    )
+    failed = sorted({source.pmid for source in failed_sources if source.pmid is not None})
+    return prepared, still_preparing, failed
+
+
+def _source_coverage_by_key(
+    sources: Sequence[ReviewSourceSummary],
+) -> dict[str, SourceCoverage]:
+    coverage_by_key: dict[str, SourceCoverage] = {}
+    for source in sources:
+        source_keys = [source.source_id]
+        if source.pmid is not None:
+            source_keys.append(source.pmid)
+        for source_key in source_keys:
+            existing = coverage_by_key.get(source_key)
+            if existing is None or SOURCE_COVERAGE_SCARCITY_PRIORITY.get(
+                source.coverage, SOURCE_COVERAGE_SCARCITY_PRIORITY["unknown"]
+            ) < SOURCE_COVERAGE_SCARCITY_PRIORITY.get(
+                existing, SOURCE_COVERAGE_SCARCITY_PRIORITY["unknown"]
+            ):
+                coverage_by_key[source_key] = source.coverage
+    return coverage_by_key
 
 
 def _review_batch_cache_key(

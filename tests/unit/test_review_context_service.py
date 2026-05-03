@@ -38,6 +38,12 @@ class FakeReviewContextRepository:
         self.available_sections_value: list[str] = []
         self.indexed_pmids_value: list[str] = []
         self.session_exists = True
+        self.calls: dict[str, int] = {
+            "preparation_status": 0,
+            "indexed_pmids": 0,
+            "available_sections": 0,
+            "list_review_failed_sources": 0,
+        }
 
     async def research_session_exists(self, review_id: str, session_id: str) -> bool:
         return self.session_exists
@@ -69,6 +75,7 @@ class FakeReviewContextRepository:
     async def preparation_status(
         self, review_id: str, *, session_id: str | None = None
     ) -> dict[str, int]:
+        self.calls["preparation_status"] += 1
         return self.preparation_status_value
 
     async def list_review_sources(
@@ -117,6 +124,7 @@ class FakeReviewContextRepository:
     async def list_review_failed_sources(
         self, review_id: str, *, session_id: str | None = None
     ) -> list[FailedSourceSummary]:
+        self.calls["list_review_failed_sources"] += 1
         self.inspect_calls.append(
             {
                 "method": "list_review_failed_sources",
@@ -137,9 +145,11 @@ class FakeReviewContextRepository:
     async def available_sections(
         self, review_id: str, *, session_id: str | None = None
     ) -> list[str]:
+        self.calls["available_sections"] += 1
         return self.available_sections_value
 
     async def indexed_pmids(self, review_id: str, *, session_id: str | None = None) -> list[str]:
+        self.calls["indexed_pmids"] += 1
         return self.indexed_pmids_value
 
     async def get_passages_by_id(
@@ -318,18 +328,14 @@ class CoroutineCountingReviewContextService(ReviewContextService):
         self.max_created_before_release = 0
         self.release = asyncio.Event()
 
-    async def retrieve_context(
-        self,
-        review_id: str,
-        request: RetrieveReviewContextRequest,
-    ) -> RetrieveReviewContextResponse:
+    async def _assemble_retrieval_response(self, **kwargs: object) -> RetrieveReviewContextResponse:
         self.created_count += 1
         self.max_created_before_release = max(
             self.max_created_before_release,
             self.created_count,
         )
         await self.release.wait()
-        return await super().retrieve_context(review_id, request)
+        return await super()._assemble_retrieval_response(**kwargs)
 
 
 def _passage(
@@ -885,6 +891,29 @@ async def test_batch_retrieval_deduplicates_and_preserves_per_query_diagnostics(
 
 
 @pytest.mark.asyncio
+async def test_batch_retrieval_reads_shared_state_once_per_batch() -> None:
+    repository = FakeReviewContextRepository(
+        [_passage("p1", pmid="111", text="first passage", lexical_rank=9.0)]
+    )
+    repository.available_sections_value = ["abstract"]
+    repository.indexed_pmids_value = ["111"]
+    service = ReviewContextService(repository)
+
+    await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["query one", "query two", "query three"],
+            include_diagnostics=True,
+        ),
+    )
+
+    assert repository.calls["preparation_status"] == 1
+    assert repository.calls["indexed_pmids"] == 1
+    assert repository.calls["available_sections"] == 1
+    assert repository.calls["list_review_failed_sources"] == 1
+
+
+@pytest.mark.asyncio
 async def test_batch_retrieval_returns_next_context_resource_links() -> None:
     repository = FakeReviewContextRepository(
         [_passage("p 1/frag", pmid="111", text="MEFV colchicine evidence", lexical_rank=9.0)]
@@ -1013,7 +1042,8 @@ async def test_batch_retrieval_gathers_no_more_than_concurrency_at_once(
         ),
     )
 
-    assert gather_widths == [2, 2]
+    assert gather_widths[0] == 5
+    assert gather_widths[1:] == [2, 2]
 
 
 @pytest.mark.asyncio

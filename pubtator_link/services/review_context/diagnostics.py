@@ -119,18 +119,31 @@ async def build_diagnostics(
     request: RetrieveReviewContextRequest,
     candidate_count: int,
     selected_count: int,
+    available_sections: Sequence[str] | None = None,
+    indexed_pmids: Sequence[str] | None = None,
+    failed_sources: Sequence[FailedSourceSummary] | None = None,
 ) -> RetrieveReviewDiagnostics:
     query_tokens_value = query_tokens(request.question)
-    available_sections = await repository.available_sections(
-        review_id, session_id=request.session_id
+    available_sections_value = (
+        list(available_sections)
+        if available_sections is not None
+        else await repository.available_sections(review_id, session_id=request.session_id)
     )
-    indexed_pmids = await repository.indexed_pmids(review_id, session_id=request.session_id)
-    failed_sources = await repository.list_review_failed_sources(
-        review_id, session_id=request.session_id
+    indexed_pmids_value = (
+        list(indexed_pmids)
+        if indexed_pmids is not None
+        else await repository.indexed_pmids(review_id, session_id=request.session_id)
     )
-    section_label = ", ".join(available_sections) if available_sections else "none"
+    failed_sources_value = (
+        list(failed_sources)
+        if failed_sources is not None
+        else await repository.list_review_failed_sources(
+            review_id, session_id=request.session_id
+        )
+    )
+    section_label = ", ".join(available_sections_value) if available_sections_value else "none"
     message = (
-        f"No passages selected. Review {review_id} has {len(indexed_pmids)} indexed PMIDs "
+        f"No passages selected. Review {review_id} has {len(indexed_pmids_value)} indexed PMIDs "
         f"and sections {section_label}. Try shorter keyword queries or remove section filters."
         if selected_count == 0
         else f"Selected {selected_count} passages from {candidate_count} candidates."
@@ -140,15 +153,15 @@ async def build_diagnostics(
         query_tokens=query_tokens_value,
         candidate_count=candidate_count,
         selected_count=selected_count,
-        available_sections=available_sections,
-        indexed_pmids=indexed_pmids,
-        failed_sources=failed_sources,
+        available_sections=available_sections_value,
+        indexed_pmids=indexed_pmids_value,
+        failed_sources=failed_sources_value,
         filter_summary={
             "pmids": list(request.pmids),
             "entity_ids": list(request.entity_ids),
             "sections": list(request.sections),
         },
-        suggested_queries=suggested_queries(query_tokens_value, available_sections),
+        suggested_queries=suggested_queries(query_tokens_value, available_sections_value),
         message=message,
     )
 
