@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from collections.abc import Callable
+from typing import Annotated, Any, Literal, cast
 
 from fastmcp import Context, FastMCP
 from pydantic import Field
@@ -20,6 +21,7 @@ from pubtator_link.mcp.annotations import (
     REVIEW_WRITE_ANNOTATIONS,
 )
 from pubtator_link.mcp.errors import run_mcp_tool
+from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.service_adapters import (
     add_evidence_certainty_impl,
     export_review_audit_bundle_impl,
@@ -64,6 +66,18 @@ from pubtator_link.models.review_rerag import (
     StageResearchSessionResponse,
 )
 
+RECORD_REVIEW_CONTEXT_OUTPUT_SCHEMA: dict[str, Any] = {
+    "title": "RecordReviewContextResponse",
+    "type": "object",
+    "properties": {
+        "success": {"type": "boolean"},
+        "review_id": {"type": "string"},
+        "passage_ids": {"type": "array", "items": {"type": "string"}},
+        "recorded": {"type": "boolean"},
+    },
+    "required": ["success", "review_id", "passage_ids", "recorded"],
+}
+
 
 async def _warn_if_degraded(ctx: Context | None, result: dict[str, Any]) -> None:
     degraded_mode = result.get("degraded_mode")
@@ -84,8 +98,20 @@ async def _report_index_progress(
         await ctx.report_progress(progress=progress, total=total)
 
 
-def register_review_tools(mcp: FastMCP) -> None:
-    @mcp.tool(
+def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
+    def mcp_tool_for(
+        *profiles: MCPToolProfile, **tool_kwargs: Any
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
+            if profile in profiles:
+                return cast(Callable[..., Any], mcp.tool(**tool_kwargs)(fn))
+            return fn
+
+        return decorator
+
+    @mcp_tool_for(
+        "full",
+        "readonly",
         name="pubtator.list_review_indexes",
         title="List Review Indexes",
         output_schema=ListReviewIndexesResponse.model_json_schema(),
@@ -103,7 +129,9 @@ def register_review_tools(mcp: FastMCP) -> None:
 
         return await run_mcp_tool("pubtator.list_review_indexes", call)
 
-    @mcp.tool(
+    @mcp_tool_for(
+        "full",
+        "readonly",
         name="pubtator.get_review_index_summary",
         title="Get Review Index Summary",
         output_schema=ReviewIndexSummaryResponse.model_json_schema(),
@@ -118,7 +146,8 @@ def register_review_tools(mcp: FastMCP) -> None:
 
         return await run_mcp_tool("pubtator.get_review_index_summary", call)
 
-    @mcp.tool(
+    @mcp_tool_for(
+        "full",
         name="pubtator.add_evidence_certainty",
         title="Add Evidence Certainty",
         output_schema=EvidenceCertaintyResponse.model_json_schema(),
@@ -164,7 +193,9 @@ def register_review_tools(mcp: FastMCP) -> None:
 
         return await run_mcp_tool("pubtator.add_evidence_certainty", call)
 
-    @mcp.tool(
+    @mcp_tool_for(
+        "full",
+        "readonly",
         name="pubtator.list_evidence_certainty",
         title="List Evidence Certainty",
         output_schema=ListEvidenceCertaintyResponse.model_json_schema(),
@@ -179,7 +210,9 @@ def register_review_tools(mcp: FastMCP) -> None:
 
         return await run_mcp_tool("pubtator.list_evidence_certainty", call)
 
-    @mcp.tool(
+    @mcp_tool_for(
+        "full",
+        "readonly",
         name="pubtator.get_evidence_certainty",
         title="Get Evidence Certainty",
         output_schema=EvidenceCertaintyResponse.model_json_schema(),
@@ -198,7 +231,10 @@ def register_review_tools(mcp: FastMCP) -> None:
 
         return await run_mcp_tool("pubtator.get_evidence_certainty", call)
 
-    @mcp.tool(
+    @mcp_tool_for(
+        "lean",
+        "full",
+        "readonly",
         name="pubtator.preflight_review_sources",
         title="Preflight Review Sources",
         output_schema=PreflightReviewSourcesResponse.model_json_schema(),
@@ -215,7 +251,8 @@ def register_review_tools(mcp: FastMCP) -> None:
 
         return await run_mcp_tool("pubtator.preflight_review_sources", call, pmids=pmids)
 
-    @mcp.tool(
+    @mcp_tool_for(
+        "full",
         name="pubtator.stage_research_session",
         title="Stage Research Session",
         output_schema=StageResearchSessionResponse.model_json_schema(),
@@ -263,7 +300,8 @@ def register_review_tools(mcp: FastMCP) -> None:
             pmids=pmids or [],
         )
 
-    @mcp.tool(
+    @mcp_tool_for(
+        "full",
         name="pubtator.review_quickstart",
         title="Review Quickstart",
         output_schema=ReviewQuickstartResponse.model_json_schema(),
@@ -295,7 +333,9 @@ def register_review_tools(mcp: FastMCP) -> None:
 
         return await run_mcp_tool("pubtator.review_quickstart", call)
 
-    @mcp.tool(
+    @mcp_tool_for(
+        "full",
+        "readonly",
         name="pubtator.get_research_session_status",
         title="Get Research Session Status",
         output_schema=ResearchSessionStatusResponse.model_json_schema(),
@@ -314,7 +354,9 @@ def register_review_tools(mcp: FastMCP) -> None:
 
         return await run_mcp_tool("pubtator.get_research_session_status", call)
 
-    @mcp.tool(
+    @mcp_tool_for(
+        "full",
+        "readonly",
         name="pubtator.list_research_sessions",
         title="List Research Sessions",
         output_schema=ListResearchSessionsResponse.model_json_schema(),
@@ -329,7 +371,9 @@ def register_review_tools(mcp: FastMCP) -> None:
 
         return await run_mcp_tool("pubtator.list_research_sessions", call)
 
-    @mcp.tool(
+    @mcp_tool_for(
+        "lean",
+        "full",
         name="pubtator.index_review_evidence",
         title="Index Review Evidence",
         output_schema=IndexReviewEvidenceResponse.model_json_schema(),
@@ -389,7 +433,10 @@ def register_review_tools(mcp: FastMCP) -> None:
             pmids=pmids or [],
         )
 
-    @mcp.tool(
+    @mcp_tool_for(
+        "lean",
+        "full",
+        "readonly",
         name="pubtator.inspect_review_index",
         title="Inspect Review Index",
         output_schema=InspectReviewIndexResponse.model_json_schema(),
@@ -425,7 +472,9 @@ def register_review_tools(mcp: FastMCP) -> None:
 
         return await run_mcp_tool("pubtator.inspect_review_index", call, pmids=pmids)
 
-    @mcp.tool(
+    @mcp_tool_for(
+        "full",
+        "readonly",
         name="pubtator.get_review_passages_by_id",
         title="Get Review Passages By ID",
         output_schema=ReviewPassageLookupResponse.model_json_schema(),
@@ -451,7 +500,10 @@ def register_review_tools(mcp: FastMCP) -> None:
 
         return await run_mcp_tool("pubtator.get_review_passages_by_id", call)
 
-    @mcp.tool(
+    @mcp_tool_for(
+        "lean",
+        "full",
+        "readonly",
         name="pubtator.get_review_audit_trail",
         title="Get Review Audit Trail",
         output_schema=ReviewAuditTrailResponse.model_json_schema(),
@@ -477,7 +529,9 @@ def register_review_tools(mcp: FastMCP) -> None:
 
         return await run_mcp_tool("pubtator.get_review_audit_trail", call)
 
-    @mcp.tool(
+    @mcp_tool_for(
+        "full",
+        "readonly",
         name="pubtator.get_neighboring_review_passages",
         title="Get Neighboring Review Passages",
         output_schema=ReviewPassageLookupResponse.model_json_schema(),
@@ -509,7 +563,8 @@ def register_review_tools(mcp: FastMCP) -> None:
 
         return await run_mcp_tool("pubtator.get_neighboring_review_passages", call)
 
-    @mcp.tool(
+    @mcp_tool_for(
+        "full",
         name="pubtator.export_review_audit_bundle",
         title="Export Review Audit Bundle",
         output_schema=McpReviewAuditBundleResponse.model_json_schema(),
@@ -535,7 +590,9 @@ def register_review_tools(mcp: FastMCP) -> None:
 
         return await run_mcp_tool("pubtator.export_review_audit_bundle", call)
 
-    @mcp.tool(
+    @mcp_tool_for(
+        "full",
+        "readonly",
         name="pubtator.retrieve_review_context",
         title="Retrieve Review Context",
         output_schema=RetrieveReviewContextResponse.model_json_schema(),
@@ -586,7 +643,10 @@ def register_review_tools(mcp: FastMCP) -> None:
 
         return await run_mcp_tool("pubtator.retrieve_review_context", call, pmids=pmids)
 
-    @mcp.tool(
+    @mcp_tool_for(
+        "lean",
+        "full",
+        "readonly",
         name="pubtator.retrieve_review_context_batch",
         title="Retrieve Review Context Batch",
         output_schema=RetrieveReviewContextBatchResponse.model_json_schema(),
@@ -658,3 +718,42 @@ def register_review_tools(mcp: FastMCP) -> None:
             call,
             pmids=pmids,
         )
+
+    @mcp_tool_for(
+        "lean",
+        "full",
+        name="pubtator.record_review_context",
+        title="Record Review Context",
+        output_schema=RECORD_REVIEW_CONTEXT_OUTPUT_SCHEMA,
+        annotations=REVIEW_WRITE_ANNOTATIONS,
+    )
+    async def record_review_context(
+        review_id: Annotated[str, Field(min_length=1)],
+        passage_ids: Annotated[list[Annotated[str, Field(min_length=1)]], Field(min_length=1)],
+        session_id: Annotated[str | None, Field(min_length=1)] = None,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        """Use this to record selected review passage IDs used as context in a research answer."""
+
+        async def call() -> dict[str, Any]:
+            service = await get_review_context_service()
+            record_audit_event = getattr(service.repository, "record_review_audit_event", None)
+            if record_audit_event is None:
+                raise RuntimeError("Review repository does not support context recording.")
+            await record_audit_event(
+                review_id,
+                "recorded_context",
+                {
+                    "passage_ids": passage_ids,
+                    "session_id": session_id,
+                    "note": note,
+                },
+            )
+            return {
+                "success": True,
+                "review_id": review_id,
+                "passage_ids": passage_ids,
+                "recorded": True,
+            }
+
+        return await run_mcp_tool("pubtator.record_review_context", call)

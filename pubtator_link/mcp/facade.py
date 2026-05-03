@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from fastmcp import FastMCP
 
+from pubtator_link.config import settings
 from pubtator_link.mcp.compat import install_inspection_managers
 from pubtator_link.mcp.metadata import register_metadata
+from pubtator_link.mcp.profiles import MCPToolProfile, normalize_mcp_profile
 from pubtator_link.mcp.resources import RESEARCH_USE_NOTICE
 from pubtator_link.mcp.tools.diagnostics import register_diagnostics_tools
 from pubtator_link.mcp.tools.discovery import register_discovery_tools
@@ -13,7 +15,10 @@ from pubtator_link.mcp.tools.review import register_review_tools
 from pubtator_link.mcp.tools.text_annotations import register_text_annotation_tools
 
 
-def create_pubtator_mcp() -> FastMCP:
+def create_pubtator_mcp(profile: MCPToolProfile | str | None = None) -> FastMCP:
+    selected_profile = normalize_mcp_profile(
+        profile if profile is not None else settings.mcp_profile
+    )
     mcp = FastMCP(
         name="pubtator-link",
         mask_error_details=True,
@@ -32,12 +37,12 @@ def create_pubtator_mcp() -> FastMCP:
             f"{RESEARCH_USE_NOTICE}"
         ),
     )
-    register_metadata(mcp)
-    register_literature_tools(mcp)
-    register_discovery_tools(mcp)
-    register_diagnostics_tools(mcp)
-    register_publication_tools(mcp)
-    register_text_annotation_tools(mcp)
-    register_review_tools(mcp)
+    register_metadata(mcp, profile=selected_profile)
+    register_literature_tools(mcp, profile=selected_profile)
+    register_discovery_tools(mcp, profile=selected_profile)
+    register_diagnostics_tools(mcp, profile=selected_profile)
+    register_publication_tools(mcp, profile=selected_profile)
+    register_text_annotation_tools(mcp, profile=selected_profile)
+    register_review_tools(mcp, profile=selected_profile)
     install_inspection_managers(mcp)
     return mcp

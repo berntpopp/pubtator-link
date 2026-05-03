@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pubtator_link.mcp.profiles import MCPToolProfile, tool_names_for_profile
 from pubtator_link.models.workflow_help import (
     WorkflowFallback,
     WorkflowHelpResponse,
@@ -11,12 +12,38 @@ from pubtator_link.models.workflow_help import (
 class WorkflowHelpService:
     """Return compact in-band workflow guidance for LLM consumers."""
 
+    def __init__(self, profile: MCPToolProfile = "full") -> None:
+        self.profile = profile
+        self._allowed_tools = tool_names_for_profile(profile)
+
     def get_help(self, task: WorkflowTask = "clinical_genetics_review") -> WorkflowHelpResponse:
         if task == "entity_discovery":
-            return self._entity_discovery()
+            return self._profile_response(self._entity_discovery())
         if task == "citation_audit":
-            return self._citation_audit()
-        return self._clinical_or_literature_review(task)
+            return self._profile_response(self._citation_audit())
+        return self._profile_response(self._clinical_or_literature_review(task))
+
+    def _profile_response(self, response: WorkflowHelpResponse) -> WorkflowHelpResponse:
+        if self.profile == "full":
+            return response
+
+        steps = [step for step in response.steps if step.tool_name in self._allowed_tools]
+        fallbacks = [
+            fallback for fallback in response.fallbacks if fallback.tool_name in self._allowed_tools
+        ]
+        meta = dict(response.meta)
+        next_commands = meta.get("next_commands")
+        if isinstance(next_commands, list):
+            meta["next_commands"] = [
+                command for command in next_commands if command in self._allowed_tools
+            ]
+        return WorkflowHelpResponse(
+            task=response.task,
+            steps=steps,
+            fallbacks=fallbacks,
+            tool_sequence=[step.tool_name for step in steps],
+            _meta=meta,
+        )
 
     def _clinical_or_literature_review(self, task: WorkflowTask) -> WorkflowHelpResponse:
         steps = [

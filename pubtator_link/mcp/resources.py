@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from pubtator_link.config import api_config, review_rerag_config, text_processing_config
@@ -10,6 +11,7 @@ from pubtator_link.mcp.contracts import (
     SCHEMA_POLICY,
     TOOL_CATEGORIES,
 )
+from pubtator_link.mcp.profiles import MCPToolProfile, tool_names_for_profile
 from pubtator_link.services.workflow_help import WorkflowHelpService
 
 RESEARCH_USE_NOTICE = (
@@ -17,6 +19,71 @@ RESEARCH_USE_NOTICE = (
     "treatment, triage, patient management, or clinical decision support. Do not "
     "submit identifiable patient data to public demo instances."
 )
+
+def _tool_key_name(value: str) -> str:
+    return value.split(":", maxsplit=1)[0]
+
+
+def _filter_tool_names(values: list[Any], allowed_tools: set[str]) -> list[Any]:
+    return [
+        value
+        for value in values
+        if not isinstance(value, str) or _tool_key_name(value) in allowed_tools
+    ]
+
+
+def _filter_tool_mapping(values: dict[str, Any], allowed_tools: set[str]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in values.items()
+        if not key.startswith("pubtator.") or _tool_key_name(key) in allowed_tools
+    }
+
+
+def _string_references_unavailable_tool(value: str, allowed_tools: set[str]) -> bool:
+    for match in re.finditer(r"pubtator\.[A-Za-z0-9_:.]+", value):
+        if _tool_key_name(match.group(0)) not in allowed_tools:
+            return True
+    return False
+
+
+def _filter_capabilities_for_profile(value: Any, allowed_tools: set[str]) -> Any:
+    if isinstance(value, list):
+        filtered_items: list[Any] = []
+        for item in value:
+            if (
+                isinstance(item, dict)
+                and isinstance(item.get("tool_name"), str)
+                and item["tool_name"] not in allowed_tools
+            ):
+                continue
+            if isinstance(item, str) and _string_references_unavailable_tool(item, allowed_tools):
+                continue
+            filtered_items.append(_filter_capabilities_for_profile(item, allowed_tools))
+        return filtered_items
+    if not isinstance(value, dict):
+        return value
+
+    filtered: dict[str, Any] = {}
+    for key, item in value.items():
+        if key == "tool_name" and isinstance(item, str) and item not in allowed_tools:
+            return {}
+        if key in {"tools", "core_workflow_tools", "core_tools", "advanced_tools"} and isinstance(
+            item, list
+        ):
+            filtered[key] = _filter_tool_names(item, allowed_tools)
+        elif key in {"tool_categories", "tool_groups"} and isinstance(item, dict):
+            filtered[key] = {
+                group: tools
+                for group, group_tools in item.items()
+                if isinstance(group_tools, list)
+                and (tools := _filter_tool_names(group_tools, allowed_tools))
+            }
+        elif key in {"sample_calls", "schema_bundle"} and isinstance(item, dict):
+            filtered[key] = _filter_tool_mapping(item, allowed_tools)
+        else:
+            filtered[key] = _filter_capabilities_for_profile(item, allowed_tools)
+    return filtered
 
 
 def get_llm_driver_contract() -> dict[str, Any]:
@@ -559,7 +626,11 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
     }
 
 
-def get_capabilities_resource(details: list[str] | None = None) -> dict[str, Any]:
+def get_capabilities_resource(
+    details: list[str] | None = None,
+    *,
+    profile: MCPToolProfile | None = None,
+) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "server": "pubtator-link",
         "transport": "streamable_http",
@@ -569,10 +640,15 @@ def get_capabilities_resource(details: list[str] | None = None) -> dict[str, Any
         "tool_categories": TOOL_CATEGORIES,
         "next_tool": "pubtator.workflow_help",
     }
+    allowed_tools = tool_names_for_profile(profile) if profile is not None else None
+    if allowed_tools is not None:
+        payload = _filter_capabilities_for_profile(payload, allowed_tools)
     if not details:
         return payload
 
     rich_details = _get_capabilities_details_resource()
+    if profile is not None:
+        rich_details["workflow_help"] = get_workflow_help_resource(profile=profile)
     detail_overrides: dict[str, Any] = {
         "sample_calls": SAMPLE_CALLS,
         "schema_policy": SCHEMA_POLICY,
@@ -585,6 +661,8 @@ def get_capabilities_resource(details: list[str] | None = None) -> dict[str, Any
         elif name in rich_details:
             selected_details[name] = rich_details[name]
     if selected_details:
+        if allowed_tools is not None:
+            selected_details = _filter_capabilities_for_profile(selected_details, allowed_tools)
         payload["details"] = selected_details
     return payload
 
@@ -609,5 +687,7 @@ def get_text_processing_resource() -> dict[str, Any]:
     return {"supported_bioconcepts": list(text_processing_config.supported_bioconcepts)}
 
 
-def get_workflow_help_resource() -> dict[str, Any]:
-    return WorkflowHelpService().get_help("clinical_genetics_review").model_dump(by_alias=True)
+def get_workflow_help_resource(profile: MCPToolProfile = "full") -> dict[str, Any]:
+    return WorkflowHelpService(profile=profile).get_help("clinical_genetics_review").model_dump(
+        by_alias=True
+    )

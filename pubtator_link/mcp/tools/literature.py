@@ -13,6 +13,7 @@ from pubtator_link.api.routes.dependencies import (
 )
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from pubtator_link.mcp.errors import run_mcp_tool
+from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.service_adapters import (
     find_entity_relations_impl,
     lookup_variant_evidence_impl,
@@ -30,7 +31,7 @@ from pubtator_link.services.search_shaping import (
 )
 
 
-def register_literature_tools(mcp: FastMCP) -> None:
+def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
     @mcp.tool(
         name="pubtator.search_literature",
         title="Search Biomedical Literature",
@@ -165,31 +166,36 @@ def register_literature_tools(mcp: FastMCP) -> None:
 
         return await run_mcp_tool("pubtator.search_biomedical_entities", call)
 
-    @mcp.tool(
-        name="pubtator.find_entity_relations",
-        title="Find Entity Relations",
-        annotations=READ_ONLY_OPEN_WORLD,
-    )
-    async def find_entity_relations(
-        entity_id: Annotated[
-            str,
-            Field(min_length=1, description="PubTator entity ID such as @CHEMICAL_remdesivir."),
-        ],
-        relation_type: str | None = None,
-        target_entity_type: str | None = None,
-    ) -> dict[str, Any]:
-        """Use this when a user has a PubTator entity ID and needs literature-derived related entities to expand a corpus after search_biomedical_entities."""
+    if profile != "lean":
 
-        async def call() -> dict[str, Any]:
-            client = await get_api_client()
-            return await find_entity_relations_impl(
-                client=client,
-                entity_id=entity_id,
-                relation_type=relation_type,
-                target_entity_type=target_entity_type,
-            )
+        @mcp.tool(
+            name="pubtator.find_entity_relations",
+            title="Find Entity Relations",
+            annotations=READ_ONLY_OPEN_WORLD,
+        )
+        async def find_entity_relations(
+            entity_id: Annotated[
+                str,
+                Field(
+                    min_length=1,
+                    description="PubTator entity ID such as @CHEMICAL_remdesivir.",
+                ),
+            ],
+            relation_type: str | None = None,
+            target_entity_type: str | None = None,
+        ) -> dict[str, Any]:
+            """Use this when a user has a PubTator entity ID and needs literature-derived related entities to expand a corpus after search_biomedical_entities."""
 
-        return await run_mcp_tool("pubtator.find_entity_relations", call)
+            async def call() -> dict[str, Any]:
+                client = await get_api_client()
+                return await find_entity_relations_impl(
+                    client=client,
+                    entity_id=entity_id,
+                    relation_type=relation_type,
+                    target_entity_type=target_entity_type,
+                )
+
+            return await run_mcp_tool("pubtator.find_entity_relations", call)
 
     @mcp.tool(
         name="pubtator.lookup_variant_evidence",

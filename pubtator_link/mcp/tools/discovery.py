@@ -11,6 +11,7 @@ from pubtator_link.api.routes.dependencies import (
 )
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from pubtator_link.mcp.errors import run_mcp_tool
+from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.service_adapters import suggest_corpus_impl
 from pubtator_link.models.corpus_suggestion import CorpusSuggestionResponse
 from pubtator_link.models.discovery import (
@@ -23,7 +24,10 @@ from pubtator_link.models.discovery import (
 )
 
 
-def register_discovery_tools(mcp: FastMCP) -> None:
+def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
+    if profile == "lean":
+        return
+
     @mcp.tool(
         name="pubtator.suggest_corpus",
         title="Suggest Corpus",

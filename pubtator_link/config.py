@@ -63,6 +63,9 @@ class ServerSettings(BaseSettings):
     enable_cache_endpoints: bool = Field(
         default=True, description="Enable cache management endpoints"
     )
+    mcp_profile: Literal["lean", "full", "readonly"] = Field(
+        default="lean", description="MCP tool registration profile"
+    )
 
     # Review-scoped re-RAG POC
     database_url: str | None = Field(default=None, description="PostgreSQL database URL")

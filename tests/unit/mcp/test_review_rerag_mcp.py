@@ -1,11 +1,12 @@
 import pytest
+from fastmcp.exceptions import ToolError
 from pydantic import ValidationError
 
 from pubtator_link.mcp.facade import create_pubtator_mcp
 
 
 def test_review_rerag_tools_are_exposed_with_expected_names() -> None:
-    mcp = create_pubtator_mcp()
+    mcp = create_pubtator_mcp(profile="full")
     tool_names = set(mcp._tool_manager._tools)
 
     assert "pubtator.index_review_evidence" in tool_names
@@ -15,7 +16,7 @@ def test_review_rerag_tools_are_exposed_with_expected_names() -> None:
 
 
 def test_review_tools_are_registered_with_flat_canonical_schemas() -> None:
-    mcp = create_pubtator_mcp()
+    mcp = create_pubtator_mcp(profile="full")
     tools = mcp._tool_manager._tools
 
     removed_suffix = "_v" + "2"
@@ -57,7 +58,7 @@ def test_review_tools_accept_context_without_exposing_ctx_parameter() -> None:
 
 
 def test_review_rerag_tool_descriptions_explain_workflow_and_query_style() -> None:
-    mcp = create_pubtator_mcp()
+    mcp = create_pubtator_mcp(profile="full")
     tools = mcp._tool_manager._tools
 
     index_description = tools["pubtator.index_review_evidence"].description
@@ -156,6 +157,109 @@ async def test_index_review_evidence_accepts_legacy_prepare_mode_without_schema_
     assert "prepare_mode" not in tool.parameters["properties"]
     assert result.structured_content["success"] is True
     assert result.structured_content["queued"] == 1
+
+
+@pytest.mark.asyncio
+async def test_record_review_context_requires_audit_repository(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.review as review_tools
+
+    class FakeService:
+        repository = object()
+
+    async def fake_get_review_context_service() -> FakeService:
+        return FakeService()
+
+    monkeypatch.setattr(review_tools, "get_review_context_service", fake_get_review_context_service)
+    tool = create_pubtator_mcp()._tool_manager._tools["pubtator.record_review_context"]
+
+    with pytest.raises(ToolError):
+        await tool.run(
+            {
+                "review_id": "review-1",
+                "passage_ids": ["PMID:1:abstract:0"],
+            }
+        )
+
+
+@pytest.mark.asyncio
+async def test_record_review_context_rejects_empty_passage_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.review as review_tools
+
+    events: list[tuple[str, str, dict[str, object]]] = []
+
+    class FakeRepository:
+        async def record_review_audit_event(
+            self, review_id: str, event_type: str, payload: dict[str, object]
+        ) -> None:
+            events.append((review_id, event_type, payload))
+
+    class FakeService:
+        repository = FakeRepository()
+
+    async def fake_get_review_context_service() -> FakeService:
+        return FakeService()
+
+    monkeypatch.setattr(review_tools, "get_review_context_service", fake_get_review_context_service)
+    tool = create_pubtator_mcp()._tool_manager._tools["pubtator.record_review_context"]
+
+    with pytest.raises(ValidationError):
+        await tool.run({"review_id": "review-1", "passage_ids": []})
+    assert events == []
+
+
+@pytest.mark.asyncio
+async def test_record_review_context_records_audit_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.review as review_tools
+
+    events: list[tuple[str, str, dict[str, object]]] = []
+
+    class FakeRepository:
+        async def record_review_audit_event(
+            self, review_id: str, event_type: str, payload: dict[str, object]
+        ) -> None:
+            events.append((review_id, event_type, payload))
+
+    class FakeService:
+        repository = FakeRepository()
+
+    async def fake_get_review_context_service() -> FakeService:
+        return FakeService()
+
+    monkeypatch.setattr(review_tools, "get_review_context_service", fake_get_review_context_service)
+    tool = create_pubtator_mcp()._tool_manager._tools["pubtator.record_review_context"]
+
+    result = await tool.run(
+        {
+            "review_id": "review-1",
+            "passage_ids": ["PMID:1:abstract:0"],
+            "session_id": "session-1",
+            "note": "used in answer",
+        }
+    )
+
+    assert result.structured_content == {
+        "success": True,
+        "review_id": "review-1",
+        "passage_ids": ["PMID:1:abstract:0"],
+        "recorded": True,
+    }
+    assert events == [
+        (
+            "review-1",
+            "recorded_context",
+            {
+                "passage_ids": ["PMID:1:abstract:0"],
+                "session_id": "session-1",
+                "note": "used in answer",
+            },
+        )
+    ]
 
 
 @pytest.mark.asyncio

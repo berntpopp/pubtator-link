@@ -6,6 +6,7 @@ from fastmcp import FastMCP
 
 from pubtator_link.mcp.annotations import READ_ONLY_CLOSED_WORLD
 from pubtator_link.mcp.errors import run_mcp_tool
+from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.prompts import (
     annotate_research_text_prompt,
     review_pubtator_annotations_prompt,
@@ -25,7 +26,7 @@ from pubtator_link.models.workflow_help import WorkflowHelpResponse, WorkflowTas
 from pubtator_link.services.workflow_help import WorkflowHelpService
 
 
-def register_metadata(mcp: FastMCP) -> None:
+def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
     @mcp.tool(
         name="pubtator.get_server_capabilities",
         title="Get PubTator-Link Capabilities",
@@ -35,7 +36,7 @@ def register_metadata(mcp: FastMCP) -> None:
         """Use this when a client needs supported tools, transports, formats, and limitations."""
 
         async def call() -> dict[str, Any]:
-            return get_capabilities_resource(details=details)
+            return get_capabilities_resource(details=details, profile=profile)
 
         return await run_mcp_tool("pubtator.get_server_capabilities", call)
 
@@ -51,17 +52,17 @@ def register_metadata(mcp: FastMCP) -> None:
         """Use this when a fresh context needs the canonical PubTator-Link research workflow."""
 
         async def call() -> dict[str, Any]:
-            return WorkflowHelpService().get_help(task).model_dump(by_alias=True)
+            return WorkflowHelpService(profile=profile).get_help(task).model_dump(by_alias=True)
 
         return await run_mcp_tool("pubtator.workflow_help", call)
 
     @mcp.resource("pubtator://capabilities")
     def capabilities() -> dict[str, Any]:
-        return get_capabilities_resource()
+        return get_capabilities_resource(profile=profile)
 
     @mcp.resource("pubtator://workflow-help")
     def workflow_help_resource() -> dict[str, Any]:
-        return get_workflow_help_resource()
+        return get_workflow_help_resource(profile=profile)
 
     @mcp.resource("pubtator://bioconcepts")
     def bioconcepts() -> dict[str, Any]:
