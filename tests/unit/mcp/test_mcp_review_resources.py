@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from pubtator_link.mcp.review_resources import get_tool_detail_resource
@@ -31,6 +33,85 @@ def test_lean_mcp_registers_review_resource_templates() -> None:
     mcp = create_pubtator_mcp(profile="lean")
 
     assert EXPECTED_REVIEW_RESOURCE_TEMPLATES.issubset(mcp._resource_manager._templates)
+
+
+@pytest.mark.asyncio
+async def test_registered_passage_resource_reads_query_parameters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.metadata as metadata
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    class FakeService:
+        async def get_neighboring_passages(self, **kwargs: object) -> _Dumpable:
+            assert kwargs == {
+                "review_id": "review 1",
+                "passage_id": "p/1",
+                "before": 1,
+                "after": 1,
+                "same_section": True,
+                "session_id": "session 1",
+                "max_chars_per_passage": 2200,
+            }
+            return _Dumpable(
+                {
+                    "success": True,
+                    "review_id": "review 1",
+                    "passages": [{"passage_id": "p/1", "text": "context"}],
+                    "not_found": [],
+                }
+            )
+
+    async def fake_get_review_context_service() -> FakeService:
+        return FakeService()
+
+    monkeypatch.setattr(metadata, "get_review_context_service", fake_get_review_context_service)
+    mcp = create_pubtator_mcp(profile="lean")
+
+    result = await mcp.read_resource(
+        "pubtator://reviews/review%201/passages/p%2F1?before=1&after=1&session_id=session+1"
+    )
+    payload = json.loads(result.contents[0].content)
+
+    assert payload["passages"] == [{"passage_id": "p/1", "text": "context"}]
+
+
+@pytest.mark.asyncio
+async def test_registered_audit_resource_reads_session_query_parameter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.metadata as metadata
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    class FakeService:
+        async def get_audit_trail(self, **kwargs: object) -> _Dumpable:
+            assert kwargs == {
+                "review_id": "review 1",
+                "passage_ids": ["p/1"],
+                "session_id": "session 1",
+                "max_chars_per_passage": 500,
+            }
+            return _Dumpable(
+                {
+                    "success": True,
+                    "review_id": "review 1",
+                    "items": [{"passage_id": "p/1"}],
+                    "audit_block": "audit",
+                }
+            )
+
+    async def fake_get_review_context_service() -> FakeService:
+        return FakeService()
+
+    monkeypatch.setattr(metadata, "get_review_context_service", fake_get_review_context_service)
+    mcp = create_pubtator_mcp(profile="lean")
+
+    result = await mcp.read_resource(
+        "pubtator://reviews/review%201/audit/p%2F1?session_id=session+1"
+    )
+    payload = json.loads(result.contents[0].content)
+
+    assert payload["items"] == [{"passage_id": "p/1"}]
 
 
 def test_tool_detail_resource_uses_runtime_tool_metadata() -> None:
@@ -143,6 +224,11 @@ async def test_review_passage_and_audit_resource_adapters_are_local_and_bounded(
     )
 
     class FakeContextService:
+        def __init__(self) -> None:
+            self.passage_session_id: str | None = None
+            self.audit_session_id: str | None = None
+            self.neighboring_call: dict[str, object] | None = None
+
         async def get_passages_by_id(
             self,
             review_id: str,
@@ -152,7 +238,7 @@ async def test_review_passage_and_audit_resource_adapters_are_local_and_bounded(
         ) -> _Dumpable:
             assert review_id == "rev-1"
             assert passage_ids == ["p1"]
-            assert session_id is None
+            self.passage_session_id = session_id
             assert max_chars_per_passage <= 2200
             return _Dumpable(
                 {
@@ -173,6 +259,7 @@ async def test_review_passage_and_audit_resource_adapters_are_local_and_bounded(
 
         async def get_audit_trail(self, **kwargs: object) -> _Dumpable:
             assert kwargs["review_id"] == "rev-1"
+            self.audit_session_id = kwargs["session_id"]  # type: ignore[assignment]
             return _Dumpable(
                 {
                     "success": True,
@@ -188,18 +275,46 @@ async def test_review_passage_and_audit_resource_adapters_are_local_and_bounded(
                 }
             )
 
+        async def get_neighboring_passages(self, **kwargs: object) -> _Dumpable:
+            self.neighboring_call = dict(kwargs)
+            return _Dumpable(
+                {
+                    "success": True,
+                    "review_id": "rev-1",
+                    "passages": [
+                        {
+                            "passage_id": "p0",
+                            "pmid": "123",
+                            "section": "abstract",
+                            "text": "Neighbor text.",
+                        }
+                    ],
+                    "not_found": [],
+                }
+            )
+
     context_service = FakeContextService()
 
     passage = await review_passage_resource_impl(
         service=context_service,
         review_id="rev-1",
         passage_id="p1",
+        session_id="sess-1",
+    )
+    neighboring = await review_passage_resource_impl(
+        service=context_service,
+        review_id="rev-1",
+        passage_id="p1",
+        before=1,
+        after=1,
+        session_id="sess-1",
     )
     audit = await review_audit_resource_impl(service=context_service, review_id="rev-1")
     passage_audit = await review_passage_audit_resource_impl(
         service=context_service,
         review_id="rev-1",
         passage_id="p1",
+        session_id="sess-1",
     )
 
     assert passage["passage"] == {
@@ -212,6 +327,18 @@ async def test_review_passage_and_audit_resource_adapters_are_local_and_bounded(
         {"passage_id": "p1", "stable_citation_key": "c_1", "quote": "Evidence text."}
     ]
     assert passage_audit["items"][0]["passage_id"] == "p1"
+    assert context_service.passage_session_id == "sess-1"
+    assert context_service.audit_session_id == "sess-1"
+    assert neighboring["passages"][0]["passage_id"] == "p0"
+    assert context_service.neighboring_call == {
+        "review_id": "rev-1",
+        "passage_id": "p1",
+        "before": 1,
+        "after": 1,
+        "same_section": True,
+        "session_id": "sess-1",
+        "max_chars_per_passage": 2200,
+    }
 
 
 @pytest.mark.asyncio

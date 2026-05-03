@@ -816,15 +816,31 @@ async def review_passage_resource_impl(
     service: Any,
     review_id: str,
     passage_id: str,
+    before: int | None = None,
+    after: int | None = None,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
-    response = _dump_mapping(
-        await service.get_passages_by_id(
-            review_id=review_id,
-            passage_ids=[passage_id],
-            session_id=None,
-            max_chars_per_passage=2200,
+    if before is not None or after is not None:
+        response = _dump_mapping(
+            await service.get_neighboring_passages(
+                review_id=review_id,
+                passage_id=passage_id,
+                before=before or 0,
+                after=after or 0,
+                same_section=True,
+                session_id=session_id,
+                max_chars_per_passage=2200,
+            )
         )
-    )
+    else:
+        response = _dump_mapping(
+            await service.get_passages_by_id(
+                review_id=review_id,
+                passage_ids=[passage_id],
+                session_id=session_id,
+                max_chars_per_passage=2200,
+            )
+        )
     passages = _bounded_list(
         response.get("passages"),
         {
@@ -844,8 +860,16 @@ async def review_passage_resource_impl(
             "relation_types",
             "screening_status",
         },
-        limit=1,
+        limit=3 if before is not None or after is not None else 1,
     )
+    if before is not None or after is not None:
+        return {
+            "success": bool(response.get("success", True)),
+            "review_id": review_id,
+            "passage_id": passage_id,
+            "passages": passages,
+            "not_found": response.get("not_found", []),
+        }
     return {
         "success": bool(response.get("success", True)),
         "review_id": review_id,
@@ -899,12 +923,13 @@ async def review_passage_audit_resource_impl(
     service: Any,
     review_id: str,
     passage_id: str,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
     response = _dump_mapping(
         await service.get_audit_trail(
             review_id=review_id,
             passage_ids=[passage_id],
-            session_id=None,
+            session_id=session_id,
             max_chars_per_passage=500,
         )
     )

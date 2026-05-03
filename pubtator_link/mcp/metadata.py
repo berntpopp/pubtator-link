@@ -137,12 +137,22 @@ def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
         )
 
     @mcp.resource("pubtator://reviews/{review_id}/passages/{passage_id}")
-    async def review_passage(review_id: str, passage_id: str) -> dict[str, Any]:
+    @mcp.resource("pubtator://reviews/{review_id}/passages/{passage_id}{?before,after,session_id}")
+    async def review_passage(
+        review_id: str,
+        passage_id: str,
+        before: int | None = None,
+        after: int | None = None,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
         service = await get_review_context_service()
         return await get_review_passage_resource(
             service=service,
             review_id=review_id,
             passage_id=passage_id,
+            before=before,
+            after=after,
+            session_id=session_id,
         )
 
     @mcp.resource("pubtator://reviews/{review_id}/audit")
@@ -151,12 +161,18 @@ def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
         return await get_review_audit_resource(service=service, review_id=review_id)
 
     @mcp.resource("pubtator://reviews/{review_id}/audit/{passage_id}")
-    async def review_passage_audit(review_id: str, passage_id: str) -> dict[str, Any]:
+    @mcp.resource("pubtator://reviews/{review_id}/audit/{passage_id}{?session_id}")
+    async def review_passage_audit(
+        review_id: str,
+        passage_id: str,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
         service = await get_review_context_service()
         return await get_review_passage_audit_resource(
             service=service,
             review_id=review_id,
             passage_id=passage_id,
+            session_id=session_id,
         )
 
     @mcp.resource("pubtator://reviews/{review_id}/llm-context")

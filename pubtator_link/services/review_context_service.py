@@ -3,6 +3,7 @@
 import asyncio
 from collections.abc import Sequence
 from typing import Any, Protocol
+from urllib.parse import quote, urlencode
 
 from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 from pubtator_link.models.review_rerag import (
@@ -11,6 +12,7 @@ from pubtator_link.models.review_rerag import (
     FailedSourceSummary,
     InspectReviewIndexRequest,
     InspectReviewIndexResponse,
+    NextContextOption,
     PreparationStatus,
     RetrieveReviewBatchDiagnostics,
     RetrieveReviewContextBatchRequest,
@@ -289,6 +291,11 @@ class ReviewContextService:
             query_results=query_results,
             coverage_by_source=coverage_by_source,
         )
+        next_context_options = _next_context_options(
+            review_id,
+            merged.passages,
+            session_id=request.session_id,
+        )
         include_batch_diagnostics = (
             request.include_diagnostics or request.response_mode == "diagnostics"
         )
@@ -350,6 +357,7 @@ class ReviewContextService:
                 still_preparing_pmids=[],
                 failed_pmids=[],
                 recovery=recovery,
+                next_context_options=next_context_options,
             )
         record_audit_event = getattr(self.repository, "record_review_audit_event", None)
         if record_audit_event is not None:
@@ -406,6 +414,7 @@ class ReviewContextService:
             failed_pmids=failed_pmids,
             recovery=recovery,
             quotes=quotes,
+            next_context_options=next_context_options,
         )
 
     async def inspect_review_index(
@@ -673,3 +682,71 @@ def _review_batch_cache_key(
             "request": request.model_dump(mode="json"),
         },
     )
+
+
+def _next_context_options(
+    review_id: str,
+    passages: Sequence[ContextPassage],
+    *,
+    session_id: str | None = None,
+) -> list[NextContextOption]:
+    options: list[NextContextOption] = []
+    for passage in passages[:5]:
+        passage_resource = _review_resource_uri(
+            review_id,
+            f"passages/{passage.passage_id}",
+            session_id=session_id,
+        )
+        neighboring_resource = _review_resource_uri(
+            review_id,
+            f"passages/{passage.passage_id}",
+            query={"before": "1", "after": "1"},
+            session_id=session_id,
+        )
+        audit_resource = _review_resource_uri(
+            review_id,
+            f"audit/{passage.passage_id}",
+            session_id=session_id,
+        )
+        options.extend(
+            [
+                NextContextOption(
+                    kind="passage",
+                    resource=passage_resource,
+                    reason="Load the exact prepared passage as resource context.",
+                ),
+                NextContextOption(
+                    kind="neighboring_passages",
+                    resource=neighboring_resource,
+                    reason="Expand local context around a cited passage.",
+                ),
+                NextContextOption(
+                    kind="audit",
+                    resource=audit_resource,
+                    reason="Load compact audit data for this passage.",
+                ),
+            ]
+        )
+    return options
+
+
+def _review_resource_uri(
+    review_id: str,
+    path: str,
+    *,
+    query: dict[str, str] | None = None,
+    session_id: str | None = None,
+) -> str:
+    query_params = dict(query or {})
+    if session_id is not None:
+        query_params["session_id"] = session_id
+    encoded_review_id = quote(review_id, safe="")
+    if "/" in path:
+        prefix, identifier = path.split("/", maxsplit=1)
+        encoded_path = f"{quote(prefix, safe='')}/{quote(identifier, safe='')}"
+    else:
+        encoded_path = quote(path, safe="")
+    resource = f"pubtator://reviews/{encoded_review_id}/{encoded_path}"
+    if query_params:
+        resource = f"{resource}?{urlencode(query_params)}"
+    return resource

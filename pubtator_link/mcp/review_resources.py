@@ -42,11 +42,17 @@ async def get_review_passage_resource(
     service: Any,
     review_id: str,
     passage_id: str,
+    before: int | None = None,
+    after: int | None = None,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
     return await review_passage_resource_impl(
         service=service,
         review_id=review_id,
         passage_id=passage_id,
+        before=before,
+        after=after,
+        session_id=session_id,
     )
 
 
@@ -59,11 +65,13 @@ async def get_review_passage_audit_resource(
     service: Any,
     review_id: str,
     passage_id: str,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
     return await review_passage_audit_resource_impl(
         service=service,
         review_id=review_id,
         passage_id=passage_id,
+        session_id=session_id,
     )
 
 

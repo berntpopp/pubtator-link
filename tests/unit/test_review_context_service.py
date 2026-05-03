@@ -885,6 +885,34 @@ async def test_batch_retrieval_deduplicates_and_preserves_per_query_diagnostics(
 
 
 @pytest.mark.asyncio
+async def test_batch_retrieval_returns_next_context_resource_links() -> None:
+    repository = FakeReviewContextRepository(
+        [_passage("p 1/frag", pmid="111", text="MEFV colchicine evidence", lexical_rank=9.0)]
+    )
+    service = ReviewContextService(repository)
+
+    result = await service.retrieve_context_batch(
+        "review 1",
+        RetrieveReviewContextBatchRequest(
+            queries=["mefv colchicine"],
+            max_total_passages=2,
+            session_id="session 1",
+        ),
+    )
+
+    options = {option.kind: option for option in result.next_context_options}
+    assert options["passage"].resource == (
+        "pubtator://reviews/review%201/passages/p%201%2Ffrag?session_id=session+1"
+    )
+    assert options["neighboring_passages"].resource == (
+        "pubtator://reviews/review%201/passages/p%201%2Ffrag?before=1&after=1&session_id=session+1"
+    )
+    assert options["audit"].resource == (
+        "pubtator://reviews/review%201/audit/p%201%2Ffrag?session_id=session+1"
+    )
+
+
+@pytest.mark.asyncio
 async def test_batch_retrieval_runs_queries_with_bounded_concurrency_and_preserves_order() -> None:
     repository = BlockingQueryRepository(
         {

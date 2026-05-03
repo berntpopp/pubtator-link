@@ -22,6 +22,7 @@ ReviewBatchResponseMode = Literal["compact", "merged_only", "full", "diagnostics
 ReviewTableMode = Literal["off", "preview", "full"]
 SourceCoverage = Literal["title_only", "abstract_only", "full_text", "curated_url", "unknown"]
 CoverageTier = SourceCoverage
+NextContextKind = Literal["passage", "neighboring_passages", "audit", "llm_context"]
 GroundingConfidenceLevel = Literal["high", "moderate", "low", "unknown"]
 CoverageExpectationConfidence = Literal["high", "moderate", "low", "unknown"]
 CoverageResolutionStage = Literal[
@@ -584,6 +585,14 @@ class ReviewQuote(BaseModel):
     coverage_status: SourceCoverage = "unknown"
 
 
+class NextContextOption(BaseModel):
+    """Resource link for loading additional context after retrieval."""
+
+    kind: NextContextKind
+    resource: str
+    reason: str
+
+
 class RetrieveReviewContextBatchRequest(BaseModel):
     """Request for multiple review-scoped context retrieval queries."""
 
@@ -635,6 +644,7 @@ class RetrieveReviewContextBatchResponse(BaseModel):
     failed_pmids: list[str] = Field(default_factory=list)
     recovery: RecoveryHint | None = None
     quotes: list[ReviewQuote] = Field(default_factory=list)
+    next_context_options: list[NextContextOption] = Field(default_factory=list)
 
     @model_serializer(mode="wrap")
     def omit_empty_results_for_compact(self, handler: Any) -> dict[str, Any]:
