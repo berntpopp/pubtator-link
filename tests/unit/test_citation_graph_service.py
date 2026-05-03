@@ -4,6 +4,7 @@ import pytest
 
 from pubtator_link.models.discovery import ArticleIdConversionRecord
 from pubtator_link.models.literature_graph import (
+    LiteratureAvailability,
     LiteratureGraphProvenance,
     LiteraturePaper,
     PublicationCitationGraphRequest,
@@ -49,6 +50,38 @@ class FakeEuropePmc:
 class FailingEuropePmc:
     async def get_citations(self, pmid: str, *, limit: int) -> list[LiteraturePaper]:
         raise RuntimeError("Europe PMC unavailable")
+
+
+class FakeOpenAlex:
+    async def get_references(self, doi: str, *, limit: int) -> list[LiteraturePaper]:
+        assert doi == "10.1016/j.ard.2025.05.020"
+        return [
+            LiteraturePaper(
+                openalex_id="https://openalex.org/W999",
+                title="OpenAlex reference",
+                provenance=[LiteratureGraphProvenance(provider="openalex", source_id=doi)],
+            )
+        ][:limit]
+
+    async def get_cited_by(self, doi: str, *, limit: int) -> list[LiteraturePaper]:
+        assert doi == "10.1016/j.ard.2025.05.020"
+        return [
+            LiteraturePaper(
+                doi="10.1000/openalex-citing",
+                title="OpenAlex citing paper",
+                provenance=[LiteratureGraphProvenance(provider="openalex", source_id=doi)],
+            )
+        ][:limit]
+
+
+class FakeUnpaywall:
+    async def get_oa_status(self, doi: str):
+        assert doi in {"10.1000/primary-study", "10.1000/openalex-citing"}
+        return LiteratureAvailability(
+            is_open_access=True,
+            full_text_url=f"https://example.org/{doi}",
+            oa_status="green",
+        )
 
 
 class FakeDiscovery:
@@ -224,3 +257,49 @@ async def test_resolve_metadata_false_skips_metadata_lookup() -> None:
     assert response.source.doi == "10.1016/j.ard.2025.05.020"
     assert response.cited_by[0].pmid == "40600001"
     assert metadata.called is False
+
+
+@pytest.mark.asyncio
+async def test_openalex_fallback_and_unpaywall_enrichment_are_wired() -> None:
+    service = CitationGraphService(
+        crossref=None,
+        europe_pmc=None,
+        openalex=FakeOpenAlex(),
+        unpaywall=FakeUnpaywall(),
+        discovery_service=ResolvingDiscovery(),
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            doi="10.1016/j.ard.2025.05.020",
+            direction="both",
+            include_open_access_status=True,
+        )
+    )
+
+    assert response.references[0].openalex_id == "https://openalex.org/W999"
+    assert response.cited_by[0].doi == "10.1000/openalex-citing"
+    assert response.cited_by[0].availability.is_open_access is True
+    assert response.cited_by[0].status == "resolved_full_text_candidate"
+
+
+@pytest.mark.asyncio
+async def test_include_open_access_status_false_skips_unpaywall() -> None:
+    service = CitationGraphService(
+        crossref=FakeCrossref(),
+        europe_pmc=None,
+        unpaywall=FakeUnpaywall(),
+        discovery_service=FakeDiscovery(),
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            doi="10.1016/j.ard.2025.05.020",
+            direction="references",
+            include_open_access_status=False,
+        )
+    )
+
+    assert response.references[0].availability.is_open_access is False

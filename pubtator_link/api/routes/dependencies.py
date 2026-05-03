@@ -33,7 +33,12 @@ from ...services.diagnostics import DiagnosticsService
 from ...services.errors import ReviewSchemaStaleError
 from ...services.europe_pmc import EuropePmcClient
 from ...services.full_text_preparation import FullTextPreparationService
-from ...services.literature_providers import CrossrefClient, EuropePmcLiteratureClient
+from ...services.literature_providers import (
+    CrossrefClient,
+    EuropePmcLiteratureClient,
+    OpenAlexClient,
+    UnpaywallClient,
+)
 from ...services.llm_review_context import LlmReviewContextService
 from ...services.ncbi_discovery import DiscoveryService, NcbiDiscoveryClient
 from ...services.publication_metadata import (
@@ -66,6 +71,8 @@ _ncbi_discovery_client: NcbiDiscoveryClient | None = None
 _discovery_service: DiscoveryService | None = None
 _crossref_client: CrossrefClient | None = None
 _europe_pmc_literature_client: EuropePmcLiteratureClient | None = None
+_openalex_client: OpenAlexClient | None = None
+_unpaywall_client: UnpaywallClient | None = None
 _citation_graph_service: CitationGraphService | None = None
 _related_evidence_service: RelatedEvidenceService | None = None
 _topic_literature_map_service: TopicLiteratureMapService | None = None
@@ -100,6 +107,8 @@ class AppResources:
     discovery_service: DiscoveryService | None = None
     crossref_client: CrossrefClient | None = None
     europe_pmc_literature_client: EuropePmcLiteratureClient | None = None
+    openalex_client: OpenAlexClient | None = None
+    unpaywall_client: UnpaywallClient | None = None
     citation_graph_service: CitationGraphService | None = None
     related_evidence_service: RelatedEvidenceService | None = None
     topic_literature_map_service: TopicLiteratureMapService | None = None
@@ -174,6 +183,8 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
     ncbi_publication_metadata_client: NcbiPublicationMetadataClient | None = None
     crossref_client: CrossrefClient | None = None
     europe_pmc_literature_client: EuropePmcLiteratureClient | None = None
+    openalex_client: OpenAlexClient | None = None
+    unpaywall_client: UnpaywallClient | None = None
     review_pool: asyncpg.Pool | None = None
     review_queue: ReviewPreparationQueue | None = None
     review_audit_service: ReviewAuditService | None = None
@@ -198,9 +209,13 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
         europe_pmc_literature_client = EuropePmcLiteratureClient(
             base_url=settings.europe_pmc_base_url,
         )
+        openalex_client = OpenAlexClient(mailto=settings.openalex_mailto)
+        unpaywall_client = UnpaywallClient(email=settings.unpaywall_email)
         citation_graph_service = CitationGraphService(
             crossref=crossref_client,
             europe_pmc=europe_pmc_literature_client,
+            openalex=openalex_client,
+            unpaywall=unpaywall_client,
             discovery_service=discovery_service,
             metadata_service=publication_metadata_service,
         )
@@ -292,6 +307,8 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             discovery_service=discovery_service,
             crossref_client=crossref_client,
             europe_pmc_literature_client=europe_pmc_literature_client,
+            openalex_client=openalex_client,
+            unpaywall_client=unpaywall_client,
             citation_graph_service=citation_graph_service,
             related_evidence_service=related_evidence_service,
             topic_literature_map_service=topic_literature_map_service,
@@ -321,6 +338,10 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             await ncbi_publication_metadata_client.close()
         if europe_pmc_literature_client is not None:
             await europe_pmc_literature_client.close()
+        if openalex_client is not None:
+            await openalex_client.close()
+        if unpaywall_client is not None:
+            await unpaywall_client.close()
         if crossref_client is not None:
             await crossref_client.close()
         if api_client is not None:
@@ -340,6 +361,10 @@ async def close_app_resources(resources: AppResources) -> None:
         await resources.ncbi_publication_metadata_client.close()
     if resources.europe_pmc_literature_client is not None:
         await resources.europe_pmc_literature_client.close()
+    if resources.openalex_client is not None:
+        await resources.openalex_client.close()
+    if resources.unpaywall_client is not None:
+        await resources.unpaywall_client.close()
     if resources.crossref_client is not None:
         await resources.crossref_client.close()
     await resources.api_client.close()
@@ -445,6 +470,7 @@ async def get_discovery_service() -> DiscoveryService:
 async def get_citation_graph_service() -> CitationGraphService:
     """Get publication citation graph service."""
     global _citation_graph_service, _crossref_client, _europe_pmc_literature_client
+    global _openalex_client, _unpaywall_client
     resources = current_app_resources()
     if resources is not None:
         if resources.citation_graph_service is None:
@@ -454,9 +480,15 @@ async def get_citation_graph_service() -> CitationGraphService:
                 resources.europe_pmc_literature_client = EuropePmcLiteratureClient(
                     base_url=settings.europe_pmc_base_url,
                 )
+            if resources.openalex_client is None:
+                resources.openalex_client = OpenAlexClient(mailto=settings.openalex_mailto)
+            if resources.unpaywall_client is None:
+                resources.unpaywall_client = UnpaywallClient(email=settings.unpaywall_email)
             resources.citation_graph_service = CitationGraphService(
                 crossref=resources.crossref_client,
                 europe_pmc=resources.europe_pmc_literature_client,
+                openalex=resources.openalex_client,
+                unpaywall=resources.unpaywall_client,
                 discovery_service=await get_discovery_service(),
                 metadata_service=await get_publication_metadata_service(),
             )
@@ -468,9 +500,15 @@ async def get_citation_graph_service() -> CitationGraphService:
             _europe_pmc_literature_client = EuropePmcLiteratureClient(
                 base_url=settings.europe_pmc_base_url,
             )
+        if _openalex_client is None:
+            _openalex_client = OpenAlexClient(mailto=settings.openalex_mailto)
+        if _unpaywall_client is None:
+            _unpaywall_client = UnpaywallClient(email=settings.unpaywall_email)
         _citation_graph_service = CitationGraphService(
             crossref=_crossref_client,
             europe_pmc=_europe_pmc_literature_client,
+            openalex=_openalex_client,
+            unpaywall=_unpaywall_client,
             discovery_service=await get_discovery_service(),
             metadata_service=await get_publication_metadata_service(),
         )
@@ -1122,6 +1160,7 @@ async def cleanup_dependencies() -> None:
     global _discovery_service, _ncbi_discovery_client, _ncbi_publication_metadata_client
     global _publication_metadata_service
     global _citation_graph_service, _crossref_client, _europe_pmc_literature_client
+    global _openalex_client, _unpaywall_client
     global _related_evidence_service, _topic_literature_map_service
     global _llm_review_context_service, _review_context_service, _review_pool
     global _review_queue, _review_repository
@@ -1150,6 +1189,16 @@ async def cleanup_dependencies() -> None:
         europe_pmc_literature_client = _europe_pmc_literature_client
         _europe_pmc_literature_client = None
         await europe_pmc_literature_client.close()
+
+    if _openalex_client:
+        openalex_client = _openalex_client
+        _openalex_client = None
+        await openalex_client.close()
+
+    if _unpaywall_client:
+        unpaywall_client = _unpaywall_client
+        _unpaywall_client = None
+        await unpaywall_client.close()
 
     if _crossref_client:
         crossref_client = _crossref_client

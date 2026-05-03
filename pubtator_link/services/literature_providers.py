@@ -150,6 +150,49 @@ class OpenAlexClient:
             await self._client.aclose()
 
     async def get_work_by_doi(self, doi: str) -> LiteraturePaper:
+        payload = await self._get_work_payload_by_doi(doi)
+        return _paper_from_openalex(payload)
+
+    async def get_references(self, doi: str, *, limit: int) -> list[LiteraturePaper]:
+        payload = await self._get_work_payload_by_doi(doi)
+        source_id = _optional_str(payload.get("id"))
+        referenced_works = payload.get("referenced_works", [])
+        if not isinstance(referenced_works, Sequence) or isinstance(referenced_works, str | bytes):
+            return []
+        return [
+            LiteraturePaper(
+                openalex_id=_optional_str(work_id),
+                status="unresolved_reference",
+                provenance=[
+                    LiteratureGraphProvenance(
+                        provider=OPENALEX_PROVIDER,
+                        source_id=source_id,
+                    )
+                ],
+            )
+            for work_id in referenced_works[:limit]
+            if _optional_str(work_id)
+        ]
+
+    async def get_cited_by(self, doi: str, *, limit: int) -> list[LiteraturePaper]:
+        payload = await self._get_work_payload_by_doi(doi)
+        cited_by_api_url = _optional_str(payload.get("cited_by_api_url"))
+        if not cited_by_api_url:
+            return []
+        params: dict[str, str] = {"per-page": str(limit)}
+        if self.mailto:
+            params["mailto"] = self.mailto
+        response = await self._client.get(cited_by_api_url, params=params)
+        response.raise_for_status()
+        cited_payload = response.json()
+        if not isinstance(cited_payload, Mapping):
+            return []
+        results = cited_payload.get("results", [])
+        if not isinstance(results, Sequence) or isinstance(results, str | bytes):
+            return []
+        return [_paper_from_openalex(item) for item in results if isinstance(item, Mapping)][:limit]
+
+    async def _get_work_payload_by_doi(self, doi: str) -> Mapping[str, Any]:
         params: dict[str, str] = {}
         if self.mailto:
             params["mailto"] = self.mailto
@@ -157,7 +200,7 @@ class OpenAlexClient:
         response = await self._client.get(f"{self.base_url}/works/{encoded_doi}", params=params)
         response.raise_for_status()
         payload = response.json()
-        return _paper_from_openalex(payload if isinstance(payload, Mapping) else {})
+        return payload if isinstance(payload, Mapping) else {}
 
 
 class UnpaywallClient:

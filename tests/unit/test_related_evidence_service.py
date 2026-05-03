@@ -159,6 +159,28 @@ async def test_filters_publication_type_and_year_without_citation_neighbors() ->
         "pubmed_neighbor_score",
         "requested_publication_type",
     ]
+    assert response.candidates[0].paper.provenance[0].provider == "pubmed_metadata"
+
+
+@pytest.mark.asyncio
+async def test_elink_candidates_do_not_depend_on_pubtator_search_flag() -> None:
+    service = RelatedEvidenceService(
+        discovery_service=FakeDiscovery(),
+        metadata_service=FakeMetadata(),
+        citation_graph_service=FakeCitationGraph(),
+    )
+
+    response = await service.find_candidates(
+        RelatedEvidenceCandidatesRequest(
+            pmid="123",
+            include_pubtator_search=False,
+            include_citation_neighbors=False,
+        )
+    )
+
+    assert response.candidate_pmids == ["222", "111"]
+    assert response.candidates[0].paper.provenance[0].provider == "pubmed_metadata"
+    assert "pubmed_neighbor_score" in response.candidates[0].match_reasons
 
 
 @pytest.mark.asyncio

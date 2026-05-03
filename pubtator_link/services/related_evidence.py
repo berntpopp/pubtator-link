@@ -7,6 +7,7 @@ from typing import Any
 
 from pubtator_link.models.literature_graph import (
     LiteratureAvailability,
+    LiteratureGraphProvenance,
     LiteraturePaper,
     LiteratureResponseMeta,
     ProviderWarning,
@@ -43,23 +44,22 @@ class RelatedEvidenceService:
         citation_pmids: set[str] = set()
         candidate_fetch_limit = _candidate_fetch_limit(request.max_results)
 
-        if request.include_pubtator_search:
-            try:
-                related_scores = await self._find_related_article_scores(
-                    [request.pmid],
-                    candidate_fetch_limit,
+        try:
+            related_scores = await self._find_related_article_scores(
+                [request.pmid],
+                candidate_fetch_limit,
+            )
+            for record in related_scores:
+                pmid = str(record.pmid)
+                if pmid == request.pmid:
+                    continue
+                neighbor_scores[pmid] = max(
+                    neighbor_scores.get(pmid, 0),
+                    int(record.neighbor_score),
                 )
-                for record in related_scores:
-                    pmid = str(record.pmid)
-                    if pmid == request.pmid:
-                        continue
-                    neighbor_scores[pmid] = max(
-                        neighbor_scores.get(pmid, 0),
-                        int(record.neighbor_score),
-                    )
-                    candidate_pmids.append(pmid)
-            except Exception as exc:
-                warnings.append(_provider_failed_warning("ncbi_elink", exc))
+                candidate_pmids.append(pmid)
+        except Exception as exc:
+            warnings.append(_provider_failed_warning("ncbi_elink", exc))
 
         if request.include_citation_neighbors:
             try:
@@ -185,6 +185,7 @@ def _paper_from_metadata(metadata: Any) -> LiteraturePaper:
         publication_types=metadata.publication_types,
         availability=LiteratureAvailability(has_pmc_full_text=has_full_text),
         status="resolved_full_text_candidate" if has_full_text else "resolved_metadata_only",
+        provenance=[LiteratureGraphProvenance(provider="pubmed_metadata")],
     )
 
 
