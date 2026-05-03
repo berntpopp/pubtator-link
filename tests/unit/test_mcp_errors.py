@@ -88,6 +88,24 @@ def test_mcp_tool_error_sanitizes_typed_upstream_message() -> None:
     assert payload["message"] == "The upstream service timed out."
 
 
+def test_ground_question_error_uses_selected_pmids_for_fallback() -> None:
+    error_source = RuntimeError("review database unavailable")
+    error_source.pmids = ["11111111", "22222222"]  # type: ignore[attr-defined]
+
+    error = mcp_tool_error(
+        error_source,
+        McpErrorContext(tool_name="pubtator.ground_question"),
+    )
+
+    payload = json.loads(str(error))
+
+    assert payload["fallback_tool"] == "pubtator.get_publication_passages"
+    assert payload["fallback_args"] == {
+        "pmids": ["11111111", "22222222"],
+        "mode": "compact_passages",
+    }
+
+
 def test_mcp_tool_error_includes_bounded_diagnostics_snapshot() -> None:
     error = mcp_tool_error(
         RuntimeError("relation review_passages is unavailable"),

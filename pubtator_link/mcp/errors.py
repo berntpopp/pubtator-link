@@ -160,6 +160,14 @@ def _fallback_for_context(context: McpErrorContext) -> tuple[str | None, dict[st
     return None, None
 
 
+def _pmids_for_exception(exc: Exception) -> list[str] | None:
+    pmids = getattr(exc, "pmids", None)
+    if not isinstance(pmids, list):
+        return None
+    normalized = [str(pmid).strip() for pmid in pmids if str(pmid).strip()]
+    return normalized or None
+
+
 def _tool_error_details(exc: ToolError) -> tuple[str, str]:
     try:
         payload = json.loads(str(exc))
@@ -183,6 +191,14 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> ToolError:
         exc_info=(type(exc), exc, exc.__traceback__),
     )
     fallback_tool, fallback_args = _fallback_for_context(context)
+    exception_pmids = _pmids_for_exception(exc)
+    if (
+        fallback_tool is None
+        and context.tool_name == "pubtator.ground_question"
+        and exception_pmids
+    ):
+        fallback_tool = "pubtator.get_publication_passages"
+        fallback_args = {"pmids": exception_pmids, "mode": "compact_passages"}
     next_commands: list[dict[str, Any]] = []
     if fallback_tool and fallback_args is not None:
         next_commands.append({"tool": fallback_tool, "arguments": fallback_args})

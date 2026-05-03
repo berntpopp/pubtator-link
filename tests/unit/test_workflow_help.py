@@ -7,6 +7,7 @@ def test_workflow_help_includes_metadata_and_review_index_steps() -> None:
     response = service.get_help("clinical_genetics_review")
 
     names = [step.tool_name for step in response.steps]
+    assert "pubtator.ground_question" in names
     assert "pubtator.search_biomedical_entities" in names
     assert "pubtator.find_entity_relations" in names
     assert "pubtator.search_literature" in names

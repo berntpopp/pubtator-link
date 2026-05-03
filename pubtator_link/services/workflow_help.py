@@ -49,6 +49,16 @@ class WorkflowHelpService:
         steps = [
             WorkflowStep(
                 order=0,
+                tool_name="pubtator.ground_question",
+                purpose=(
+                    "Use the one-call path for standard grounded research questions when "
+                    "the server may index review evidence."
+                ),
+                required=False,
+                key_args={"max_pmids": 8},
+            ),
+            WorkflowStep(
+                order=1,
                 tool_name="pubtator.review_quickstart",
                 purpose=(
                     "For casual sessions, search, stage/index, inspect coverage, and get a "
@@ -58,28 +68,28 @@ class WorkflowHelpService:
                 key_args={"n_pmids": 8},
             ),
             WorkflowStep(
-                order=1,
+                order=2,
                 tool_name="pubtator.search_biomedical_entities",
                 purpose="Resolve canonical entity IDs for genes, diseases, chemicals, and variants.",
             ),
             WorkflowStep(
-                order=2,
+                order=3,
                 tool_name="pubtator.find_entity_relations",
                 purpose="Use grounded entity IDs to discover relation evidence and PMID candidates.",
             ),
             WorkflowStep(
-                order=3,
+                order=4,
                 tool_name="pubtator.lookup_variant_evidence",
                 purpose="Look up source-attributed variant records and literature evidence without backend classification.",
             ),
             WorkflowStep(
-                order=4,
+                order=5,
                 tool_name="pubtator.search_literature",
                 purpose="Find candidate PMIDs with compact results and optional metadata.",
                 key_args={"metadata": "basic", "coverage": "preflight"},
             ),
             WorkflowStep(
-                order=5,
+                order=6,
                 tool_name="pubtator.search_guidelines",
                 purpose=(
                     "Convenience wrapper for filtered search_literature when guideline, "
@@ -89,22 +99,22 @@ class WorkflowHelpService:
                 required=False,
             ),
             WorkflowStep(
-                order=6,
+                order=7,
                 tool_name="pubtator.get_publication_metadata",
                 purpose="Fetch citation-grade author and journal metadata for selected PMIDs.",
             ),
             WorkflowStep(
-                order=7,
+                order=8,
                 tool_name="pubtator.index_review_evidence",
                 purpose="Prepare the selected corpus for review-scoped retrieval.",
             ),
             WorkflowStep(
-                order=8,
+                order=9,
                 tool_name="pubtator.inspect_review_index",
                 purpose="Verify indexed coverage, source status, and sample passages.",
             ),
             WorkflowStep(
-                order=9,
+                order=10,
                 tool_name="pubtator.retrieve_review_context_batch",
                 purpose="Retrieve citable passages for final claims.",
             ),

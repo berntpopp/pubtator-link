@@ -764,51 +764,55 @@ async def ground_question_impl(
             recovery=["Refine the search query or provide candidate PMIDs explicitly."],
         ).model_dump(mode="json")
 
-    indexing_service = _review_indexing_service_from_factory(
-        review_indexing_service_factory,
-        queue,
-    )
-    await indexing_service.index_review_evidence(
-        selected_review_id,
-        IndexReviewEvidenceRequest(
-            pmids=selected_pmids,
-            wait_for_completion=wait_until_ready,
-            wait_for_status="complete_or_partial" if wait_until_ready else None,
-            timeout_ms=timeout_ms,
-        ),
-    )
-    inspect_response = await context_service.inspect_review_index(
-        review_id=selected_review_id,
-        request=InspectReviewIndexRequest(pmids=selected_pmids),
-    )
-    ready_to_retrieve = inspect_response.totals.passage_count > 0
-    context: RetrieveReviewContextBatchResponse | None = None
-    recovery: list[str] = []
-    if ready_to_retrieve:
-        context = await context_service.retrieve_context_batch(
-            review_id=selected_review_id,
-            request=RetrieveReviewContextBatchRequest(
-                queries=[normalized_question],
+    try:
+        indexing_service = _review_indexing_service_from_factory(
+            review_indexing_service_factory,
+            queue,
+        )
+        await indexing_service.index_review_evidence(
+            selected_review_id,
+            IndexReviewEvidenceRequest(
                 pmids=selected_pmids,
-                entity_ids=entity_ids or [],
-                response_mode="compact",
-                max_total_passages=8,
-                max_response_chars=12000,
-                include_diagnostics=False,
+                wait_for_completion=wait_until_ready,
+                wait_for_status="complete_or_partial" if wait_until_ready else None,
+                timeout_ms=timeout_ms,
             ),
         )
-        next_tools = [
-            "pubtator.retrieve_review_context_batch",
-            "pubtator.record_review_context",
-        ]
-    else:
-        recovery.append(
-            "Indexing has not produced passages yet; inspect the review index and retry retrieval."
+        inspect_response = await context_service.inspect_review_index(
+            review_id=selected_review_id,
+            request=InspectReviewIndexRequest(pmids=selected_pmids),
         )
-        next_tools = [
-            "pubtator.inspect_review_index",
-            "pubtator.retrieve_review_context_batch",
-        ]
+        ready_to_retrieve = _ground_question_sources_ready(inspect_response, selected_pmids)
+        context: RetrieveReviewContextBatchResponse | None = None
+        recovery: list[str] = []
+        if ready_to_retrieve:
+            context = await context_service.retrieve_context_batch(
+                review_id=selected_review_id,
+                request=RetrieveReviewContextBatchRequest(
+                    queries=[normalized_question],
+                    pmids=selected_pmids,
+                    entity_ids=entity_ids or [],
+                    response_mode="compact",
+                    max_total_passages=8,
+                    max_response_chars=12000,
+                    include_diagnostics=False,
+                ),
+            )
+            next_tools = [
+                "pubtator.record_review_context",
+                "pubtator.get_review_audit_trail",
+            ]
+        else:
+            recovery.append(
+                "Indexing has not produced passages yet; inspect the review index and retry retrieval."
+            )
+            next_tools = [
+                "pubtator.inspect_review_index",
+                "pubtator.retrieve_review_context_batch",
+            ]
+    except Exception as exc:
+        exc.pmids = selected_pmids  # type: ignore[attr-defined]
+        raise
 
     return GroundQuestionResponse(
         question=normalized_question,
@@ -822,6 +826,24 @@ async def ground_question_impl(
         next_tools=next_tools,
         recovery=recovery,
     ).model_dump(mode="json")
+
+
+def _ground_question_sources_ready(inspect_response: Any, selected_pmids: list[str]) -> bool:
+    selected = set(selected_pmids)
+    if not selected:
+        return False
+    ready_coverages = {"abstract_only", "full_text", "curated_url"}
+    ready_pmids: set[str] = set()
+    for source in getattr(inspect_response, "sources", []) or []:
+        pmid = str(getattr(source, "pmid", "") or "").strip()
+        coverage = str(getattr(source, "coverage", "") or "").strip()
+        passage_count = int(getattr(source, "passage_count", 0) or 0)
+        if pmid in selected and (passage_count > 0 or coverage in ready_coverages):
+            ready_pmids.add(pmid)
+    if ready_pmids:
+        return True
+    status = getattr(inspect_response, "preparation_status", None)
+    return bool(status and (int(status.complete or 0) > 0 or int(status.partial or 0) > 0))
 
 
 def _review_indexing_service_from_factory(factory: Any, queue: ReviewPreparationQueue) -> Any:

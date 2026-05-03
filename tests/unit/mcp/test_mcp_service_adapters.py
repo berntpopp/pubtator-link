@@ -711,8 +711,8 @@ async def test_ground_question_adapter_chains_search_index_inspect_retrieve() ->
     assert result["ready_to_retrieve"] is True
     assert result["coverage_summary"] == {"full_text": 2}
     assert result["next_tools"] == [
-        "pubtator.retrieve_review_context_batch",
         "pubtator.record_review_context",
+        "pubtator.get_review_audit_trail",
     ]
     assert "_meta" not in result
 
@@ -776,6 +776,65 @@ async def test_ground_question_adapter_no_pmids_returns_search_recovery() -> Non
         "Refine the search query or provide candidate PMIDs explicitly.",
     ]
     assert "_meta" not in result
+
+
+@pytest.mark.asyncio
+async def test_ground_question_adapter_waits_when_selected_pmids_are_not_ready() -> None:
+    from pubtator_link.mcp import service_adapters
+    from pubtator_link.models.review_rerag import (
+        InspectReviewIndexResponse,
+        PreparationStatus,
+        ReviewIndexTotals,
+    )
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "count": 1,
+                "page": 1,
+                "results": [{"pmid": "44444444", "title": "New selected source"}],
+            }
+
+    class FakeQueue:
+        repository = object()
+
+    class FakeIndexingService:
+        def __init__(self, **kwargs):
+            pass
+
+        async def index_review_evidence(self, review_id, request):
+            return {"success": True}
+
+    class FakeContextService:
+        async def inspect_review_index(self, review_id, request):
+            return InspectReviewIndexResponse(
+                review_id=review_id,
+                preparation_status=PreparationStatus(),
+                sources=[],
+                totals=ReviewIndexTotals(passage_count=5),
+                failed_sources=[],
+                coverage_summary={},
+            )
+
+        async def retrieve_context_batch(self, review_id, request):
+            raise AssertionError("retrieval should wait for selected PMIDs to be ready")
+
+    result = await service_adapters.ground_question_impl(
+        client=FakeClient(),
+        queue=FakeQueue(),
+        context_service=FakeContextService(),
+        question="new source question",
+        review_id="existing-review",
+        review_indexing_service_factory=FakeIndexingService,
+    )
+
+    assert result["selected_pmids"] == ["44444444"]
+    assert result["ready_to_retrieve"] is False
+    assert result["context"] is None
+    assert result["next_tools"] == [
+        "pubtator.inspect_review_index",
+        "pubtator.retrieve_review_context_batch",
+    ]
 
 
 @pytest.mark.asyncio
