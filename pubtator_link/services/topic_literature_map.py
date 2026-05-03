@@ -162,7 +162,7 @@ class TopicLiteratureMapService:
                 raw = await self.search_client.search_publications(
                     request.query,
                     page=1,
-                    sort="relevance",
+                    sort="score desc",
                 )
             except Exception as exc:
                 warnings.append(_provider_failed_warning("pubtator_search", exc))

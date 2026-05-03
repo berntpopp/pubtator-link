@@ -28,7 +28,7 @@ class FakeSearchClient:
     ) -> dict[str, object]:
         assert text == "FMF"
         assert page == 1
-        assert sort == "relevance"
+        assert sort == "score desc"
         return {"results": [{"pmid": "111"}, {"pmid": "222"}]}
 
 
