@@ -14,6 +14,7 @@ from pubtator_link.models.discovery import (
     RelatedArticleRecord,
 )
 from pubtator_link.services.ncbi_discovery import DiscoveryService, NcbiDiscoveryClient
+from tests.fixtures.literature_graph import NCBI_ELINK_NEIGHBOR_SCORE
 
 
 class MockTransport:
@@ -401,6 +402,23 @@ async def test_ncbi_client_parses_related_article_links() -> None:
     assert transport.requests[0].url.params["linkname"] == "pubmed_pubmed"
     assert transport.requests[0].url.params["retmode"] == "json"
     assert transport.requests[0].url.params["tool"] == "pubtator-link"
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_ncbi_client_parses_elink_neighbor_scores() -> None:
+    transport = MockTransport(NCBI_ELINK_NEIGHBOR_SCORE)
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = NcbiDiscoveryClient(http_client=http_client)
+
+    records = await client.find_related_article_scores(["40562663"], limit=10)
+
+    assert [(record.source_pmid, record.pmid, record.neighbor_score) for record in records] == [
+        ("40562663", "39596913", 1220),
+        ("40562663", "40600001", 900),
+    ]
+    assert transport.requests[0].url.path.endswith("/elink.fcgi")
+    assert transport.requests[0].url.params["cmd"] == "neighbor_score"
     await client.close()
 
 

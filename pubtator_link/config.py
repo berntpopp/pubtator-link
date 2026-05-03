@@ -155,6 +155,15 @@ class ServerSettings(BaseSettings):
     europe_pmc_rate_limit_per_second: float = Field(default=1.0, gt=0, le=5)
     europe_pmc_timeout_seconds: int = Field(default=20, ge=2, le=120)
     europe_pmc_max_concurrency: int = Field(default=1, ge=1, le=5)
+    crossref_mailto: str | None = Field(
+        default=None, description="Optional Crossref polite-pool mailto"
+    )
+    openalex_mailto: str | None = Field(
+        default=None, description="Optional OpenAlex polite-pool mailto"
+    )
+    unpaywall_email: str | None = Field(
+        default=None, description="Required email for optional Unpaywall API use"
+    )
 
     @field_validator("mcp_path")
     @classmethod
