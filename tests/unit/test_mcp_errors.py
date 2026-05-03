@@ -60,6 +60,34 @@ def test_error_code_legacy_schema_text_fallback_still_works() -> None:
     )
 
 
+def test_review_schema_stale_error_preserves_runtime_error_compatibility() -> None:
+    assert isinstance(ReviewSchemaStaleError("schema stale"), RuntimeError)
+
+
+def test_mcp_tool_error_sanitizes_typed_review_schema_message() -> None:
+    error = mcp_tool_error(
+        ReviewSchemaStaleError("Review database schema is not current: review_sources"),
+        McpErrorContext(tool_name="pubtator.index_review_evidence"),
+    )
+
+    payload = json.loads(str(error))
+
+    assert payload["error_code"] == "review_schema_not_current"
+    assert payload["message"] == "Review database schema is not current."
+
+
+def test_mcp_tool_error_sanitizes_typed_upstream_message() -> None:
+    error = mcp_tool_error(
+        UpstreamUnavailableError("service unavailable"),
+        McpErrorContext(tool_name="pubtator.search_literature"),
+    )
+
+    payload = json.loads(str(error))
+
+    assert payload["error_code"] == "upstream_unavailable"
+    assert payload["message"] == "The upstream service timed out."
+
+
 def test_mcp_tool_error_includes_bounded_diagnostics_snapshot() -> None:
     error = mcp_tool_error(
         RuntimeError("relation review_passages is unavailable"),

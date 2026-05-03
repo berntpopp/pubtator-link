@@ -81,6 +81,19 @@ def sanitize_error_message(message: str) -> str:
     return "The tool could not complete the requested operation."
 
 
+def safe_message_for_exception(exc: Exception) -> str:
+    """Return a stable safe message for known typed exceptions."""
+    if isinstance(exc, ReviewSchemaStaleError):
+        return "Review database schema is not current."
+    if isinstance(exc, ReviewIndexUnavailableError):
+        return "Review database operation failed."
+    if isinstance(exc, UpstreamUnavailableError):
+        return "The upstream service timed out."
+    if isinstance(exc, ValidationFailureError):
+        return "Invalid MCP arguments."
+    return sanitize_error_message(str(exc))
+
+
 def record_mcp_error(
     *,
     tool_name: str,
@@ -179,7 +192,7 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> ToolError:
         "error_code": error_code_for_exception(exc),
         "message": "Invalid MCP arguments."
         if isinstance(exc, InputNormalizationError)
-        else sanitize_error_message(str(exc)),
+        else safe_message_for_exception(exc),
         "retryable": False,
         "fallback_tool": fallback_tool,
         "fallback_args": fallback_args,
@@ -247,7 +260,7 @@ async def run_mcp_tool(
     except Exception as exc:
         latency_seconds = perf_counter() - started_at
         error_code = error_code_for_exception(exc)
-        message = sanitize_error_message(str(exc))
+        message = safe_message_for_exception(exc)
         logger.warning(
             "mcp_tool_failed",
             extra={

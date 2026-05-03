@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-class PubTatorLinkError(Exception):
+class PubTatorLinkError(RuntimeError):
     """Base class for PubTator-Link service errors with stable MCP mapping."""
 
 
