@@ -137,9 +137,7 @@ async def build_diagnostics(
     failed_sources_value = (
         list(failed_sources)
         if failed_sources is not None
-        else await repository.list_review_failed_sources(
-            review_id, session_id=request.session_id
-        )
+        else await repository.list_review_failed_sources(review_id, session_id=request.session_id)
     )
     section_label = ", ".join(available_sections_value) if available_sections_value else "none"
     message = (

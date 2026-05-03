@@ -270,9 +270,7 @@ class ReviewContextService:
     ) -> RetrieveReviewContextBatchResponse:
         """Retrieve multiple query variants and merge selected passages."""
         await self._ensure_session_exists(review_id, request.session_id)
-        snapshot = await self._review_retrieval_snapshot(
-            review_id, session_id=request.session_id
-        )
+        snapshot = await self._review_retrieval_snapshot(review_id, session_id=request.session_id)
         results: list[RetrieveReviewContextResponse] = []
         query_results: list[RetrieveReviewContextResponse] = []
 
