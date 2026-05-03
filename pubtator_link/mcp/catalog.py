@@ -148,6 +148,14 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         example='{"pmids":["12345"],"include_citations":"nlm"}',
         next_tools=("pubtator.get_publication_passages",),
     ),
+    "pubtator.get_publication_citation_graph": ToolCatalogSupplement(
+        category="publication",
+        profiles=("lean", "full", "readonly"),
+        stability="lean",
+        do_not_use_for=("claim-level evidence support", "publisher full-text retrieval"),
+        example='{"pmid":"40562663","direction":"both","max_results":50}',
+        next_tools=("pubtator.get_publication_passages",),
+    ),
     "pubtator.get_publication_passages": ToolCatalogSupplement(
         category="publication",
         profiles=("lean", "full", "readonly"),

@@ -5,6 +5,10 @@ import logging
 from fastapi import APIRouter, HTTPException, Query
 
 from ...config import api_config
+from ...models.literature_graph import (
+    PublicationCitationGraphRequest,
+    PublicationCitationGraphResponse,
+)
 from ...models.publication_metadata import PublicationMetadataRequest, PublicationMetadataResponse
 from ...models.publication_passages import (
     PublicationContextEstimateRequest,
@@ -15,6 +19,7 @@ from ...models.publication_passages import (
 from ...models.requests import PMCExportRequest, PublicationExportRequest
 from ...models.responses import PublicationExportResponse
 from .dependencies import (
+    CitationGraphServiceDep,
     PublicationMetadataServiceDep,
     PublicationPassageServiceDep,
     PublicationServiceDep,
@@ -70,6 +75,21 @@ async def get_publication_metadata(
 ) -> PublicationMetadataResponse:
     """Return citation-grade metadata for known PMIDs."""
     return await service.get_metadata(request)
+
+
+@router.post(
+    "/citation-graph",
+    response_model=PublicationCitationGraphResponse,
+    operation_id="get_publication_citation_graph",
+    summary="Get publication citation graph",
+)
+@handle_api_errors
+async def get_publication_citation_graph(
+    request: PublicationCitationGraphRequest,
+    service: CitationGraphServiceDep,
+) -> PublicationCitationGraphResponse:
+    """Return citation-neighbor metadata for one PMID or DOI."""
+    return await service.get_citation_graph(request)
 
 
 @router.get(

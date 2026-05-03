@@ -19,6 +19,7 @@ EXPECTED_PUBLIC_TOOL_NAMES = {
     "pubtator.fetch_publication_annotations",
     "pubtator.get_publication_metadata",
     "pubtator.get_publication_passages",
+    "pubtator.get_publication_citation_graph",
     "pubtator.estimate_publication_context",
     "pubtator.fetch_pmc_annotations",
     "pubtator.search_biomedical_entities",
@@ -149,6 +150,20 @@ def test_get_publication_passages_schema_exposes_dry_run_and_verbosity() -> None
 
     assert schema["properties"]["dry_run"]["default"] is False
     assert set(schema["properties"]["verbosity"]["enum"]) == {"lean", "standard", "full"}
+
+
+def test_citation_graph_tool_schema_is_flat() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator.get_publication_citation_graph"
+    ]
+    properties = tool.parameters["properties"]
+
+    assert "pmid" in properties
+    assert "doi" in properties
+    assert "request" not in properties
+    assert tool.output_schema["title"] == "PublicationCitationGraphResponse"
 
 
 def test_review_retrieval_schema_hides_resolver_trace_by_default() -> None:

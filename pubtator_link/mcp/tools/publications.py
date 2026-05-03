@@ -6,6 +6,7 @@ from fastmcp import FastMCP
 from pydantic import Field
 
 from pubtator_link.api.routes.dependencies import (
+    get_citation_graph_service,
     get_publication_metadata_service,
     get_publication_passage_service,
     get_publication_service,
@@ -17,9 +18,11 @@ from pubtator_link.mcp.service_adapters import (
     estimate_publication_context_impl,
     fetch_pmc_annotations_impl,
     fetch_publication_annotations_impl,
+    get_publication_citation_graph_impl,
     get_publication_metadata_impl,
     get_publication_passages_impl,
 )
+from pubtator_link.models.literature_graph import PublicationCitationGraphResponse
 from pubtator_link.models.publication_metadata import PublicationMetadataResponse
 from pubtator_link.models.publication_passages import (
     PublicationContextEstimateResponse,
@@ -122,6 +125,40 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             )
 
         return await run_mcp_tool("pubtator.get_publication_metadata", call, pmids=pmids)
+
+    @mcp.tool(
+        name="pubtator.get_publication_citation_graph",
+        title="Get Publication Citation Graph",
+        output_schema=PublicationCitationGraphResponse.model_json_schema(),
+        annotations=READ_ONLY_OPEN_WORLD,
+    )
+    async def get_publication_citation_graph(
+        pmid: str | None = None,
+        doi: str | None = None,
+        direction: Literal["references", "cited_by", "both"] = "both",
+        resolve_metadata: bool = True,
+        include_open_access_status: bool = True,
+        max_results: Annotated[int, Field(ge=1, le=100)] = 50,
+    ) -> dict[str, Any]:
+        """Use this when a user needs reference or cited-by neighbors for one publication. Do not use this for claim-level evidence support or publisher full-text retrieval; use pubtator.get_publication_passages. Next: pubtator.get_publication_passages."""
+
+        async def call() -> dict[str, Any]:
+            service = await get_citation_graph_service()
+            return await get_publication_citation_graph_impl(
+                service=service,
+                pmid=pmid,
+                doi=doi,
+                direction=direction,
+                resolve_metadata=resolve_metadata,
+                include_open_access_status=include_open_access_status,
+                max_results=max_results,
+            )
+
+        return await run_mcp_tool(
+            "pubtator.get_publication_citation_graph",
+            call,
+            pmids=[pmid] if pmid else None,
+        )
 
     if profile != "lean":
 

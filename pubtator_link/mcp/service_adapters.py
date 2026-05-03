@@ -16,6 +16,7 @@ from pubtator_link.mcp.input_normalization import (
     normalize_retrieve_review_context_batch_args,
 )
 from pubtator_link.models.corpus_suggestion import CorpusSuggestionRequest
+from pubtator_link.models.literature_graph import PublicationCitationGraphRequest
 from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 from pubtator_link.models.publication_passages import (
     PublicationContextEstimateRequest,
@@ -56,6 +57,7 @@ from pubtator_link.models.review_rerag import (
     UpsertEvidenceCertaintyRequest,
 )
 from pubtator_link.models.variants import VariantEvidenceRequest, VariantEvidenceSource
+from pubtator_link.services.citation_graph import CitationGraphService
 from pubtator_link.services.corpus_suggestion import CorpusSuggestionService
 from pubtator_link.services.entity_matching import (
     matched_terms_from_match_text,
@@ -238,6 +240,29 @@ async def get_publication_metadata_impl(
             include_publication_types=include_publication_types,
             include_citations=include_citations,
             include_coverage=include_coverage,
+        )
+    )
+    return response.model_dump(by_alias=True)
+
+
+async def get_publication_citation_graph_impl(
+    *,
+    service: CitationGraphService,
+    pmid: str | None = None,
+    doi: str | None = None,
+    direction: Literal["references", "cited_by", "both"] = "both",
+    resolve_metadata: bool = True,
+    include_open_access_status: bool = True,
+    max_results: int = 50,
+) -> dict[str, Any]:
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            pmid=pmid,
+            doi=doi,
+            direction=direction,
+            resolve_metadata=resolve_metadata,
+            include_open_access_status=include_open_access_status,
+            max_results=max_results,
         )
     )
     return response.model_dump(by_alias=True)

@@ -157,6 +157,20 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Resource links: `pubtator://reviews/{review_id}/passages/{passage_id}`
 - Output schema: `ReviewPassageLookupResponse`; has_output_schema: `yes`
 
+## `pubtator.get_publication_citation_graph`
+
+- Name: `pubtator.get_publication_citation_graph`
+- Title: Get Publication Citation Graph
+- Category: `publication`
+- Profiles: `lean`, `full`, `readonly`
+- Stability: `lean`
+- Description: Use this when a user needs reference or cited-by neighbors for one publication. Do not use this for claim-level evidence support or publisher full-text retrieval; use pubtator.get_publication_passages. Next: pubtator.get_publication_passages.
+- Do not use for: `claim-level evidence support`, `publisher full-text retrieval`
+- Example: `{"pmid":"40562663","direction":"both","max_results":50}`
+- Next tools by profile: lean: `pubtator.get_publication_passages`; full: `pubtator.get_publication_passages`; readonly: `pubtator.get_publication_passages`
+- Resource links: None
+- Output schema: `PublicationCitationGraphResponse`; has_output_schema: `yes`
+
 ## `pubtator.get_publication_metadata`
 
 - Name: `pubtator.get_publication_metadata`

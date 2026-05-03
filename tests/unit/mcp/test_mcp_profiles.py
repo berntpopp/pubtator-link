@@ -14,6 +14,7 @@ EXPECTED_LEAN_TOOLS = {
     "pubtator.lookup_variant_evidence",
     "pubtator.get_publication_metadata",
     "pubtator.get_publication_passages",
+    "pubtator.get_publication_citation_graph",
     "pubtator.preflight_review_sources",
     "pubtator.index_review_evidence",
     "pubtator.inspect_review_index",
@@ -78,3 +79,11 @@ def test_ground_question_is_lean_and_full_but_not_readonly() -> None:
     assert "pubtator.ground_question" in _tool_names("lean")
     assert "pubtator.ground_question" in _tool_names("full")
     assert "pubtator.ground_question" not in _tool_names("readonly")
+
+
+def test_citation_graph_is_lean_full_and_readonly() -> None:
+    tool_name = "pubtator.get_publication_citation_graph"
+
+    assert tool_name in _tool_names("lean")
+    assert tool_name in _tool_names("full")
+    assert tool_name in _tool_names("readonly")

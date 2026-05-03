@@ -22,16 +22,18 @@ from pubtator_link.models.responses import SearchResponse, SearchResult
 from pubtator_link.models.review_rerag import StageResearchSessionRequest
 
 from ...api.client import PubTator3Client
-from ...config import review_rerag_config
+from ...config import review_rerag_config, settings
 from ...logging_config import configure_logging
 from ...models.review_rerag import CoverageReason, CoverageTier
 from ...repositories.review_rerag import PostgresReviewReragRepository
+from ...services.citation_graph import CitationGraphService
 from ...services.clinvar import ClinVarService
 from ...services.corpus_suggestion import CorpusSuggestionService
 from ...services.diagnostics import DiagnosticsService
 from ...services.errors import ReviewSchemaStaleError
 from ...services.europe_pmc import EuropePmcClient
 from ...services.full_text_preparation import FullTextPreparationService
+from ...services.literature_providers import CrossrefClient, EuropePmcLiteratureClient
 from ...services.llm_review_context import LlmReviewContextService
 from ...services.ncbi_discovery import DiscoveryService, NcbiDiscoveryClient
 from ...services.publication_metadata import (
@@ -60,6 +62,9 @@ _publication_metadata_service: PublicationMetadataService | None = None
 _ncbi_publication_metadata_client: NcbiPublicationMetadataClient | None = None
 _ncbi_discovery_client: NcbiDiscoveryClient | None = None
 _discovery_service: DiscoveryService | None = None
+_crossref_client: CrossrefClient | None = None
+_europe_pmc_literature_client: EuropePmcLiteratureClient | None = None
+_citation_graph_service: CitationGraphService | None = None
 _logger: FilteringBoundLogger | None = None
 _review_pool: asyncpg.Pool | None = None
 _review_repository: PostgresReviewReragRepository | None = None
@@ -89,6 +94,9 @@ class AppResources:
     publication_metadata_service: PublicationMetadataService | None = None
     ncbi_discovery_client: NcbiDiscoveryClient | None = None
     discovery_service: DiscoveryService | None = None
+    crossref_client: CrossrefClient | None = None
+    europe_pmc_literature_client: EuropePmcLiteratureClient | None = None
+    citation_graph_service: CitationGraphService | None = None
     europe_pmc_client: EuropePmcClient | None = None
     review_pool: asyncpg.Pool | None = None
     review_repository: PostgresReviewReragRepository | None = None
@@ -158,6 +166,8 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
     api_client: PubTator3Client | None = None
     ncbi_discovery_client: NcbiDiscoveryClient | None = None
     ncbi_publication_metadata_client: NcbiPublicationMetadataClient | None = None
+    crossref_client: CrossrefClient | None = None
+    europe_pmc_literature_client: EuropePmcLiteratureClient | None = None
     review_pool: asyncpg.Pool | None = None
     review_queue: ReviewPreparationQueue | None = None
     review_audit_service: ReviewAuditService | None = None
@@ -178,6 +188,16 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
         )
         ncbi_discovery_client = NcbiDiscoveryClient()
         discovery_service = DiscoveryService(ncbi_discovery_client)
+        crossref_client = CrossrefClient(mailto=settings.crossref_mailto)
+        europe_pmc_literature_client = EuropePmcLiteratureClient(
+            base_url=settings.europe_pmc_base_url,
+        )
+        citation_graph_service = CitationGraphService(
+            crossref=crossref_client,
+            europe_pmc=europe_pmc_literature_client,
+            discovery_service=discovery_service,
+            metadata_service=publication_metadata_service,
+        )
         clinvar_service = ClinVarService()
         variant_evidence_service = VariantEvidenceService(
             clinvar=clinvar_service,
@@ -253,6 +273,9 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             publication_metadata_service=publication_metadata_service,
             ncbi_discovery_client=ncbi_discovery_client,
             discovery_service=discovery_service,
+            crossref_client=crossref_client,
+            europe_pmc_literature_client=europe_pmc_literature_client,
+            citation_graph_service=citation_graph_service,
             europe_pmc_client=europe_pmc_client,
             source_preflight_service=source_preflight_service,
             review_pool=review_pool,
@@ -277,6 +300,10 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             await ncbi_discovery_client.close()
         if ncbi_publication_metadata_client is not None:
             await ncbi_publication_metadata_client.close()
+        if europe_pmc_literature_client is not None:
+            await europe_pmc_literature_client.close()
+        if crossref_client is not None:
+            await crossref_client.close()
         if api_client is not None:
             await api_client.close()
         raise
@@ -292,6 +319,10 @@ async def close_app_resources(resources: AppResources) -> None:
         await resources.ncbi_discovery_client.close()
     if resources.ncbi_publication_metadata_client is not None:
         await resources.ncbi_publication_metadata_client.close()
+    if resources.europe_pmc_literature_client is not None:
+        await resources.europe_pmc_literature_client.close()
+    if resources.crossref_client is not None:
+        await resources.crossref_client.close()
     await resources.api_client.close()
 
 
@@ -390,6 +421,41 @@ async def get_discovery_service() -> DiscoveryService:
             _ncbi_discovery_client = NcbiDiscoveryClient()
         _discovery_service = DiscoveryService(_ncbi_discovery_client)
     return _discovery_service
+
+
+async def get_citation_graph_service() -> CitationGraphService:
+    """Get publication citation graph service."""
+    global _citation_graph_service, _crossref_client, _europe_pmc_literature_client
+    resources = current_app_resources()
+    if resources is not None:
+        if resources.citation_graph_service is None:
+            if resources.crossref_client is None:
+                resources.crossref_client = CrossrefClient(mailto=settings.crossref_mailto)
+            if resources.europe_pmc_literature_client is None:
+                resources.europe_pmc_literature_client = EuropePmcLiteratureClient(
+                    base_url=settings.europe_pmc_base_url,
+                )
+            resources.citation_graph_service = CitationGraphService(
+                crossref=resources.crossref_client,
+                europe_pmc=resources.europe_pmc_literature_client,
+                discovery_service=await get_discovery_service(),
+                metadata_service=await get_publication_metadata_service(),
+            )
+        return resources.citation_graph_service
+    if _citation_graph_service is None:
+        if _crossref_client is None:
+            _crossref_client = CrossrefClient(mailto=settings.crossref_mailto)
+        if _europe_pmc_literature_client is None:
+            _europe_pmc_literature_client = EuropePmcLiteratureClient(
+                base_url=settings.europe_pmc_base_url,
+            )
+        _citation_graph_service = CitationGraphService(
+            crossref=_crossref_client,
+            europe_pmc=_europe_pmc_literature_client,
+            discovery_service=await get_discovery_service(),
+            metadata_service=await get_publication_metadata_service(),
+        )
+    return _citation_graph_service
 
 
 async def get_clinvar_service() -> ClinVarService:
@@ -822,6 +888,7 @@ PublicationPassageServiceDep = Annotated[
 PublicationMetadataServiceDep = Annotated[
     PublicationMetadataService, Depends(get_publication_metadata_service)
 ]
+CitationGraphServiceDep = Annotated[CitationGraphService, Depends(get_citation_graph_service)]
 CorpusSuggestionServiceDep = Annotated[
     CorpusSuggestionService, Depends(get_corpus_suggestion_service)
 ]
@@ -972,6 +1039,7 @@ async def cleanup_dependencies() -> None:
     global _api_client, _publication_passage_service, _publication_service, _logger
     global _discovery_service, _ncbi_discovery_client, _ncbi_publication_metadata_client
     global _publication_metadata_service
+    global _citation_graph_service, _crossref_client, _europe_pmc_literature_client
     global _llm_review_context_service, _review_context_service, _review_pool
     global _review_queue, _review_repository
     global _review_evidence_certainty_service
@@ -995,6 +1063,16 @@ async def cleanup_dependencies() -> None:
         _ncbi_publication_metadata_client = None
         await publication_metadata_client.close()
 
+    if _europe_pmc_literature_client:
+        europe_pmc_literature_client = _europe_pmc_literature_client
+        _europe_pmc_literature_client = None
+        await europe_pmc_literature_client.close()
+
+    if _crossref_client:
+        crossref_client = _crossref_client
+        _crossref_client = None
+        await crossref_client.close()
+
     if _review_queue:
         await _review_queue.stop()
         _review_queue = None
@@ -1012,6 +1090,7 @@ async def cleanup_dependencies() -> None:
     _corpus_suggestion_service = None
     _clinvar_service = None
     _variant_evidence_service = None
+    _citation_graph_service = None
     _discovery_service = None
     _publication_passage_service = None
     _publication_metadata_service = None
