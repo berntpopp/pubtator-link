@@ -17,6 +17,10 @@ from pubtator_link.models.literature_graph import (
     RelatedEvidenceCandidatesResponse,
 )
 from pubtator_link.models.publication_metadata import PublicationMetadataRequest
+from pubtator_link.services.literature_graph_compact import (
+    coalesced_provider_warnings,
+    json_size_class,
+)
 
 
 class RelatedEvidenceService:
@@ -89,16 +93,18 @@ class RelatedEvidenceService:
         candidates = candidates[: request.max_results]
         ordered_pmids = [candidate.paper.pmid for candidate in candidates if candidate.paper.pmid]
 
-        return RelatedEvidenceCandidatesResponse(
+        response = RelatedEvidenceCandidatesResponse(
             source=LiteraturePaper(pmid=request.pmid),
             candidates=candidates,
             candidate_pmids=ordered_pmids,
             _meta=LiteratureGraphResponseMeta(
                 response_mode=request.response_mode,
-                warnings=warnings,
+                warnings=coalesced_provider_warnings(warnings),
                 next_commands=_next_commands(ordered_pmids),
             ),
         )
+        response.meta.response_size_class = json_size_class(response.model_dump(by_alias=True))
+        return response
 
     async def _find_related_article_scores(self, pmids: list[str], limit: int) -> Any:
         finder = getattr(self.discovery_service, "find_related_article_scores", None)

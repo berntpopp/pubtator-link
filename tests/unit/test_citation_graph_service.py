@@ -33,6 +33,20 @@ class FakeCrossref:
         ]
 
 
+class LargeCrossref:
+    async def get_work(self, doi: str) -> dict[str, str]:
+        return {"DOI": doi}
+
+    def references_from_work(self, work: dict[str, str]) -> list[LiteraturePaper]:
+        return [
+            LiteraturePaper(
+                doi=f"10.1000/large-{index}",
+                title=f"Large reference {index} " + ("literature graph payload " * 40),
+            )
+            for index in range(25)
+        ]
+
+
 class FakeEuropePmc:
     async def get_citations(self, pmid: str, *, limit: int) -> list[LiteraturePaper]:
         assert pmid == "40562663"
@@ -481,6 +495,11 @@ async def test_citation_graph_compact_returns_candidates_status_and_no_metadata_
     assert any(status.operation == "references" for status in response.references_status)
     assert any(status.operation == "cited_by" for status in response.cited_by_status)
     assert len([s for s in response.open_access_status if s.provider == "unpaywall"]) == 1
+    unpaywall_warnings = [
+        warning for warning in response.meta.warnings if warning.provider == "unpaywall"
+    ]
+    assert len(unpaywall_warnings) == 1
+    assert "repeated" in unpaywall_warnings[0].message
 
 
 @pytest.mark.asyncio
@@ -503,6 +522,54 @@ async def test_citation_graph_full_preserves_existing_arrays() -> None:
     assert response.references
     assert response.cited_by
     assert response.meta.response_mode == "full"
+
+
+@pytest.mark.asyncio
+async def test_citation_graph_nodes_edges_returns_topology_without_full_arrays() -> None:
+    service = CitationGraphService(
+        crossref=FakeCrossref(),
+        europe_pmc=FakeEuropePmc(),
+        discovery_service=ResolvingDiscovery(),
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            doi="10.1016/j.ard.2025.05.020",
+            direction="both",
+            response_mode="nodes_edges",
+        )
+    )
+
+    assert response.meta.response_mode == "nodes_edges"
+    assert response.references == []
+    assert response.cited_by == []
+    assert response.metadata_only == []
+    assert response.reference_candidates == []
+    assert response.cited_by_candidates == []
+    assert response.nodes
+    assert response.edges
+
+
+@pytest.mark.asyncio
+async def test_citation_graph_full_computes_response_size_class() -> None:
+    service = CitationGraphService(
+        crossref=LargeCrossref(),
+        discovery_service=FakeDiscovery(),
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            doi="10.1016/j.ard.2025.05.020",
+            direction="references",
+            response_mode="full",
+            max_results=50,
+            resolve_reference_pmids=False,
+        )
+    )
+
+    assert response.meta.response_size_class in {"medium", "large"}
 
 
 @pytest.mark.asyncio

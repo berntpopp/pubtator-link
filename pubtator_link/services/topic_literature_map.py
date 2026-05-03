@@ -34,6 +34,7 @@ from pubtator_link.services.literature_graph_compact import (
     candidate_summary,
     coalesced_provider_warnings,
     intent_flags_for_query,
+    json_size_class,
     normalize_query_text,
 )
 
@@ -193,7 +194,7 @@ class TopicLiteratureMapService:
                 "top_candidates": len(ranked_candidates),
             }
 
-        return TopicLiteratureMapResponse(
+        response = TopicLiteratureMapResponse(
             query=request.query,
             seed_pmids=seed_pmids,
             summary=response_summary,
@@ -219,6 +220,8 @@ class TopicLiteratureMapService:
                 provider_status=[],
             ),
         )
+        response.meta.response_size_class = json_size_class(response.model_dump(by_alias=True))
+        return response
 
     async def _seed_pmids(
         self,

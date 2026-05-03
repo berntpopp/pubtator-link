@@ -8,6 +8,8 @@ from typing import Any, Protocol
 from pubtator_link.models.literature_graph import (
     LiteratureAvailability,
     LiteratureCandidateSummary,
+    LiteratureGraphEdge,
+    LiteratureGraphNode,
     LiteratureGraphProvenance,
     LiteratureGraphResponseMeta,
     LiteraturePaper,
@@ -19,7 +21,11 @@ from pubtator_link.models.literature_graph import (
     dedupe_papers,
 )
 from pubtator_link.models.publication_metadata import PublicationMetadataRequest
-from pubtator_link.services.literature_graph_compact import candidate_summary
+from pubtator_link.services.literature_graph_compact import (
+    candidate_summary,
+    coalesced_provider_warnings,
+    json_size_class,
+)
 from pubtator_link.services.literature_identifier_resolution import (
     DoiPmidResolver,
     DoiResolutionResult,
@@ -306,23 +312,38 @@ class CitationGraphService:
         candidate_pmids = _candidate_pmids([*references, *cited_by])
         reference_candidates = _citation_candidates(references, "source_reference")
         cited_by_candidates = _citation_candidates(cited_by, "source_cited_by")
-        response_references = [] if request.response_mode == "compact" else references
-        response_cited_by = [] if request.response_mode == "compact" else cited_by
-        response_metadata_only = (
-            [] if request.response_mode == "compact" else _metadata_only([*references, *cited_by])
-        )
+        response_references = references
+        response_cited_by = cited_by
+        response_reference_candidates = reference_candidates
+        response_cited_by_candidates = cited_by_candidates
+        response_metadata_only = _metadata_only([*references, *cited_by])
+        response_nodes: list[LiteratureGraphNode] = []
+        response_edges: list[LiteratureGraphEdge] = []
+        if request.response_mode == "compact":
+            response_references = []
+            response_cited_by = []
+            response_metadata_only = []
+        elif request.response_mode == "nodes_edges":
+            response_references = []
+            response_cited_by = []
+            response_reference_candidates = []
+            response_cited_by_candidates = []
+            response_metadata_only = []
+            response_nodes, response_edges = _citation_nodes_edges(source, references, cited_by)
         if not request.include_provider_status:
             references_status = []
             cited_by_status = []
             identifier_resolution_status = []
             open_access_status = []
-        return PublicationCitationGraphResponse(
+        response = PublicationCitationGraphResponse(
             source=source,
             references=response_references,
             cited_by=response_cited_by,
+            nodes=response_nodes,
+            edges=response_edges,
             response_mode=request.response_mode,
-            reference_candidates=reference_candidates,
-            cited_by_candidates=cited_by_candidates,
+            reference_candidates=response_reference_candidates,
+            cited_by_candidates=response_cited_by_candidates,
             candidate_pmids=candidate_pmids,
             metadata_only=response_metadata_only,
             references_status=references_status,
@@ -331,7 +352,7 @@ class CitationGraphService:
             open_access_status=open_access_status,
             _meta=LiteratureGraphResponseMeta(
                 response_mode=request.response_mode,
-                warnings=warnings,
+                warnings=coalesced_provider_warnings(warnings),
                 next_commands=_next_commands(candidate_pmids),
                 provider_status=[
                     *references_status,
@@ -341,6 +362,8 @@ class CitationGraphService:
                 ],
             ),
         )
+        response.meta.response_size_class = json_size_class(response.model_dump(by_alias=True))
+        return response
 
     async def _source_paper(self, request: PublicationCitationGraphRequest) -> LiteraturePaper:
         if request.pmid:
@@ -632,6 +655,36 @@ def _citation_candidates(
             )
         )
     return candidates
+
+
+def _citation_nodes_edges(
+    source: LiteraturePaper,
+    references: Sequence[LiteraturePaper],
+    cited_by: Sequence[LiteraturePaper],
+) -> tuple[list[LiteratureGraphNode], list[LiteratureGraphEdge]]:
+    papers = dedupe_papers([source, *references, *cited_by])
+    nodes = [LiteratureGraphNode(node_type="paper", paper=paper) for paper in papers]
+    edges = [
+        LiteratureGraphEdge(
+            source=source.key,
+            target=paper.key,
+            edge_type="cites",
+            reasons=["source_reference"],
+            provenance=[LiteratureGraphProvenance(provider="citation_graph")],
+        )
+        for paper in references
+    ]
+    edges.extend(
+        LiteratureGraphEdge(
+            source=source.key,
+            target=paper.key,
+            edge_type="cited_by",
+            reasons=["source_cited_by"],
+            provenance=[LiteratureGraphProvenance(provider="citation_graph")],
+        )
+        for paper in cited_by
+    )
+    return nodes, edges
 
 
 def _candidate_pmids(papers: Sequence[LiteraturePaper]) -> list[str]:

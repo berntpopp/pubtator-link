@@ -332,6 +332,8 @@ class PublicationCitationGraphResponse(BaseModel):
     source: LiteraturePaper
     references: list[LiteraturePaper] = Field(default_factory=list)
     cited_by: list[LiteraturePaper] = Field(default_factory=list)
+    nodes: list[LiteratureGraphNode] = Field(default_factory=list)
+    edges: list[LiteratureGraphEdge] = Field(default_factory=list)
     response_mode: LiteratureGraphResponseMode = "full"
     reference_candidates: list[LiteratureCandidateSummary] = Field(default_factory=list)
     cited_by_candidates: list[LiteratureCandidateSummary] = Field(default_factory=list)
