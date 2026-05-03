@@ -20,7 +20,11 @@ from pubtator_link.mcp.service_adapters import (
     search_biomedical_entities_impl,
     search_literature_impl,
 )
-from pubtator_link.models.responses import EntityAutocompleteResponse, SearchResponse
+from pubtator_link.models.responses import (
+    EntityAutocompleteResponse,
+    RelationsResponse,
+    SearchResponse,
+)
 from pubtator_link.models.variants import VariantEvidenceResponse, VariantEvidenceSource
 from pubtator_link.services.search_coverage import SearchCoverageMode
 from pubtator_link.services.search_shaping import (
@@ -171,6 +175,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         @mcp.tool(
             name="pubtator.find_entity_relations",
             title="Find Entity Relations",
+            output_schema=RelationsResponse.model_json_schema(),
             annotations=READ_ONLY_OPEN_WORLD,
         )
         async def find_entity_relations(
@@ -184,7 +189,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             relation_type: str | None = None,
             target_entity_type: str | None = None,
         ) -> dict[str, Any]:
-            """Use this when a user has a PubTator entity ID and needs literature-derived related entities to expand a corpus after search_biomedical_entities."""
+            """Use this when a user has a PubTator entity ID and needs literature-derived related entities to expand a corpus. Do not use this for canonical entity lookup; use pubtator.search_biomedical_entities. Next: pubtator.search_literature."""
 
             async def call() -> dict[str, Any]:
                 client = await get_api_client()

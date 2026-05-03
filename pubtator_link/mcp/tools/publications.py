@@ -20,7 +20,14 @@ from pubtator_link.mcp.service_adapters import (
     get_publication_metadata_impl,
     get_publication_passages_impl,
 )
-from pubtator_link.models.publication_passages import PublicationPassageMode, Verbosity
+from pubtator_link.models.publication_metadata import PublicationMetadataResponse
+from pubtator_link.models.publication_passages import (
+    PublicationContextEstimateResponse,
+    PublicationPassageMode,
+    PublicationPassageResponse,
+    Verbosity,
+)
+from pubtator_link.models.responses import PublicationExportResponse
 
 
 def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
@@ -29,6 +36,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         @mcp.tool(
             name="pubtator.fetch_publication_annotations",
             title="Fetch Publication Annotations",
+            output_schema=PublicationExportResponse.model_json_schema(),
             annotations=READ_ONLY_OPEN_WORLD,
         )
         async def fetch_publication_annotations(
@@ -36,7 +44,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             format: Literal["pubtator", "biocxml", "biocjson"] = "biocjson",
             full: bool = False,
         ) -> dict[str, Any]:
-            """Use this when a user provides PubMed IDs and needs raw PubTator BioC/annotation export; prefer compact passage or review context tools for grounded answers because full BioC can be large."""
+            """Use this when a user provides PubMed IDs and needs raw PubTator BioC annotation export. Do not use this for compact grounded answers; use pubtator.get_publication_passages. Next: pubtator.get_publication_passages."""
 
             async def call() -> dict[str, Any]:
                 service = await get_publication_service()
@@ -52,6 +60,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
     @mcp.tool(
         name="pubtator.get_publication_passages",
         title="Get Publication Passages",
+        output_schema=PublicationPassageResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_publication_passages(
@@ -66,7 +75,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         dry_run: bool = False,
         verbosity: Verbosity = "standard",
     ) -> dict[str, Any]:
-        """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. Prefer this over raw annotation export for routine grounding."""
+        """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. Do not use this for prepared review RAG; use pubtator.retrieve_review_context_batch. Next: pubtator.retrieve_review_context_batch."""
 
         async def call() -> dict[str, Any]:
             service = await get_publication_passage_service()
@@ -89,6 +98,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
     @mcp.tool(
         name="pubtator.get_publication_metadata",
         title="Get Publication Metadata",
+        output_schema=PublicationMetadataResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_publication_metadata(
@@ -98,7 +108,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         include_citations: Literal["none", "nlm", "bibtex", "both"] = "both",
         include_coverage: bool = True,
     ) -> dict[str, Any]:
-        """Return citation-grade metadata for known PMIDs, including authors, journal, year, DOI, publication types, MeSH headings, and citation strings."""
+        """Use this when a user needs citation-grade metadata for known PMIDs. Do not use this for article text or annotations; use pubtator.get_publication_passages. Next: pubtator.get_publication_passages."""
 
         async def call() -> dict[str, Any]:
             service = await get_publication_metadata_service()
@@ -118,6 +128,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         @mcp.tool(
             name="pubtator.estimate_publication_context",
             title="Estimate Publication Context",
+            output_schema=PublicationContextEstimateResponse.model_json_schema(),
             annotations=READ_ONLY_OPEN_WORLD,
         )
         async def estimate_publication_context(
@@ -129,7 +140,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             include_tables: bool = True,
             include_references: bool = False,
         ) -> dict[str, Any]:
-            """Use this when a user needs to estimate passage count and context size before fetching publication passages. Inputs mirror get_publication_passages except max_chars; output includes estimated_passages, estimated_chars, sections_by_pmid, recommended_mode, and warning."""
+            """Use this when a user needs to estimate passage count and context size before fetching publication passages. Do not use this for text retrieval; use pubtator.get_publication_passages. Next: pubtator.get_publication_passages."""
 
             async def call() -> dict[str, Any]:
                 service = await get_publication_passage_service()
@@ -151,13 +162,14 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             @mcp.tool(
                 name="pubtator.fetch_pmc_annotations",
                 title="Fetch PMC Annotations",
+                output_schema=PublicationExportResponse.model_json_schema(),
                 annotations=READ_ONLY_OPEN_WORLD,
             )
             async def fetch_pmc_annotations(
                 pmcids: Annotated[list[str], Field(min_length=1, max_length=50)],
                 format: Literal["biocxml", "biocjson"] = "biocjson",
             ) -> dict[str, Any]:
-                """Use this when a user provides PMC IDs and needs raw PubTator full-text BioC/annotation export; prefer compact passage or review context tools for focused grounding because full text can be large."""
+                """Use this when a user provides PMC IDs and needs raw PubTator full-text BioC annotation export. Do not use this for compact grounded answers; use pubtator.get_publication_passages. Next: pubtator.get_publication_passages."""
 
                 async def call() -> dict[str, Any]:
                     service = await get_publication_service()

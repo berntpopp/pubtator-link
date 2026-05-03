@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp import FastMCP
+from pydantic import BaseModel, ConfigDict, Field
 
 from pubtator_link.mcp.annotations import READ_ONLY_CLOSED_WORLD
 from pubtator_link.mcp.errors import run_mcp_tool
@@ -26,14 +27,30 @@ from pubtator_link.models.workflow_help import WorkflowHelpResponse, WorkflowTas
 from pubtator_link.services.workflow_help import WorkflowHelpService
 
 
+class ServerCapabilitiesResponse(BaseModel):
+    """Response schema for PubTator-Link capability discovery."""
+
+    model_config = ConfigDict(extra="allow")
+
+    server: str
+    transport: str
+    endpoint: str
+    research_use_only: bool
+    core_workflow_tools: list[str]
+    tool_categories: dict[str, list[str]]
+    next_tool: str
+    details: dict[str, Any] | None = Field(default=None)
+
+
 def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
     @mcp.tool(
         name="pubtator.get_server_capabilities",
         title="Get PubTator-Link Capabilities",
+        output_schema=ServerCapabilitiesResponse.model_json_schema(),
         annotations=READ_ONLY_CLOSED_WORLD,
     )
     async def get_server_capabilities(details: list[str] | None = None) -> dict[str, Any]:
-        """Use this when a client needs supported tools, transports, formats, and limitations."""
+        """Use this when a client needs supported tools, transports, formats, and limitations. Do not use this for task-specific workflow guidance; use pubtator.workflow_help. Next: pubtator.workflow_help."""
 
         async def call() -> dict[str, Any]:
             return get_capabilities_resource(details=details, profile=profile)

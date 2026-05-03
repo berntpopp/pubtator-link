@@ -387,6 +387,20 @@ def test_variant_evidence_tool_is_registered(mcp_tool_names) -> None:
     assert "pubtator.lookup_variant_evidence" in mcp_tool_names
 
 
+def test_full_profile_all_tools_have_output_schemas() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp(profile="full")
+    missing = []
+    for name, tool in mcp._tool_manager._tools.items():
+        schema = _tool_output_schema(tool)
+        properties = schema.get("properties")
+        if not isinstance(properties, dict) or not properties:
+            missing.append(name)
+
+    assert missing == []
+
+
 def test_research_session_tool_schema_and_annotations_are_stable() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
@@ -845,13 +859,12 @@ def test_profile_workflow_help_only_references_registered_tools() -> None:
         mcp = create_pubtator_mcp(profile=profile)
         registered_tools = set(mcp._tool_manager._tools)
         help_payload = WorkflowHelpService(profile=profile).get_help().model_dump(by_alias=True)
-        referenced_tools = {
-            step["tool_name"]
-            for step in help_payload["steps"]
-        } | {
-            fallback["tool_name"]
-            for fallback in help_payload["fallbacks"]
-        } | set(help_payload["tool_sequence"]) | set(help_payload["_meta"]["next_commands"])
+        referenced_tools = (
+            {step["tool_name"] for step in help_payload["steps"]}
+            | {fallback["tool_name"] for fallback in help_payload["fallbacks"]}
+            | set(help_payload["tool_sequence"])
+            | set(help_payload["_meta"]["next_commands"])
+        )
 
         assert referenced_tools <= registered_tools
 

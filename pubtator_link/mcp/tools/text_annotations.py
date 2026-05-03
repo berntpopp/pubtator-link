@@ -13,6 +13,10 @@ from pubtator_link.mcp.service_adapters import (
     get_text_annotation_results_impl,
     submit_text_annotation_impl,
 )
+from pubtator_link.models.responses import (
+    TextAnnotationResultResponse,
+    TextAnnotationSubmitResponse,
+)
 
 
 def register_text_annotation_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
@@ -21,6 +25,7 @@ def register_text_annotation_tools(mcp: FastMCP, profile: MCPToolProfile = "lean
         @mcp.tool(
             name="pubtator.submit_text_annotation",
             title="Submit Text Annotation",
+            output_schema=TextAnnotationSubmitResponse.model_json_schema(),
             annotations=REMOTE_JOB_ANNOTATIONS,
         )
         async def submit_text_annotation(
@@ -29,7 +34,7 @@ def register_text_annotation_tools(mcp: FastMCP, profile: MCPToolProfile = "lean
                 str, Field(description="Comma-separated PubTator bioconcepts or 'all'.")
             ] = "Gene",
         ) -> dict[str, Any]:
-            """Use this when research text should be submitted for PubTator biomedical named entity recognition. Do not submit identifiable patient data to public demo instances."""
+            """Use this when research text should be submitted for PubTator biomedical named entity recognition. Do not use this for PubMed or PMC IDs; use pubtator.fetch_publication_annotations. Next: pubtator.get_text_annotation_results."""
 
             async def call() -> dict[str, Any]:
                 client = await get_api_client()
@@ -47,12 +52,13 @@ def register_text_annotation_tools(mcp: FastMCP, profile: MCPToolProfile = "lean
     @mcp.tool(
         name="pubtator.get_text_annotation_results",
         title="Get Text Annotation Results",
+        output_schema=TextAnnotationResultResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_text_annotation_results(
         session_id: Annotated[str, Field(min_length=8)],
     ) -> dict[str, Any]:
-        """Use this when a user has a PubTator text annotation session ID and needs its results."""
+        """Use this when a user has a PubTator text annotation session ID and needs its results. Do not use this for entity lookup from names; use pubtator.search_biomedical_entities. Next: pubtator.search_biomedical_entities."""
 
         async def call() -> dict[str, Any]:
             client = await get_api_client()
