@@ -1,9 +1,24 @@
 from pathlib import Path
+from typing import NamedTuple
 
 from pubtator_link.db.migrate import (
     MIGRATIONS_PACKAGE,
     required_review_schema_items,
     schema_repair_statements,
+)
+
+
+class RequiredSchemaItem(NamedTuple):
+    kind: str
+    name: str
+
+
+def iter_sql_migrations() -> list[Path]:
+    return sorted(Path("pubtator_link/db/migrations").glob("*.sql"))
+
+
+REQUIRED_SCHEMA_ITEMS = tuple(
+    RequiredSchemaItem(kind="table", name=name) for name in required_review_schema_items().tables
 )
 
 
@@ -16,8 +31,19 @@ def test_migration_files_are_ordered_and_include_repair_migration() -> None:
         "0002_review_schema_drift_repair.sql",
         "0003_review_session_sources_repair.sql",
         "0004_review_llm_context.sql",
+        "0005_review_passage_embeddings.sql",
     ]
     assert MIGRATIONS_PACKAGE == "pubtator_link.db.migrations"
+
+
+def test_review_passage_embeddings_migration_is_bundled() -> None:
+    migration_names = [path.name for path in iter_sql_migrations()]
+    assert "0005_review_passage_embeddings.sql" in migration_names
+
+
+def test_required_schema_includes_review_passage_embeddings() -> None:
+    required_tables = {item.name for item in REQUIRED_SCHEMA_ITEMS if item.kind == "table"}
+    assert "review_passage_embeddings" in required_tables
 
 
 def test_repair_migration_adds_reviews_updated_at_without_dropping_data() -> None:
