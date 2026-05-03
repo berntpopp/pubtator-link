@@ -124,6 +124,29 @@ class RecordingMetadata:
         return PublicationMetadataResponse(metadata=[], failed_pmids={})
 
 
+class BatchResolvingDiscovery:
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    async def convert_article_ids(self, ids: list[str], source: str = "auto"):
+        self.calls.append(ids)
+        return type(
+            "ArticleIdConversionResponse",
+            (),
+            {
+                "records": [
+                    ArticleIdConversionRecord(
+                        input_id="10.1000/primary-study",
+                        input_kind="doi",
+                        status="resolved",
+                        pmid="30000001",
+                        doi="10.1000/primary-study",
+                    )
+                ]
+            },
+        )()
+
+
 @pytest.mark.asyncio
 async def test_doi_references_direction_returns_crossref_references() -> None:
     service = CitationGraphService(
@@ -480,3 +503,30 @@ async def test_citation_graph_full_preserves_existing_arrays() -> None:
     assert response.references
     assert response.cited_by
     assert response.meta.response_mode == "full"
+
+
+@pytest.mark.asyncio
+async def test_citation_graph_batches_reference_doi_resolution() -> None:
+    discovery = BatchResolvingDiscovery()
+    service = CitationGraphService(
+        crossref=FakeCrossref(),
+        discovery_service=discovery,
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            doi="10.1016/j.ard.2025.05.020",
+            direction="references",
+            response_mode="compact",
+            resolve_reference_pmids=True,
+            max_reference_resolution=20,
+        )
+    )
+
+    assert discovery.calls == [["10.1016/j.ard.2025.05.020"], ["10.1000/primary-study"]]
+    assert response.reference_candidates[0].pmid == "30000001"
+    assert "resolved_pmid_from_doi" in response.reference_candidates[0].rank_reasons
+    assert any(
+        status.operation == "doi_to_pmid" for status in response.identifier_resolution_status
+    )
