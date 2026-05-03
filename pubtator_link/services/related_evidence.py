@@ -82,6 +82,8 @@ class RelatedEvidenceService:
                 warnings.append(_provider_failed_warning("citation_graph", exc))
 
         deduped_pmids = [pmid for pmid in _dedupe(candidate_pmids) if pmid != request.pmid]
+        source, source_warnings = await self._source_paper(request.pmid)
+        warnings.extend(source_warnings)
         candidates, metadata_warnings = await self._metadata_candidates(
             request=request,
             pmids=deduped_pmids,
@@ -94,7 +96,7 @@ class RelatedEvidenceService:
         ordered_pmids = [candidate.paper.pmid for candidate in candidates if candidate.paper.pmid]
 
         response = RelatedEvidenceCandidatesResponse(
-            source=LiteraturePaper(pmid=request.pmid),
+            source=source,
             candidates=candidates,
             candidate_pmids=ordered_pmids,
             _meta=LiteratureGraphResponseMeta(
@@ -105,6 +107,24 @@ class RelatedEvidenceService:
         )
         response.meta.response_size_class = json_size_class(response.model_dump(by_alias=True))
         return response
+
+    async def _source_paper(self, pmid: str) -> tuple[LiteraturePaper, list[ProviderWarning]]:
+        try:
+            metadata_response = await self.metadata_service.get_metadata(
+                PublicationMetadataRequest(
+                    pmids=[pmid],
+                    include_mesh=False,
+                    include_publication_types=True,
+                    include_citations="none",
+                    include_coverage=True,
+                )
+            )
+        except Exception as exc:
+            return LiteraturePaper(pmid=pmid), [_provider_failed_warning("pubmed_metadata", exc)]
+        metadata = getattr(metadata_response, "metadata", [])
+        if not metadata:
+            return LiteraturePaper(pmid=pmid), []
+        return _paper_from_metadata(metadata[0]), []
 
     async def _find_related_article_scores(self, pmids: list[str], limit: int) -> Any:
         finder = getattr(self.discovery_service, "find_related_article_scores", None)

@@ -29,6 +29,17 @@ class MockTransport:
         return httpx.Response(200, json=self.payload, request=request)
 
 
+class SequentialTransport:
+    def __init__(self, payloads: list[dict[str, object]]) -> None:
+        self.payloads = payloads
+        self.requests: list[httpx.Request] = []
+
+    async def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        payload = self.payloads[len(self.requests) - 1]
+        return httpx.Response(200, json=payload, request=request)
+
+
 @pytest.mark.asyncio
 async def test_crossref_client_get_work_and_reference_mapping() -> None:
     transport = MockTransport(CROSSREF_WORK_ARD_2025)
@@ -64,6 +75,34 @@ async def test_europe_pmc_literature_client_get_citations_maps_availability() ->
     assert citations[0].availability.is_open_access is True
     assert citations[0].availability.has_pmc_full_text is True
     assert citations[0].availability.has_pdf is True
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_europe_pmc_literature_client_get_citations_maps_citation_list_payload() -> None:
+    transport = MockTransport(
+        {
+            "citationList": {
+                "citation": [
+                    {
+                        "id": "41910911",
+                        "source": "MED",
+                        "title": "Growth differentiation factor-15 as a potential biomarker.",
+                        "journalAbbreviation": "Clin Rheumatol",
+                        "pubYear": 2026,
+                    }
+                ]
+            }
+        }
+    )
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = EuropePmcLiteratureClient(http_client=http_client)
+
+    citations = await client.get_citations("28386255", limit=5)
+
+    assert citations[0].pmid == "41910911"
+    assert citations[0].journal == "Clin Rheumatol"
+    assert citations[0].year == 2026
     await client.close()
 
 
@@ -108,6 +147,48 @@ async def test_openalex_client_get_work_by_doi_maps_metadata_and_availability() 
     assert paper.authors[0].affiliations == ["Example University"]
     assert paper.availability.is_open_access is True
     assert paper.availability.oa_status == "green"
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_openalex_client_get_cited_by_falls_back_to_cites_filter() -> None:
+    transport = SequentialTransport(
+        [
+            {
+                "id": "https://openalex.org/W2599457451",
+                "doi": "https://doi.org/10.3389/fimmu.2017.00253",
+                "title": "Familial Mediterranean Fever",
+                "publication_year": 2017,
+                "cited_by_count": 193,
+            },
+            {
+                "meta": {"count": 193},
+                "results": [
+                    {
+                        "id": "https://openalex.org/W1685331907",
+                        "ids": {
+                            "pmid": "https://pubmed.ncbi.nlm.nih.gov/31180581",
+                            "doi": "https://doi.org/10.1002/jca.21705",
+                        },
+                        "doi": "https://doi.org/10.1002/jca.21705",
+                        "title": "Guidelines on therapeutic apheresis",
+                        "publication_year": 2019,
+                    }
+                ],
+            },
+        ]
+    )
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = OpenAlexClient(http_client=http_client, mailto="curator@example.org")
+
+    papers = await client.get_cited_by("10.3389/fimmu.2017.00253", limit=5)
+
+    assert transport.requests[1].url.path == "/works"
+    assert transport.requests[1].url.params["filter"] == "cites:W2599457451"
+    assert transport.requests[1].url.params["per-page"] == "5"
+    assert transport.requests[1].url.params["mailto"] == "curator@example.org"
+    assert papers[0].pmid == "31180581"
+    assert papers[0].doi == "10.1002/jca.21705"
     await client.close()
 
 

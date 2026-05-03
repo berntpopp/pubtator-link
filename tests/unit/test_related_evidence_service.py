@@ -62,6 +62,14 @@ class FakeMetadata:
     async def get_metadata(self, request):
         assert request.pmids
         records = {
+            "123": PublicationMetadata(
+                pmid="123",
+                title="Seed review",
+                journal="Seed Journal",
+                pub_year=2021,
+                publication_types=["Review"],
+                coverage="abstract_only",
+            ),
             "111": PublicationMetadata(
                 pmid="111",
                 title="Review paper",
@@ -226,6 +234,24 @@ async def test_elink_candidates_do_not_depend_on_pubtator_search_flag() -> None:
     assert response.candidate_pmids == ["222", "111"]
     assert response.candidates[0].paper.provenance[0].provider == "pubmed_metadata"
     assert "pubmed_neighbor_score" in response.candidates[0].match_reasons
+
+
+@pytest.mark.asyncio
+async def test_related_evidence_resolves_source_metadata() -> None:
+    service = RelatedEvidenceService(
+        discovery_service=FakeDiscovery(),
+        metadata_service=FakeMetadata(),
+        citation_graph_service=FakeCitationGraph(),
+    )
+
+    response = await service.find_candidates(
+        RelatedEvidenceCandidatesRequest(pmid="123", include_citation_neighbors=False)
+    )
+
+    assert response.source.title == "Seed review"
+    assert response.source.journal == "Seed Journal"
+    assert response.source.year == 2021
+    assert response.source.publication_types == ["Review"]
 
 
 @pytest.mark.asyncio

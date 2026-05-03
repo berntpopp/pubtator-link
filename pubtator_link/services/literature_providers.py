@@ -121,8 +121,12 @@ class EuropePmcLiteratureClient:
         payload = response.json()
         if not isinstance(payload, Mapping):
             return []
-        result_list = payload.get("resultList")
-        results = result_list.get("result", []) if isinstance(result_list, Mapping) else []
+        citation_list = payload.get("citationList")
+        if isinstance(citation_list, Mapping):
+            results = citation_list.get("citation", [])
+        else:
+            result_list = payload.get("resultList")
+            results = result_list.get("result", []) if isinstance(result_list, Mapping) else []
         if not isinstance(results, Sequence) or isinstance(results, str | bytes):
             return []
         return [_paper_from_europe_pmc(item) for item in results if isinstance(item, Mapping)][
@@ -177,12 +181,18 @@ class OpenAlexClient:
     async def get_cited_by(self, doi: str, *, limit: int) -> list[LiteraturePaper]:
         payload = await self._get_work_payload_by_doi(doi)
         cited_by_api_url = _optional_str(payload.get("cited_by_api_url"))
-        if not cited_by_api_url:
-            return []
         params: dict[str, str] = {"per-page": str(limit)}
         if self.mailto:
             params["mailto"] = self.mailto
-        response = await self._client.get(cited_by_api_url, params=params)
+        if cited_by_api_url:
+            url = cited_by_api_url
+        else:
+            source_work_id = _openalex_work_filter_id(_optional_str(payload.get("id")))
+            if not source_work_id:
+                return []
+            url = f"{self.base_url}/works"
+            params["filter"] = f"cites:{source_work_id}"
+        response = await self._client.get(url, params=params)
         response.raise_for_status()
         cited_payload = response.json()
         if not isinstance(cited_payload, Mapping):
@@ -243,12 +253,16 @@ class UnpaywallClient:
 
 
 def _paper_from_europe_pmc(item: Mapping[str, Any]) -> LiteraturePaper:
+    source = _optional_str(item.get("source"))
+    pmid = _optional_str(item.get("pmid"))
+    if pmid is None and source == "MED":
+        pmid = _optional_str(item.get("id"))
     return LiteraturePaper(
-        pmid=_optional_str(item.get("pmid")),
+        pmid=pmid,
         doi=_optional_str(item.get("doi")),
         pmcid=_optional_str(item.get("pmcid")),
         title=_optional_str(item.get("title")),
-        journal=_optional_str(item.get("journalTitle")),
+        journal=_optional_str(item.get("journalTitle") or item.get("journalAbbreviation")),
         year=_optional_int(item.get("pubYear")),
         availability=LiteratureAvailability(
             has_pmc_full_text=_is_truthy_flag(item.get("inPMC")),
@@ -261,18 +275,20 @@ def _paper_from_europe_pmc(item: Mapping[str, Any]) -> LiteraturePaper:
         provenance=[
             LiteratureGraphProvenance(
                 provider=EUROPE_PMC_PROVIDER,
-                source_id=_optional_str(item.get("pmid")),
+                source_id=pmid or _optional_str(item.get("id")),
             )
         ],
     )
 
 
 def _paper_from_openalex(item: Mapping[str, Any]) -> LiteraturePaper:
+    ids = item.get("ids")
+    ids_mapping = ids if isinstance(ids, Mapping) else {}
     open_access = item.get("open_access")
     open_access_mapping = open_access if isinstance(open_access, Mapping) else {}
     return LiteraturePaper(
-        pmid=_pmid_from_url(_optional_str(item.get("pmid"))),
-        doi=_doi_from_url(_optional_str(item.get("doi"))),
+        pmid=_pmid_from_url(_optional_str(item.get("pmid") or ids_mapping.get("pmid"))),
+        doi=_doi_from_url(_optional_str(item.get("doi") or ids_mapping.get("doi"))),
         openalex_id=_optional_str(item.get("id")),
         title=_optional_str(item.get("title")),
         journal=_openalex_journal(item),
@@ -363,6 +379,12 @@ def _doi_from_url(value: str | None) -> str | None:
 
 
 def _pmid_from_url(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return value.rstrip("/").rsplit("/", 1)[-1]
+
+
+def _openalex_work_filter_id(value: str | None) -> str | None:
     if value is None:
         return None
     return value.rstrip("/").rsplit("/", 1)[-1]
