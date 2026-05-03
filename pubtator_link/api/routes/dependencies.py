@@ -31,6 +31,7 @@ from ...services.corpus_suggestion import CorpusSuggestionService
 from ...services.diagnostics import DiagnosticsService
 from ...services.europe_pmc import EuropePmcClient
 from ...services.full_text_preparation import FullTextPreparationService
+from ...services.llm_review_context import LlmReviewContextService
 from ...services.ncbi_discovery import DiscoveryService, NcbiDiscoveryClient
 from ...services.publication_metadata import (
     NcbiPublicationMetadataClient,
@@ -63,6 +64,7 @@ _review_pool: asyncpg.Pool | None = None
 _review_repository: PostgresReviewReragRepository | None = None
 _review_queue: ReviewPreparationQueue | None = None
 _review_context_service: ReviewContextService | None = None
+_llm_review_context_service: LlmReviewContextService | None = None
 _review_audit_service: ReviewAuditService | None = None
 _review_evidence_certainty_service: ReviewEvidenceCertaintyService | None = None
 _review_index_lifecycle_service: ReviewIndexLifecycleService | None = None
@@ -91,6 +93,7 @@ class AppResources:
     review_repository: PostgresReviewReragRepository | None = None
     review_queue: ReviewPreparationQueue | None = None
     review_context_service: ReviewContextService | None = None
+    llm_review_context_service: LlmReviewContextService | None = None
     review_audit_service: ReviewAuditService | None = None
     review_evidence_certainty_service: ReviewEvidenceCertaintyService | None = None
     review_index_lifecycle_service: ReviewIndexLifecycleService | None = None
@@ -189,6 +192,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
 
         review_repository: PostgresReviewReragRepository | None = None
         review_context_service: ReviewContextService | None = None
+        llm_review_context_service: LlmReviewContextService | None = None
 
         if review_rerag_config.database_url is not None:
             if getattr(review_rerag_config, "auto_migrate", False):
@@ -220,6 +224,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
                 review_repository,
                 publication_metadata_service=publication_metadata_service,
             )
+            llm_review_context_service = LlmReviewContextService(repository=review_repository)
             review_audit_service = ReviewAuditService(repository=review_repository)
             review_evidence_certainty_service = ReviewEvidenceCertaintyService(
                 repository=review_repository
@@ -253,6 +258,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             review_repository=review_repository,
             review_queue=review_queue,
             review_context_service=review_context_service,
+            llm_review_context_service=llm_review_context_service,
             review_audit_service=review_audit_service,
             review_evidence_certainty_service=review_evidence_certainty_service,
             review_index_lifecycle_service=review_index_lifecycle_service,
@@ -661,6 +667,25 @@ async def get_review_audit_service() -> ReviewAuditService:
     return _review_audit_service
 
 
+async def get_llm_review_context_service() -> LlmReviewContextService:
+    """Get durable LLM review context service."""
+    global _llm_review_context_service
+    resources = current_app_resources()
+    if resources is not None:
+        if resources.llm_review_context_service is None:
+            if resources.review_repository is None:
+                raise RuntimeError("PUBTATOR_LINK_DATABASE_URL is required for review re-RAG")
+            resources.llm_review_context_service = LlmReviewContextService(
+                repository=resources.review_repository
+            )
+        return resources.llm_review_context_service
+    if _llm_review_context_service is None:
+        _llm_review_context_service = LlmReviewContextService(
+            repository=await get_review_repository()
+        )
+    return _llm_review_context_service
+
+
 async def get_review_index_lifecycle_service() -> ReviewIndexLifecycleService:
     """Get review index lifecycle service."""
     global _review_index_lifecycle_service
@@ -802,6 +827,10 @@ CorpusSuggestionServiceDep = Annotated[
 DiscoveryServiceDep = Annotated[DiscoveryService, Depends(get_discovery_service)]
 ReviewQueueDep = Annotated[ReviewPreparationQueue, Depends(get_review_queue)]
 ReviewContextServiceDep = Annotated[ReviewContextService, Depends(get_review_context_service)]
+LlmReviewContextServiceDep = Annotated[
+    LlmReviewContextService,
+    Depends(get_llm_review_context_service),
+]
 ReviewAuditServiceDep = Annotated[ReviewAuditService, Depends(get_review_audit_service)]
 ReviewEvidenceCertaintyServiceDep = Annotated[
     ReviewEvidenceCertaintyService,
@@ -942,7 +971,8 @@ async def cleanup_dependencies() -> None:
     global _api_client, _publication_passage_service, _publication_service, _logger
     global _discovery_service, _ncbi_discovery_client, _ncbi_publication_metadata_client
     global _publication_metadata_service
-    global _review_context_service, _review_pool, _review_queue, _review_repository
+    global _llm_review_context_service, _review_context_service, _review_pool
+    global _review_queue, _review_repository
     global _review_evidence_certainty_service
     global _review_index_lifecycle_service
     global _research_session_service
@@ -974,6 +1004,7 @@ async def cleanup_dependencies() -> None:
 
     _review_repository = None
     _review_context_service = None
+    _llm_review_context_service = None
     _review_evidence_certainty_service = None
     _review_index_lifecycle_service = None
     _research_session_service = None

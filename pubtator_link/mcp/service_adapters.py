@@ -39,10 +39,14 @@ from pubtator_link.models.review_rerag import (
     InspectReviewIndexRequest,
     McpReviewAuditBundleResponse,
     PrepareMode,
+    RecordReviewContextRequest,
+    RecordReviewContextResponse,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
     ReviewAuditTrailResponse,
     ReviewBatchResponseMode,
+    ReviewLlmContext,
+    ReviewLlmContextEventType,
     ReviewQuickstartResponse,
     ReviewTableMode,
     SampleSectionPolicy,
@@ -945,14 +949,127 @@ async def review_passage_audit_resource_impl(
     }
 
 
-def review_llm_context_resource_impl(*, review_id: str, latest: bool = False) -> dict[str, Any]:
+def _empty_llm_context_resource(review_id: str) -> dict[str, Any]:
+    return {
+        "context_id": None,
+        "review_id": review_id,
+        "session_id": None,
+        "kind": "retrieval_context",
+        "topic": None,
+        "research_question": None,
+        "question_hash": None,
+        "request": {},
+        "response_summary": {},
+        "selected_pmids": [],
+        "rejected_pmids": [],
+        "preferred_entity_ids": [],
+        "active_queries": [],
+        "successful_queries": [],
+        "failed_queries": [],
+        "selected_passage_ids": [],
+        "audit_passage_ids": [],
+        "open_questions": [],
+        "user_decisions": [],
+        "last_next_commands": [],
+        "stable_citation_keys": {},
+        "cache_key": None,
+        "token_estimate": None,
+        "created_by": None,
+        "created_at": None,
+        "updated_at": None,
+    }
+
+
+async def review_llm_context_resource_impl(
+    *,
+    service: Any,
+    review_id: str,
+    latest: bool = False,
+    session_id: str | None = None,
+) -> dict[str, Any]:
+    context = await service.get_latest_context(review_id, session_id=session_id)
+    context_payload = (
+        context.model_dump(mode="json")
+        if isinstance(context, ReviewLlmContext)
+        else _empty_llm_context_resource(review_id)
+    )
     return {
         "success": True,
         "review_id": review_id,
         "latest": latest,
-        "context": [],
-        "message": "LLM context resources are reserved for Task 7.",
+        "context": context_payload,
     }
+
+
+async def record_review_context_impl(
+    *,
+    service: Any,
+    review_id: str,
+    event_type: ReviewLlmContextEventType,
+    session_id: str | None = None,
+    topic: str | None = None,
+    research_question: str | None = None,
+    question_hash: str | None = None,
+    request: dict[str, Any] | None = None,
+    response_summary: dict[str, Any] | None = None,
+    selected_pmids: list[str] | None = None,
+    rejected_pmids: list[str] | None = None,
+    preferred_entity_ids: list[str] | None = None,
+    active_queries: list[str] | None = None,
+    successful_queries: list[str] | None = None,
+    failed_queries: list[str] | None = None,
+    selected_passage_ids: list[str] | None = None,
+    audit_passage_ids: list[str] | None = None,
+    open_questions: list[dict[str, Any]] | None = None,
+    user_decisions: list[dict[str, Any]] | None = None,
+    last_next_commands: list[dict[str, Any]] | None = None,
+    stable_citation_keys: dict[str, str] | None = None,
+    cache_key: str | None = None,
+    token_estimate: int | None = None,
+    summary: str | None = None,
+    pmids: list[str] | None = None,
+    passage_ids: list[str] | None = None,
+    queries: list[str] | None = None,
+    decision: dict[str, Any] | None = None,
+    payload: dict[str, Any] | None = None,
+    created_by: str | None = None,
+) -> dict[str, Any]:
+    response = await service.record_context(
+        review_id,
+        RecordReviewContextRequest(
+            session_id=session_id,
+            topic=topic,
+            research_question=research_question,
+            question_hash=question_hash,
+            request=request or {},
+            response_summary=response_summary or {},
+            selected_pmids=selected_pmids or [],
+            rejected_pmids=rejected_pmids or [],
+            preferred_entity_ids=preferred_entity_ids or [],
+            active_queries=active_queries or [],
+            successful_queries=successful_queries or [],
+            failed_queries=failed_queries or [],
+            selected_passage_ids=selected_passage_ids or [],
+            audit_passage_ids=audit_passage_ids or [],
+            open_questions=open_questions or [],
+            user_decisions=user_decisions or [],
+            last_next_commands=last_next_commands or [],
+            stable_citation_keys=stable_citation_keys or {},
+            cache_key=cache_key,
+            token_estimate=token_estimate,
+            event_type=event_type,
+            summary=summary,
+            pmids=pmids or [],
+            passage_ids=passage_ids or [],
+            queries=queries or [],
+            decision=decision,
+            payload=payload or {},
+            created_by=created_by,
+        ),
+    )
+    if isinstance(response, RecordReviewContextResponse):
+        return response.model_dump(mode="json")
+    return _dump_mapping(response)
 
 
 async def inspect_review_index_impl(

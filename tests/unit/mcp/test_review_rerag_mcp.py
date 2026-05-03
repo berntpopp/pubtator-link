@@ -160,24 +160,30 @@ async def test_index_review_evidence_accepts_legacy_prepare_mode_without_schema_
 
 
 @pytest.mark.asyncio
-async def test_record_review_context_requires_audit_repository(
+async def test_record_review_context_propagates_service_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import pubtator_link.mcp.tools.review as review_tools
 
     class FakeService:
-        repository = object()
+        async def record_context(self, *_args, **_kwargs):
+            raise RuntimeError("Review repository does not support context recording.")
 
-    async def fake_get_review_context_service() -> FakeService:
+    async def fake_get_llm_review_context_service() -> FakeService:
         return FakeService()
 
-    monkeypatch.setattr(review_tools, "get_review_context_service", fake_get_review_context_service)
+    monkeypatch.setattr(
+        review_tools,
+        "get_llm_review_context_service",
+        fake_get_llm_review_context_service,
+    )
     tool = create_pubtator_mcp()._tool_manager._tools["pubtator.record_review_context"]
 
     with pytest.raises(ToolError):
         await tool.run(
             {
                 "review_id": "review-1",
+                "event_type": "passage_selected",
                 "passage_ids": ["PMID:1:abstract:0"],
             }
         )
@@ -189,26 +195,22 @@ async def test_record_review_context_rejects_empty_passage_ids(
 ) -> None:
     import pubtator_link.mcp.tools.review as review_tools
 
-    events: list[tuple[str, str, dict[str, object]]] = []
-
-    class FakeRepository:
-        async def record_review_audit_event(
-            self, review_id: str, event_type: str, payload: dict[str, object]
-        ) -> None:
-            events.append((review_id, event_type, payload))
-
     class FakeService:
-        repository = FakeRepository()
+        async def record_context(self, *_args, **_kwargs):
+            raise AssertionError("empty records should fail before service call")
 
-    async def fake_get_review_context_service() -> FakeService:
+    async def fake_get_llm_review_context_service() -> FakeService:
         return FakeService()
 
-    monkeypatch.setattr(review_tools, "get_review_context_service", fake_get_review_context_service)
+    monkeypatch.setattr(
+        review_tools,
+        "get_llm_review_context_service",
+        fake_get_llm_review_context_service,
+    )
     tool = create_pubtator_mcp()._tool_manager._tools["pubtator.record_review_context"]
 
-    with pytest.raises(ValidationError):
-        await tool.run({"review_id": "review-1", "passage_ids": []})
-    assert events == []
+    with pytest.raises(ToolError):
+        await tool.run({"review_id": "review-1", "event_type": "passage_selected"})
 
 
 @pytest.mark.asyncio
@@ -217,49 +219,56 @@ async def test_record_review_context_records_audit_event(
 ) -> None:
     import pubtator_link.mcp.tools.review as review_tools
 
-    events: list[tuple[str, str, dict[str, object]]] = []
+    recorded: list[tuple[str, object]] = []
 
-    class FakeRepository:
-        async def record_review_audit_event(
-            self, review_id: str, event_type: str, payload: dict[str, object]
-        ) -> None:
-            events.append((review_id, event_type, payload))
+    class _Dumpable:
+        def model_dump(self, **_: object) -> dict[str, object]:
+            return {
+                "success": True,
+                "context": {
+                    "context_id": "ctx-1",
+                    "review_id": "review-1",
+                    "selected_passage_ids": ["PMID:1:abstract:0"],
+                },
+                "event": {
+                    "event_id": "event-1",
+                    "review_id": "review-1",
+                    "event_type": "passage_selected",
+                    "passage_ids": ["PMID:1:abstract:0"],
+                },
+            }
 
     class FakeService:
-        repository = FakeRepository()
+        async def record_context(self, review_id: str, request: object) -> _Dumpable:
+            recorded.append((review_id, request))
+            return _Dumpable()
 
-    async def fake_get_review_context_service() -> FakeService:
+    async def fake_get_llm_review_context_service() -> FakeService:
         return FakeService()
 
-    monkeypatch.setattr(review_tools, "get_review_context_service", fake_get_review_context_service)
+    monkeypatch.setattr(
+        review_tools,
+        "get_llm_review_context_service",
+        fake_get_llm_review_context_service,
+    )
     tool = create_pubtator_mcp()._tool_manager._tools["pubtator.record_review_context"]
 
     result = await tool.run(
         {
             "review_id": "review-1",
+            "event_type": "passage_selected",
             "passage_ids": ["PMID:1:abstract:0"],
+            "selected_passage_ids": ["PMID:1:abstract:0"],
             "session_id": "session-1",
-            "note": "used in answer",
+            "summary": "used in answer",
         }
     )
 
-    assert result.structured_content == {
-        "success": True,
-        "review_id": "review-1",
-        "passage_ids": ["PMID:1:abstract:0"],
-        "recorded": True,
-    }
-    assert events == [
-        (
-            "review-1",
-            "recorded_context",
-            {
-                "passage_ids": ["PMID:1:abstract:0"],
-                "session_id": "session-1",
-                "note": "used in answer",
-            },
-        )
-    ]
+    assert result.structured_content["success"] is True
+    assert result.structured_content["context"]["context_id"] == "ctx-1"
+    assert recorded[0][0] == "review-1"
+    assert recorded[0][1].passage_ids == ["PMID:1:abstract:0"]
+    assert recorded[0][1].selected_passage_ids == ["PMID:1:abstract:0"]
 
 
 @pytest.mark.asyncio

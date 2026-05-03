@@ -647,7 +647,7 @@ def test_high_use_mcp_tools_expose_specific_output_schemas() -> None:
         "pubtator.get_review_audit_trail": {"success", "review_id", "items", "audit_block"},
         "pubtator.get_neighboring_review_passages": {"success", "review_id", "passages"},
         "pubtator.export_review_audit_bundle": {"success", "audit_bundle"},
-        "pubtator.record_review_context": {"success", "review_id", "passage_ids", "recorded"},
+        "pubtator.record_review_context": {"success", "context", "event"},
     }
 
     for name, required in expected.items():

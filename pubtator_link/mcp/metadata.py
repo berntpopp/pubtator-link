@@ -6,6 +6,7 @@ from fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field
 
 from pubtator_link.api.routes.dependencies import (
+    get_llm_review_context_service,
     get_research_session_service,
     get_review_audit_service,
     get_review_context_service,
@@ -176,12 +177,31 @@ def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
         )
 
     @mcp.resource("pubtator://reviews/{review_id}/llm-context")
-    def review_llm_context(review_id: str) -> dict[str, Any]:
-        return get_review_llm_context_resource(review_id=review_id)
+    @mcp.resource("pubtator://reviews/{review_id}/llm-context{?session_id}")
+    async def review_llm_context(
+        review_id: str,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
+        service = await get_llm_review_context_service()
+        return await get_review_llm_context_resource(
+            service=service,
+            review_id=review_id,
+            session_id=session_id,
+        )
 
     @mcp.resource("pubtator://reviews/{review_id}/llm-context/latest")
-    def review_latest_llm_context(review_id: str) -> dict[str, Any]:
-        return get_review_llm_context_resource(review_id=review_id, latest=True)
+    @mcp.resource("pubtator://reviews/{review_id}/llm-context/latest{?session_id}")
+    async def review_latest_llm_context(
+        review_id: str,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
+        service = await get_llm_review_context_service()
+        return await get_review_llm_context_resource(
+            service=service,
+            review_id=review_id,
+            latest=True,
+            session_id=session_id,
+        )
 
     @mcp.resource("pubtator://capabilities/tools/{tool_name}")
     def tool_detail(tool_name: str) -> dict[str, Any]:

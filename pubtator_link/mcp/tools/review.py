@@ -7,6 +7,7 @@ from fastmcp import Context, FastMCP
 from pydantic import Field
 
 from pubtator_link.api.routes.dependencies import (
+    get_llm_review_context_service,
     get_research_session_service,
     get_review_audit_service,
     get_review_context_service,
@@ -37,6 +38,7 @@ from pubtator_link.mcp.service_adapters import (
     list_research_sessions_impl,
     list_review_indexes_impl,
     preflight_review_sources_impl,
+    record_review_context_impl,
     retrieve_review_context_batch_impl,
     retrieve_review_context_impl,
     review_quickstart_impl,
@@ -53,30 +55,20 @@ from pubtator_link.models.review_rerag import (
     ListReviewIndexesResponse,
     McpReviewAuditBundleResponse,
     PreflightReviewSourcesResponse,
+    RecordReviewContextResponse,
     ResearchSessionStatusResponse,
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextResponse,
     ReviewAuditTrailResponse,
     ReviewBatchResponseMode,
     ReviewIndexSummaryResponse,
+    ReviewLlmContextEventType,
     ReviewPassageLookupResponse,
     ReviewQuickstartResponse,
     ReviewTableMode,
     SampleSectionPolicy,
     StageResearchSessionResponse,
 )
-
-RECORD_REVIEW_CONTEXT_OUTPUT_SCHEMA: dict[str, Any] = {
-    "title": "RecordReviewContextResponse",
-    "type": "object",
-    "properties": {
-        "success": {"type": "boolean"},
-        "review_id": {"type": "string"},
-        "passage_ids": {"type": "array", "items": {"type": "string"}},
-        "recorded": {"type": "boolean"},
-    },
-    "required": ["success", "review_id", "passage_ids", "recorded"],
-}
 
 
 async def _warn_if_degraded(ctx: Context | None, result: dict[str, Any]) -> None:
@@ -724,36 +716,75 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         "full",
         name="pubtator.record_review_context",
         title="Record Review Context",
-        output_schema=RECORD_REVIEW_CONTEXT_OUTPUT_SCHEMA,
+        output_schema=RecordReviewContextResponse.model_json_schema(),
         annotations=REVIEW_WRITE_ANNOTATIONS,
     )
     async def record_review_context(
         review_id: Annotated[str, Field(min_length=1)],
-        passage_ids: Annotated[list[Annotated[str, Field(min_length=1)]], Field(min_length=1)],
+        event_type: ReviewLlmContextEventType,
         session_id: Annotated[str | None, Field(min_length=1)] = None,
-        note: str | None = None,
+        summary: Annotated[str | None, Field(max_length=4000)] = None,
+        pmids: list[Annotated[str, Field(min_length=1)]] | None = None,
+        passage_ids: list[Annotated[str, Field(min_length=1)]] | None = None,
+        queries: list[Annotated[str, Field(min_length=1)]] | None = None,
+        decision: dict[str, Any] | None = None,
+        topic: Annotated[str | None, Field(max_length=500)] = None,
+        research_question: Annotated[str | None, Field(max_length=1000)] = None,
+        question_hash: Annotated[str | None, Field(max_length=128)] = None,
+        request: dict[str, Any] | None = None,
+        response_summary: dict[str, Any] | None = None,
+        selected_pmids: list[Annotated[str, Field(min_length=1)]] | None = None,
+        rejected_pmids: list[Annotated[str, Field(min_length=1)]] | None = None,
+        preferred_entity_ids: list[Annotated[str, Field(min_length=1)]] | None = None,
+        selected_passage_ids: list[Annotated[str, Field(min_length=1)]] | None = None,
+        audit_passage_ids: list[Annotated[str, Field(min_length=1)]] | None = None,
+        active_queries: list[Annotated[str, Field(min_length=1)]] | None = None,
+        successful_queries: list[Annotated[str, Field(min_length=1)]] | None = None,
+        failed_queries: list[Annotated[str, Field(min_length=1)]] | None = None,
+        open_questions: list[dict[str, Any]] | None = None,
+        user_decisions: list[dict[str, Any]] | None = None,
+        last_next_commands: list[dict[str, Any]] | None = None,
+        stable_citation_keys: dict[str, str] | None = None,
+        cache_key: Annotated[str | None, Field(max_length=500)] = None,
+        token_estimate: Annotated[int | None, Field(ge=0)] = None,
+        payload: dict[str, Any] | None = None,
+        created_by: Annotated[str | None, Field(max_length=200)] = None,
     ) -> dict[str, Any]:
-        """Use this when a user needs to record selected review passage IDs used as context in a research answer."""
+        """Use this when a user needs to persist compact LLM review context, selected evidence IDs, decisions, or next-step state without storing article text."""
 
         async def call() -> dict[str, Any]:
-            service = await get_review_context_service()
-            record_audit_event = getattr(service.repository, "record_review_audit_event", None)
-            if record_audit_event is None:
-                raise RuntimeError("Review repository does not support context recording.")
-            await record_audit_event(
-                review_id,
-                "recorded_context",
-                {
-                    "passage_ids": passage_ids,
-                    "session_id": session_id,
-                    "note": note,
-                },
+            service = await get_llm_review_context_service()
+            return await record_review_context_impl(
+                service=service,
+                review_id=review_id,
+                event_type=event_type,
+                session_id=session_id,
+                summary=summary,
+                pmids=pmids,
+                passage_ids=passage_ids,
+                queries=queries,
+                decision=decision,
+                topic=topic,
+                research_question=research_question,
+                question_hash=question_hash,
+                request=request,
+                response_summary=response_summary,
+                selected_pmids=selected_pmids,
+                rejected_pmids=rejected_pmids,
+                preferred_entity_ids=preferred_entity_ids,
+                selected_passage_ids=selected_passage_ids,
+                audit_passage_ids=audit_passage_ids,
+                active_queries=active_queries,
+                successful_queries=successful_queries,
+                failed_queries=failed_queries,
+                open_questions=open_questions,
+                user_decisions=user_decisions,
+                last_next_commands=last_next_commands,
+                stable_citation_keys=stable_citation_keys,
+                cache_key=cache_key,
+                token_estimate=token_estimate,
+                payload=payload,
+                created_by=created_by,
             )
-            return {
-                "success": True,
-                "review_id": review_id,
-                "passage_ids": passage_ids,
-                "recorded": True,
-            }
 
         return await run_mcp_tool("pubtator.record_review_context", call)

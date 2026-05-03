@@ -369,15 +369,69 @@ async def test_review_audit_resource_uses_bounded_summary_not_full_export() -> N
     assert result["search_runs"] == [{"query": "MEFV"}]
 
 
-def test_llm_context_resource_placeholder_is_empty_until_task_7() -> None:
+@pytest.mark.asyncio
+async def test_llm_context_resource_returns_latest_snapshot_or_empty_context() -> None:
     from pubtator_link.mcp.service_adapters import review_llm_context_resource_impl
 
-    result = review_llm_context_resource_impl(review_id="rev-1", latest=True)
+    class FakeService:
+        async def get_latest_context(
+            self, review_id: str, *, session_id: str | None = None
+        ) -> None:
+            assert review_id == "rev-1"
+            assert session_id == "sess-1"
+            return None
 
-    assert result == {
-        "success": True,
-        "review_id": "rev-1",
-        "latest": True,
-        "context": [],
-        "message": "LLM context resources are reserved for Task 7.",
-    }
+    result = await review_llm_context_resource_impl(
+        service=FakeService(),
+        review_id="rev-1",
+        latest=True,
+        session_id="sess-1",
+    )
+
+    assert result["success"] is True
+    assert result["latest"] is True
+    assert result["context"]["review_id"] == "rev-1"
+    assert result["context"]["context_id"] is None
+    assert result["context"]["selected_passage_ids"] == []
+
+
+@pytest.mark.asyncio
+async def test_registered_llm_context_resource_reads_session_query_parameter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.metadata as metadata
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+    from pubtator_link.models.review_rerag import ReviewLlmContext
+
+    class FakeService:
+        async def get_latest_context(
+            self, review_id: str, *, session_id: str | None = None
+        ) -> ReviewLlmContext:
+            assert review_id == "review 1"
+            assert session_id == "session 1"
+            return ReviewLlmContext(
+                context_id="ctx-1",
+                review_id=review_id,
+                session_id=session_id,
+                selected_passage_ids=["p/1"],
+                created_at="2026-05-03T00:00:00Z",
+                updated_at="2026-05-03T00:00:00Z",
+            )
+
+    async def fake_get_llm_review_context_service() -> FakeService:
+        return FakeService()
+
+    monkeypatch.setattr(
+        metadata,
+        "get_llm_review_context_service",
+        fake_get_llm_review_context_service,
+    )
+    mcp = create_pubtator_mcp(profile="lean")
+
+    result = await mcp.read_resource(
+        "pubtator://reviews/review%201/llm-context/latest?session_id=session+1"
+    )
+    payload = json.loads(result.contents[0].content)
+
+    assert payload["context"]["context_id"] == "ctx-1"
+    assert payload["context"]["selected_passage_ids"] == ["p/1"]

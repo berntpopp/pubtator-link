@@ -7,7 +7,6 @@ from fastmcp import FastMCP
 from pubtator_link.mcp.profiles import MCPToolProfile, tool_names_for_profile
 from pubtator_link.mcp.service_adapters import (
     review_audit_resource_impl,
-    review_llm_context_resource_impl,
     review_passage_audit_resource_impl,
     review_passage_resource_impl,
     review_session_detail_resource_impl,
@@ -75,12 +74,21 @@ async def get_review_passage_audit_resource(
     )
 
 
-def get_review_llm_context_resource(
+async def get_review_llm_context_resource(
     *,
+    service: Any,
     review_id: str,
     latest: bool = False,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
-    return review_llm_context_resource_impl(review_id=review_id, latest=latest)
+    from pubtator_link.mcp.service_adapters import review_llm_context_resource_impl
+
+    return await review_llm_context_resource_impl(
+        service=service,
+        review_id=review_id,
+        latest=latest,
+        session_id=session_id,
+    )
 
 
 def get_tool_detail_resource(tool_name: str) -> dict[str, Any]:
