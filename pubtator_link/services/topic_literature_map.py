@@ -30,7 +30,9 @@ from pubtator_link.models.literature_graph import (
 )
 from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 from pubtator_link.services.literature_graph_compact import (
+    TOPIC_RANKING_VERSION,
     candidate_summary,
+    coalesced_provider_warnings,
     intent_flags_for_query,
     normalize_query_text,
 )
@@ -145,16 +147,77 @@ class TopicLiteratureMapService:
             candidate_pmids=_dedupe(candidate_pmids),
             accessible_candidates=dedupe_papers(accessible_candidates),
         )
-        hints = _retrieval_hints(summary.recommended_next_pmids)
+        ranked_candidates = rank_topic_candidates(
+            deduped_papers,
+            query=request.query,
+            seed_pmids=seed_pmids,
+            candidate_pmids=_dedupe(candidate_pmids),
+            accessible_pmids=[paper.pmid for paper in accessible_candidates if paper.pmid],
+            bias_toward=request.bias_toward,
+        )
+        recommended_next_pmids = _recommended_next_pmids(ranked_candidates, seed_pmids)
+        accessible_full_text_pmids = _accessible_full_text_pmids(ranked_candidates)
+        closed_central_pmids = _closed_central_pmids(ranked_candidates, summary)
+        demoted_candidate_pmids, demoted_reasons_by_pmid = _demoted_candidates(
+            ranked_candidates,
+            seed_pmids=seed_pmids,
+            max_demoted=request.max_demoted,
+            include_demoted=request.include_demoted,
+        )
+        hints = _retrieval_hints(recommended_next_pmids)
+        response_nodes = nodes
+        response_edges = deduped_edges
+        response_summary = summary
+        top_candidates = ranked_candidates[: request.max_candidates]
+        omitted_counts: dict[str, int] = {}
+
+        if request.response_mode == "compact":
+            response_nodes = []
+            response_edges = []
+            response_summary = _summary_without_papers(summary, recommended_next_pmids)
+            omitted_counts = {
+                "nodes": len(nodes),
+                "edges": len(deduped_edges),
+                "summary_papers": _summary_paper_count(summary),
+                "top_candidates": max(0, len(ranked_candidates) - len(top_candidates)),
+            }
+        elif request.response_mode == "nodes_edges":
+            response_nodes = nodes[: request.max_graph_nodes]
+            response_edges = deduped_edges[: request.max_graph_edges]
+            response_summary = _summary_without_papers(summary, recommended_next_pmids)
+            top_candidates = []
+            omitted_counts = {
+                "nodes": max(0, len(nodes) - len(response_nodes)),
+                "edges": max(0, len(deduped_edges) - len(response_edges)),
+                "summary_papers": _summary_paper_count(summary),
+                "top_candidates": len(ranked_candidates),
+            }
 
         return TopicLiteratureMapResponse(
             query=request.query,
             seed_pmids=seed_pmids,
-            summary=summary,
-            nodes=nodes,
-            edges=deduped_edges,
+            summary=response_summary,
+            nodes=response_nodes,
+            edges=response_edges,
+            response_mode=request.response_mode,
+            top_candidates=top_candidates,
+            recommended_next_pmids=recommended_next_pmids,
+            accessible_full_text_pmids=accessible_full_text_pmids,
+            closed_central_pmids=closed_central_pmids,
+            demoted_candidate_pmids=demoted_candidate_pmids,
+            demoted_reasons_by_pmid=demoted_reasons_by_pmid,
+            provider_status=[],
+            omitted_counts=omitted_counts,
             candidate_retrieval_hints=hints,
-            _meta=LiteratureGraphResponseMeta(warnings=warnings, next_commands=hints),
+            _meta=LiteratureGraphResponseMeta(
+                response_mode=request.response_mode,
+                truncated=any(count > 0 for count in omitted_counts.values()),
+                omitted_counts=omitted_counts,
+                ranking_version=TOPIC_RANKING_VERSION,
+                warnings=coalesced_provider_warnings(warnings),
+                next_commands=hints,
+                provider_status=[],
+            ),
         )
 
     async def _seed_pmids(
@@ -582,6 +645,90 @@ def _retrieval_hints(pmids: list[str]) -> list[dict[str, Any]]:
     ]
 
 
+def _recommended_next_pmids(
+    candidates: list[LiteratureCandidateSummary],
+    seed_pmids: list[str],
+) -> list[str]:
+    seed_set = set(seed_pmids)
+    weak_reasons = {"missing_pmid", "doi_only_unresolved", "low_query_overlap"}
+    pmid_candidates = [
+        candidate for candidate in candidates if candidate.pmid and candidate.pmid not in seed_set
+    ]
+    stronger_candidates = [
+        candidate
+        for candidate in pmid_candidates
+        if not weak_reasons.intersection(candidate.demotion_reasons)
+    ]
+    selected = stronger_candidates if stronger_candidates else pmid_candidates
+    return _dedupe([candidate.pmid or "" for candidate in selected])[:20]
+
+
+def _accessible_full_text_pmids(candidates: list[LiteratureCandidateSummary]) -> list[str]:
+    return _dedupe(
+        [
+            candidate.pmid or ""
+            for candidate in candidates
+            if candidate.pmid and candidate.access == "full_text"
+        ]
+    )
+
+
+def _closed_central_pmids(
+    candidates: list[LiteratureCandidateSummary],
+    summary: TopicLiteratureMapSummary,
+) -> list[str]:
+    central_pmids = {paper.pmid for paper in summary.closed_central_sources if paper.pmid}
+    return _dedupe(
+        [
+            candidate.pmid or ""
+            for candidate in candidates
+            if candidate.pmid in central_pmids
+            and candidate.access not in {"full_text", "open_access"}
+        ]
+    )
+
+
+def _demoted_candidates(
+    candidates: list[LiteratureCandidateSummary],
+    *,
+    seed_pmids: list[str],
+    max_demoted: int,
+    include_demoted: bool,
+) -> tuple[list[str], dict[str, list[str]]]:
+    if not include_demoted or max_demoted == 0:
+        return [], {}
+    seed_set = set(seed_pmids)
+    demoted = [
+        candidate
+        for candidate in candidates
+        if candidate.pmid and candidate.pmid not in seed_set and candidate.demotion_reasons
+    ][:max_demoted]
+    pmids = [candidate.pmid or "" for candidate in demoted]
+    return pmids, {
+        candidate.pmid or "": candidate.demotion_reasons for candidate in demoted if candidate.pmid
+    }
+
+
+def _summary_without_papers(
+    summary: TopicLiteratureMapSummary,
+    recommended_next_pmids: list[str],
+) -> TopicLiteratureMapSummary:
+    return TopicLiteratureMapSummary(
+        dominant_author_groups=summary.dominant_author_groups,
+        recommended_next_pmids=recommended_next_pmids,
+    )
+
+
+def _summary_paper_count(summary: TopicLiteratureMapSummary) -> int:
+    return (
+        len(summary.central_papers)
+        + len(summary.recent_connected_papers)
+        + len(summary.bridge_papers)
+        + len(summary.accessible_full_text_candidates)
+        + len(summary.closed_central_sources)
+    )
+
+
 def _edge(
     *,
     source: str,
@@ -623,7 +770,7 @@ def rank_topic_candidates(
     seed_pmids: list[str],
     candidate_pmids: list[str],
     accessible_pmids: list[str],
-    bias_toward: list[str] | None = None,
+    bias_toward: Sequence[str] | None = None,
 ) -> list[LiteratureCandidateSummary]:
     intents = intent_flags_for_query(query)
     query_terms = _query_terms(query)

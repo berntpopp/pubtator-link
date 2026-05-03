@@ -410,6 +410,25 @@ class TopicLiteratureMapRequest(BaseModel):
     pmids: list[str] | None = Field(default=None, min_length=1, max_length=100)
     max_seed_papers: int = Field(default=25, ge=1, le=50)
     max_neighbors_per_paper: int = Field(default=10, ge=1, le=20)
+    response_mode: LiteratureGraphResponseMode = "full"
+    max_candidates: int = Field(default=12, ge=1, le=50)
+    include_demoted: bool = True
+    max_demoted: int = Field(default=3, ge=0, le=20)
+    bias_toward: (
+        list[
+            Literal[
+                "guideline",
+                "cohort",
+                "genotype_phenotype",
+                "treatment",
+                "pediatric",
+                "population",
+            ]
+        ]
+        | None
+    ) = None
+    max_graph_nodes: int = Field(default=30, ge=1, le=200)
+    max_graph_edges: int = Field(default=60, ge=1, le=400)
     include_authors: bool = True
     include_citations: bool = True
     include_pubtator_entities: bool = True
@@ -461,6 +480,15 @@ class TopicLiteratureMapResponse(BaseModel):
     summary: TopicLiteratureMapSummary = Field(default_factory=TopicLiteratureMapSummary)
     nodes: list[LiteratureGraphNode] = Field(default_factory=list)
     edges: list[LiteratureGraphEdge] = Field(default_factory=list)
+    response_mode: LiteratureGraphResponseMode = "full"
+    top_candidates: list[LiteratureCandidateSummary] = Field(default_factory=list)
+    recommended_next_pmids: list[str] = Field(default_factory=list)
+    accessible_full_text_pmids: list[str] = Field(default_factory=list)
+    closed_central_pmids: list[str] = Field(default_factory=list)
+    demoted_candidate_pmids: list[str] = Field(default_factory=list)
+    demoted_reasons_by_pmid: dict[str, list[str]] = Field(default_factory=dict)
+    provider_status: list[LiteratureProviderStatus] = Field(default_factory=list)
+    omitted_counts: dict[str, int] = Field(default_factory=dict)
     candidate_retrieval_hints: list[dict[str, Any]] = Field(default_factory=list)
     meta: LiteratureGraphResponseMeta = Field(
         default_factory=LiteratureGraphResponseMeta,

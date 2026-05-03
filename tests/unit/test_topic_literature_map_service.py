@@ -15,6 +15,7 @@ from pubtator_link.models.publication_metadata import (
     PublicationMetadata,
     PublicationMetadataResponse,
 )
+from pubtator_link.services.literature_graph_compact import TOPIC_RANKING_VERSION
 from pubtator_link.services.topic_literature_map import (
     TopicLiteratureMapService,
     rank_topic_candidates,
@@ -29,7 +30,7 @@ class FakeSearchClient:
         page: int = 1,
         sort: str | None = None,
     ) -> dict[str, object]:
-        assert text == "FMF"
+        assert "FMF" in text
         assert page == 1
         assert sort == "score desc"
         return {"results": [{"pmid": "111"}, {"pmid": "222"}]}
@@ -342,3 +343,93 @@ def test_topic_ranker_promotes_guideline_and_pediatric_colchicine_records() -> N
     assert "low_query_overlap" in by_pmid["40616106"].demotion_reasons
     assert by_pmid["28386255"].relevance_to_query is not None
     assert "guideline_intent" in by_pmid["28386255"].relevance_to_query.matched_intents
+
+
+@pytest.mark.asyncio
+async def test_topic_map_compact_omits_topology_and_uses_pmid_indexes() -> None:
+    response = await _service().build_map(
+        TopicLiteratureMapRequest(
+            query="FMF colchicine guideline child",
+            max_seed_papers=2,
+            max_neighbors_per_paper=2,
+            response_mode="compact",
+            max_candidates=1,
+            max_demoted=1,
+        )
+    )
+
+    assert response.meta.response_mode == "compact"
+    assert response.nodes == []
+    assert response.edges == []
+    assert response.top_candidates
+    assert len(response.top_candidates) <= 1
+    assert response.summary.central_papers == []
+    assert response.summary.recent_connected_papers == []
+    assert response.summary.bridge_papers == []
+    assert response.summary.accessible_full_text_candidates == []
+    assert response.summary.closed_central_sources == []
+    assert isinstance(response.accessible_full_text_pmids, list)
+    assert isinstance(response.closed_central_pmids, list)
+    assert len(response.demoted_candidate_pmids) <= 1
+    assert response.recommended_next_pmids == [
+        pmid for pmid in response.recommended_next_pmids if pmid
+    ]
+
+
+@pytest.mark.asyncio
+async def test_topic_map_nodes_edges_mode_returns_bounded_topology_without_candidate_envelopes() -> (
+    None
+):
+    response = await _service().build_map(
+        TopicLiteratureMapRequest(
+            pmids=["111", "222"],
+            response_mode="nodes_edges",
+            max_graph_nodes=2,
+            max_graph_edges=1,
+        )
+    )
+
+    assert response.meta.response_mode == "nodes_edges"
+    assert len(response.nodes) <= 2
+    assert len(response.edges) <= 1
+    assert response.top_candidates == []
+    assert response.summary.central_papers == []
+    assert response.summary.recent_connected_papers == []
+    assert response.summary.bridge_papers == []
+    assert response.summary.accessible_full_text_candidates == []
+    assert response.summary.closed_central_sources == []
+
+
+@pytest.mark.asyncio
+async def test_topic_map_full_mode_adds_bounded_candidates_and_preserves_topology() -> None:
+    response = await _service().build_map(
+        TopicLiteratureMapRequest(
+            query="FMF",
+            max_seed_papers=2,
+            max_neighbors_per_paper=2,
+            max_candidates=1,
+        )
+    )
+
+    assert response.meta.response_mode == "full"
+    assert response.meta.ranking_version == TOPIC_RANKING_VERSION
+    assert 0 < len(response.top_candidates) <= 1
+    assert response.nodes
+    assert response.edges
+    assert response.summary.central_papers
+
+
+@pytest.mark.asyncio
+async def test_topic_map_demoted_candidate_pmids_exclude_seed_pmids() -> None:
+    response = await _service().build_map(
+        TopicLiteratureMapRequest(
+            query="FMF colchicine guideline child",
+            max_seed_papers=2,
+            max_neighbors_per_paper=2,
+            response_mode="compact",
+            max_demoted=20,
+        )
+    )
+
+    assert response.demoted_candidate_pmids
+    assert set(response.demoted_candidate_pmids).isdisjoint(response.seed_pmids)
