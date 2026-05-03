@@ -819,7 +819,7 @@ async def test_ground_question_adapter_waits_when_selected_pmids_are_not_ready()
         async def inspect_review_index(self, review_id, request):
             return InspectReviewIndexResponse(
                 review_id=review_id,
-                preparation_status=PreparationStatus(),
+                preparation_status=PreparationStatus(complete=1),
                 sources=[],
                 totals=ReviewIndexTotals(passage_count=5),
                 failed_sources=[],
