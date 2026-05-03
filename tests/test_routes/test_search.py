@@ -521,7 +521,8 @@ class TestSearchRoutes:
 
         assert response.status_code == 200
         item = response.json()["results"][0]
-        assert item["authors"][0]["display_name"] == "Kavrul Kayaalp GK"
+        assert item["authors"] == []
+        assert item["first_author_et_al"] == "Kavrul Kayaalp GK"
         assert item["journal"] == "Rheumatology International"
 
     @patch.object(PubTator3Client, "search_publications")
