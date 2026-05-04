@@ -375,7 +375,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"review_id":"demo","include_passage_samples":true}`
 - Next tools by profile: lean: `pubtator.retrieve_review_context_batch`; full: `pubtator.retrieve_review_context_batch`; readonly: `pubtator.retrieve_review_context_batch`
 - Resource links: `pubtator://reviews/{review_id}`
-- Input schema: `review_id` (string); `session_id` (string | null; default: `None`); `pmids` (array | null; default: `None`); `include_passage_samples` (boolean; default: `False`); `sample_per_pmid` (integer; default: `2`); `min_sample_chars` (integer; default: `80`); `sample_section_policy` (string; enum: `evidence_first`, `original_order`; default: `evidence_first`); `include_metadata` (boolean; default: `False`); `metadata` (string; enum: `basic`, `full`; default: `basic`)
+- Input schema: `review_id` (string); `session_id` (string | null; default: `None`); `pmids` (array | null; default: `None`); `include_passage_samples` (boolean; default: `False`); `sample_per_pmid` (integer; default: `2`); `min_sample_chars` (integer; default: `80`); `sample_section_policy` (string; enum: `evidence_first`, `original_order`; default: `evidence_first`); `include_metadata` (boolean; default: `False`); `metadata` (string; enum: `basic`, `full`; default: `basic`); `response_mode` (string; enum: `compact`, `full`; default: `compact`)
 - Output schema: `InspectReviewIndexResponse`; has_output_schema: `yes`
 
 ## `pubtator.list_evidence_certainty`
