@@ -331,6 +331,7 @@ class CitationGraphService:
         )
         reference_candidates = _citation_candidates(references, "source_reference")
         cited_by_candidates = _citation_candidates(cited_by, "source_cited_by")
+        compact_omitted_counts: dict[str, int] = {}
         response_references = references
         response_cited_by = cited_by
         response_reference_candidates = reference_candidates
@@ -342,6 +343,15 @@ class CitationGraphService:
             response_references = []
             response_cited_by = []
             response_metadata_only = []
+            response_reference_candidates, omitted_references = _compact_actionable_candidates(
+                response_reference_candidates
+            )
+            response_cited_by_candidates, omitted_cited_by = _compact_actionable_candidates(
+                response_cited_by_candidates
+            )
+            omitted_unresolved = omitted_references + omitted_cited_by
+            if omitted_unresolved:
+                compact_omitted_counts["doi_only_unresolved"] = omitted_unresolved
         elif request.response_mode == "nodes_edges":
             response_references = []
             response_cited_by = []
@@ -375,6 +385,8 @@ class CitationGraphService:
             open_access_status=open_access_status,
             _meta=LiteratureGraphResponseMeta(
                 response_mode=request.response_mode,
+                truncated=bool(compact_omitted_counts),
+                omitted_counts=compact_omitted_counts,
                 warnings=coalesced_provider_warnings(warnings),
                 next_commands=_next_commands(candidate_pmids),
                 provider_status=[
@@ -684,6 +696,13 @@ def _citation_candidates(
             )
         )
     return candidates
+
+
+def _compact_actionable_candidates(
+    candidates: list[LiteratureCandidateSummary],
+) -> tuple[list[LiteratureCandidateSummary], int]:
+    actionable = [candidate for candidate in candidates if candidate.pmid]
+    return actionable, len(candidates) - len(actionable)
 
 
 def _compact_status_for_direction(direction: CitationGraphDirection) -> dict[str, str]:

@@ -30,6 +30,7 @@ from pubtator_link.services.literature_graph_compact import (
     TOPIC_RANKING_VERSION,
     candidate_summary,
     coalesced_provider_warnings,
+    compact_author_summary,
     intent_flags_for_query,
     json_size_class,
     normalize_query_text,
@@ -177,6 +178,10 @@ class TopicLiteratureMapService:
             response_nodes = []
             response_edges = []
             response_summary = _compact_summary(summary, recommended_next_pmids)
+            compact_candidates, omitted_doi_only = _compact_actionable_topic_candidates(
+                ranked_candidates
+            )
+            top_candidates = compact_candidates[: request.max_candidates]
             omitted_counts = {
                 "nodes": len(nodes),
                 "edges": len(deduped_edges),
@@ -186,6 +191,8 @@ class TopicLiteratureMapService:
                 ),
                 "top_candidates": max(0, len(ranked_candidates) - len(top_candidates)),
             }
+            if omitted_doi_only:
+                omitted_counts["doi_only_unresolved"] = omitted_doi_only
         elif request.response_mode == "nodes_edges":
             response_nodes = nodes[: request.max_graph_nodes]
             response_edges = deduped_edges[: request.max_graph_edges]
@@ -657,6 +664,14 @@ def _demoted_candidates(
     }
 
 
+def _compact_actionable_topic_candidates(
+    candidates: list[LiteratureCandidateSummary],
+) -> tuple[list[LiteratureCandidateSummary], int]:
+    actionable = [candidate for candidate in candidates if candidate.pmid]
+    omitted_doi_only = sum(1 for candidate in candidates if candidate.doi and not candidate.pmid)
+    return actionable, omitted_doi_only
+
+
 def _summary_without_papers(
     summary: TopicLiteratureMapSummary,
     recommended_next_pmids: list[str],
@@ -677,13 +692,28 @@ def _compact_summary(
     recommended_next_pmids: list[str],
 ) -> TopicLiteratureMapSummary:
     return TopicLiteratureMapSummary(
-        central_papers=summary.central_papers[:5],
-        recent_connected_papers=summary.recent_connected_papers[:5],
-        bridge_papers=summary.bridge_papers[:5],
+        central_papers=[_compact_paper(paper) for paper in summary.central_papers[:5]],
+        recent_connected_papers=[
+            _compact_paper(paper) for paper in summary.recent_connected_papers[:5]
+        ],
+        bridge_papers=[_compact_paper(paper) for paper in summary.bridge_papers[:5]],
         dominant_author_groups=summary.dominant_author_groups,
         accessible_full_text_candidates=[],
-        closed_central_sources=summary.closed_central_sources[:5],
+        closed_central_sources=[
+            _compact_paper(paper) for paper in summary.closed_central_sources[:5]
+        ],
         recommended_next_pmids=recommended_next_pmids,
+    )
+
+
+def _compact_paper(paper: LiteraturePaper) -> LiteraturePaper:
+    author_label, author_count = compact_author_summary(paper.authors)
+    return paper.model_copy(
+        update={
+            "authors": [],
+            "author_summary": author_label,
+            "author_count": author_count,
+        }
     )
 
 

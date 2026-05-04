@@ -169,6 +169,29 @@ class RichNeighborCitationGraph:
         )
 
 
+class DoiOnlyCitationGraph:
+    async def get_citation_graph(self, request: object) -> PublicationCitationGraphResponse:
+        return PublicationCitationGraphResponse(
+            source=LiteraturePaper(pmid=request.pmid),
+            references=[
+                LiteraturePaper(
+                    doi="10.1000/unresolved-topic",
+                    title="FMF unresolved DOI-only reference",
+                )
+            ],
+            candidate_pmids=[],
+        )
+
+
+class EmptyRelatedEvidence:
+    async def find_candidates(self, request: object) -> RelatedEvidenceCandidatesResponse:
+        return RelatedEvidenceCandidatesResponse(
+            source=LiteraturePaper(pmid=request.pmid),
+            candidates=[],
+            candidate_pmids=[],
+        )
+
+
 class FailingProvider:
     async def get_metadata(self, request: object) -> PublicationMetadataResponse:
         raise RuntimeError("metadata unavailable")
@@ -384,6 +407,9 @@ async def test_topic_map_compact_keeps_summary_papers_and_candidate_signals() ->
     assert len(response.summary.central_papers) <= 5
     assert len(response.summary.recent_connected_papers) <= 5
     assert len(response.summary.bridge_papers) <= 5
+    assert response.summary.central_papers[0].authors == []
+    assert response.summary.central_papers[0].author_summary == "Ada"
+    assert response.summary.central_papers[0].author_count == 1
     assert response.top_candidates
     assert response.top_candidates[0].signals
     assert len(response.top_candidates[0].signals) == len(set(response.top_candidates[0].signals))
@@ -412,6 +438,29 @@ async def test_topic_map_compact_omitted_summary_papers_count_only_hidden_papers
         _summary_paper_count(full_response.summary)
         - _summary_paper_count(compact_response.summary),
     )
+
+
+@pytest.mark.asyncio
+async def test_topic_map_compact_hides_doi_only_top_candidates() -> None:
+    service = TopicLiteratureMapService(
+        search_client=FakeSearchClient(),
+        metadata_service=FakeMetadata(),
+        citation_graph_service=DoiOnlyCitationGraph(),
+        related_evidence_service=EmptyRelatedEvidence(),
+    )
+
+    response = await service.build_map(
+        TopicLiteratureMapRequest(
+            pmids=["111"],
+            response_mode="compact",
+            max_neighbors_per_paper=1,
+            max_candidates=5,
+        )
+    )
+
+    assert all(candidate.pmid for candidate in response.top_candidates)
+    assert response.omitted_counts["doi_only_unresolved"] == 1
+    assert response.meta.omitted_counts["doi_only_unresolved"] == 1
 
 
 @pytest.mark.asyncio

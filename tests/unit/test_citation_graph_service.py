@@ -616,7 +616,10 @@ async def test_citation_graph_compact_returns_candidates_status_and_no_metadata_
     assert response.references == []
     assert response.cited_by == []
     assert response.metadata_only == []
-    assert response.reference_candidates
+    serialized = response.model_dump(by_alias=True)
+    assert "references" not in serialized
+    assert "cited_by" not in serialized
+    assert response.reference_candidates == []
     assert response.cited_by_candidates
     assert response.candidate_pmids == ["40600001"]
     assert response.actionable_pmid_count == len(response.candidate_pmids)
@@ -636,6 +639,28 @@ async def test_citation_graph_compact_returns_candidates_status_and_no_metadata_
 
 
 @pytest.mark.asyncio
+async def test_citation_graph_compact_hides_unresolved_doi_candidate_rows() -> None:
+    service = CitationGraphService(
+        crossref=FakeCrossref(),
+        discovery_service=FakeDiscovery(),
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            doi="10.1016/j.ard.2025.05.020",
+            direction="references",
+            response_mode="compact",
+            resolve_reference_pmids=False,
+        )
+    )
+
+    assert response.unresolved_doi_count == 1
+    assert response.reference_candidates == []
+    assert response.meta.omitted_counts["doi_only_unresolved"] == 1
+
+
+@pytest.mark.asyncio
 async def test_citation_graph_compact_status_marks_unrequested_direction() -> None:
     service = CitationGraphService(
         crossref=FakeCrossref(),
@@ -652,10 +677,11 @@ async def test_citation_graph_compact_status_marks_unrequested_direction() -> No
         )
     )
 
-    assert response.reference_candidates
+    assert response.reference_candidates == []
     assert response.cited_by_candidates == []
     assert response.compact_status["references"] == "candidates_only"
     assert response.compact_status["cited_by"] == "not_requested"
+    assert response.meta.omitted_counts["doi_only_unresolved"] == 1
 
 
 @pytest.mark.asyncio

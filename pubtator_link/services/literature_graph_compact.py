@@ -9,6 +9,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from pubtator_link.models.literature_graph import (
+    LiteratureAuthor,
     LiteratureCandidateAccess,
     LiteratureCandidateSummary,
     LiteraturePaper,
@@ -108,6 +109,7 @@ def candidate_summary(
         rank_reasons or [],
         demotion_reasons or [],
     )
+    author_label, author_count = compact_author_summary(paper.authors)
     return LiteratureCandidateSummary(
         pmid=paper.pmid,
         doi=paper.doi,
@@ -115,6 +117,8 @@ def candidate_summary(
         journal=paper.journal,
         year=paper.year,
         publication_types=paper.publication_types,
+        author_summary=author_label,
+        author_count=author_count,
         access=access_summary(paper),
         access_flags=access_flags(paper),
         score=score,
@@ -129,3 +133,13 @@ def candidate_summary(
             else []
         ),
     )
+
+
+def compact_author_summary(authors: Iterable[LiteratureAuthor]) -> tuple[str | None, int]:
+    names = [author.name for author in authors if author.name]
+    count = len(names)
+    if count == 0:
+        return None, 0
+    if count <= 3:
+        return ", ".join(names), count
+    return f"{', '.join(names[:3])} et al. ({count} authors)", count

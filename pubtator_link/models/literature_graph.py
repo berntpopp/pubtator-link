@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 CitationGraphDirection = Literal["references", "cited_by", "both"]
 LiteratureGraphResponseMode = Literal["compact", "nodes_edges", "full"]
@@ -129,6 +137,8 @@ class LiteraturePaper(BaseModel):
     year: int | None = None
     publication_types: list[str] = Field(default_factory=list)
     authors: list[LiteratureAuthor] = Field(default_factory=list)
+    author_summary: str | None = None
+    author_count: int = Field(default=0, ge=0)
     availability: LiteratureAvailability = Field(default_factory=LiteratureAvailability)
     status: LiteraturePaperStatus = "resolved_metadata_only"
     provenance: list[LiteratureGraphProvenance] = Field(default_factory=list)
@@ -233,6 +243,8 @@ class LiteratureCandidateSummary(BaseModel):
     journal: str | None = None
     year: int | None = None
     publication_types: list[str] = Field(default_factory=list)
+    author_summary: str | None = None
+    author_count: int = Field(default=0, ge=0)
     access: LiteratureCandidateAccess
     access_flags: dict[str, bool] = Field(default_factory=dict)
     score: float | None = None
@@ -357,6 +369,16 @@ class PublicationCitationGraphResponse(BaseModel):
     @classmethod
     def coerce_legacy_meta(cls, value: Any) -> Any:
         return _coerce_graph_response_meta(value)
+
+    @model_serializer(mode="wrap")
+    def omit_empty_full_lanes_for_compact(self, handler: Any) -> Any:
+        data = handler(self)
+        if not isinstance(data, dict) or self.response_mode != "compact":
+            return data
+        for field in ("references", "cited_by", "metadata_only", "nodes", "edges"):
+            if not data.get(field):
+                data.pop(field, None)
+        return data
 
 
 class RelatedEvidenceCandidatesRequest(BaseModel):
