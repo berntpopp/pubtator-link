@@ -183,6 +183,50 @@ class IntentCitationGraph:
         )
 
 
+class ManyCandidateDiscovery:
+    async def find_related_article_scores(
+        self,
+        pmids: list[str],
+        limit: int,
+    ) -> list[RelatedArticleScoreRecord]:
+        assert pmids == ["123"]
+        return [
+            RelatedArticleScoreRecord(
+                source_pmid="123",
+                pmid=str(100000 + index),
+                neighbor_score=1000 - index,
+            )
+            for index in range(100)
+        ]
+
+
+class ManyCandidateCitationGraph:
+    async def get_citation_graph(self, request):
+        return PublicationCitationGraphResponse(
+            source=LiteraturePaper(pmid=request.pmid),
+            candidate_pmids=[str(200000 + index) for index in range(110)],
+        )
+
+
+class RecordingMetadata:
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    async def get_metadata(self, request):
+        self.calls.append(list(request.pmids))
+        return PublicationMetadataResponse(
+            metadata=[
+                PublicationMetadata(
+                    pmid=pmid,
+                    title=f"Resolved metadata {pmid}",
+                    pub_year=2024,
+                    coverage="abstract_only",
+                )
+                for pmid in request.pmids
+            ],
+        )
+
+
 @pytest.mark.asyncio
 async def test_ranks_full_text_candidate_when_neighbor_scores_tie() -> None:
     service = RelatedEvidenceService(
@@ -323,6 +367,30 @@ async def test_metadata_failure_degrades_to_bare_candidates_with_warning() -> No
         warning.provider == "pubmed_metadata" and warning.status == "provider_failed"
         for warning in response.meta.warnings
     )
+
+
+@pytest.mark.asyncio
+async def test_related_evidence_batches_large_metadata_candidate_sets() -> None:
+    metadata = RecordingMetadata()
+    service = RelatedEvidenceService(
+        discovery_service=ManyCandidateDiscovery(),
+        metadata_service=metadata,
+        citation_graph_service=ManyCandidateCitationGraph(),
+    )
+
+    response = await service.find_candidates(
+        RelatedEvidenceCandidatesRequest(
+            pmid="123",
+            max_results=25,
+            include_citation_neighbors=True,
+        )
+    )
+
+    assert [len(call) for call in metadata.calls] == [1, 100, 100, 10]
+    assert len(response.candidates) == 25
+    assert all(candidate.paper.status == "resolved_metadata_only" for candidate in response.candidates)
+    assert all(candidate.paper.title for candidate in response.candidates)
+    assert not any(warning.provider == "pubmed_metadata" for warning in response.meta.warnings)
 
 
 @pytest.mark.asyncio

@@ -148,30 +148,35 @@ class RelatedEvidenceService:
             return [], []
 
         warnings: list[ProviderWarning] = []
-        try:
-            metadata_response = await self.metadata_service.get_metadata(
-                PublicationMetadataRequest(
-                    pmids=pmids,
-                    include_mesh=False,
-                    include_publication_types=True,
-                    include_citations="none",
-                    include_coverage=True,
-                )
-            )
-            metadata_by_pmid = {metadata.pmid: metadata for metadata in metadata_response.metadata}
-            failed_pmids = getattr(metadata_response, "failed_pmids", {})
-            if failed_pmids:
-                warnings.append(
-                    ProviderWarning(
-                        provider="pubmed_metadata",
-                        status="provider_failed",
-                        retryable=True,
-                        message=f"Metadata lookup failed for {len(failed_pmids)} PMID(s).",
+        metadata_by_pmid: dict[str, Any] = {}
+        failed_pmids: dict[str, Any] = {}
+        for batch in _chunks(pmids, 100):
+            try:
+                metadata_response = await self.metadata_service.get_metadata(
+                    PublicationMetadataRequest(
+                        pmids=batch,
+                        include_mesh=False,
+                        include_publication_types=True,
+                        include_citations="none",
+                        include_coverage=True,
                     )
                 )
-        except Exception as exc:
-            metadata_by_pmid = {}
-            warnings.append(_provider_failed_warning("pubmed_metadata", exc))
+                metadata_by_pmid.update(
+                    {metadata.pmid: metadata for metadata in metadata_response.metadata}
+                )
+                failed_pmids.update(getattr(metadata_response, "failed_pmids", {}))
+            except Exception as exc:
+                warnings.append(_provider_failed_warning("pubmed_metadata", exc))
+
+        if failed_pmids:
+            warnings.append(
+                ProviderWarning(
+                    provider="pubmed_metadata",
+                    status="provider_failed",
+                    retryable=True,
+                    message=f"Metadata lookup failed for {len(failed_pmids)} PMID(s).",
+                )
+            )
 
         candidates: list[RelatedEvidenceCandidate] = []
         for pmid in pmids:
@@ -322,6 +327,11 @@ def _provider_failed_warning(provider: str, exc: Exception) -> ProviderWarning:
 
 def _candidate_fetch_limit(max_results: int) -> int:
     return min(100, max(25, max_results * 5))
+
+
+def _chunks(values: list[str], size: int) -> Iterable[list[str]]:
+    for index in range(0, len(values), size):
+        yield values[index : index + size]
 
 
 def _dedupe(values: Iterable[str]) -> list[str]:

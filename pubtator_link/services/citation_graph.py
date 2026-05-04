@@ -490,10 +490,12 @@ class CitationGraphService:
                 enriched.append(paper)
                 continue
             if isinstance(availability, ProviderWarning):
-                warnings.append(availability)
-                status: LiteratureProviderStatusValue = (
-                    "disabled" if availability.status == "provider_disabled" else "failed"
-                )
+                status: LiteratureProviderStatusValue
+                if availability.status == "provider_no_match":
+                    status = "empty"
+                else:
+                    warnings.append(availability)
+                    status = "disabled" if availability.status == "provider_disabled" else "failed"
                 _append_unique_status(
                     open_access_status,
                     _provider_status(

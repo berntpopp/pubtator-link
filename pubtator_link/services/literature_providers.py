@@ -244,6 +244,13 @@ class UnpaywallClient:
             f"{self.base_url}/{quote(doi, safe='')}",
             params={"email": self.email},
         )
+        if response.status_code == 404:
+            return ProviderWarning(
+                provider=UNPAYWALL_PROVIDER,
+                status="provider_no_match",
+                retryable=False,
+                message="No Unpaywall record for DOI.",
+            )
         response.raise_for_status()
         payload = response.json()
         return _availability_from_unpaywall(payload if isinstance(payload, Mapping) else {})

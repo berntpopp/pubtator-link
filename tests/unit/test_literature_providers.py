@@ -29,6 +29,17 @@ class MockTransport:
         return httpx.Response(200, json=self.payload, request=request)
 
 
+class StatusTransport:
+    def __init__(self, status_code: int, payload: dict[str, object] | None = None) -> None:
+        self.status_code = status_code
+        self.payload = payload or {}
+        self.requests: list[httpx.Request] = []
+
+    async def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        return httpx.Response(self.status_code, json=self.payload, request=request)
+
+
 class SequentialTransport:
     def __init__(self, payloads: list[dict[str, object]]) -> None:
         self.payloads = payloads
@@ -216,4 +227,18 @@ async def test_unpaywall_client_with_payload_returns_availability() -> None:
     assert availability.oa_status == "green"
     assert availability.full_text_url == "https://example.org/fulltext"
     assert availability.license_or_access_hint == "cc-by"
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_unpaywall_client_404_returns_no_match_warning() -> None:
+    transport = StatusTransport(404)
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = UnpaywallClient(http_client=http_client, email="curator@example.org")
+
+    result = await client.get_availability("10.1002/missing")
+
+    assert isinstance(result, ProviderWarning)
+    assert result.status == "provider_no_match"
+    assert result.retryable is False
     await client.close()

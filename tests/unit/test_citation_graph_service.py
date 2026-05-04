@@ -556,6 +556,41 @@ class DisabledUnpaywall:
         )
 
 
+class NoMatchUnpaywall:
+    async def get_oa_status(self, doi: str):
+        from pubtator_link.models.literature_graph import ProviderWarning
+
+        return ProviderWarning(
+            provider="unpaywall",
+            status="provider_no_match",
+            retryable=False,
+            message="No Unpaywall record for DOI.",
+        )
+
+
+@pytest.mark.asyncio
+async def test_citation_graph_treats_unpaywall_no_match_as_empty_status() -> None:
+    service = CitationGraphService(
+        crossref=FakeCrossref(),
+        europe_pmc=None,
+        unpaywall=NoMatchUnpaywall(),
+        discovery_service=FakeDiscovery(),
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            doi="10.1016/j.ard.2025.05.020",
+            direction="references",
+            response_mode="compact",
+        )
+    )
+
+    assert response.meta.warnings == []
+    assert response.open_access_status[0].provider == "unpaywall"
+    assert response.open_access_status[0].status == "empty"
+
+
 @pytest.mark.asyncio
 async def test_citation_graph_compact_returns_candidates_status_and_no_metadata_duplicates() -> (
     None
