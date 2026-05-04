@@ -388,7 +388,9 @@ async def test_related_evidence_batches_large_metadata_candidate_sets() -> None:
 
     assert [len(call) for call in metadata.calls] == [1, 100, 100, 10]
     assert len(response.candidates) == 25
-    assert all(candidate.paper.status == "resolved_metadata_only" for candidate in response.candidates)
+    assert all(
+        candidate.paper.status == "resolved_metadata_only" for candidate in response.candidates
+    )
     assert all(candidate.paper.title for candidate in response.candidates)
     assert not any(warning.provider == "pubmed_metadata" for warning in response.meta.warnings)
 
