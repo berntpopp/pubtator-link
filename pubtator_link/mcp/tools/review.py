@@ -485,6 +485,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         sample_section_policy: SampleSectionPolicy = "evidence_first",
         include_metadata: bool = False,
         metadata: Literal["basic", "full"] = "basic",
+        response_mode: Literal["compact", "full"] = "compact",
     ) -> dict[str, Any]:
         """Use this when a user needs to inspect indexed PMIDs, sections, passage counts, and failures for a review_id, including source coverage."""
 
@@ -501,6 +502,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
                 sample_section_policy=sample_section_policy,
                 include_metadata=include_metadata,
                 metadata=metadata,
+                response_mode=response_mode,
             )
 
         return await run_mcp_tool("pubtator.inspect_review_index", call, pmids=pmids)

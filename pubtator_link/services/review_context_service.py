@@ -506,6 +506,7 @@ class ReviewContextService:
             coverage_summary[source.coverage] = coverage_summary.get(source.coverage, 0) + 1
         return InspectReviewIndexResponse(
             review_id=review_id,
+            response_mode=request.response_mode,
             preparation_status=preparation_status,
             sources=sources,
             totals=totals,

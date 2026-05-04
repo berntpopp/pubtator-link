@@ -19,6 +19,7 @@ PreparationEnqueueResult = Literal[
 ]
 AttemptStatus = Literal["success", "not_available", "blocked", "failed"]
 ReviewBatchResponseMode = Literal["compact", "merged_only", "full", "diagnostics", "quotes"]
+InspectReviewIndexResponseMode = Literal["compact", "full"]
 ReviewTableMode = Literal["off", "preview", "full"]
 SourceCoverage = Literal["title_only", "abstract_only", "full_text", "curated_url", "unknown"]
 CoverageTier = SourceCoverage
@@ -1059,6 +1060,7 @@ class InspectReviewIndexRequest(BaseModel):
 
     session_id: str | None = Field(default=None, min_length=1)
     pmids: list[str] = Field(default_factory=list)
+    response_mode: InspectReviewIndexResponseMode = "full"
     include_passage_samples: bool = False
     sample_per_pmid: int = Field(default=2, ge=0, le=10)
     min_sample_chars: int = Field(default=80, ge=0, le=1000)
@@ -1072,12 +1074,38 @@ class InspectReviewIndexResponse(BaseModel):
 
     success: bool = True
     review_id: str
+    response_mode: InspectReviewIndexResponseMode = "full"
     preparation_status: PreparationStatus
     sources: list[ReviewSourceSummary]
     totals: ReviewIndexTotals
     failed_sources: list[FailedSourceSummary]
     coverage_summary: dict[str, int] = Field(default_factory=dict)
     index_snapshot_date: str | None = None
+
+    @model_serializer(mode="wrap")
+    def omit_bulky_fields_for_compact(self, handler: Any) -> dict[str, Any]:
+        data = cast(dict[str, Any], handler(self))
+        if self.response_mode != "compact":
+            return data
+        for source in data.get("sources", []):
+            if not isinstance(source, dict):
+                continue
+            source.pop("resolver_attempts", None)
+            source.pop("sample_passages", None)
+            source.pop("citation_metadata", None)
+            _drop_none_values(source)
+        for failed_source in data.get("failed_sources", []):
+            if not isinstance(failed_source, dict):
+                continue
+            failed_source.pop("resolver_attempts", None)
+            _drop_none_values(failed_source)
+        return data
+
+
+def _drop_none_values(data: dict[str, Any]) -> None:
+    for key, value in list(data.items()):
+        if value is None:
+            data.pop(key)
 
 
 class ReviewPassageRow(BaseModel):

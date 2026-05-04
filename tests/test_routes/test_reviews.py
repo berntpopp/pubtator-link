@@ -443,6 +443,7 @@ async def test_inspect_review_index_returns_sources_and_failures() -> None:
                 "sample_per_pmid": "1",
                 "include_metadata": "true",
                 "metadata": "full",
+                "response_mode": "compact",
             },
         )
 
@@ -460,6 +461,7 @@ async def test_inspect_review_index_returns_sources_and_failures() -> None:
     request = service.inspect_review_index.await_args.kwargs["request"]
     assert request.include_metadata is True
     assert request.metadata == "full"
+    assert request.response_mode == "compact"
 
 
 @pytest.mark.asyncio

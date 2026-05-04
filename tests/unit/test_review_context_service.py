@@ -10,6 +10,7 @@ from pubtator_link.models.publication_metadata import (
 from pubtator_link.models.review_rerag import (
     FailedSourceSummary,
     InspectReviewIndexRequest,
+    ResolverAttemptSummary,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
     RetrieveReviewContextResponse,
@@ -790,6 +791,63 @@ async def test_inspect_review_index_attaches_citation_metadata() -> None:
     assert response.sources[0].citation_metadata.title == "Citation title"
     assert metadata_service.requests[0].pmids == ["111"]
     assert metadata_service.requests[0].include_mesh is False
+
+
+@pytest.mark.asyncio
+async def test_inspect_review_index_compact_serialization_omits_bulky_source_fields() -> None:
+    repository = FakeReviewContextRepository([], preparation_status={"complete": 1, "failed": 1})
+    attempt = ResolverAttemptSummary(
+        source_kind="pubtator_full_bioc",
+        status="failed",
+        url="https://example.org/full.xml",
+        content_length=70000,
+    )
+    repository.source_summaries = [
+        ReviewSourceSummary(
+            source_id="111",
+            pmid="111",
+            source_kind="pubtator_abstract",
+            job_status="complete",
+            resolver_attempts=[attempt],
+            sample_passages=[
+                ReviewPassageSample(
+                    passage_id="p1",
+                    section="abstract",
+                    text="Long passage text that should not be serialized in compact inspect.",
+                    char_count=64,
+                )
+            ],
+            citation_metadata={"title": "Verbose citation metadata"},
+        )
+    ]
+    repository.failed_source_summaries = [
+        FailedSourceSummary(
+            source_id="222",
+            pmid="222",
+            source_kind="pubtator_full_bioc",
+            job_status="failed",
+            error="not available",
+            resolver_attempts=[attempt],
+        )
+    ]
+    service = ReviewContextService(repository)
+
+    response = await service.inspect_review_index(
+        review_id="review-1",
+        request=InspectReviewIndexRequest(
+            response_mode="compact",
+            include_passage_samples=True,
+            include_metadata=True,
+        ),
+    )
+    data = response.model_dump()
+
+    assert data["response_mode"] == "compact"
+    assert "resolver_attempts" not in data["sources"][0]
+    assert "sample_passages" not in data["sources"][0]
+    assert "citation_metadata" not in data["sources"][0]
+    assert "resolver_attempts" not in data["failed_sources"][0]
+    assert data["totals"]["source_count"] == 0
 
 
 @pytest.mark.asyncio

@@ -1432,6 +1432,7 @@ async def test_inspect_review_index_adapter_builds_request_from_flat_args() -> N
             self.request = request
             return InspectReviewIndexResponse(
                 review_id=review_id,
+                response_mode=request.response_mode,
                 preparation_status=PreparationStatus(complete=1),
                 sources=[],
                 totals=ReviewIndexTotals(),
@@ -1449,6 +1450,7 @@ async def test_inspect_review_index_adapter_builds_request_from_flat_args() -> N
         sample_per_pmid=3,
         min_sample_chars=120,
         sample_section_policy="original_order",
+        response_mode="compact",
     )
 
     assert service.review_id == "rev"
@@ -1456,6 +1458,8 @@ async def test_inspect_review_index_adapter_builds_request_from_flat_args() -> N
     assert service.request.sample_per_pmid == 3
     assert service.request.min_sample_chars == 120
     assert service.request.sample_section_policy == "original_order"
+    assert service.request.response_mode == "compact"
+    assert result["response_mode"] == "compact"
     assert result["review_id"] == "rev"
     assert result["index_snapshot_date"] is not None
 

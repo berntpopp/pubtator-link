@@ -1444,12 +1444,14 @@ async def inspect_review_index_impl(
     sample_section_policy: SampleSectionPolicy = "evidence_first",
     include_metadata: bool = False,
     metadata: Literal["basic", "full"] = "basic",
+    response_mode: Literal["compact", "full"] = "compact",
 ) -> dict[str, Any]:
     response = await service.inspect_review_index(
         review_id=review_id,
         request=InspectReviewIndexRequest(
             session_id=session_id,
             pmids=pmids or [],
+            response_mode=response_mode,
             include_passage_samples=include_passage_samples,
             sample_per_pmid=sample_per_pmid,
             min_sample_chars=min_sample_chars,
