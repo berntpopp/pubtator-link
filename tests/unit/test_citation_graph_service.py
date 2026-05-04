@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from pubtator_link.models.discovery import ArticleIdConversionRecord
@@ -92,6 +94,82 @@ class FakeOpenAlex:
         ][:limit]
 
 
+class ProviderStartBarrier:
+    def __init__(self, expected: int) -> None:
+        self.expected = expected
+        self.started: list[str] = []
+        self.release = asyncio.Event()
+
+    async def arrive(self, name: str) -> None:
+        self.started.append(name)
+        if len(self.started) >= self.expected:
+            self.release.set()
+        await self.release.wait()
+
+
+class CoordinatedCrossref:
+    def __init__(self, barrier: ProviderStartBarrier) -> None:
+        self.barrier = barrier
+
+    async def get_work(self, doi: str) -> dict[str, str]:
+        await self.barrier.arrive("crossref_references")
+        return {"DOI": doi}
+
+    def references_from_work(self, work: dict[str, str]) -> list[LiteraturePaper]:
+        return [
+            LiteraturePaper(
+                doi="10.1000/coordinated-crossref-reference",
+                title="Coordinated Crossref reference",
+                provenance=[LiteratureGraphProvenance(provider="crossref", source_id=work["DOI"])],
+            )
+        ]
+
+
+class CoordinatedOpenAlex:
+    def __init__(self, barrier: ProviderStartBarrier) -> None:
+        self.barrier = barrier
+
+    async def get_work_by_doi(self, doi: str) -> LiteraturePaper:
+        return LiteraturePaper(doi=doi, pmid="40562663")
+
+    async def get_references(self, doi: str, *, limit: int) -> list[LiteraturePaper]:
+        await self.barrier.arrive("openalex_references")
+        return [
+            LiteraturePaper(
+                doi="10.1000/coordinated-openalex-reference",
+                title="Coordinated OpenAlex reference",
+                provenance=[LiteratureGraphProvenance(provider="openalex", source_id=doi)],
+            )
+        ][:limit]
+
+    async def get_cited_by(self, doi: str, *, limit: int) -> list[LiteraturePaper]:
+        await self.barrier.arrive("openalex_cited_by")
+        return [
+            LiteraturePaper(
+                pmid="40600002",
+                doi="10.1000/coordinated-openalex-citing",
+                title="Coordinated OpenAlex citing paper",
+                provenance=[LiteratureGraphProvenance(provider="openalex", source_id=doi)],
+            )
+        ][:limit]
+
+
+class CoordinatedEuropePmc:
+    def __init__(self, barrier: ProviderStartBarrier) -> None:
+        self.barrier = barrier
+
+    async def get_citations(self, pmid: str, *, limit: int) -> list[LiteraturePaper]:
+        await self.barrier.arrive("europe_pmc_cited_by")
+        return [
+            LiteraturePaper(
+                pmid="40600001",
+                doi="10.1000/coordinated-europe-pmc-citing",
+                title="Coordinated Europe PMC citing paper",
+                provenance=[LiteratureGraphProvenance(provider="europe_pmc", source_id=pmid)],
+            )
+        ][:limit]
+
+
 class EularOpenAlexFallback:
     async def get_work_by_doi(self, doi: str) -> LiteraturePaper:
         assert doi == "10.1136/annrheumdis-2015-208690"
@@ -107,6 +185,44 @@ class EularOpenAlexFallback:
 class FakeUnpaywall:
     async def get_oa_status(self, doi: str):
         assert doi in {"10.1000/primary-study", "10.1000/openalex-citing"}
+        return LiteratureAvailability(
+            is_open_access=True,
+            full_text_url=f"https://example.org/{doi}",
+            oa_status="green",
+        )
+
+
+class ManyDoiCrossref:
+    async def get_work(self, doi: str) -> dict[str, str]:
+        return {"DOI": doi}
+
+    def references_from_work(self, work: dict[str, str]) -> list[LiteraturePaper]:
+        return [
+            LiteraturePaper(
+                doi=f"10.1000/open-access-{index}",
+                title=f"Open access candidate {index}",
+                provenance=[LiteratureGraphProvenance(provider="crossref", source_id=work["DOI"])],
+            )
+            for index in range(5)
+        ]
+
+
+class GatedUnpaywall:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+        self.in_flight = 0
+        self.max_in_flight = 0
+        self.release = asyncio.Event()
+
+    async def get_oa_status(self, doi: str):
+        self.calls.append(doi)
+        self.in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        if len(self.calls) >= 3:
+            self.release.set()
+        await self.release.wait()
+        await asyncio.sleep(0)
+        self.in_flight -= 1
         return LiteratureAvailability(
             is_open_access=True,
             full_text_url=f"https://example.org/{doi}",
@@ -337,6 +453,25 @@ async def test_pmid_cited_by_direction_reports_openalex_doi_required_skipped() -
 
 
 @pytest.mark.asyncio
+async def test_pmid_cited_by_status_keeps_europe_pmc_before_openalex_skip() -> None:
+    service = CitationGraphService(
+        europe_pmc=FakeEuropePmc(),
+        openalex=FakeOpenAlex(),
+        discovery_service=FakeDiscovery(),
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(pmid="40562663", direction="cited_by")
+    )
+
+    assert [(status.provider, status.status) for status in response.cited_by_status] == [
+        ("europe_pmc", "success"),
+        ("openalex", "skipped"),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_both_direction_with_pmid_and_failing_europe_pmc_keeps_references_warning() -> None:
     service = CitationGraphService(
         crossref=FakeCrossref(),
@@ -483,6 +618,45 @@ async def test_openalex_fallback_and_unpaywall_enrichment_are_wired() -> None:
     assert response.cited_by[0].status == "resolved_full_text_candidate"
 
 
+@pytest.mark.asyncio
+async def test_citation_graph_runs_independent_provider_lanes_concurrently() -> None:
+    barrier = ProviderStartBarrier(expected=4)
+    service = CitationGraphService(
+        crossref=CoordinatedCrossref(barrier),
+        europe_pmc=CoordinatedEuropePmc(barrier),
+        openalex=CoordinatedOpenAlex(barrier),
+        discovery_service=ResolvingDiscovery(),
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await asyncio.wait_for(
+        service.get_citation_graph(
+            PublicationCitationGraphRequest(
+                doi="10.1016/j.ard.2025.05.020",
+                direction="both",
+                resolve_metadata=False,
+                resolve_reference_pmids=False,
+                include_open_access_status=False,
+            )
+        ),
+        timeout=0.5,
+    )
+
+    assert barrier.started == [
+        "crossref_references",
+        "openalex_references",
+        "europe_pmc_cited_by",
+        "openalex_cited_by",
+    ]
+    assert [status.status for status in response.references_status] == ["success", "success"]
+    assert [status.status for status in response.cited_by_status] == ["success", "success"]
+    assert [paper.doi for paper in response.references] == [
+        "10.1000/coordinated-crossref-reference",
+        "10.1000/coordinated-openalex-reference",
+    ]
+    assert response.candidate_pmids == ["40600001", "40600002"]
+
+
 class CountingUnpaywall:
     async def get_oa_status(self, doi: str):
         return LiteratureAvailability(
@@ -521,6 +695,35 @@ async def test_open_access_status_counts_multiple_successful_unpaywall_lookups()
 
     assert len(unpaywall_status) == 1
     assert unpaywall_status[0].result_count == 3
+
+
+@pytest.mark.asyncio
+async def test_open_access_enrichment_uses_bounded_concurrency() -> None:
+    unpaywall = GatedUnpaywall()
+    service = CitationGraphService(
+        crossref=ManyDoiCrossref(),
+        unpaywall=unpaywall,
+        discovery_service=FakeDiscovery(),
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await asyncio.wait_for(
+        service.get_citation_graph(
+            PublicationCitationGraphRequest(
+                doi="10.1016/j.ard.2025.05.020",
+                direction="references",
+                include_open_access_status=True,
+                resolve_reference_pmids=False,
+                max_results=5,
+            )
+        ),
+        timeout=0.5,
+    )
+
+    assert len(unpaywall.calls) == 5
+    assert unpaywall.max_in_flight == 3
+    assert all(paper.availability.is_open_access for paper in response.references)
+    assert response.open_access_status[0].result_count == 5
 
 
 @pytest.mark.asyncio

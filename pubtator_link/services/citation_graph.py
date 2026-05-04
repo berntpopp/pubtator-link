@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from typing import Any, Protocol
+import asyncio
+from collections.abc import Awaitable, Mapping, Sequence
+from typing import Any, Literal, Protocol
 
 from pubtator_link.models.literature_graph import (
     CitationGraphDirection,
@@ -38,6 +39,15 @@ from pubtator_link.services.literature_providers import (
     OPENALEX_PROVIDER,
     UNPAYWALL_PROVIDER,
 )
+
+OPEN_ACCESS_LOOKUP_CONCURRENCY = 3
+CitationNeighborLane = Literal["references", "cited_by"]
+ProviderLaneResult = tuple[
+    CitationNeighborLane,
+    list[LiteraturePaper],
+    LiteratureProviderStatus,
+    ProviderWarning | None,
+]
 
 
 class CrossrefProvider(Protocol):
@@ -149,155 +159,115 @@ class CitationGraphService:
                 )
             )
 
-        if self.crossref and request.direction not in {"references", "both"}:
-            references_status.append(
-                _provider_status(CROSSREF_PROVIDER, "references", "not_requested")
-            )
-        if request.direction in {"references", "both"} and not source.doi and self.crossref:
-            references_status.append(
-                _provider_status(
-                    CROSSREF_PROVIDER,
-                    "references",
-                    "skipped",
-                    message="DOI required",
+        provider_lane_tasks: list[Awaitable[ProviderLaneResult]] = []
+
+        if self.crossref:
+            if request.direction not in {"references", "both"}:
+                provider_lane_tasks.append(
+                    _static_provider_lane_result(
+                        "references",
+                        _provider_status(CROSSREF_PROVIDER, "references", "not_requested"),
+                    )
                 )
-            )
-        if request.direction in {"references", "both"} and source.doi and self.crossref:
-            try:
-                work = await self.crossref.get_work(source.doi)
-                records = self.crossref.references_from_work(work)
+            elif not source.doi:
+                provider_lane_tasks.append(
+                    _static_provider_lane_result(
+                        "references",
+                        _provider_status(
+                            CROSSREF_PROVIDER,
+                            "references",
+                            "skipped",
+                            message="DOI required",
+                        ),
+                    )
+                )
+            else:
+                provider_lane_tasks.append(self._crossref_reference_lane(source.doi))
+
+        if self.openalex:
+            if request.direction not in {"references", "both"}:
+                provider_lane_tasks.append(
+                    _static_provider_lane_result(
+                        "references",
+                        _provider_status(OPENALEX_PROVIDER, "references", "not_requested"),
+                    )
+                )
+            elif not source.doi:
+                provider_lane_tasks.append(
+                    _static_provider_lane_result(
+                        "references",
+                        _provider_status(
+                            OPENALEX_PROVIDER,
+                            "references",
+                            "skipped",
+                            message="DOI required",
+                        ),
+                    )
+                )
+            else:
+                provider_lane_tasks.append(
+                    self._openalex_reference_lane(source.doi, limit=request.max_results)
+                )
+
+        if self.europe_pmc:
+            if request.direction not in {"cited_by", "both"}:
+                provider_lane_tasks.append(
+                    _static_provider_lane_result(
+                        "cited_by",
+                        _provider_status(EUROPE_PMC_PROVIDER, "cited_by", "not_requested"),
+                    )
+                )
+            elif not source.pmid:
+                provider_lane_tasks.append(
+                    _static_provider_lane_result(
+                        "cited_by",
+                        _provider_status(
+                            EUROPE_PMC_PROVIDER,
+                            "cited_by",
+                            "skipped",
+                            message="PMID required",
+                        ),
+                    )
+                )
+            else:
+                provider_lane_tasks.append(
+                    self._europe_pmc_cited_by_lane(source.pmid, limit=request.max_results)
+                )
+
+        if self.openalex:
+            if request.direction not in {"cited_by", "both"}:
+                provider_lane_tasks.append(
+                    _static_provider_lane_result(
+                        "cited_by",
+                        _provider_status(OPENALEX_PROVIDER, "cited_by", "not_requested"),
+                    )
+                )
+            elif not source.doi:
+                provider_lane_tasks.append(
+                    _static_provider_lane_result(
+                        "cited_by",
+                        _provider_status(
+                            OPENALEX_PROVIDER,
+                            "cited_by",
+                            "skipped",
+                            message="DOI required",
+                        ),
+                    )
+                )
+            else:
+                provider_lane_tasks.append(
+                    self._openalex_cited_by_lane(source.doi, limit=request.max_results)
+                )
+
+        for lane, records, status, warning in await asyncio.gather(*provider_lane_tasks):
+            if warning is not None:
+                warnings.append(warning)
+            if lane == "references":
                 references.extend(records)
-                references_status.append(
-                    _provider_status(
-                        CROSSREF_PROVIDER,
-                        "references",
-                        "success" if records else "empty",
-                        len(records),
-                    )
-                )
-            except Exception as exc:  # pragma: no cover - exercised by provider fakes as needed
-                warnings.append(_provider_failed_warning(CROSSREF_PROVIDER, exc))
-                references_status.append(
-                    _provider_status(
-                        CROSSREF_PROVIDER,
-                        "references",
-                        "failed",
-                        retryable=True,
-                        message=str(exc),
-                    )
-                )
-
-        if self.openalex and request.direction not in {"references", "both"}:
-            references_status.append(
-                _provider_status(OPENALEX_PROVIDER, "references", "not_requested")
-            )
-        if request.direction in {"references", "both"} and not source.doi and self.openalex:
-            references_status.append(
-                _provider_status(
-                    OPENALEX_PROVIDER,
-                    "references",
-                    "skipped",
-                    message="DOI required",
-                )
-            )
-        if request.direction in {"references", "both"} and source.doi and self.openalex:
-            try:
-                records = await self.openalex.get_references(source.doi, limit=request.max_results)
-                references.extend(records)
-                references_status.append(
-                    _provider_status(
-                        OPENALEX_PROVIDER,
-                        "references",
-                        "success" if records else "empty",
-                        len(records),
-                    )
-                )
-            except Exception as exc:
-                warnings.append(_provider_failed_warning(OPENALEX_PROVIDER, exc))
-                references_status.append(
-                    _provider_status(
-                        OPENALEX_PROVIDER,
-                        "references",
-                        "failed",
-                        retryable=True,
-                        message=str(exc),
-                    )
-                )
-
-        if self.europe_pmc and request.direction not in {"cited_by", "both"}:
-            cited_by_status.append(
-                _provider_status(EUROPE_PMC_PROVIDER, "cited_by", "not_requested")
-            )
-        if request.direction in {"cited_by", "both"} and self.europe_pmc and not source.pmid:
-            cited_by_status.append(
-                _provider_status(
-                    EUROPE_PMC_PROVIDER,
-                    "cited_by",
-                    "skipped",
-                    message="PMID required",
-                )
-            )
-        if request.direction in {"cited_by", "both"} and self.europe_pmc and source.pmid:
-            try:
-                records = await self.europe_pmc.get_citations(
-                    source.pmid,
-                    limit=request.max_results,
-                )
+                references_status.append(status)
+            else:
                 cited_by.extend(records)
-                cited_by_status.append(
-                    _provider_status(
-                        EUROPE_PMC_PROVIDER,
-                        "cited_by",
-                        "success" if records else "empty",
-                        len(records),
-                    )
-                )
-            except Exception as exc:
-                warnings.append(_provider_failed_warning(EUROPE_PMC_PROVIDER, exc))
-                cited_by_status.append(
-                    _provider_status(
-                        EUROPE_PMC_PROVIDER,
-                        "cited_by",
-                        "failed",
-                        retryable=True,
-                        message=str(exc),
-                    )
-                )
-
-        if self.openalex and request.direction not in {"cited_by", "both"}:
-            cited_by_status.append(_provider_status(OPENALEX_PROVIDER, "cited_by", "not_requested"))
-        if request.direction in {"cited_by", "both"} and not source.doi and self.openalex:
-            cited_by_status.append(
-                _provider_status(
-                    OPENALEX_PROVIDER,
-                    "cited_by",
-                    "skipped",
-                    message="DOI required",
-                )
-            )
-        if request.direction in {"cited_by", "both"} and source.doi and self.openalex:
-            try:
-                records = await self.openalex.get_cited_by(source.doi, limit=request.max_results)
-                cited_by.extend(records)
-                cited_by_status.append(
-                    _provider_status(
-                        OPENALEX_PROVIDER,
-                        "cited_by",
-                        "success" if records else "empty",
-                        len(records),
-                    )
-                )
-            except Exception as exc:
-                warnings.append(_provider_failed_warning(OPENALEX_PROVIDER, exc))
-                cited_by_status.append(
-                    _provider_status(
-                        OPENALEX_PROVIDER,
-                        "cited_by",
-                        "failed",
-                        retryable=True,
-                        message=str(exc),
-                    )
-                )
+                cited_by_status.append(status)
 
         references = dedupe_papers(references)[: request.max_results]
         cited_by = dedupe_papers(cited_by)[: request.max_results]
@@ -400,6 +370,123 @@ class CitationGraphService:
         response.meta.response_size_class = json_size_class(response.model_dump(by_alias=True))
         return response
 
+    async def _crossref_reference_lane(self, doi: str) -> ProviderLaneResult:
+        assert self.crossref is not None
+        try:
+            work = await self.crossref.get_work(doi)
+            records = self.crossref.references_from_work(work)
+            return (
+                "references",
+                records,
+                _provider_status(
+                    CROSSREF_PROVIDER,
+                    "references",
+                    "success" if records else "empty",
+                    len(records),
+                ),
+                None,
+            )
+        except Exception as exc:  # pragma: no cover - exercised by provider fakes as needed
+            return (
+                "references",
+                [],
+                _provider_status(
+                    CROSSREF_PROVIDER,
+                    "references",
+                    "failed",
+                    retryable=True,
+                    message=str(exc),
+                ),
+                _provider_failed_warning(CROSSREF_PROVIDER, exc),
+            )
+
+    async def _openalex_reference_lane(self, doi: str, *, limit: int) -> ProviderLaneResult:
+        assert self.openalex is not None
+        try:
+            records = await self.openalex.get_references(doi, limit=limit)
+            return (
+                "references",
+                records,
+                _provider_status(
+                    OPENALEX_PROVIDER,
+                    "references",
+                    "success" if records else "empty",
+                    len(records),
+                ),
+                None,
+            )
+        except Exception as exc:
+            return (
+                "references",
+                [],
+                _provider_status(
+                    OPENALEX_PROVIDER,
+                    "references",
+                    "failed",
+                    retryable=True,
+                    message=str(exc),
+                ),
+                _provider_failed_warning(OPENALEX_PROVIDER, exc),
+            )
+
+    async def _europe_pmc_cited_by_lane(self, pmid: str, *, limit: int) -> ProviderLaneResult:
+        assert self.europe_pmc is not None
+        try:
+            records = await self.europe_pmc.get_citations(pmid, limit=limit)
+            return (
+                "cited_by",
+                records,
+                _provider_status(
+                    EUROPE_PMC_PROVIDER,
+                    "cited_by",
+                    "success" if records else "empty",
+                    len(records),
+                ),
+                None,
+            )
+        except Exception as exc:
+            return (
+                "cited_by",
+                [],
+                _provider_status(
+                    EUROPE_PMC_PROVIDER,
+                    "cited_by",
+                    "failed",
+                    retryable=True,
+                    message=str(exc),
+                ),
+                _provider_failed_warning(EUROPE_PMC_PROVIDER, exc),
+            )
+
+    async def _openalex_cited_by_lane(self, doi: str, *, limit: int) -> ProviderLaneResult:
+        assert self.openalex is not None
+        try:
+            records = await self.openalex.get_cited_by(doi, limit=limit)
+            return (
+                "cited_by",
+                records,
+                _provider_status(
+                    OPENALEX_PROVIDER,
+                    "cited_by",
+                    "success" if records else "empty",
+                    len(records),
+                ),
+                None,
+            )
+        except Exception as exc:
+            return (
+                "cited_by",
+                [],
+                _provider_status(
+                    OPENALEX_PROVIDER,
+                    "cited_by",
+                    "failed",
+                    retryable=True,
+                    message=str(exc),
+                ),
+                _provider_failed_warning(OPENALEX_PROVIDER, exc),
+            )
+
     async def _source_paper(
         self,
         request: PublicationCitationGraphRequest,
@@ -480,50 +567,62 @@ class CitationGraphService:
     ) -> list[LiteraturePaper]:
         if self.unpaywall is None:
             return papers
-        enriched: list[LiteraturePaper] = []
-        for paper in papers:
+        unpaywall = self.unpaywall
+        semaphore = asyncio.Semaphore(OPEN_ACCESS_LOOKUP_CONCURRENCY)
+
+        async def enrich_one(
+            paper: LiteraturePaper,
+        ) -> tuple[LiteraturePaper, LiteratureProviderStatus | None, ProviderWarning | None]:
             if not paper.doi:
-                enriched.append(paper)
-                continue
-            try:
-                availability = await self.unpaywall.get_oa_status(paper.doi)
-            except Exception as exc:
-                warnings.append(_provider_failed_warning(UNPAYWALL_PROVIDER, exc))
-                _append_unique_status(
-                    open_access_status,
-                    _provider_status(
-                        UNPAYWALL_PROVIDER,
-                        "open_access",
-                        "failed",
-                        retryable=True,
-                        message=str(exc),
-                    ),
-                )
-                enriched.append(paper)
-                continue
+                return paper, None, None
+            async with semaphore:
+                try:
+                    availability = await unpaywall.get_oa_status(paper.doi)
+                except Exception as exc:
+                    return (
+                        paper,
+                        _provider_status(
+                            UNPAYWALL_PROVIDER,
+                            "open_access",
+                            "failed",
+                            retryable=True,
+                            message=str(exc),
+                        ),
+                        _provider_failed_warning(UNPAYWALL_PROVIDER, exc),
+                    )
             if isinstance(availability, ProviderWarning):
                 status: LiteratureProviderStatusValue
+                warning: ProviderWarning | None = None
                 if availability.status == "provider_no_match":
                     status = "empty"
                 else:
-                    warnings.append(availability)
+                    warning = availability
                     status = "disabled" if availability.status == "provider_disabled" else "failed"
-                _append_unique_status(
-                    open_access_status,
+                return (
+                    paper,
                     _provider_status(
                         UNPAYWALL_PROVIDER,
                         "open_access",
                         status,
                         message=availability.message,
                     ),
+                    warning,
                 )
-                enriched.append(paper)
-                continue
-            _append_unique_status(
-                open_access_status,
+            return (
+                _paper_with_availability(paper, availability),
                 _provider_status(UNPAYWALL_PROVIDER, "open_access", "success", 1),
+                None,
             )
-            enriched.append(_paper_with_availability(paper, availability))
+
+        enriched: list[LiteraturePaper] = []
+        for paper, status, warning in await asyncio.gather(
+            *(enrich_one(paper) for paper in papers)
+        ):
+            enriched.append(paper)
+            if warning is not None:
+                warnings.append(warning)
+            if status is not None:
+                _append_unique_status(open_access_status, status)
         return enriched
 
 
@@ -534,6 +633,13 @@ def _provider_failed_warning(provider: str, exc: Exception) -> ProviderWarning:
         retryable=True,
         message=f"{provider} citation lookup failed: {exc}",
     )
+
+
+async def _static_provider_lane_result(
+    lane: CitationNeighborLane,
+    status: LiteratureProviderStatus,
+) -> ProviderLaneResult:
+    return lane, [], status, None
 
 
 def _paper_with_availability(
