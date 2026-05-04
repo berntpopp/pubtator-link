@@ -67,8 +67,6 @@ SAMPLE_CALLS = {
         "review_id": "fmf-colchicine-guidelines",
         "queries": ["MEFV colchicine", "familial Mediterranean fever child"],
         "response_mode": "compact",
-        "max_chars": 12000,
-        "max_response_chars": 24000,
     },
 }
 

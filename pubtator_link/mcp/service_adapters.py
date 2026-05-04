@@ -16,6 +16,11 @@ from pubtator_link.mcp.input_normalization import (
     normalize_retrieve_review_context_batch_args,
 )
 from pubtator_link.models.corpus_suggestion import CorpusSuggestionRequest
+from pubtator_link.models.literature_graph import (
+    PublicationCitationGraphRequest,
+    RelatedEvidenceCandidatesRequest,
+    TopicLiteratureMapRequest,
+)
 from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 from pubtator_link.models.publication_passages import (
     PublicationContextEstimateRequest,
@@ -34,6 +39,7 @@ from pubtator_link.models.responses import (
     TextAnnotationSubmitResponse,
 )
 from pubtator_link.models.review_rerag import (
+    BudgetSource,
     BudgetStrategy,
     GroundQuestionResponse,
     IndexReviewEvidenceRequest,
@@ -56,6 +62,7 @@ from pubtator_link.models.review_rerag import (
     UpsertEvidenceCertaintyRequest,
 )
 from pubtator_link.models.variants import VariantEvidenceRequest, VariantEvidenceSource
+from pubtator_link.services.citation_graph import CitationGraphService
 from pubtator_link.services.corpus_suggestion import CorpusSuggestionService
 from pubtator_link.services.entity_matching import (
     matched_terms_from_match_text,
@@ -64,6 +71,7 @@ from pubtator_link.services.entity_matching import (
 from pubtator_link.services.publication_metadata import PublicationMetadataService
 from pubtator_link.services.publication_passage_service import PublicationPassageService
 from pubtator_link.services.publication_service import PublicationService
+from pubtator_link.services.related_evidence import RelatedEvidenceService
 from pubtator_link.services.review_audit import ReviewAuditService
 from pubtator_link.services.review_context_service import ReviewContextService
 from pubtator_link.services.review_evidence_certainty import ReviewEvidenceCertaintyService
@@ -85,9 +93,108 @@ from pubtator_link.services.search_shaping import (
     shaped_search_response,
 )
 from pubtator_link.services.source_preflight import SourcePreflightService
+from pubtator_link.services.topic_literature_map import TopicLiteratureMapService
 
 INLINE_AUDIT_BUNDLE_MAX_BYTES = 1_000_000
 RESOURCE_LIST_LIMIT = 50
+REVIEW_BATCH_DEFAULT_MAX_CHARS = 24_000
+REVIEW_BATCH_DEFAULT_MAX_RESPONSE_CHARS = 48_000
+REVIEW_BATCH_MAX_CHARS_CAP = 50_000
+REVIEW_BATCH_MAX_RESPONSE_CHARS_CAP = 100_000
+LiteratureGraphResponseModeArg = Literal["compact", "nodes_edges", "full"]
+LiteratureGraphBias = Literal[
+    "guideline",
+    "cohort",
+    "genotype_phenotype",
+    "treatment",
+    "pediatric",
+    "population",
+]
+
+
+def _add_mcp_response_mode_warning(result: dict[str, Any]) -> dict[str, Any]:
+    result.setdefault("_meta", {}).setdefault("warnings", []).append(
+        {
+            "provider": "mcp",
+            "status": "response_mode_deprecation",
+            "retryable": False,
+            "message": (
+                "Future MCP default will be response_mode='compact'; pass response_mode='full' "
+                "for legacy nodes/edges arrays."
+            ),
+        }
+    )
+    return result
+
+
+def _review_batch_budget_args(
+    *,
+    max_total_passages: int,
+    max_chars_per_passage: int,
+    max_chars: int | None,
+    max_response_chars: int | None,
+) -> tuple[int, int, BudgetSource]:
+    if max_chars is not None or max_response_chars is not None:
+        effective_max_chars = (
+            max_chars
+            if max_chars is not None
+            else min(
+                REVIEW_BATCH_MAX_CHARS_CAP,
+                max(
+                    REVIEW_BATCH_DEFAULT_MAX_CHARS,
+                    max_total_passages * max_chars_per_passage,
+                ),
+            )
+        )
+        effective_max_response_chars = (
+            max_response_chars
+            if max_response_chars is not None
+            else min(
+                REVIEW_BATCH_MAX_RESPONSE_CHARS_CAP,
+                max(
+                    REVIEW_BATCH_DEFAULT_MAX_RESPONSE_CHARS,
+                    effective_max_chars * 2,
+                ),
+            )
+        )
+        return (
+            effective_max_chars,
+            effective_max_response_chars,
+            "caller",
+        )
+
+    effective_max_chars = min(
+        REVIEW_BATCH_MAX_CHARS_CAP,
+        max(
+            REVIEW_BATCH_DEFAULT_MAX_CHARS,
+            max_total_passages * max_chars_per_passage,
+        ),
+    )
+    effective_max_response_chars = min(
+        REVIEW_BATCH_MAX_RESPONSE_CHARS_CAP,
+        max(
+            REVIEW_BATCH_DEFAULT_MAX_RESPONSE_CHARS,
+            effective_max_chars * 2,
+        ),
+    )
+    budget_source: BudgetSource = (
+        "auto_fit" if effective_max_chars != REVIEW_BATCH_DEFAULT_MAX_CHARS else "default"
+    )
+    return effective_max_chars, effective_max_response_chars, budget_source
+
+
+def _coerce_budget_int(value: Any) -> int:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        return int(value.strip())
+    return cast(int, value)
+
+
+def _coerce_optional_budget_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    return _coerce_budget_int(value)
 
 
 def _dump_mapping(value: Any) -> dict[str, Any]:
@@ -241,6 +348,125 @@ async def get_publication_metadata_impl(
         )
     )
     return response.model_dump(by_alias=True)
+
+
+async def get_publication_citation_graph_impl(
+    *,
+    service: CitationGraphService,
+    pmid: str | None = None,
+    doi: str | None = None,
+    direction: Literal["references", "cited_by", "both"] = "both",
+    response_mode: LiteratureGraphResponseModeArg | None = None,
+    resolve_metadata: bool = True,
+    resolve_reference_pmids: bool = True,
+    max_reference_resolution: int = 20,
+    include_provider_status: bool = True,
+    include_open_access_status: bool = True,
+    max_results: int = 50,
+) -> dict[str, Any]:
+    effective_response_mode = response_mode or "full"
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            pmid=pmid,
+            doi=doi,
+            direction=direction,
+            response_mode=effective_response_mode,
+            resolve_metadata=resolve_metadata,
+            resolve_reference_pmids=resolve_reference_pmids,
+            max_reference_resolution=max_reference_resolution,
+            include_provider_status=include_provider_status,
+            include_open_access_status=include_open_access_status,
+            max_results=max_results,
+        )
+    )
+    result = response.model_dump(by_alias=True)
+    if response_mode is None:
+        _add_mcp_response_mode_warning(result)
+    return result
+
+
+async def find_related_evidence_candidates_impl(
+    *,
+    service: RelatedEvidenceService,
+    pmid: str,
+    max_results: int = 25,
+    response_mode: LiteratureGraphResponseModeArg | None = None,
+    prefer_full_text: bool = True,
+    include_pubtator_search: bool = True,
+    include_citation_neighbors: bool = True,
+    publication_types: list[str] | None = None,
+    year_min: int | None = None,
+    year_max: int | None = None,
+) -> dict[str, Any]:
+    effective_response_mode = response_mode or "full"
+    response = await service.find_candidates(
+        RelatedEvidenceCandidatesRequest(
+            pmid=pmid,
+            max_results=max_results,
+            response_mode=effective_response_mode,
+            prefer_full_text=prefer_full_text,
+            include_pubtator_search=include_pubtator_search,
+            include_citation_neighbors=include_citation_neighbors,
+            publication_types=publication_types,
+            year_min=year_min,
+            year_max=year_max,
+        )
+    )
+    result = response.model_dump(by_alias=True)
+    if response_mode is None:
+        _add_mcp_response_mode_warning(result)
+    return result
+
+
+async def build_topic_literature_map_impl(
+    *,
+    service: TopicLiteratureMapService,
+    query: str | None = None,
+    pmids: list[str] | None = None,
+    max_seed_papers: int = 25,
+    max_neighbors_per_paper: int = 10,
+    response_mode: LiteratureGraphResponseModeArg | None = None,
+    max_candidates: int = 12,
+    include_demoted: bool = True,
+    max_demoted: int = 3,
+    bias_toward: list[LiteratureGraphBias] | None = None,
+    max_graph_nodes: int = 30,
+    max_graph_edges: int = 60,
+    include_authors: bool = True,
+    include_citations: bool = True,
+    include_pubtator_entities: bool = True,
+    include_related_candidates: bool = True,
+    year_min: int | None = None,
+    year_max: int | None = None,
+    prefer_full_text: bool = True,
+) -> dict[str, Any]:
+    effective_response_mode = response_mode or "full"
+    response = await service.build_map(
+        TopicLiteratureMapRequest(
+            query=query,
+            pmids=pmids,
+            max_seed_papers=max_seed_papers,
+            max_neighbors_per_paper=max_neighbors_per_paper,
+            response_mode=effective_response_mode,
+            max_candidates=max_candidates,
+            include_demoted=include_demoted,
+            max_demoted=max_demoted,
+            bias_toward=bias_toward,
+            max_graph_nodes=max_graph_nodes,
+            max_graph_edges=max_graph_edges,
+            include_authors=include_authors,
+            include_citations=include_citations,
+            include_pubtator_entities=include_pubtator_entities,
+            include_related_candidates=include_related_candidates,
+            year_min=year_min,
+            year_max=year_max,
+            prefer_full_text=prefer_full_text,
+        )
+    )
+    result = response.model_dump(by_alias=True)
+    if response_mode is None:
+        _add_mcp_response_mode_warning(result)
+    return result
 
 
 async def suggest_corpus_impl(
@@ -1218,12 +1444,14 @@ async def inspect_review_index_impl(
     sample_section_policy: SampleSectionPolicy = "evidence_first",
     include_metadata: bool = False,
     metadata: Literal["basic", "full"] = "basic",
+    response_mode: Literal["compact", "full"] = "compact",
 ) -> dict[str, Any]:
     response = await service.inspect_review_index(
         review_id=review_id,
         request=InspectReviewIndexRequest(
             session_id=session_id,
             pmids=pmids or [],
+            response_mode=response_mode,
             include_passage_samples=include_passage_samples,
             sample_per_pmid=sample_per_pmid,
             min_sample_chars=min_sample_chars,
@@ -1461,8 +1689,8 @@ async def retrieve_review_context_batch_impl(
     max_total_passages: int | None = None,
     limit: int | None = None,
     size: int | None = None,
-    max_chars: int = 12000,
-    max_response_chars: int = 24000,
+    max_chars: int | None = None,
+    max_response_chars: int | None = None,
     deduplicate_passages: bool = True,
     budget_strategy: BudgetStrategy | str = "query_fair",
     min_passages_per_source: int = 1,
@@ -1510,6 +1738,14 @@ async def retrieve_review_context_batch_impl(
     }
     args = {key: value for key, value in args.items() if value is not None}
     normalized_args, normalization_warnings = normalize_retrieve_review_context_batch_args(args)
+    effective_max_total_passages = _coerce_budget_int(normalized_args.get("max_total_passages", 20))
+    effective_max_chars_per_passage = _coerce_budget_int(normalized_args["max_chars_per_passage"])
+    effective_max_chars, effective_max_response_chars, budget_source = _review_batch_budget_args(
+        max_total_passages=effective_max_total_passages,
+        max_chars_per_passage=effective_max_chars_per_passage,
+        max_chars=_coerce_optional_budget_int(normalized_args.get("max_chars")),
+        max_response_chars=_coerce_optional_budget_int(normalized_args.get("max_response_chars")),
+    )
     request_args = {
         "queries": normalized_args["queries"],
         "session_id": normalized_args.get("session_id"),
@@ -1518,9 +1754,10 @@ async def retrieve_review_context_batch_impl(
         "sections": normalized_args.get("sections") or [],
         "response_mode": normalized_args["response_mode"],
         "max_passages_per_query": normalized_args["max_passages_per_query"],
-        "max_total_passages": normalized_args.get("max_total_passages", 20),
-        "max_chars": normalized_args["max_chars"],
-        "max_response_chars": normalized_args["max_response_chars"],
+        "max_total_passages": effective_max_total_passages,
+        "max_chars": effective_max_chars,
+        "max_response_chars": effective_max_response_chars,
+        "budget_source": budget_source,
         "deduplicate_passages": normalized_args["deduplicate_passages"],
         "budget_strategy": normalized_args["budget_strategy"],
         "min_passages_per_source": normalized_args["min_passages_per_source"],
@@ -1532,7 +1769,7 @@ async def retrieve_review_context_batch_impl(
         "table_mode": normalized_args["table_mode"],
         "section_policy": normalized_args.get("section_policy", "evidence_first"),
         "allow_truncated_passages": normalized_args["allow_truncated_passages"],
-        "max_chars_per_passage": normalized_args["max_chars_per_passage"],
+        "max_chars_per_passage": effective_max_chars_per_passage,
         "dry_run": normalized_args["dry_run"],
     }
     request = RetrieveReviewContextBatchRequest(**request_args)

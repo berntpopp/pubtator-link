@@ -32,6 +32,7 @@ class ToolCatalogEntry:
     example: str
     next_tools: tuple[str, ...]
     resource_links: tuple[str, ...]
+    input_schema: dict[str, Any]
     output_schema_name: str | None
     has_output_schema: bool
 
@@ -65,6 +66,22 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         do_not_use_for=("article text retrieval",),
         example='{"ids":["PMC123456","10.1000/example"],"source":"auto"}',
         next_tools=("pubtator.get_publication_metadata",),
+    ),
+    "pubtator.build_topic_literature_map": ToolCatalogSupplement(
+        category="publication",
+        profiles=("full",),
+        stability="advanced",
+        purpose=(
+            "Use this when a user needs a topic literature graph. Compact mode returns "
+            "candidate lanes and bounded summaries; full can be large. Returns "
+            "response_size_class."
+        ),
+        do_not_use_for=("claim-level evidence support", "substitute evidence selection"),
+        example='{"query":"familial Mediterranean fever colchicine","max_seed_papers":10}',
+        next_tools=(
+            "pubtator.get_publication_passages",
+            "pubtator.index_review_evidence",
+        ),
     ),
     "pubtator.diagnostics": ToolCatalogSupplement(
         category="diagnostics",
@@ -123,6 +140,19 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         example='{"pmids":["12345"],"mode":"similar","limit":20}',
         next_tools=("pubtator.preflight_review_sources",),
     ),
+    "pubtator.find_related_evidence_candidates": ToolCatalogSupplement(
+        category="publication",
+        profiles=("lean", "full", "readonly"),
+        stability="lean",
+        purpose=(
+            "Use this when a user has one PMID and needs related evidence candidates. "
+            "Compact mode returns candidate lanes and bounded summaries; full can be "
+            "large. Returns response_size_class."
+        ),
+        do_not_use_for=("claim-level evidence support", "substitute evidence selection"),
+        example='{"pmid":"40562663","max_results":25,"prefer_full_text":true}',
+        next_tools=("pubtator.get_publication_passages",),
+    ),
     "pubtator.get_evidence_certainty": ToolCatalogSupplement(
         category="review",
         profiles=("full", "readonly"),
@@ -147,6 +177,22 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         do_not_use_for=("article passage text",),
         example='{"pmids":["12345"],"include_citations":"nlm"}',
         next_tools=("pubtator.get_publication_passages",),
+    ),
+    "pubtator.get_publication_citation_graph": ToolCatalogSupplement(
+        category="publication",
+        profiles=("lean", "full", "readonly"),
+        stability="lean",
+        purpose=(
+            "Use this when a user needs reference or cited-by neighborhoods for one "
+            "publication. Compact mode returns candidate lanes and bounded summaries; "
+            "full can be large. Returns response_size_class."
+        ),
+        do_not_use_for=("claim-level evidence support", "publisher full-text retrieval"),
+        example='{"pmid":"40562663","direction":"both","max_results":50}',
+        next_tools=(
+            "pubtator.find_related_evidence_candidates",
+            "pubtator.get_publication_passages",
+        ),
     ),
     "pubtator.get_publication_passages": ToolCatalogSupplement(
         category="publication",
@@ -205,8 +251,9 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         profiles=("lean", "full"),
         stability="lean",
         purpose=(
-            "One-call grounded research workflow that searches literature, indexes "
-            "candidate PMIDs, inspects readiness, and retrieves compact citable context."
+            "Use this when a user needs a one-call grounded research workflow that "
+            "searches literature, indexes candidate PMIDs, inspects readiness, and "
+            "retrieves compact citable context."
         ),
         do_not_use_for=("clinical decision support", "uncited answer generation"),
         example='{"question":"Does colchicine prevent FMF flares?","max_pmids":8}',
@@ -401,6 +448,11 @@ def _tool_output_schema(tool: object) -> dict[str, Any] | None:
     return schema if isinstance(schema, dict) else None
 
 
+def _tool_input_schema(tool: object) -> dict[str, Any]:
+    schema = getattr(tool, "parameters", None)
+    return schema if isinstance(schema, dict) else {}
+
+
 def build_tool_catalog(
     mcp: Any,
     *,
@@ -421,13 +473,14 @@ def build_tool_catalog(
             category=supplement.category,
             profiles=supplement.profiles,
             stability=supplement.stability,
-            description=getattr(tool, "description", "") or "",
+            description=supplement.purpose or getattr(tool, "description", "") or "",
             do_not_use_for=supplement.do_not_use_for,
             example=supplement.example,
             next_tools=tuple(
                 tool for tool in supplement.next_tools if tool in registered_tool_names
             ),
             resource_links=supplement.resource_links,
+            input_schema=_tool_input_schema(tool),
             output_schema_name=output_schema_name if isinstance(output_schema_name, str) else None,
             has_output_schema=output_schema is not None,
         )

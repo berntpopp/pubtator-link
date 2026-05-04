@@ -128,6 +128,14 @@ class RelatedArticleRecord(BaseModel):
     year: int | None = None
 
 
+class RelatedArticleScoreRecord(BaseModel):
+    """One scored related article lookup result from PubMed neighbor_score links."""
+
+    source_pmid: str
+    pmid: str
+    neighbor_score: int
+
+
 class RelatedArticlesResponse(BaseModel):
     """Response for related article lookup."""
 

@@ -320,7 +320,9 @@ def test_batch_request_defaults_to_compact_context_safe_mode() -> None:
     request = RetrieveReviewContextBatchRequest(queries=["MEFV colchicine"])
 
     assert request.response_mode == "compact"
-    assert request.max_response_chars == 24000
+    assert request.max_chars == 24000
+    assert request.max_response_chars == 48000
+    assert request.budget_source == "default"
     assert request.allow_truncated_passages is True
     assert request.max_chars_per_passage == 2200
     assert request.include_tables is False
@@ -390,6 +392,7 @@ def test_context_pack_budget_metadata_defaults() -> None:
     assert pack.passages[0].truncated is False
     assert pack.budget is not None
     assert pack.budget.estimated_total_chars == 2500
+    assert pack.budget.budget_source == "default"
     assert pack.dropped == []
 
 

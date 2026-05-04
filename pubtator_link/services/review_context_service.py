@@ -8,6 +8,7 @@ from urllib.parse import quote, urlencode
 
 from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 from pubtator_link.models.review_rerag import (
+    BudgetSource,
     ContextPack,
     ContextPassage,
     FailedSourceSummary,
@@ -49,6 +50,11 @@ from pubtator_link.services.review_context.ranking import (
     rerank_key,
 )
 from pubtator_link.services.review_state import index_snapshot_date
+
+REVIEW_BATCH_DEFAULT_MAX_CHARS = 24_000
+REVIEW_BATCH_DEFAULT_MAX_RESPONSE_CHARS = 48_000
+REVIEW_BATCH_MAX_CHARS_CAP = 50_000
+REVIEW_BATCH_MAX_RESPONSE_CHARS_CAP = 100_000
 
 
 class ReviewContextRepository(Protocol):
@@ -273,6 +279,9 @@ class ReviewContextService:
     ) -> RetrieveReviewContextBatchResponse:
         """Retrieve multiple query variants and merge selected passages."""
         await self._ensure_session_exists(review_id, request.session_id)
+        budget_source = _effective_batch_budget_source(request)
+        if budget_source != request.budget_source:
+            request = request.model_copy(update={"budget_source": budget_source})
         snapshot = await self._review_retrieval_snapshot(review_id, session_id=request.session_id)
         results: list[RetrieveReviewContextResponse] = []
         query_results: list[RetrieveReviewContextResponse] = []
@@ -374,7 +383,7 @@ class ReviewContextService:
                 max_chars=request.max_chars,
                 text_chars=0,
                 dropped_count=0,
-            )
+            ).model_copy(update={"budget_source": request.budget_source})
             return RetrieveReviewContextBatchResponse(
                 review_id=review_id,
                 response_mode="diagnostics",
@@ -397,6 +406,7 @@ class ReviewContextService:
                 ),
                 preparation_status=snapshot.preparation_status,
                 budget=dry_run_budget,
+                budget_source=request.budget_source,
                 cache_key=_review_batch_cache_key(review_id, request),
                 corpus_snapshot_date=corpus_snapshot_date(),
                 index_snapshot_date=index_snapshot_date(),
@@ -422,7 +432,7 @@ class ReviewContextService:
             max_chars=request.max_chars,
             text_chars=merged.budget_text_chars,
             dropped_count=len(merged.dropped),
-        )
+        ).model_copy(update={"budget_source": request.budget_source})
         quotes = quotes_from_passages(merged.passages) if request.response_mode == "quotes" else []
         merged_passages = [] if request.response_mode == "quotes" else merged.passages
         stable_citation_map = {
@@ -453,6 +463,7 @@ class ReviewContextService:
             ),
             preparation_status=snapshot.preparation_status,
             budget=budget,
+            budget_source=request.budget_source,
             cache_key=_review_batch_cache_key(review_id, request),
             corpus_snapshot_date=corpus_snapshot_date(),
             index_snapshot_date=index_snapshot_date(),
@@ -495,6 +506,7 @@ class ReviewContextService:
             coverage_summary[source.coverage] = coverage_summary.get(source.coverage, 0) + 1
         return InspectReviewIndexResponse(
             review_id=review_id,
+            response_mode=request.response_mode,
             preparation_status=preparation_status,
             sources=sources,
             totals=totals,
@@ -767,6 +779,50 @@ def _source_coverage_by_key(
             ):
                 coverage_by_key[source_key] = source.coverage
     return coverage_by_key
+
+
+def _batch_auto_fit_budgets(
+    *,
+    max_total_passages: int,
+    max_chars_per_passage: int,
+) -> tuple[int, int, BudgetSource]:
+    max_chars = min(
+        REVIEW_BATCH_MAX_CHARS_CAP,
+        max(REVIEW_BATCH_DEFAULT_MAX_CHARS, max_total_passages * max_chars_per_passage),
+    )
+    max_response_chars = min(
+        REVIEW_BATCH_MAX_RESPONSE_CHARS_CAP,
+        max(REVIEW_BATCH_DEFAULT_MAX_RESPONSE_CHARS, max_chars * 2),
+    )
+    budget_source: BudgetSource = (
+        "auto_fit" if max_chars != REVIEW_BATCH_DEFAULT_MAX_CHARS else "default"
+    )
+    return max_chars, max_response_chars, budget_source
+
+
+def _effective_batch_budget_source(
+    request: RetrieveReviewContextBatchRequest,
+) -> BudgetSource:
+    auto_max_chars, auto_max_response_chars, auto_source = _batch_auto_fit_budgets(
+        max_total_passages=request.max_total_passages,
+        max_chars_per_passage=request.max_chars_per_passage,
+    )
+    is_default_budget = (
+        request.max_chars == REVIEW_BATCH_DEFAULT_MAX_CHARS
+        and request.max_response_chars == REVIEW_BATCH_DEFAULT_MAX_RESPONSE_CHARS
+    )
+    is_auto_fit_budget = (
+        request.max_chars == auto_max_chars
+        and request.max_response_chars == auto_max_response_chars
+        and auto_source == "auto_fit"
+    )
+    if request.budget_source == "auto_fit":
+        if is_auto_fit_budget:
+            return "auto_fit"
+        return "default" if is_default_budget else "caller"
+    if request.budget_source == "caller":
+        return "default" if is_default_budget else "caller"
+    return "default" if is_default_budget else "caller"
 
 
 def _review_batch_cache_key(

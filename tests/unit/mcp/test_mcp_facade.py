@@ -14,11 +14,14 @@ EXPECTED_PUBLIC_TOOL_NAMES = {
     "pubtator.lookup_citation",
     "pubtator.find_related_articles",
     "pubtator.suggest_corpus",
+    "pubtator.build_topic_literature_map",
     "pubtator.diagnostics",
     "pubtator.search_guidelines",
     "pubtator.fetch_publication_annotations",
     "pubtator.get_publication_metadata",
     "pubtator.get_publication_passages",
+    "pubtator.get_publication_citation_graph",
+    "pubtator.find_related_evidence_candidates",
     "pubtator.estimate_publication_context",
     "pubtator.fetch_pmc_annotations",
     "pubtator.search_biomedical_entities",
@@ -149,6 +152,63 @@ def test_get_publication_passages_schema_exposes_dry_run_and_verbosity() -> None
 
     assert schema["properties"]["dry_run"]["default"] is False
     assert set(schema["properties"]["verbosity"]["enum"]) == {"lean", "standard", "full"}
+
+
+def test_citation_graph_tool_schema_is_flat() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator.get_publication_citation_graph"
+    ]
+    properties = tool.parameters["properties"]
+
+    assert "pmid" in properties
+    assert "doi" in properties
+    assert "request" not in properties
+    assert tool.output_schema["title"] == "PublicationCitationGraphResponse"
+
+
+def test_related_evidence_tool_schema_is_flat() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator.find_related_evidence_candidates"
+    ]
+    properties = tool.parameters["properties"]
+
+    assert "pmid" in properties
+    assert "max_results" in properties
+    assert "prefer_full_text" in properties
+    assert "include_pubtator_search" in properties
+    assert "include_citation_neighbors" in properties
+    assert "publication_types" in properties
+    assert "year_min" in properties
+    assert "year_max" in properties
+    assert "request" not in properties
+    assert tool.output_schema["title"] == "RelatedEvidenceCandidatesResponse"
+
+
+def test_topic_literature_map_tool_schema_is_flat() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator.build_topic_literature_map"
+    ]
+    properties = tool.parameters["properties"]
+
+    assert "query" in properties
+    assert "pmids" in properties
+    assert "max_seed_papers" in properties
+    assert "max_neighbors_per_paper" in properties
+    assert "include_authors" in properties
+    assert "include_citations" in properties
+    assert "include_pubtator_entities" in properties
+    assert "include_related_candidates" in properties
+    assert "year_min" in properties
+    assert "year_max" in properties
+    assert "prefer_full_text" in properties
+    assert "request" not in properties
+    assert tool.output_schema["title"] == "TopicLiteratureMapResponse"
 
 
 def test_review_retrieval_schema_hides_resolver_trace_by_default() -> None:
@@ -342,6 +402,26 @@ def test_capabilities_document_new_budget_and_stable_citation_fields() -> None:
         "default": "disabled",
         "scope": "open_access_records_only",
     }
+    assert capabilities["budgeting_defaults"]["batch_max_chars"] == 24000
+    assert capabilities["budgeting_defaults"]["batch_max_response_chars"] == 48000
+    assert capabilities["budgeting_defaults"]["batch_budget_source"] == "auto_fit_when_omitted"
+
+
+def test_capabilities_expose_literature_graph_workflow_bundle() -> None:
+    from pubtator_link.mcp.resources import get_capabilities_resource
+
+    payload = get_capabilities_resource(profile="full")
+
+    bundle = payload["workflow_bundles"]["literature_graph"]
+    assert bundle["tools"] == [
+        "pubtator.search_literature",
+        "pubtator.build_topic_literature_map",
+        "pubtator.get_publication_citation_graph",
+        "pubtator.find_related_evidence_candidates",
+        "pubtator.index_review_evidence",
+        "pubtator.retrieve_review_context_batch",
+    ]
+    assert "host" in bundle["boundary_note"].casefold()
 
 
 def test_capabilities_document_error_recovery_and_compact_search() -> None:

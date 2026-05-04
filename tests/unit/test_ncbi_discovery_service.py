@@ -14,6 +14,11 @@ from pubtator_link.models.discovery import (
     RelatedArticleRecord,
 )
 from pubtator_link.services.ncbi_discovery import DiscoveryService, NcbiDiscoveryClient
+from tests.fixtures.literature_graph import NCBI_ELINK_NEIGHBOR_SCORE
+
+
+def assert_no_prepare_mode(payload: object) -> None:
+    assert "prepare_mode" not in str(payload)
 
 
 class MockTransport:
@@ -59,6 +64,9 @@ class FakeDiscoveryClient:
             ),
         ]
 
+    async def find_pmid_by_doi(self, doi: str) -> str | None:
+        return None
+
     async def lookup_mesh(self, query: str, limit: int, exact: bool) -> list[MeshDescriptor]:
         return [
             MeshDescriptor(
@@ -100,8 +108,9 @@ async def test_convert_article_ids_adds_candidates_and_next_commands() -> None:
     assert response.meta.next_commands[0]["arguments"] == {"pmids": ["123"]}
     assert response.meta.next_commands[1] == {
         "tool": "pubtator.index_review_evidence",
-        "arguments": {"pmids": ["123"], "prepare_mode": "selected"},
+        "arguments": {"pmids": ["123"]},
     }
+    assert_no_prepare_mode(response.meta.next_commands)
 
 
 @pytest.mark.asyncio
@@ -192,6 +201,24 @@ async def test_ncbi_client_sends_idtype_for_explicit_source() -> None:
     assert records[0].status == "resolved"
     assert transport.requests[0].url.params["ids"] == "PMC123"
     assert transport.requests[0].url.params["idtype"] == "pmcid"
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_ncbi_client_finds_pmid_by_doi_with_article_identifier_search() -> None:
+    transport = MockTransport({"esearchresult": {"idlist": ["26802180"]}})
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = NcbiDiscoveryClient(http_client=http_client)
+
+    pmid = await client.find_pmid_by_doi("10.1136/annrheumdis-2015-208690")
+
+    assert pmid == "26802180"
+    assert transport.requests[0].url.path.endswith("/esearch.fcgi")
+    assert transport.requests[0].url.params["db"] == "pubmed"
+    assert transport.requests[0].url.params["term"] == "10.1136/annrheumdis-2015-208690[AID]"
+    assert transport.requests[0].url.params["retmode"] == "json"
+    assert transport.requests[0].url.params["retmax"] == "1"
+    assert transport.requests[0].url.params["tool"] == "pubtator-link"
     await client.close()
 
 
@@ -357,8 +384,8 @@ async def test_lookup_citation_deduplicates_candidate_pmids() -> None:
     assert response.meta.next_commands[0]["arguments"] == {"pmids": ["123"]}
     assert response.meta.next_commands[1]["arguments"] == {
         "pmids": ["123"],
-        "prepare_mode": "selected",
     }
+    assert_no_prepare_mode(response.meta.next_commands)
 
 
 @pytest.mark.asyncio
@@ -371,8 +398,8 @@ async def test_find_related_articles_deduplicates_candidates() -> None:
     assert response.meta.next_commands[0]["arguments"] == {"pmids": ["456", "789"]}
     assert response.meta.next_commands[1]["arguments"] == {
         "pmids": ["456", "789"],
-        "prepare_mode": "selected",
     }
+    assert_no_prepare_mode(response.meta.next_commands)
     assert response.unresolved == ["999"]
 
 
@@ -401,6 +428,23 @@ async def test_ncbi_client_parses_related_article_links() -> None:
     assert transport.requests[0].url.params["linkname"] == "pubmed_pubmed"
     assert transport.requests[0].url.params["retmode"] == "json"
     assert transport.requests[0].url.params["tool"] == "pubtator-link"
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_ncbi_client_parses_elink_neighbor_scores() -> None:
+    transport = MockTransport(NCBI_ELINK_NEIGHBOR_SCORE)
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = NcbiDiscoveryClient(http_client=http_client)
+
+    records = await client.find_related_article_scores(["40562663"], limit=10)
+
+    assert [(record.source_pmid, record.pmid, record.neighbor_score) for record in records] == [
+        ("40562663", "39596913", 1220),
+        ("40562663", "40600001", 900),
+    ]
+    assert transport.requests[0].url.path.endswith("/elink.fcgi")
+    assert transport.requests[0].url.params["cmd"] == "neighbor_score"
     await client.close()
 
 

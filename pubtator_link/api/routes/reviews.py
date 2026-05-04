@@ -249,6 +249,7 @@ async def inspect_review_index(
     sample_section_policy: SampleSectionPolicy = "evidence_first",
     include_metadata: bool = False,
     metadata: Literal["basic", "full"] = "basic",
+    response_mode: Literal["compact", "full"] = "full",
 ) -> InspectReviewIndexResponse:
     pmid_list = [pmid.strip() for pmid in pmids.split(",") if pmid.strip()] if pmids else []
     return await service.inspect_review_index(
@@ -256,6 +257,7 @@ async def inspect_review_index(
         request=InspectReviewIndexRequest(
             session_id=session_id,
             pmids=pmid_list,
+            response_mode=response_mode,
             include_passage_samples=include_passage_samples,
             sample_per_pmid=sample_per_pmid,
             min_sample_chars=min_sample_chars,

@@ -19,6 +19,56 @@ def _format_output_schema(entry: ToolCatalogEntry) -> str:
     return f"`{schema_name}`; has_output_schema: `{availability}`"
 
 
+def _schema_type(schema: dict[str, object]) -> str:
+    schema_type = schema.get("type")
+    if isinstance(schema_type, str):
+        return schema_type
+    any_of = schema.get("anyOf")
+    if isinstance(any_of, list):
+        types: list[str] = []
+        for item in any_of:
+            if isinstance(item, dict):
+                item_type = item.get("type")
+                if isinstance(item_type, str):
+                    types.append(item_type)
+        if types:
+            return " | ".join(types)
+    return "unknown"
+
+
+def _schema_enum(schema: dict[str, object]) -> list[object]:
+    enum = schema.get("enum")
+    if isinstance(enum, list):
+        return enum
+    any_of = schema.get("anyOf")
+    if isinstance(any_of, list):
+        for item in any_of:
+            if isinstance(item, dict):
+                item_enum = item.get("enum")
+                if isinstance(item_enum, list):
+                    return list(item_enum)
+    return []
+
+
+def _format_input_schema(entry: ToolCatalogEntry) -> str:
+    properties = entry.input_schema.get("properties")
+    if not isinstance(properties, dict) or not properties:
+        return "None"
+    segments: list[str] = []
+    for name, raw_schema in properties.items():
+        if not isinstance(raw_schema, dict):
+            segments.append(f"`{name}`")
+            continue
+        details = [_schema_type(raw_schema)]
+        enum = _schema_enum(raw_schema)
+        if enum:
+            details.append("enum: " + ", ".join(f"`{value}`" for value in enum))
+        if "default" in raw_schema:
+            details.append(f"default: `{raw_schema['default']}`")
+        segments.append(f"`{name}` ({'; '.join(details)})")
+    return "; ".join(segments)
+
+
 def _format_next_tools_by_profile(
     tool_name: str,
     catalogs_by_profile: dict[MCPToolProfile, dict[str, ToolCatalogEntry]],
@@ -59,6 +109,7 @@ def render_tool_catalog_markdown() -> str:
                 f"- Example: `{entry.example}`",
                 f"- Next tools by profile: {_format_next_tools_by_profile(name, catalogs_by_profile)}",
                 f"- Resource links: {_format_tuple(entry.resource_links)}",
+                f"- Input schema: {_format_input_schema(entry)}",
                 f"- Output schema: {_format_output_schema(entry)}",
                 "",
             ]

@@ -14,6 +14,8 @@ EXPECTED_LEAN_TOOLS = {
     "pubtator.lookup_variant_evidence",
     "pubtator.get_publication_metadata",
     "pubtator.get_publication_passages",
+    "pubtator.get_publication_citation_graph",
+    "pubtator.find_related_evidence_candidates",
     "pubtator.preflight_review_sources",
     "pubtator.index_review_evidence",
     "pubtator.inspect_review_index",
@@ -78,3 +80,33 @@ def test_ground_question_is_lean_and_full_but_not_readonly() -> None:
     assert "pubtator.ground_question" in _tool_names("lean")
     assert "pubtator.ground_question" in _tool_names("full")
     assert "pubtator.ground_question" not in _tool_names("readonly")
+
+
+def test_citation_graph_is_lean_full_and_readonly() -> None:
+    tool_name = "pubtator.get_publication_citation_graph"
+
+    assert tool_name in _tool_names("lean")
+    assert tool_name in _tool_names("full")
+    assert tool_name in _tool_names("readonly")
+
+
+def test_related_evidence_is_lean_full_and_readonly() -> None:
+    tool_name = "pubtator.find_related_evidence_candidates"
+
+    assert tool_name in _tool_names("lean")
+    assert tool_name in _tool_names("full")
+    assert tool_name in _tool_names("readonly")
+
+
+def test_topic_literature_map_is_full_only() -> None:
+    tool_name = "pubtator.build_topic_literature_map"
+
+    assert tool_name not in _tool_names("lean")
+    assert tool_name in _tool_names("full")
+    assert tool_name not in _tool_names("readonly")
+
+
+def test_topic_literature_map_is_not_advertised_in_readonly_profile_metadata() -> None:
+    from pubtator_link.mcp.profiles import tool_names_for_profile
+
+    assert "pubtator.build_topic_literature_map" not in tool_names_for_profile("readonly")

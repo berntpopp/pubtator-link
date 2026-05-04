@@ -5,6 +5,14 @@ import logging
 from fastapi import APIRouter, HTTPException, Query
 
 from ...config import api_config
+from ...models.literature_graph import (
+    PublicationCitationGraphRequest,
+    PublicationCitationGraphResponse,
+    RelatedEvidenceCandidatesRequest,
+    RelatedEvidenceCandidatesResponse,
+    TopicLiteratureMapRequest,
+    TopicLiteratureMapResponse,
+)
 from ...models.publication_metadata import PublicationMetadataRequest, PublicationMetadataResponse
 from ...models.publication_passages import (
     PublicationContextEstimateRequest,
@@ -15,9 +23,12 @@ from ...models.publication_passages import (
 from ...models.requests import PMCExportRequest, PublicationExportRequest
 from ...models.responses import PublicationExportResponse
 from .dependencies import (
+    CitationGraphServiceDep,
     PublicationMetadataServiceDep,
     PublicationPassageServiceDep,
     PublicationServiceDep,
+    RelatedEvidenceServiceDep,
+    TopicLiteratureMapServiceDep,
     handle_api_errors,
     validate_pmcids,
     validate_pmids,
@@ -70,6 +81,51 @@ async def get_publication_metadata(
 ) -> PublicationMetadataResponse:
     """Return citation-grade metadata for known PMIDs."""
     return await service.get_metadata(request)
+
+
+@router.post(
+    "/citation-graph",
+    response_model=PublicationCitationGraphResponse,
+    operation_id="get_publication_citation_graph",
+    summary="Get publication citation graph",
+)
+@handle_api_errors
+async def get_publication_citation_graph(
+    request: PublicationCitationGraphRequest,
+    service: CitationGraphServiceDep,
+) -> PublicationCitationGraphResponse:
+    """Return citation-neighbor metadata for one PMID or DOI."""
+    return await service.get_citation_graph(request)
+
+
+@router.post(
+    "/related-evidence",
+    response_model=RelatedEvidenceCandidatesResponse,
+    operation_id="find_related_evidence_candidates",
+    summary="Find related evidence candidates",
+)
+@handle_api_errors
+async def find_related_evidence_candidates(
+    request: RelatedEvidenceCandidatesRequest,
+    service: RelatedEvidenceServiceDep,
+) -> RelatedEvidenceCandidatesResponse:
+    """Return related candidate papers for passage-level evidence review."""
+    return await service.find_candidates(request)
+
+
+@router.post(
+    "/topic-literature-map",
+    response_model=TopicLiteratureMapResponse,
+    operation_id="build_topic_literature_map",
+    summary="Build topic literature map",
+)
+@handle_api_errors
+async def build_topic_literature_map(
+    request: TopicLiteratureMapRequest,
+    service: TopicLiteratureMapServiceDep,
+) -> TopicLiteratureMapResponse:
+    """Return a bounded topic-level literature graph for query or seed PMIDs."""
+    return await service.build_map(request)
 
 
 @router.get(

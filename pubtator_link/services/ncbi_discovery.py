@@ -20,6 +20,7 @@ from pubtator_link.models.discovery import (
     MeshLookupResponse,
     RelatedArticleMode,
     RelatedArticleRecord,
+    RelatedArticleScoreRecord,
     RelatedArticlesResponse,
 )
 
@@ -57,6 +58,9 @@ class NcbiDiscoveryClientProtocol(Protocol):
     ) -> list[ArticleIdConversionRecord]:
         """Convert article identifiers to PubMed-centered records."""
 
+    async def find_pmid_by_doi(self, doi: str) -> str | None:
+        """Resolve a DOI to a PMID via PubMed search."""
+
     async def lookup_mesh(self, query: str, limit: int, exact: bool) -> list[MeshDescriptor]:
         """Look up MeSH descriptors for a query."""
 
@@ -70,6 +74,13 @@ class NcbiDiscoveryClientProtocol(Protocol):
         limit: int,
     ) -> list[RelatedArticleRecord]:
         """Find related PubMed articles for source PMIDs."""
+
+    async def find_related_article_scores(
+        self,
+        pmids: Sequence[str],
+        limit: int,
+    ) -> list[RelatedArticleScoreRecord]:
+        """Find PubMed neighbor_score links for source PMIDs."""
 
 
 class NcbiDiscoveryClient:
@@ -155,6 +166,28 @@ class NcbiDiscoveryClient:
             )
             for requested in ids
         ]
+
+    async def find_pmid_by_doi(self, doi: str) -> str | None:
+        response = await self._get(
+            "esearch.fcgi",
+            {
+                "db": "pubmed",
+                "term": f"{doi}[AID]",
+                "retmode": "json",
+                "retmax": "1",
+                "tool": "pubtator-link",
+            },
+        )
+        payload = response.json()
+        if not isinstance(payload, dict):
+            return None
+        esearch_result = payload.get("esearchresult")
+        idlist_payload = (
+            esearch_result.get("idlist", []) if isinstance(esearch_result, dict) else []
+        )
+        if not isinstance(idlist_payload, list | tuple) or not idlist_payload:
+            return None
+        return str(idlist_payload[0])
 
     async def lookup_mesh(self, query: str, limit: int, exact: bool) -> list[MeshDescriptor]:
         term = f'"{query}"[MeSH Terms]' if exact else query
@@ -316,6 +349,66 @@ class NcbiDiscoveryClient:
 
         return records
 
+    async def find_related_article_scores(
+        self,
+        pmids: Sequence[str],
+        limit: int,
+    ) -> list[RelatedArticleScoreRecord]:
+        params: list[tuple[str, QueryParamValue]] = [
+            ("dbfrom", "pubmed"),
+            ("db", "pubmed"),
+            *(("id", pmid) for pmid in pmids),
+            ("linkname", "pubmed_pubmed"),
+            ("cmd", "neighbor_score"),
+            ("retmode", "json"),
+            ("tool", "pubtator-link"),
+        ]
+        response = await self._get("elink.fcgi", params)
+        payload = response.json()
+        linksets = payload.get("linksets", []) if isinstance(payload, dict) else []
+
+        records: list[RelatedArticleScoreRecord] = []
+        for linkset in linksets:
+            if not isinstance(linkset, dict):
+                continue
+
+            ids = linkset.get("ids")
+            source_pmid = str(ids[0]) if isinstance(ids, list | tuple) and ids else None
+            if source_pmid is None:
+                continue
+
+            emitted_for_source = 0
+            linksetdbs = linkset.get("linksetdbs", [])
+            if not isinstance(linksetdbs, list | tuple):
+                continue
+
+            for linksetdb in linksetdbs:
+                if emitted_for_source >= limit:
+                    break
+                if not isinstance(linksetdb, dict):
+                    continue
+
+                links = linksetdb.get("links", [])
+                if not isinstance(links, list | tuple):
+                    continue
+
+                for link in links:
+                    if emitted_for_source >= limit:
+                        break
+                    linked_pmid, score = _link_id_and_score(link)
+                    if linked_pmid is None or linked_pmid == source_pmid:
+                        continue
+                    records.append(
+                        RelatedArticleScoreRecord(
+                            source_pmid=source_pmid,
+                            pmid=linked_pmid,
+                            neighbor_score=score,
+                        )
+                    )
+                    emitted_for_source += 1
+
+        return records
+
 
 class DiscoveryService:
     def __init__(self, client: NcbiDiscoveryClientProtocol) -> None:
@@ -335,6 +428,9 @@ class DiscoveryService:
             unresolved=unresolved,
             _meta=_candidate_meta(candidate_pmids),
         )
+
+    async def find_pmid_by_doi(self, doi: str) -> str | None:
+        return await self.client.find_pmid_by_doi(doi)
 
     async def lookup_mesh(
         self,
@@ -459,6 +555,21 @@ def _string_list(value: object) -> list[str]:
     return [str(value)]
 
 
+def _link_id_and_score(link: object) -> tuple[str | None, int]:
+    if isinstance(link, dict):
+        linked_id = _optional_str(link.get("id"))
+        score_value = link.get("score", 0)
+    else:
+        linked_id = _optional_str(link)
+        score_value = 0
+
+    try:
+        score = int(score_value)
+    except (TypeError, ValueError):
+        score = 0
+    return linked_id, score
+
+
 def _mesh_tree_numbers(item: Mapping[str, object]) -> list[str]:
     tree_numbers: list[str] = []
     idx_links = item.get("ds_idxlinks")
@@ -484,7 +595,7 @@ def _candidate_meta(candidate_pmids: list[str]) -> DiscoveryMeta:
             },
             {
                 "tool": "pubtator.index_review_evidence",
-                "arguments": {"pmids": candidate_pmids, "prepare_mode": "selected"},
+                "arguments": {"pmids": candidate_pmids},
             },
         ]
     return DiscoveryMeta(

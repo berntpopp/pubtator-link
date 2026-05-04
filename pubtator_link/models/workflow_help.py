@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 WorkflowTask = Literal[
     "clinical_genetics_review",
     "literature_review",
+    "graph",
     "citation_audit",
     "entity_discovery",
 ]

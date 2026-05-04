@@ -380,3 +380,64 @@ def test_merge_batch_context_structures_dropped_summary_with_filter_advice() -> 
     assert merged.dropped_summary.by_reason["max_total_passages_exceeded"] >= 1
     assert merged.dropped_summary.suggested_filters is not None
     assert merged.dropped_summary.suggested_filters.sections
+
+
+def test_budget_advice_reports_tokens_and_dropped_priority_pmids() -> None:
+    request = RetrieveReviewContextBatchRequest(
+        queries=["MEFV colchicine"],
+        max_total_passages=5,
+        max_chars=900,
+        max_response_chars=100000,
+        prioritize_pmids=["222", "333"],
+    )
+    result = _result(
+        "MEFV colchicine",
+        [
+            _passage("p1", "A" * 700, pmid="111"),
+            _passage("p2", "B" * 300, pmid="222"),
+            _passage("p3", "C" * 300, pmid="333"),
+        ],
+    )
+
+    merged = merge_batch_context(
+        request=request,
+        query_results=[result],
+        coverage_by_source={},
+    )
+
+    advice = merged.dropped_summary.budget_advice
+    assert advice is not None
+    assert getattr(advice, "dropped_pmid_count", None) == 2
+    assert getattr(advice, "dropped_priority_pmids", None) == ["222", "333"]
+    retry_arguments = getattr(advice, "retry_arguments", {})
+    assert retry_arguments["prioritize_pmids"] == ["222", "333"]
+    assert "estimated_tokens_to_unlock" not in retry_arguments
+    assert getattr(advice, "estimated_tokens_to_unlock", None) is not None
+    assert retry_arguments["max_chars"] == advice.increase_max_chars_to
+
+
+def test_budget_advice_caps_dropped_priority_pmids_in_retry_arguments() -> None:
+    priority_pmids = [str(1000 + index) for index in range(12)]
+    request = RetrieveReviewContextBatchRequest(
+        queries=["MEFV colchicine"],
+        max_total_passages=20,
+        max_chars=900,
+        max_response_chars=100000,
+        prioritize_pmids=priority_pmids,
+    )
+    result = _result(
+        "MEFV colchicine",
+        [_passage(f"p{index}", "A" * 300, pmid=pmid) for index, pmid in enumerate(priority_pmids)],
+    )
+
+    merged = merge_batch_context(
+        request=request,
+        query_results=[result],
+        coverage_by_source={},
+    )
+
+    advice = merged.dropped_summary.budget_advice
+    assert advice is not None
+    assert len(advice.dropped_priority_pmids) == 5
+    assert set(advice.dropped_priority_pmids).issubset(priority_pmids)
+    assert advice.retry_arguments["prioritize_pmids"] == advice.dropped_priority_pmids

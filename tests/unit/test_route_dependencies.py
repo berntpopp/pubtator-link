@@ -180,6 +180,15 @@ async def test_create_app_resources_builds_core_services_without_database(
     assert resources.review_repository is None
     assert resources.review_queue is None
     assert resources.review_context_service is None
+    assert resources.crossref_client is not None
+    assert resources.europe_pmc_literature_client is not None
+
+    crossref_client = resources.crossref_client
+    europe_pmc_literature_client = resources.europe_pmc_literature_client
+    await dependencies.close_app_resources(resources)
+
+    assert crossref_client._client.is_closed
+    assert europe_pmc_literature_client._client.is_closed
 
 
 @pytest.mark.asyncio
@@ -517,3 +526,29 @@ async def test_cleanup_dependencies_clears_fallback_globals(
 
     assert client.closed is True
     assert dependencies._api_client is None
+
+
+@pytest.mark.asyncio
+async def test_cleanup_dependencies_closes_lazy_citation_graph_clients(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(dependencies, "_citation_graph_service", None)
+    monkeypatch.setattr(dependencies, "_crossref_client", None)
+    monkeypatch.setattr(dependencies, "_europe_pmc_literature_client", None)
+    monkeypatch.setattr(dependencies, "_discovery_service", object())
+    monkeypatch.setattr(dependencies, "_publication_metadata_service", object())
+
+    await dependencies.get_citation_graph_service()
+    crossref_client = dependencies._crossref_client
+    europe_pmc_literature_client = dependencies._europe_pmc_literature_client
+
+    assert crossref_client is not None
+    assert europe_pmc_literature_client is not None
+
+    await dependencies.cleanup_dependencies()
+
+    assert crossref_client._client.is_closed
+    assert europe_pmc_literature_client._client.is_closed
+    assert dependencies._citation_graph_service is None
+    assert dependencies._crossref_client is None
+    assert dependencies._europe_pmc_literature_client is None

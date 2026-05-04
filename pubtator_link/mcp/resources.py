@@ -37,6 +37,29 @@ def _tool_categories() -> dict[str, list[str]]:
     return categories
 
 
+def _workflow_bundles() -> dict[str, Any]:
+    return {
+        "literature_graph": {
+            "tools": [
+                "pubtator.search_literature",
+                "pubtator.build_topic_literature_map",
+                "pubtator.get_publication_citation_graph",
+                "pubtator.find_related_evidence_candidates",
+                "pubtator.index_review_evidence",
+                "pubtator.retrieve_review_context_batch",
+            ],
+            "compact_mode_contract": (
+                "Graph compact mode returns candidate lanes, bounded summary papers, "
+                "machine-readable compact_status, omitted_counts, and response_size_class."
+            ),
+            "boundary_note": (
+                "The server advertises this bundle, but host ToolSearch gating controls "
+                "which tool schemas are loaded on first use."
+            ),
+        }
+    }
+
+
 def _sample_calls() -> dict[str, dict[str, Any]]:
     calls: dict[str, dict[str, Any]] = {}
     for name, value in SAMPLE_CALLS.items():
@@ -479,8 +502,6 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
                     "EULAR PReS recommendation",
                 ],
                 "response_mode": "compact",
-                "max_chars": 12000,
-                "max_response_chars": 24000,
             },
             "pubtator.ground_question": {
                 "question": "Does colchicine prevent FMF flares?",
@@ -604,8 +625,9 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
             "batch_response_mode": "compact",
             "budget_strategy_default": "query_fair",
             "budget_strategy_review_recommendation": "scarcity_first",
-            "batch_max_chars": 12000,
-            "batch_max_response_chars": 24000,
+            "batch_max_chars": 24000,
+            "batch_max_response_chars": 48000,
+            "batch_budget_source": "auto_fit_when_omitted",
             "max_chars_per_passage": 2200,
             "batch_budgeting": "fair first pass across query variants before overflow",
             "tables": "excluded by default for review retrieval unless explicitly requested",
@@ -687,6 +709,7 @@ def get_capabilities_resource(
         "research_use_only": True,
         "core_workflow_tools": _core_workflow_tools(),
         "tool_categories": _tool_categories(),
+        "workflow_bundles": _workflow_bundles(),
         "next_tool": "pubtator.workflow_help",
     }
     allowed_tools = tool_names_for_profile(profile) if profile is not None else None

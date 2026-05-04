@@ -61,3 +61,36 @@ def test_workflow_help_documents_guideline_search_as_filtered_literature_search(
 
     assert "pubtator.search_guidelines" in payload
     assert "filtered search_literature" in payload
+
+
+def test_workflow_help_mentions_literature_graph_bundle_boundary() -> None:
+    payload = WorkflowHelpService().get_help("graph").model_dump()
+    text = str(payload)
+
+    assert "build_topic_literature_map" in text
+    assert "get_publication_citation_graph" in text
+    assert "find_related_evidence_candidates" in text
+    assert "ToolSearch" in text
+
+
+def test_workflow_help_routes_hyphenated_literature_graph_aliases() -> None:
+    for task in ("topic-map", "topic map", "literature-map", "literature map", "citation graph"):
+        response = WorkflowHelpService().get_help(task)
+
+        assert response.task == "graph"
+        assert "pubtator.build_topic_literature_map" in response.tool_sequence
+        assert "pubtator.get_publication_citation_graph" in response.tool_sequence
+
+
+def test_workflow_help_keeps_citation_audit_aliases_on_audit_workflow() -> None:
+    for task in (
+        "citation_audit",
+        "citation audit",
+        "citation-audit",
+        "citation audit workflow",
+    ):
+        response = WorkflowHelpService().get_help(task)
+
+        assert response.task == "citation_audit"
+        assert response.tool_sequence[0] == "pubtator.lookup_citation"
+        assert "pubtator.get_publication_citation_graph" not in response.tool_sequence

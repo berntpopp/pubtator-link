@@ -982,6 +982,133 @@ async def test_retrieve_review_context_batch_adapter_builds_request_from_flat_ar
 
 
 @pytest.mark.asyncio
+async def test_retrieve_review_context_batch_adapter_auto_fits_omitted_budgets() -> None:
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
+    from pubtator_link.models.review_rerag import (
+        ContextBudget,
+        ContextPack,
+        PreparationStatus,
+        RetrieveReviewContextBatchResponse,
+    )
+
+    class RecordingService:
+        request = None
+
+        async def retrieve_context_batch(self, review_id, request):
+            self.request = request
+            budget_source = getattr(request, "budget_source", None)
+            return RetrieveReviewContextBatchResponse(
+                review_id=review_id,
+                response_mode=request.response_mode,
+                results=[],
+                merged_context_pack=ContextPack(question="q", passages=[], citation_map={}),
+                preparation_status=PreparationStatus(),
+                budget=ContextBudget(
+                    max_chars=request.max_chars,
+                    text_chars=0,
+                    estimated_json_chars=1200,
+                    estimated_total_chars=1200,
+                    estimated_tokens=334,
+                    budget_source=budget_source,
+                ),
+                budget_source=budget_source,
+            )
+
+    service = RecordingService()
+
+    result = await retrieve_review_context_batch_impl(
+        service=service,
+        review_id="rev",
+        queries=["MEFV"],
+        max_total_passages=14,
+        max_chars_per_passage=2200,
+    )
+
+    assert service.request.max_chars == 30800
+    assert service.request.max_response_chars == 61600
+    assert getattr(service.request, "budget_source", None) == "auto_fit"
+    assert result.get("budget_source") == "auto_fit"
+    assert result["budget"]["budget_source"] == "auto_fit"
+
+
+@pytest.mark.asyncio
+async def test_retrieve_review_context_batch_adapter_preserves_explicit_budgets() -> None:
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        PreparationStatus,
+        RetrieveReviewContextBatchResponse,
+    )
+
+    class RecordingService:
+        request = None
+
+        async def retrieve_context_batch(self, review_id, request):
+            self.request = request
+            return RetrieveReviewContextBatchResponse(
+                review_id=review_id,
+                response_mode=request.response_mode,
+                results=[],
+                merged_context_pack=ContextPack(question="q", passages=[], citation_map={}),
+                preparation_status=PreparationStatus(),
+                budget_source=getattr(request, "budget_source", None),
+            )
+
+    service = RecordingService()
+
+    result = await retrieve_review_context_batch_impl(
+        service=service,
+        review_id="rev",
+        queries=["MEFV"],
+        max_chars=8000,
+        max_response_chars=12000,
+    )
+
+    assert service.request.max_chars == 8000
+    assert service.request.max_response_chars == 12000
+    assert getattr(service.request, "budget_source", None) == "caller"
+    assert result.get("budget_source") == "caller"
+
+
+@pytest.mark.asyncio
+async def test_retrieve_review_context_batch_adapter_derives_omitted_response_budget() -> None:
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        PreparationStatus,
+        RetrieveReviewContextBatchResponse,
+    )
+
+    class RecordingService:
+        request = None
+
+        async def retrieve_context_batch(self, review_id, request):
+            self.request = request
+            return RetrieveReviewContextBatchResponse(
+                review_id=review_id,
+                response_mode=request.response_mode,
+                results=[],
+                merged_context_pack=ContextPack(question="q", passages=[], citation_map={}),
+                preparation_status=PreparationStatus(),
+                budget_source=getattr(request, "budget_source", None),
+            )
+
+    service = RecordingService()
+
+    result = await retrieve_review_context_batch_impl(
+        service=service,
+        review_id="rev",
+        queries=["MEFV"],
+        max_chars=50_000,
+    )
+
+    assert service.request.max_chars == 50_000
+    assert service.request.max_response_chars == 100_000
+    assert getattr(service.request, "budget_source", None) == "caller"
+    assert result.get("budget_source") == "caller"
+
+
+@pytest.mark.asyncio
 async def test_retrieve_review_context_batch_adapter_sets_budget_strategy() -> None:
     from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
     from pubtator_link.models.review_rerag import (
@@ -1082,6 +1209,46 @@ async def test_retrieve_review_context_batch_adapter_normalizes_llm_input_mistak
     assert captured_request.queries == ["MEFV"]
     assert captured_request.response_mode == "quotes"
     assert captured_request.max_total_passages == 3
+
+
+@pytest.mark.asyncio
+async def test_retrieve_review_context_batch_adapter_coerces_numeric_strings_before_budgeting() -> (
+    None
+):
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        PreparationStatus,
+        RetrieveReviewContextBatchResponse,
+    )
+
+    captured_request = None
+
+    class Service:
+        async def retrieve_context_batch(self, review_id, request):
+            nonlocal captured_request
+            captured_request = request
+            return RetrieveReviewContextBatchResponse(
+                review_id=review_id,
+                response_mode="compact",
+                results=[],
+                merged_context_pack=ContextPack(question="", passages=[], citation_map={}),
+                preparation_status=PreparationStatus(),
+                budget_source=getattr(request, "budget_source", None),
+            )
+
+    result = await retrieve_review_context_batch_impl(
+        service=Service(),
+        review_id="r1",
+        queries=["MEFV"],
+        limit="14",
+        max_chars_per_passage="2200",
+    )
+
+    assert captured_request.max_total_passages == 14
+    assert captured_request.max_chars == 30_800
+    assert captured_request.max_response_chars == 61_600
+    assert result["budget_source"] == "auto_fit"
 
 
 @pytest.mark.asyncio
@@ -1265,6 +1432,7 @@ async def test_inspect_review_index_adapter_builds_request_from_flat_args() -> N
             self.request = request
             return InspectReviewIndexResponse(
                 review_id=review_id,
+                response_mode=request.response_mode,
                 preparation_status=PreparationStatus(complete=1),
                 sources=[],
                 totals=ReviewIndexTotals(),
@@ -1282,6 +1450,7 @@ async def test_inspect_review_index_adapter_builds_request_from_flat_args() -> N
         sample_per_pmid=3,
         min_sample_chars=120,
         sample_section_policy="original_order",
+        response_mode="compact",
     )
 
     assert service.review_id == "rev"
@@ -1289,6 +1458,8 @@ async def test_inspect_review_index_adapter_builds_request_from_flat_args() -> N
     assert service.request.sample_per_pmid == 3
     assert service.request.min_sample_chars == 120
     assert service.request.sample_section_policy == "original_order"
+    assert service.request.response_mode == "compact"
+    assert result["response_mode"] == "compact"
     assert result["review_id"] == "rev"
     assert result["index_snapshot_date"] is not None
 
@@ -2098,3 +2269,27 @@ async def test_get_text_annotation_results_adapter_maps_completed_results() -> N
     assert result["success"] is True
     assert result["status"] == "completed"
     assert result["annotations"][0]["entity_id"] == "@GENE_672"
+
+
+async def test_citation_graph_adapter_accepts_compact_response_mode() -> None:
+    from pubtator_link.mcp.service_adapters import get_publication_citation_graph_impl
+    from pubtator_link.models.literature_graph import (
+        LiteraturePaper,
+        PublicationCitationGraphResponse,
+    )
+
+    class Service:
+        async def get_citation_graph(self, request):
+            assert request.response_mode == "compact"
+            return PublicationCitationGraphResponse(
+                source=LiteraturePaper(pmid="1"),
+                response_mode="compact",
+            )
+
+    result = await get_publication_citation_graph_impl(
+        service=Service(),
+        pmid="1",
+        response_mode="compact",
+    )
+
+    assert result["response_mode"] == "compact"

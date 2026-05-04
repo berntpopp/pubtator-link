@@ -6,6 +6,7 @@ BASE = Path("docker/docker-compose.yml").read_text()
 PROD = Path("docker/docker-compose.prod.yml").read_text()
 NPM = Path("docker/docker-compose.npm.yml").read_text()
 NPM_ENV = Path("docker/.env.npm.example").read_text()
+DOCKER_ENV = Path(".env.docker.example")
 
 
 def test_base_compose_runs_unified_server_with_mcp() -> None:
@@ -36,3 +37,13 @@ def test_npm_environment_documents_public_url_and_cors() -> None:
     assert "PUBTATOR_LINK_PUBLIC_DOMAIN" in NPM_ENV
     assert "PUBTATOR_LINK_PUBLIC_URL" in NPM_ENV
     assert "PUBTATOR_LINK_CORS_ORIGINS" in NPM_ENV
+
+
+def test_root_docker_env_example_matches_vps_manager_contract() -> None:
+    assert DOCKER_ENV.exists()
+    env = DOCKER_ENV.read_text()
+
+    assert "NPM_SHARED_NETWORK_NAME=npm_default" in env
+    assert "PUBTATOR_LINK_PUBLIC_DOMAIN=" in env
+    assert "PUBTATOR_LINK_PUBLIC_URL=" in env
+    assert "PUBTATOR_LINK_CORS_ORIGINS=" in env
