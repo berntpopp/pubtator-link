@@ -314,7 +314,7 @@ class TopicLiteratureMapService:
                     provider="pubmed_metadata",
                     status="provider_failed",
                     retryable=True,
-                    message=f"Metadata lookup failed for {len(response.failed_pmids)} PMID(s)",
+                    message=f"Metadata lookup failed for {len(response.failed_pmids)} PMID(s).",
                 )
             )
         return (
