@@ -1907,6 +1907,58 @@ async def test_search_literature_metadata_respects_limit() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_literature_metadata_batches_limit_none_over_public_cap() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+    from pubtator_link.models.publication_metadata import (
+        PublicationMetadata,
+        PublicationMetadataResponse,
+    )
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "results": [
+                    {"pmid": str(pmid), "title": f"Search {pmid}"}
+                    for pmid in range(500000, 500105)
+                ],
+                "count": 105,
+                "total_pages": 1,
+                "page_size": 105,
+            }
+
+    class RecordingMetadata:
+        def __init__(self) -> None:
+            self.requests = []
+
+        async def get_metadata(self, request):
+            self.requests.append(request)
+            return PublicationMetadataResponse(
+                metadata=[
+                    PublicationMetadata(pmid=pmid, title=f"Metadata {pmid}")
+                    for pmid in request.pmids
+                ],
+                _meta={"next_commands": []},
+            )
+
+    metadata = RecordingMetadata()
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="MEFV",
+        limit=None,
+        metadata="basic",
+        metadata_service=metadata,
+    )
+
+    assert result["success"] is True
+    assert len(result["results"]) == 105
+    assert [len(request.pmids) for request in metadata.requests] == [100, 5]
+    assert [request.include_mesh for request in metadata.requests] == [False, False]
+    assert [request.include_citations for request in metadata.requests] == ["none", "none"]
+    assert [request.include_coverage for request in metadata.requests] == [False, False]
+
+
+@pytest.mark.asyncio
 async def test_search_literature_full_metadata_requests_citations() -> None:
     from pubtator_link.mcp.service_adapters import search_literature_impl
     from pubtator_link.models.publication_metadata import PublicationMetadataResponse
