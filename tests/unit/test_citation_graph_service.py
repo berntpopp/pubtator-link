@@ -296,6 +296,40 @@ class RecordingMetadata:
         return PublicationMetadataResponse(metadata=[], failed_pmids={})
 
 
+@pytest.mark.asyncio
+async def test_citation_graph_metadata_resolution_remains_single_pmid_public_request() -> None:
+    from pubtator_link.models.publication_metadata import PublicationMetadata
+
+    class SinglePmidMetadata:
+        def __init__(self) -> None:
+            self.requests: list[object] = []
+
+        async def get_metadata(self, request):
+            self.requests.append(request)
+            return PublicationMetadataResponse(
+                metadata=[
+                    PublicationMetadata(
+                        pmid="28386255",
+                        title="Familial Mediterranean Fever",
+                    )
+                ],
+                failed_pmids={},
+            )
+
+    metadata = SinglePmidMetadata()
+    service = CitationGraphService(metadata_service=metadata)
+
+    result = await service._metadata_for_pmid("28386255")
+
+    assert result is not None
+    assert result.pmid == "28386255"
+    assert len(metadata.requests) == 1
+    assert metadata.requests[0].pmids == ["28386255"]
+    assert metadata.requests[0].include_mesh is False
+    assert metadata.requests[0].include_citations == "none"
+    assert metadata.requests[0].include_coverage is True
+
+
 class BatchResolvingDiscovery:
     def __init__(self) -> None:
         self.calls: list[list[str]] = []

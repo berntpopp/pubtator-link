@@ -161,6 +161,27 @@ async def test_get_publication_metadata_impl_returns_typed_payload() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_publication_metadata_impl_preserves_public_100_pmid_cap() -> None:
+    from pydantic import ValidationError
+
+    from pubtator_link.mcp import service_adapters
+
+    class UnexpectedService:
+        async def get_metadata(self, request):
+            raise AssertionError("oversized public metadata request should fail validation first")
+
+    with pytest.raises(ValidationError):
+        await service_adapters.get_publication_metadata_impl(
+            service=UnexpectedService(),
+            pmids=[str(600000 + index) for index in range(101)],
+            include_mesh=True,
+            include_publication_types=True,
+            include_citations="both",
+            include_coverage=True,
+        )
+
+
+@pytest.mark.asyncio
 async def test_graph_adapters_default_omitted_response_mode_to_compact() -> None:
     from pubtator_link.mcp.service_adapters import (
         build_topic_literature_map_impl,
