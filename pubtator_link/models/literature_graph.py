@@ -267,6 +267,8 @@ class LiteratureProviderStatus(BaseModel):
     result_count: int = 0
     retryable: bool = False
     message: str | None = None
+    elapsed_ms: int | None = None
+    budget_ms: int | None = None
 
 
 class LiteratureResponseMeta(BaseModel):
@@ -495,8 +497,9 @@ class TopicLiteratureMapRequest(BaseModel):
     year_min: int | None = None
     year_max: int | None = None
     prefer_full_text: bool = True
-    timeout_ms: int = Field(default=25_000, ge=0, le=120_000)
+    timeout_ms: int = Field(default=45_000, ge=0, le=120_000)
     partial_ok: bool = True
+    expand_query_seeds: bool = False
     citation_graph_timeout_ms: int | None = Field(default=None, ge=1, le=120_000)
     related_evidence_timeout_ms: int | None = Field(default=None, ge=1, le=120_000)
     metadata_backfill_timeout_ms: int | None = Field(default=None, ge=1, le=120_000)
@@ -558,6 +561,9 @@ class TopicLiteratureMapResponse(BaseModel):
     demoted_candidate_pmids: list[str] = Field(default_factory=list)
     demoted_reasons_by_pmid: dict[str, list[str]] = Field(default_factory=dict)
     bias_score_by_pmid: dict[str, float] = Field(default_factory=dict)
+    degraded: bool = False
+    degraded_reasons: list[str] = Field(default_factory=list)
+    scope_auto_reduced: bool = False
     provider_status: list[LiteratureProviderStatus] = Field(default_factory=list)
     omitted_counts: dict[str, int] = Field(default_factory=dict)
     graph_inspection_hint: str | None = None

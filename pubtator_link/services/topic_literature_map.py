@@ -168,6 +168,7 @@ class TopicLiteratureMapService:
                 provider_status=provider_status,
                 operation="metadata_backfill",
                 deadline=_stage_deadline(deadline, request.metadata_backfill_timeout_ms),
+                budget_ms=request.metadata_backfill_timeout_ms,
             )
             papers_by_pmid.update(backfill_papers)
             entities_by_pmid.update(backfill_entities)
@@ -202,6 +203,11 @@ class TopicLiteratureMapService:
             accessible_pmids=[paper.pmid for paper in accessible_candidates if paper.pmid],
             bias_toward=request.bias_toward,
         )
+        summary = _summary_with_ranked_accessible_candidates(
+            summary,
+            deduped_papers,
+            ranked_candidates,
+        )
         recommended_next_pmids = _recommended_next_pmids(ranked_candidates, seed_pmids)
         recommended_next_candidates = _recommended_next_candidates(
             ranked_candidates,
@@ -210,6 +216,7 @@ class TopicLiteratureMapService:
         accessible_full_text_pmids = _accessible_full_text_pmids(ranked_candidates)
         closed_central_pmids = _closed_central_pmids(ranked_candidates, summary)
         bias_score_by_pmid = _bias_score_by_pmid(ranked_candidates)
+        degraded_reasons = _degraded_reasons(provider_status)
         demoted_candidate_pmids, demoted_reasons_by_pmid = _demoted_candidates(
             ranked_candidates,
             seed_pmids=seed_pmids,
@@ -301,12 +308,16 @@ class TopicLiteratureMapService:
             demoted_candidate_pmids=demoted_candidate_pmids,
             demoted_reasons_by_pmid=demoted_reasons_by_pmid,
             bias_score_by_pmid=bias_score_by_pmid,
+            degraded=bool(degraded_reasons),
+            degraded_reasons=degraded_reasons,
             provider_status=provider_status,
             omitted_counts=omitted_counts,
             graph_inspection_hint=graph_inspection_hint,
             candidate_retrieval_hints=hints,
             _meta=meta,
         )
+        if degraded_reasons and not request.partial_ok:
+            raise RuntimeError("Topic literature map degraded: " + ", ".join(degraded_reasons))
         response = _enforce_topic_map_budget(response)
         response.meta.response_size_class = json_size_class(response.model_dump(by_alias=True))
         return response
@@ -321,7 +332,19 @@ class TopicLiteratureMapService:
         seed_pmids: list[str] = []
         if request.pmids:
             seed_pmids.extend(request.pmids)
-        if request.query and len(seed_pmids) < request.max_seed_papers:
+        if request.query and request.pmids and not request.expand_query_seeds:
+            provider_status.append(
+                _topic_provider_status(
+                    "pubtator_search",
+                    "seed_search",
+                    "skipped",
+                    message=(
+                        "Skipped query seed expansion because explicit PMIDs were provided; "
+                        "set expand_query_seeds=true to add search-derived seeds."
+                    ),
+                )
+            )
+        elif request.query and len(seed_pmids) < request.max_seed_papers:
             try:
                 raw = await _await_with_deadline(
                     self.search_client.search_publications(
@@ -424,9 +447,11 @@ class TopicLiteratureMapService:
         provider_status: list[LiteratureProviderStatus] | None = None,
         operation: str = "metadata_lookup",
         deadline: float | None = None,
+        budget_ms: int | None = None,
     ) -> tuple[dict[str, LiteraturePaper], dict[str, list[LiteratureEntity]]]:
         if not pmids:
             return {}, {}
+        stage_started = time.monotonic()
         try:
             response = await _await_with_deadline(
                 lookup_metadata_batched(
@@ -449,6 +474,8 @@ class TopicLiteratureMapService:
                         "failed",
                         retryable=True,
                         message=_provider_exception_message(exc, "PubMed metadata"),
+                        elapsed_ms=_elapsed_ms(stage_started),
+                        budget_ms=budget_ms,
                     )
                 )
             return {}, {}
@@ -459,6 +486,8 @@ class TopicLiteratureMapService:
                     status="provider_failed",
                     retryable=True,
                     message=f"PubMed metadata warning: {warning}",
+                    code=_metadata_warning_code(warning),
+                    next_steps=_metadata_warning_next_steps(warning),
                 )
             )
         if response.failed_pmids:
@@ -468,6 +497,10 @@ class TopicLiteratureMapService:
                     status="provider_failed",
                     retryable=True,
                     message=f"Metadata lookup failed for {len(response.failed_pmids)} PMID(s).",
+                    code="metadata_lookup_failed",
+                    next_steps=[
+                        "Retry with narrower PMID inputs or continue with available metadata."
+                    ],
                 )
             )
         if provider_status is not None:
@@ -492,6 +525,8 @@ class TopicLiteratureMapService:
                         if response.failed_pmids
                         else None
                     ),
+                    elapsed_ms=_elapsed_ms(stage_started),
+                    budget_ms=budget_ms,
                 )
             )
         return (
@@ -513,6 +548,7 @@ class TopicLiteratureMapService:
         provider_status: list[LiteratureProviderStatus],
         deadline: float | None,
     ) -> tuple[list[LiteraturePaper], list[LiteratureGraphEdge], list[str], dict[str, int]]:
+        stage_started = time.monotonic()
         semaphore = asyncio.Semaphore(TOPIC_STAGE_CONCURRENCY)
 
         async def collect_seed(
@@ -602,6 +638,8 @@ class TopicLiteratureMapService:
                 result_count=len(papers),
                 failed_count=failed_count,
                 failure_message=failure_message,
+                elapsed_ms=_elapsed_ms(stage_started),
+                budget_ms=request.citation_graph_timeout_ms,
             )
         )
         return papers, edges, _dedupe(candidate_pmids), remaining_neighbors
@@ -616,6 +654,7 @@ class TopicLiteratureMapService:
         provider_status: list[LiteratureProviderStatus],
         deadline: float | None,
     ) -> tuple[list[LiteraturePaper], list[LiteratureGraphEdge], list[str]]:
+        stage_started = time.monotonic()
         semaphore = asyncio.Semaphore(TOPIC_STAGE_CONCURRENCY)
 
         async def collect_seed(
@@ -697,6 +736,8 @@ class TopicLiteratureMapService:
                 result_count=len(papers),
                 failed_count=failed_count,
                 failure_message=failure_message,
+                elapsed_ms=_elapsed_ms(stage_started),
+                budget_ms=request.related_evidence_timeout_ms,
             )
         )
         return papers, edges, _dedupe(candidate_pmids)
@@ -736,6 +777,18 @@ def _metadata_response_warnings(response: Any) -> list[str]:
     if isinstance(raw_warnings, list):
         return [warning for warning in raw_warnings if isinstance(warning, str) and warning]
     return []
+
+
+def _metadata_warning_code(warning: str) -> str:
+    return warning
+
+
+def _metadata_warning_next_steps(warning: str) -> list[str]:
+    if warning == "coverage_lookup_failed":
+        return [
+            "Continue with metadata-only ranking or recheck coverage during index_review_evidence."
+        ]
+    return ["Retry with narrower PMID inputs or response_mode='full' for diagnostics."]
 
 
 def _prefer_metadata_paper(
@@ -966,6 +1019,36 @@ def _recommended_next_candidates(
     ]
 
 
+def _summary_with_ranked_accessible_candidates(
+    summary: TopicLiteratureMapSummary,
+    papers: list[LiteraturePaper],
+    candidates: list[LiteratureCandidateSummary],
+) -> TopicLiteratureMapSummary:
+    existing_pmids = {paper.pmid for paper in summary.accessible_full_text_candidates if paper.pmid}
+    if len(existing_pmids) >= 10:
+        return summary
+    paper_by_pmid = {paper.pmid: paper for paper in papers if paper.pmid}
+    ranked_accessible_pmids = [
+        candidate.pmid
+        for candidate in candidates
+        if candidate.pmid
+        and candidate.access == "full_text"
+        and candidate.pmid not in existing_pmids
+    ]
+    if not ranked_accessible_pmids:
+        return summary
+    additions = [paper_by_pmid[pmid] for pmid in ranked_accessible_pmids if pmid in paper_by_pmid]
+    if not additions:
+        return summary
+    return summary.model_copy(
+        update={
+            "accessible_full_text_candidates": dedupe_papers(
+                [*summary.accessible_full_text_candidates, *additions]
+            )[:10]
+        }
+    )
+
+
 def _top_actionable_candidates(
     candidates: list[LiteratureCandidateSummary],
 ) -> list[LiteratureCandidateSummary]:
@@ -1042,6 +1125,22 @@ def _compact_actionable_topic_candidates(
     return actionable, omitted_doi_only
 
 
+def _budget_compact_topic_candidate(
+    candidate: LiteratureCandidateSummary,
+) -> LiteratureCandidateSummary:
+    return candidate.model_copy(
+        update={
+            "publication_types": candidate.publication_types[:3],
+            "access_flags": {},
+            "rank_reasons": candidate.rank_reasons[:3],
+            "demotion_reasons": candidate.demotion_reasons[:3],
+            "signals": candidate.signals[:5],
+            "source_tools": [],
+            "next_actions": [],
+        }
+    )
+
+
 def _summary_without_papers(
     summary: TopicLiteratureMapSummary,
     recommended_next_pmids: list[str],
@@ -1111,11 +1210,24 @@ def _enforce_topic_map_budget(response: TopicLiteratureMapResponse) -> TopicLite
     omitted: dict[str, int] = {}
     compacted = response.model_copy(
         update={
+            "top_candidates": [
+                _budget_compact_topic_candidate(candidate) for candidate in response.top_candidates
+            ],
+            "recommended_next_candidates": [
+                _budget_compact_topic_candidate(candidate)
+                for candidate in response.recommended_next_candidates[:5]
+            ],
             "demoted_candidate_pmids": [],
             "demoted_reasons_by_pmid": {},
             "candidate_retrieval_hints": response.candidate_retrieval_hints[:1],
         }
     )
+    if response.top_candidates:
+        omitted["candidate_details"] = len(response.top_candidates)
+    if len(response.recommended_next_candidates) > len(compacted.recommended_next_candidates):
+        omitted["recommended_next_candidates"] = len(response.recommended_next_candidates) - len(
+            compacted.recommended_next_candidates
+        )
     if response.demoted_candidate_pmids:
         omitted["demoted_candidates"] = len(response.demoted_candidate_pmids)
     compacted, dropped = _drop_topic_candidates_to_budget(compacted, budget=budget)
@@ -1142,17 +1254,24 @@ def _drop_topic_candidates_to_budget(
         return response, 0
     reclaimed = 0
     dropped = 0
-    for candidate in reversed(response.top_candidates):
+    min_keep = 3 if response.recommended_next_pmids else 0
+    droppable_candidates = response.top_candidates[min_keep:]
+    for candidate in reversed(droppable_candidates):
         reclaimed += graph_payload_json_bytes(candidate)
         dropped += 1
         if reclaimed >= overage:
             break
+    if dropped == 0:
+        return response, 0
     trimmed = response.model_copy(
         update={"top_candidates": response.top_candidates[: len(response.top_candidates) - dropped]}
     )
     if graph_payload_json_bytes(trimmed) <= budget:
         return trimmed, dropped
-    return trimmed.model_copy(update={"top_candidates": []}), len(response.top_candidates)
+    keep_candidates = trimmed.top_candidates[:min_keep]
+    return trimmed.model_copy(update={"top_candidates": keep_candidates}), (
+        len(response.top_candidates) - len(keep_candidates)
+    )
 
 
 def _edge(
@@ -1199,6 +1318,10 @@ def _deadline_exhausted(deadline: float | None) -> bool:
     return deadline is not None and deadline <= time.monotonic()
 
 
+def _elapsed_ms(started: float) -> int:
+    return max(0, round((time.monotonic() - started) * 1000))
+
+
 async def _await_with_deadline(awaitable: Awaitable[Any], deadline: float | None) -> Any:
     if deadline is None:
         return await awaitable
@@ -1225,6 +1348,8 @@ def _topic_provider_status(
     *,
     retryable: bool = False,
     message: str | None = None,
+    elapsed_ms: int | None = None,
+    budget_ms: int | None = None,
 ) -> LiteratureProviderStatus:
     return LiteratureProviderStatus(
         provider=provider,
@@ -1233,6 +1358,8 @@ def _topic_provider_status(
         result_count=result_count,
         retryable=retryable,
         message=message,
+        elapsed_ms=elapsed_ms,
+        budget_ms=budget_ms,
     )
 
 
@@ -1243,6 +1370,8 @@ def _stage_provider_status(
     result_count: int,
     failed_count: int,
     failure_message: str | None,
+    elapsed_ms: int | None = None,
+    budget_ms: int | None = None,
 ) -> LiteratureProviderStatus:
     status: LiteratureProviderStatusValue
     if failed_count and result_count:
@@ -1265,7 +1394,24 @@ def _stage_provider_status(
         result_count,
         retryable=bool(failed_count),
         message=message,
+        elapsed_ms=elapsed_ms,
+        budget_ms=budget_ms,
     )
+
+
+def _degraded_reasons(provider_status: list[LiteratureProviderStatus]) -> list[str]:
+    reasons: list[str] = []
+    for status in provider_status:
+        if status.status not in {"failed", "partial", "skipped"}:
+            continue
+        if (
+            status.provider == "pubtator_search"
+            and status.operation == "seed_search"
+            and status.status == "skipped"
+        ):
+            continue
+        reasons.append(f"{status.provider}:{status.operation}:{status.status}")
+    return _dedupe(reasons)
 
 
 def _topic_map_recovery_commands(
