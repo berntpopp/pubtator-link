@@ -86,13 +86,17 @@ Add one module-level internal batching helper in
 `pubtator_link/services/publication_metadata.py`:
 
 ```python
+class PublicationMetadataLookup(Protocol):
+    async def get_metadata(self, request: PublicationMetadataRequest) -> PublicationMetadataResponse:
+        """Return publication metadata for PMIDs."""
+
 async def lookup_metadata_batched(
-    metadata_service: Any,
+    metadata_service: PublicationMetadataLookup,
     pmids: Sequence[str],
     *,
-    include_mesh: bool = True,
+    include_mesh: bool = False,
     include_publication_types: bool = True,
-    include_citations: Literal["none", "nlm", "bibtex", "both"] = "both",
+    include_citations: Literal["none", "nlm", "bibtex", "both"] = "none",
     include_coverage: bool = True,
     batch_size: int = 100,
 ) -> PublicationMetadataResponse:
@@ -107,6 +111,11 @@ batch.
 
 The helper accepts `Sequence[str]` for internal ergonomics, but every chunk is
 converted to `list[str]` before constructing `PublicationMetadataRequest`.
+
+The helper defaults match the dominant internal enrichment path: no MeSH EFetch
+and no generated NLM/BibTeX citations unless a caller opts in. Review index
+metadata can still pass `include_mesh=True` and `include_citations="both"` for
+full metadata mode, and topic maps can still pass `include_mesh=include_entities`.
 
 `PublicationMetadataService` keeps its existing public method unchanged:
 
@@ -124,9 +133,10 @@ directly and therefore keep the 100-PMID cap. Internal services call
 PMID lists that can exceed one public request.
 
 This design keeps protocol-like metadata dependencies simple. For example,
-`PublicationMetadataLookup` in `review_context_service.py` can continue
-requiring only `get_metadata()`, and test doubles do not need to implement a
-second method. There is one merge implementation: the module-level helper.
+the existing `PublicationMetadataLookup` protocol shape can move to
+`publication_metadata.py` and continue requiring only `get_metadata()`. Test
+doubles do not need to implement a second method. There is one merge
+implementation: the module-level helper.
 
 ## Helper Semantics
 
@@ -140,10 +150,17 @@ The helper uses the same PMID normalization rules as the public model:
 - Reject non-numeric PMIDs.
 - Preserve the first occurrence of each valid PMID.
 
-If normalization leaves no valid PMID, the helper raises
-`ValueError("at least one PMID is required")`. Internal non-numeric PMIDs also
-raise `ValueError("PMID must be numeric")`. Direct public calls still receive
-Pydantic validation errors from `PublicationMetadataRequest`.
+If normalization leaves no valid PMID because the input is empty or contains only
+blank values, the helper returns `PublicationMetadataResponse(success=True,
+metadata=[], failed_pmids={}, _meta={"next_commands": []})`. This mirrors the
+existing internal call sites, which already early-return on empty input, and
+makes the helper safe for future callers.
+
+Internal non-numeric PMIDs raise `ValueError("PMID must be numeric")` rather
+than being soft-dropped. This intentionally fails loud because non-numeric PMIDs
+indicate upstream source hygiene problems in review, graph, or search flows.
+Direct public calls still receive Pydantic validation errors from
+`PublicationMetadataRequest`.
 
 ### Chunking
 
@@ -154,6 +171,14 @@ call sites should rely on the default.
 
 Every batch should still be represented by a public `PublicationMetadataRequest`
 so the lower-level client behavior and public cap remain exercised.
+
+Batched calls multiply the existing per-request side effects: `include_mesh=True`
+means one EFetch XML call per batch, and `include_coverage=True` means one
+coverage-provider call per batch. This is accepted for this sprint because the
+goal is correctness and public-cap safety. A 1,000-PMID internal lookup becomes
+about 10 sequential metadata batches. If this becomes too slow for hot paths,
+the follow-up should optimize the helper executor or coverage aggregation
+without changing service call sites.
 
 Batches run sequentially in this sprint. The loop should be isolated in the
 helper so a future concurrency change can replace the sequential executor
@@ -201,9 +226,15 @@ The merged response keeps the existing metadata response shape:
   metadata was returned.
 - `_meta.warnings`: merged warning strings when any batch or sub-provider warns.
 
-The implementation should avoid adding public-facing schema fields for internal
-batch diagnostics. If internal diagnostics are needed, they can use `_meta` keys
-that are safe for clients to ignore, such as `batch_count`.
+`_meta.source` should use the first non-empty batch source. `_meta.next_commands`
+should be derived once from the final merged metadata list, not concatenated from
+each batch, to avoid duplicate guidance.
+
+Warning strings are deduplicated in first-seen order. This means one
+`mesh_lookup_failed` warning may represent one failed batch or many failed
+batches. That lossy warning merge is acceptable for this sprint. If observability
+needs to improve later, add ignorable `_meta` diagnostics such as `batch_count`
+and `failed_batch_count`.
 
 ## Shared Helper Boundary
 
@@ -261,7 +292,10 @@ The sprint should not add neighbor metadata enrichment for references or
 `cited_by` papers. That is a separate graph-quality feature with ranking and
 payload implications. The acceptance criterion for citation graph in this sprint
 is compatibility: the existing source metadata path still works and uses the
-shared helper.
+shared helper. Because `_metadata_for_pmid()` already returns `None` when the
+metadata response has no records, a helper response with
+`failed_pmids[pmid] = "batch_request_failed"` preserves the existing
+None-on-failure behavior.
 
 ### REST And MCP Adapters
 
@@ -294,6 +328,9 @@ availability into complete feature loss:
 - Existing `mesh_lookup_failed` and `coverage_lookup_failed` warnings merge
   across batches.
 - Duplicate warnings are collapsed in first-seen order.
+- A coverage-provider failure in one batch does not drop metadata records from
+  successful ESummary batches; it contributes a single deduplicated
+  `coverage_lookup_failed` warning.
 - Services that already convert PubMed metadata problems into `ProviderWarning`
   entries should continue doing so after receiving merged helper warnings.
 
@@ -314,6 +351,10 @@ Core helper tests in `tests/unit/test_publication_metadata_service.py`:
 - Batch `_meta.warnings` are merged and deduplicated.
 - One raised batch records only that batch's PMIDs as failed and preserves
   successful batches.
+- Empty input and blank-only input return an empty successful response.
+- A coverage-provider failure in one batch out of multiple batches returns
+  metadata from successful batches and one deduplicated `coverage_lookup_failed`
+  warning.
 
 Model tests in `tests/unit/test_publication_metadata_models.py`:
 
