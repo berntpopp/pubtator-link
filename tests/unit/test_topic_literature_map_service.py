@@ -93,6 +93,48 @@ class FakeMetadata:
         )
 
 
+class RecordingTopicMetadata:
+    def __init__(self) -> None:
+        self.requests: list[object] = []
+
+    async def get_metadata(self, request: object) -> PublicationMetadataResponse:
+        self.requests.append(request)
+        return PublicationMetadataResponse(
+            metadata=[
+                PublicationMetadata(
+                    pmid=pmid,
+                    title=f"Paper {pmid}",
+                    journal="Journal",
+                    pub_year=2024,
+                    mesh_headings=["Familial Mediterranean Fever"],
+                )
+                for pmid in request.pmids
+            ]
+        )
+
+
+class PartialFailureTopicMetadata:
+    def __init__(self) -> None:
+        self.requests: list[object] = []
+
+    async def get_metadata(self, request: object) -> PublicationMetadataResponse:
+        self.requests.append(request)
+        if len(self.requests) == 2:
+            raise RuntimeError("metadata unavailable")
+        return PublicationMetadataResponse(
+            metadata=[
+                PublicationMetadata(
+                    pmid=pmid,
+                    title=f"Paper {pmid}",
+                    journal="Journal",
+                    pub_year=2024,
+                    mesh_headings=["Familial Mediterranean Fever"],
+                )
+                for pmid in request.pmids
+            ]
+        )
+
+
 class FakeCitationGraph:
     async def get_citation_graph(self, request: object) -> PublicationCitationGraphResponse:
         pmid = request.pmid
@@ -284,6 +326,68 @@ async def test_build_map_enforces_total_neighbor_bound_and_prefers_metadata() ->
     assert len(neighbor_edges) == 1
     assert paper_333.title == "Paper 333"
     assert paper_333.authors[0].name == "Bea"
+
+
+@pytest.mark.asyncio
+async def test_topic_metadata_papers_batches_more_than_public_cap() -> None:
+    metadata = RecordingTopicMetadata()
+    service = TopicLiteratureMapService(
+        search_client=FakeSearchClient(),
+        metadata_service=metadata,
+        citation_graph_service=FakeCitationGraph(),
+        related_evidence_service=FakeRelatedEvidence(),
+    )
+    pmids = [str(pmid) for pmid in range(300000, 300105)]
+    warnings = []
+
+    papers, entities = await service._metadata_papers(
+        pmids,
+        include_entities=True,
+        warnings=warnings,
+    )
+
+    assert [len(request.pmids) for request in metadata.requests] == [100, 5]
+    assert [
+        (
+            request.include_mesh,
+            request.include_publication_types,
+            request.include_citations,
+            request.include_coverage,
+        )
+        for request in metadata.requests
+    ] == [(True, True, "none", True), (True, True, "none", True)]
+    assert set(papers) == set(pmids)
+    assert set(entities) == set(pmids)
+    assert warnings == []
+
+
+@pytest.mark.asyncio
+async def test_topic_metadata_papers_partial_batch_failure_preserves_successful_metadata() -> None:
+    metadata = PartialFailureTopicMetadata()
+    service = TopicLiteratureMapService(
+        search_client=FakeSearchClient(),
+        metadata_service=metadata,
+        citation_graph_service=FakeCitationGraph(),
+        related_evidence_service=FakeRelatedEvidence(),
+    )
+    pmids = [str(pmid) for pmid in range(400000, 400105)]
+    warnings = []
+
+    papers, entities = await service._metadata_papers(
+        pmids,
+        include_entities=True,
+        warnings=warnings,
+    )
+
+    assert [len(request.pmids) for request in metadata.requests] == [100, 5]
+    assert set(papers) == set(pmids[:100])
+    assert set(entities) == set(pmids[:100])
+    assert any(
+        warning.provider == "pubmed_metadata"
+        and warning.status == "provider_failed"
+        and warning.retryable is True
+        for warning in warnings
+    )
 
 
 @pytest.mark.asyncio

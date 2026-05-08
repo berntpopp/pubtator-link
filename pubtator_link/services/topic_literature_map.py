@@ -24,7 +24,6 @@ from pubtator_link.models.literature_graph import (
     dedupe_edges,
     dedupe_papers,
 )
-from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 from pubtator_link.services.literature_graph_compact import (
     TOPIC_RANKING_VERSION,
     candidate_summary,
@@ -43,6 +42,7 @@ from pubtator_link.services.literature_paper_resolution import (
     merge_literature_availability,
     paper_from_publication_metadata,
 )
+from pubtator_link.services.publication_metadata import lookup_metadata_batched
 
 
 class TopicSearchClient(Protocol):
@@ -288,18 +288,35 @@ class TopicLiteratureMapService:
         if not pmids:
             return {}, {}
         try:
-            response = await self.metadata_service.get_metadata(
-                PublicationMetadataRequest(
-                    pmids=list(pmids),
-                    include_mesh=include_entities,
-                    include_publication_types=True,
-                    include_citations="none",
-                    include_coverage=True,
-                )
+            response = await lookup_metadata_batched(
+                self.metadata_service,
+                pmids,
+                include_mesh=include_entities,
+                include_publication_types=True,
+                include_citations="none",
+                include_coverage=True,
             )
         except Exception as exc:
             warnings.append(_provider_failed_warning("pubmed_metadata", exc))
             return {}, {}
+        for warning in _metadata_response_warnings(response):
+            warnings.append(
+                ProviderWarning(
+                    provider="pubmed_metadata",
+                    status="provider_failed",
+                    retryable=True,
+                    message=f"PubMed metadata warning: {warning}",
+                )
+            )
+        if response.failed_pmids:
+            warnings.append(
+                ProviderWarning(
+                    provider="pubmed_metadata",
+                    status="provider_failed",
+                    retryable=True,
+                    message=f"Metadata lookup failed for {len(response.failed_pmids)} PMID(s)",
+                )
+            )
         return (
             {metadata.pmid: _paper_from_metadata(metadata) for metadata in response.metadata},
             {
@@ -445,6 +462,15 @@ def _entities_from_metadata(metadata: Any) -> list[LiteratureEntity]:
         for heading in getattr(metadata, "mesh_headings", [])
         if heading
     ]
+
+
+def _metadata_response_warnings(response: Any) -> list[str]:
+    raw_warnings = response.meta.get("warnings", [])
+    if isinstance(raw_warnings, str):
+        return [raw_warnings]
+    if isinstance(raw_warnings, list):
+        return [warning for warning in raw_warnings if isinstance(warning, str) and warning]
+    return []
 
 
 def _prefer_metadata_paper(
