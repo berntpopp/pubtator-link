@@ -10,6 +10,11 @@ This spec defines the first sprint for MCP-facing payload controls in PubTator-L
 
 Implementation status: shipped in commit `974cf47` (`feat: implement mcp payload controls sprint`) with documentation archived in commit `f5fe75c`.
 
+Post-sprint update: optional embedding rerank was later rebased and merged to `main`
+in commit `eb3c47d`. Dense rerank is no longer a future implementation item;
+it is now an optional, disabled-by-default feature that still needs stabilization
+and evaluation work after the remaining payload and trust gaps.
+
 Fresh verification after implementation:
 
 - `make format`
@@ -17,7 +22,8 @@ Fresh verification after implementation:
 - `make typecheck`
 - `make ci-local`
 
-Result: `make ci-local` passed with 969 tests passing and 2 skipped integration database tests.
+Result after the dense-rerank merge: `make ci-local` passed with 999 tests
+passing and 2 skipped integration database tests.
 
 ## Best-Practice Basis
 
@@ -42,7 +48,8 @@ The design follows current primary-source guidance:
 
 ## Non-Goals
 
-- Dense reranker implementation.
+- Dense reranker implementation as part of the first payload-controls sprint. It was merged
+  later as optional post-sprint work.
 - Error telemetry and quote controls beyond payload warnings already needed for this sprint.
 - Workflow-state/session model changes.
 - Streaming progress.
@@ -51,7 +58,7 @@ The design follows current primary-source guidance:
 
 ## Next Sprint Priority
 
-The next sprint should stay aligned with the consolidation plan, but the priority order changes now that compact defaults, graph budgets, inspect pagination, and auto review budgets have shipped.
+The next sprint should stay aligned with the consolidation plan, but the priority order changes now that compact defaults, graph budgets, inspect pagination, auto review budgets, and optional dense rerank have shipped.
 
 ### P0: Batch PubMed Metadata Internally
 
@@ -79,7 +86,7 @@ Acceptance criteria:
 
 ### P1: Trust, Retry, And Quote Semantics
 
-After metadata batching, implement the trust/retry sprint. This is higher user-facing reliability risk than dense retrieval because it affects how LLM clients recover from failures and cite evidence.
+After metadata batching, implement the trust/retry sprint. This is the next highest user-facing reliability risk because it affects how LLM clients recover from failures and cite evidence.
 
 Scope:
 
@@ -101,24 +108,38 @@ Acceptance criteria:
 - All-dropped quote responses explain how to recover.
 - `make ci-local` passes before completion.
 
-### P2: Deterministic Retrieval Quality
+### P2: Dense Rerank Stabilization And Deterministic Retrieval Quality
 
-Dense retrieval remains lower priority than metadata batching and trust controls. Start with deterministic ranking improvements before adding optional embedding infrastructure.
+Optional dense rerank is merged, disabled by default, and covered by diagnostics/fallback tests. After metadata batching and trust controls, stabilize retrieval quality by evaluating the merged dense path, tightening deterministic guardrails, and exposing clearer diagnostics rather than adding another retrieval architecture.
 
 Scope:
 
 - Centralize non-evidence section classification for ranking and packing.
 - Add optional deterministic score breakdown diagnostics.
 - Add bounded deterministic metadata/query expansion.
-- Add optional dense rerank only as a disabled-by-default sidecar, with lexical fallback and no default pgvector dependency.
+- Evaluate the merged dense rerank path with transcript-style review retrieval cases.
+- Keep dense rerank disabled by default unless explicitly configured.
+- Preserve lexical fallback when embeddings, pgvector, provider setup, or query embedding fails.
 
 Acceptance criteria:
 
-- Default startup, Docker, and CI work without pgvector, Torch, Sentence Transformers, or optional migrations.
+- Default CI passes without requiring Sentence Transformers model downloads.
 - Non-evidence sections such as references and abbreviations cannot be promoted above evidence sections by ranking changes.
 - Dense rerank diagnostics clearly report fallback reasons.
+- Dense-rerank evaluation cases show whether the optional path improves or harms review retrieval quality before it is recommended for routine use.
 
-## Current Codebase Findings
+## Current Post-Merge Findings For Next Sprint
+
+- `PublicationMetadataRequest.pmids` remains capped at 100, which is correct for public REST/MCP ergonomics.
+- `PublicationMetadataService` has only `get_metadata(request)`, so there is no shared internal helper for larger PMID lists.
+- `ReviewContextService._attach_source_metadata()` can still forward all page source PMIDs in one capped request when `inspect_review_index(include_metadata=True)` is used.
+- `TopicLiteratureMapService._metadata_papers()` still forwards `list(pmids)` directly to `PublicationMetadataRequest`.
+- `RelatedEvidenceService._metadata_candidates()` already chunks PMIDs locally, but this is ad hoc and should be replaced by the shared helper.
+- Citation graph source metadata calls are single-PMID today, but candidate enrichment or future graph expansions should use the same helper if they can exceed one public request.
+- Persistent MCP error telemetry is not implemented as a database-backed service.
+- Quote mode exists, but the planned strict quote controls (`min_quote_chars`, `require_claim_indicator`, and `claim_density_mode`) are not exposed as request fields.
+
+## Historical Codebase Findings Before Sprint 1
 
 ### Graph Tools
 
