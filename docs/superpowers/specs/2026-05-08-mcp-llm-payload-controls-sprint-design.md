@@ -2,13 +2,22 @@
 
 ## Purpose
 
-This spec defines the first sprint for MCP-facing payload controls in PubTator-Link. The sprint implements the top three priorities from `docs/superpowers/plans/2026-05-08-mcp-llm-performance-maintainability-consolidation.md`:
+This spec defines the first sprint for MCP-facing payload controls in PubTator-Link. The sprint implemented the top three priorities from `docs/superpowers/plans/2026-05-08-mcp-llm-performance-maintainability-consolidation.md`:
 
 1. Make literature graph MCP tools compact-first and budgeted.
 2. Add compact pagination to `inspect_review_index`.
 3. Add auto budgets and verbosity controls for `retrieve_review_context_batch` and `ground_question`.
 
-The design is planning-only. No production code changes are part of this session.
+Implementation status: shipped in commit `974cf47` (`feat: implement mcp payload controls sprint`) with documentation archived in commit `f5fe75c`.
+
+Fresh verification after implementation:
+
+- `make format`
+- `make lint`
+- `make typecheck`
+- `make ci-local`
+
+Result: `make ci-local` passed with 969 tests passing and 2 skipped integration database tests.
 
 ## Best-Practice Basis
 
@@ -39,6 +48,75 @@ The design follows current primary-source guidance:
 - Streaming progress.
 - Public hosted destructive cache operations.
 - Changing graph tools from candidate-selection helpers into claim-grounding tools.
+
+## Next Sprint Priority
+
+The next sprint should stay aligned with the consolidation plan, but the priority order changes now that compact defaults, graph budgets, inspect pagination, and auto review budgets have shipped.
+
+### P0: Batch PubMed Metadata Internally
+
+This is the recommended next sprint. It is the only remaining P0 payload/latency item from the consolidation plan and it directly protects the just-shipped compact workflows from large-list failures.
+
+Scope:
+
+- Keep public `PublicationMetadataRequest.pmids` capped at 100 for API ergonomics.
+- Add an internal metadata batching helper that accepts larger PMID lists, chunks them into PubMed-sized requests, preserves input order, deduplicates IDs, merges partial failures, and reports provider warnings.
+- Use the helper at internal call sites that can naturally exceed 100 PMIDs:
+  - review index metadata attachment
+  - related-evidence candidate enrichment
+  - citation graph enrichment where list size can grow
+  - MCP adapter/service paths that currently risk forwarding oversized metadata requests
+- Ensure one failed metadata batch does not drop successful batches.
+- Preserve REST compatibility and existing explicit metadata request validation.
+
+Acceptance criteria:
+
+- `inspect_review_index(include_metadata=True)` works for indexes with more than 100 sources.
+- Related evidence and graph compact responses do not degrade to bare PMIDs solely because candidate metadata exceeded a public request cap.
+- Partial PubMed metadata failures surface as warnings, not all-or-nothing failures.
+- Focused metadata, review-context, related-evidence, citation-graph, and MCP adapter tests pass.
+- `make ci-local` passes before completion.
+
+### P1: Trust, Retry, And Quote Semantics
+
+After metadata batching, implement the trust/retry sprint. This is higher user-facing reliability risk than dense retrieval because it affects how LLM clients recover from failures and cite evidence.
+
+Scope:
+
+- Persist sanitized MCP tool error telemetry with bounded retention.
+- Keep in-memory error diagnostics as a fallback and merge persisted plus in-memory diagnostics.
+- Correct MCP idempotence annotations for write-like review tools.
+- Add quote controls for `response_mode="quotes"`:
+  - `min_quote_chars`
+  - `require_claim_indicator`
+  - `claim_density_mode`
+- Preserve exact quote offsets in returned quote payloads when source passages have offsets.
+- Return recovery hints when strict quote filters drop all candidate quotes.
+
+Acceptance criteria:
+
+- Telemetry persistence never makes an original tool failure worse.
+- Sanitized persisted errors do not include request args, passage text, full user questions, or database host details.
+- Quote mode can return exact-offset auditable quotes without requiring a follow-up passage call when offsets are available.
+- All-dropped quote responses explain how to recover.
+- `make ci-local` passes before completion.
+
+### P2: Deterministic Retrieval Quality
+
+Dense retrieval remains lower priority than metadata batching and trust controls. Start with deterministic ranking improvements before adding optional embedding infrastructure.
+
+Scope:
+
+- Centralize non-evidence section classification for ranking and packing.
+- Add optional deterministic score breakdown diagnostics.
+- Add bounded deterministic metadata/query expansion.
+- Add optional dense rerank only as a disabled-by-default sidecar, with lexical fallback and no default pgvector dependency.
+
+Acceptance criteria:
+
+- Default startup, Docker, and CI work without pgvector, Torch, Sentence Transformers, or optional migrations.
+- Non-evidence sections such as references and abbreviations cannot be promoted above evidence sections by ranking changes.
+- Dense rerank diagnostics clearly report fallback reasons.
 
 ## Current Codebase Findings
 
