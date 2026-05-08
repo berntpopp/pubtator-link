@@ -28,8 +28,10 @@ into public-cap-sized batches and merges partial results.
   page contains more than 100 sources.
 - Make topic map metadata enrichment tolerate more than 100 seed and candidate
   PMIDs.
-- Use the helper in citation graph's existing source metadata path for
-  consistency, without adding new neighbor metadata enrichment in this sprint.
+- Make MCP search metadata enrichment safe when `limit=None` selects more than
+  one public metadata request of results.
+- Leave citation graph unchanged unless a multi-PMID metadata enrichment path is
+  introduced.
 - Preserve existing REST and MCP compatibility.
 
 ## Non-Goals
@@ -66,12 +68,19 @@ Current oversized or duplicated internal patterns:
   to `PublicationMetadataRequest`, so seed and backfill enrichment can fail when
   candidate sets exceed 100.
 - `CitationGraphService._metadata_for_pmid()` performs single-PMID metadata
-  lookup today. Future graph enrichment or DOI resolution paths should use the
-  same helper whenever a multi-PMID lookup is introduced.
+  lookup today. It has no internal large-list metadata path in this sprint.
 - `pubtator_link/mcp/service_adapters.py` and
   `pubtator_link/api/routes/search.py` keep public metadata and search
-  enrichment behavior. These paths should preserve public request validation and
-  route/tool compatibility.
+  enrichment behavior. REST search is bounded by a route `limit` of at most 50
+  selected hits, while MCP search can pass `limit=None` and enrich every raw
+  PubTator page item.
+
+Direct metadata calls that are verified small and out of scope:
+
+- `VariantEvidenceService` caps `VariantEvidenceRequest.max_literature_pmids`
+  at 100 and already fits one public metadata request.
+- `CorpusSuggestionService` caps `CorpusSuggestionRequest.max_pmids` at 20 and
+  already fits one public metadata request.
 
 Existing tests already cover the public 100-PMID cap
 (`test_publication_metadata_request_rejects_too_many_pmids`) and
@@ -112,10 +121,13 @@ batch.
 The helper accepts `Sequence[str]` for internal ergonomics, but every chunk is
 converted to `list[str]` before constructing `PublicationMetadataRequest`.
 
-The helper defaults match the dominant internal enrichment path: no MeSH EFetch
-and no generated NLM/BibTeX citations unless a caller opts in. Review index
-metadata can still pass `include_mesh=True` and `include_citations="both"` for
-full metadata mode, and topic maps can still pass `include_mesh=include_entities`.
+The helper defaults intentionally diverge from the public
+`PublicationMetadataRequest` defaults. Public metadata requests default to MeSH
+and citation generation for citation-grade responses. The internal helper
+defaults to the cheap enrichment path: no MeSH EFetch and no generated
+NLM/BibTeX citations unless a caller opts in. Review index metadata must still
+pass `include_mesh=True` and `include_citations="both"` for full metadata mode,
+and topic maps must still pass `include_mesh=include_entities`.
 
 `PublicationMetadataService` keeps its existing public method unchanged:
 
@@ -132,17 +144,21 @@ directly and therefore keep the 100-PMID cap. Internal services call
 `lookup_metadata_batched(...)` instead of calling `get_metadata()` directly for
 PMID lists that can exceed one public request.
 
-This design keeps protocol-like metadata dependencies simple. For example,
-the existing `PublicationMetadataLookup` protocol shape can move to
-`publication_metadata.py` and continue requiring only `get_metadata()`. Test
-doubles do not need to implement a second method. There is one merge
-implementation: the module-level helper.
+This design keeps protocol-like metadata dependencies simple. Move the existing
+`PublicationMetadataLookup` protocol shape from `review_context_service.py` to
+`publication_metadata.py`, tighten its return type from `Any` to
+`PublicationMetadataResponse`, and update `ReviewContextService` to import it.
+Test doubles should be audited for compatibility, but they do not need to
+implement a second method. There is one merge implementation: the module-level
+helper.
 
 ## Helper Semantics
 
 ### Input Normalization
 
-The helper uses the same PMID normalization rules as the public model:
+Normalization and validation happen once over the full input sequence before any
+batch request is sent. The helper uses the same PMID normalization rules as the
+public model:
 
 - Trim whitespace.
 - Strip a leading `PMID:` prefix case-insensitively.
@@ -156,11 +172,15 @@ metadata=[], failed_pmids={}, _meta={"next_commands": []})`. This mirrors the
 existing internal call sites, which already early-return on empty input, and
 makes the helper safe for future callers.
 
-Internal non-numeric PMIDs raise `ValueError("PMID must be numeric")` rather
-than being soft-dropped. This intentionally fails loud because non-numeric PMIDs
-indicate upstream source hygiene problems in review, graph, or search flows.
-Direct public calls still receive Pydantic validation errors from
+Internal non-numeric PMIDs raise `ValueError("PMID must be numeric")` before any
+batch runs rather than being soft-dropped. This intentionally fails loud because
+non-numeric PMIDs indicate upstream source hygiene problems in review, graph, or
+search flows. Direct public calls still receive Pydantic validation errors from
 `PublicationMetadataRequest`.
+
+The empty-input behavior is a deliberate divergence from the public model. The
+public request model rejects empty requests; the internal helper returns an empty
+successful response so callers can use it without duplicating empty-list guards.
 
 ### Chunking
 
@@ -174,16 +194,22 @@ so the lower-level client behavior and public cap remain exercised.
 
 Batched calls multiply the existing per-request side effects: `include_mesh=True`
 means one EFetch XML call per batch, and `include_coverage=True` means one
-coverage-provider call per batch. This is accepted for this sprint because the
-goal is correctness and public-cap safety. A 1,000-PMID internal lookup becomes
-about 10 sequential metadata batches. If this becomes too slow for hot paths,
-the follow-up should optimize the helper executor or coverage aggregation
-without changing service call sites.
+coverage-provider call per batch. The current coverage provider calls source
+preflight for each batch, so a 1,000-PMID internal lookup becomes about 10
+sequential metadata batches and 10 coverage-provider calls. This is accepted for
+this sprint because the goal is correctness and public-cap safety. At roughly
+three upstream metadata requests per second without an API key, a 1,000-PMID
+lookup is expected to be seconds, not sub-second. If this becomes too slow for
+hot paths, the follow-up should optimize the helper executor or hoist coverage
+aggregation over the full deduplicated PMID set without changing service call
+sites.
 
 Batches run sequentially in this sprint. The loop should be isolated in the
 helper so a future concurrency change can replace the sequential executor
 without changing service call sites. Warning merge order is therefore
 deterministic first-seen order in this sprint.
+If concurrency is later introduced, the helper must post-sort warnings,
+`failed_pmids`, and diagnostics by batch index to preserve deterministic output.
 
 ### Merge Order
 
@@ -225,16 +251,20 @@ The merged response keeps the existing metadata response shape:
 - `_meta.next_commands`: existing next-command guidance based on whether any
   metadata was returned.
 - `_meta.warnings`: merged warning strings when any batch or sub-provider warns.
+- `_meta.batch_count`: number of batches attempted.
+- `_meta.failed_batch_count`: number of batches where `get_metadata()` raised.
+- `_meta.warning_counts`: counts for warning strings before deduplication.
+- `_meta.batch_failure_exception_types`: deduplicated exception class names for
+  raised batch requests.
 
 `_meta.source` should use the first non-empty batch source. `_meta.next_commands`
 should be derived once from the final merged metadata list, not concatenated from
 each batch, to avoid duplicate guidance.
 
-Warning strings are deduplicated in first-seen order. This means one
-`mesh_lookup_failed` warning may represent one failed batch or many failed
-batches. That lossy warning merge is acceptable for this sprint. If observability
-needs to improve later, add ignorable `_meta` diagnostics such as `batch_count`
-and `failed_batch_count`.
+Warning strings are deduplicated in first-seen order for backward compatibility,
+but `_meta.warning_counts` preserves how often each warning occurred across
+batches. Batch exception diagnostics must include class names only, not request
+parameters, PMID lists, URLs, or provider response bodies.
 
 ## Shared Helper Boundary
 
@@ -284,18 +314,16 @@ from successful batches.
 ### Citation Graph
 
 `CitationGraphService` currently fetches metadata one PMID at a time. This
-sprint should update `_metadata_for_pmid()` to call `lookup_metadata_batched()`
-with a one-item sequence so citation graph source resolution uses the shared
-metadata boundary without introducing new graph enrichment behavior.
+sprint should not change citation graph production code solely to wrap that
+single-PMID path. If a multi-PMID citation graph metadata path is introduced
+later, it must use `lookup_metadata_batched()` instead of constructing a large
+`PublicationMetadataRequest`.
 
 The sprint should not add neighbor metadata enrichment for references or
 `cited_by` papers. That is a separate graph-quality feature with ranking and
 payload implications. The acceptance criterion for citation graph in this sprint
-is compatibility: the existing source metadata path still works and uses the
-shared helper. Because `_metadata_for_pmid()` already returns `None` when the
-metadata response has no records, a helper response with
-`failed_pmids[pmid] = "batch_request_failed"` preserves the existing
-None-on-failure behavior.
+is compatibility: the existing source metadata path still works and remains
+out-of-scope for batching because it cannot exceed one PMID.
 
 ### REST And MCP Adapters
 
@@ -307,11 +335,11 @@ Search enrichment in `pubtator_link/api/routes/search.py` is bounded by the
 route `limit` query parameter with `le=50` before metadata enrichment. MCP
 search enrichment in `pubtator_link/mcp/service_adapters.py` defaults to
 `limit=5`; if callers pass `limit=None`, it enriches the current PubTator page.
-These paths are not the primary implementation targets for this sprint. Add
-compatibility tests that keep their response shapes stable and keep direct
-public metadata requests capped at 100. Do not broaden search batching scope
-unless a focused test proves an existing search path can construct more than 100
-metadata PMIDs.
+Update MCP search metadata enrichment to use `lookup_metadata_batched()` so
+`limit=None` cannot construct an oversized public metadata request. REST search
+can keep its direct public request because route validation caps selected
+metadata PMIDs at 50. Add compatibility tests that keep response shapes stable
+and keep direct public metadata requests capped at 100.
 
 ## Error Handling
 
@@ -349,6 +377,9 @@ Core helper tests in `tests/unit/test_publication_metadata_service.py`:
 - Duplicate input PMIDs are fetched once and returned once.
 - Batch `failed_pmids` are merged.
 - Batch `_meta.warnings` are merged and deduplicated.
+- `_meta.batch_count`, `_meta.failed_batch_count`, `_meta.warning_counts`, and
+  `_meta.batch_failure_exception_types` report batch diagnostics without leaking
+  request arguments or provider bodies.
 - One raised batch records only that batch's PMIDs as failed and preserves
   successful batches.
 - Empty input and blank-only input return an empty successful response.
@@ -368,6 +399,8 @@ Review tests in `tests/unit/test_review_context_service.py`:
   attaches metadata without constructing an oversized public request.
 - The service fetches metadata only for the current page when pagination omits
   later sources.
+- Compact and full metadata modes pass the same `include_mesh` and
+  `include_citations` values as today.
 
 Related evidence tests in `tests/unit/test_related_evidence_service.py`:
 
@@ -375,18 +408,21 @@ Related evidence tests in `tests/unit/test_related_evidence_service.py`:
   passes after local chunking is replaced.
 - Partial metadata batch failure still returns candidates from successful
   batches and emits PubMed metadata warnings.
+- Migrated calls preserve `include_mesh=False` and `include_citations="none"`.
 
 Topic map tests in `tests/unit/test_topic_literature_map_service.py`:
 
 - More than 100 seed/candidate PMIDs do not raise validation errors.
 - Successful batch metadata still enriches papers and entities when a later
   batch fails.
+- Migrated calls preserve `include_mesh=include_entities` and
+  `include_citations="none"`.
 
 Citation graph tests in `tests/unit/test_citation_graph_service.py`:
 
 - Metadata enrichment remains compatible for source PMID resolution.
-- Source PMID metadata resolution uses `lookup_metadata_batched()` and preserves
-  the existing single-PMID response behavior.
+- No batching change is required unless the sprint introduces a multi-PMID
+  citation graph metadata path.
 
 MCP and route tests:
 
@@ -396,6 +432,9 @@ MCP and route tests:
   at 100.
 - MCP service paths that call review inspect, related evidence, topic map, or
   citation graph continue returning compatible response shapes.
+- MCP search metadata enrichment with `limit=None` and more than 100 raw items
+  uses internal batching and does not construct an oversized public metadata
+  request.
 - `tests/test_routes/test_search.py`
   `test_search_publications_can_enrich_basic_metadata` preserves search metadata
   enrichment compatibility.
@@ -419,8 +458,10 @@ make ci-local
 - `RelatedEvidenceService._metadata_candidates()` uses the helper instead of
   local chunking.
 - `TopicLiteratureMapService._metadata_papers()` uses the helper.
-- `CitationGraphService._metadata_for_pmid()` uses the shared helper for its
-  existing single-PMID source metadata path.
+- MCP search metadata enrichment uses the helper when selected raw results can
+  exceed one public metadata request.
+- Citation graph remains unchanged unless a multi-PMID metadata enrichment path
+  is introduced.
 - `inspect_review_index(include_metadata=True)` works for more than 100 sources.
 - Topic map enrichment works for more than 100 seed/candidate PMIDs.
 - REST and MCP public metadata compatibility is preserved.
