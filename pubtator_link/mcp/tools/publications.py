@@ -103,6 +103,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             year_min: int | None = None,
             year_max: int | None = None,
             prefer_full_text: bool = True,
+            timeout_ms: Annotated[int, Field(ge=0, le=120_000)] = 25_000,
         ) -> dict[str, Any]:
             """Use this when a user needs a bounded topic-level literature map from a query or seed PMIDs. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: pubtator.get_publication_passages."""
 
@@ -128,6 +129,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                     year_min=year_min,
                     year_max=year_max,
                     prefer_full_text=prefer_full_text,
+                    timeout_ms=timeout_ms,
                 )
 
             return await run_mcp_tool(

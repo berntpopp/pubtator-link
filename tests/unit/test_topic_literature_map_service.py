@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from pubtator_link.models.literature_graph import (
@@ -140,6 +142,16 @@ class PartialFailureTopicMetadata:
         )
 
 
+class AllFailedTopicMetadata:
+    async def get_metadata(
+        self, request: PublicationMetadataRequest
+    ) -> PublicationMetadataResponse:
+        return PublicationMetadataResponse(
+            metadata=[],
+            failed_pmids=dict.fromkeys(request.pmids, "metadata unavailable"),
+        )
+
+
 class FakeCitationGraph:
     async def get_citation_graph(self, request: object) -> PublicationCitationGraphResponse:
         pmid = request.pmid
@@ -171,6 +183,17 @@ class FakeRelatedEvidence:
         )
 
 
+class OneFailingCitationGraph:
+    async def get_citation_graph(self, request: object) -> PublicationCitationGraphResponse:
+        if request.pmid == "222":
+            raise RuntimeError("citation provider unavailable")
+        return PublicationCitationGraphResponse(
+            source=LiteraturePaper(pmid=request.pmid),
+            references=[LiteraturePaper(pmid="333", title="Paper 333")],
+            candidate_pmids=["333"],
+        )
+
+
 class WideCitationGraph:
     async def get_citation_graph(self, request: object) -> PublicationCitationGraphResponse:
         return PublicationCitationGraphResponse(
@@ -182,6 +205,11 @@ class WideCitationGraph:
             cited_by=[LiteraturePaper(pmid="555", title="Extra citing")],
             candidate_pmids=["333", "444", "555"],
         )
+
+
+class EmptyCitationGraph:
+    async def get_citation_graph(self, request: object) -> PublicationCitationGraphResponse:
+        return PublicationCitationGraphResponse(source=LiteraturePaper(pmid=request.pmid))
 
 
 class WideRelatedEvidence:
@@ -227,6 +255,16 @@ class DoiOnlyCitationGraph:
                 )
             ],
             candidate_pmids=[],
+        )
+
+
+class SlowCitationGraph:
+    async def get_citation_graph(self, request: object) -> PublicationCitationGraphResponse:
+        await asyncio.sleep(0.2)
+        return PublicationCitationGraphResponse(
+            source=LiteraturePaper(pmid=request.pmid),
+            references=[LiteraturePaper(pmid="999", title="Slow reference")],
+            candidate_pmids=["999"],
         )
 
 
@@ -472,6 +510,133 @@ async def test_build_map_degrades_with_provider_warnings() -> None:
         "citation_graph",
         "related_evidence",
     }
+
+
+@pytest.mark.asyncio
+async def test_build_map_records_provider_status_for_completed_stages() -> None:
+    response = await _service().build_map(
+        TopicLiteratureMapRequest(
+            query="FMF",
+            max_seed_papers=1,
+            max_neighbors_per_paper=2,
+        )
+    )
+
+    statuses = {(status.provider, status.operation): status for status in response.provider_status}
+
+    assert statuses[("pubtator_search", "seed_search")].status == "success"
+    assert statuses[("pubmed_metadata", "seed_metadata")].status == "success"
+    assert statuses[("citation_graph", "neighbor_enrichment")].status == "success"
+    assert statuses[("related_evidence", "candidate_enrichment")].status == "success"
+    assert response.meta.provider_status == response.provider_status
+
+
+@pytest.mark.asyncio
+async def test_build_map_aggregates_citation_provider_status_across_seeds() -> None:
+    service = TopicLiteratureMapService(
+        search_client=FakeSearchClient(),
+        metadata_service=FakeMetadata(),
+        citation_graph_service=OneFailingCitationGraph(),
+        related_evidence_service=EmptyRelatedEvidence(),
+    )
+
+    response = await service.build_map(
+        TopicLiteratureMapRequest(
+            pmids=["111", "222"],
+            max_seed_papers=2,
+            max_neighbors_per_paper=1,
+            include_related_candidates=False,
+        )
+    )
+
+    citation_statuses = [
+        status
+        for status in response.provider_status
+        if status.provider == "citation_graph" and status.operation == "neighbor_enrichment"
+    ]
+    assert len(citation_statuses) == 1
+    assert citation_statuses[0].status == "partial"
+    assert citation_statuses[0].result_count == 1
+    assert citation_statuses[0].retryable is True
+    assert citation_statuses[0].message is not None
+    assert "failed_seed_pmids=1" in citation_statuses[0].message
+
+
+@pytest.mark.asyncio
+async def test_build_map_returns_partial_response_when_citation_stage_times_out() -> None:
+    service = TopicLiteratureMapService(
+        search_client=FakeSearchClient(),
+        metadata_service=FakeMetadata(),
+        citation_graph_service=SlowCitationGraph(),
+        related_evidence_service=EmptyRelatedEvidence(),
+    )
+
+    response = await service.build_map(
+        TopicLiteratureMapRequest(
+            pmids=["111"],
+            max_seed_papers=1,
+            max_neighbors_per_paper=1,
+            timeout_ms=50,
+        )
+    )
+
+    assert response.seed_pmids == ["111"]
+    assert any(node.paper is not None and node.paper.pmid == "111" for node in response.nodes)
+    assert not any(edge.edge_type in {"cites", "cited_by"} for edge in response.edges)
+    assert any(
+        warning.provider == "citation_graph"
+        and warning.retryable is True
+        and "timed out" in warning.message
+        for warning in response.meta.warnings
+    )
+    citation_status = next(
+        status
+        for status in response.provider_status
+        if status.provider == "citation_graph" and status.operation == "neighbor_enrichment"
+    )
+    assert citation_status.status == "failed"
+    assert citation_status.retryable is True
+    assert citation_status.message is not None
+    assert "timed out" in citation_status.message
+    assert any(
+        command["tool"] == "pubtator.build_topic_literature_map"
+        and command["arguments"]["include_citations"] is False
+        and command["arguments"]["timeout_ms"] == 50
+        for command in response.meta.next_commands
+    )
+    related_status = next(
+        status
+        for status in response.provider_status
+        if status.provider == "related_evidence" and status.operation == "candidate_enrichment"
+    )
+    assert related_status.status == "skipped"
+    assert related_status.retryable is False
+
+
+@pytest.mark.asyncio
+async def test_build_map_records_metadata_failure_status_when_all_pmids_fail() -> None:
+    service = TopicLiteratureMapService(
+        search_client=FakeSearchClient(),
+        metadata_service=AllFailedTopicMetadata(),
+        citation_graph_service=EmptyCitationGraph(),
+        related_evidence_service=EmptyRelatedEvidence(),
+    )
+
+    response = await service.build_map(
+        TopicLiteratureMapRequest(
+            pmids=["111"],
+            include_citations=False,
+            include_related_candidates=False,
+        )
+    )
+
+    metadata_status = next(
+        status
+        for status in response.provider_status
+        if status.provider == "pubmed_metadata" and status.operation == "seed_metadata"
+    )
+    assert metadata_status.status == "failed"
+    assert metadata_status.retryable is True
 
 
 def test_topic_ranker_promotes_guideline_and_pediatric_colchicine_records() -> None:

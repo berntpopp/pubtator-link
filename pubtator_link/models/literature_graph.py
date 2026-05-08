@@ -481,6 +481,7 @@ class TopicLiteratureMapRequest(BaseModel):
     year_min: int | None = None
     year_max: int | None = None
     prefer_full_text: bool = True
+    timeout_ms: int = Field(default=25_000, ge=0, le=120_000)
 
     @field_validator("pmids")
     @classmethod

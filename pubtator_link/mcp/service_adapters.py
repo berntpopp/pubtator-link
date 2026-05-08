@@ -359,6 +359,7 @@ async def build_topic_literature_map_impl(
     year_min: int | None = None,
     year_max: int | None = None,
     prefer_full_text: bool = True,
+    timeout_ms: int = 25_000,
 ) -> dict[str, Any]:
     effective_response_mode = response_mode or "compact"
     response = await service.build_map(
@@ -381,6 +382,7 @@ async def build_topic_literature_map_impl(
             year_min=year_min,
             year_max=year_max,
             prefer_full_text=prefer_full_text,
+            timeout_ms=timeout_ms,
         )
     )
     return response.model_dump(by_alias=True)

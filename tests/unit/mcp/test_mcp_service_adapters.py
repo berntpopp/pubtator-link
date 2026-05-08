@@ -242,11 +242,13 @@ async def test_graph_adapters_default_omitted_response_mode_to_compact() -> None
     topic_result = await build_topic_literature_map_impl(
         service=topic,
         query="FMF",
+        timeout_ms=1234,
     )
 
     assert citation.request.response_mode == "compact"
     assert related.request.response_mode == "compact"
     assert topic.request.response_mode == "compact"
+    assert topic.request.timeout_ms == 1234
     assert citation_result["response_mode"] == "compact"
     assert related_result["_meta"]["response_mode"] == "compact"
     assert topic_result["response_mode"] == "compact"

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
+import time
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Awaitable, Sequence
 from typing import Any, Protocol
 
 from pubtator_link.models.literature_graph import (
@@ -14,6 +16,8 @@ from pubtator_link.models.literature_graph import (
     LiteratureGraphNode,
     LiteratureGraphProvenance,
     LiteraturePaper,
+    LiteratureProviderStatus,
+    LiteratureProviderStatusValue,
     LiteratureQueryRelevance,
     ProviderWarning,
     PublicationCitationGraphRequest,
@@ -77,11 +81,16 @@ class TopicLiteratureMapService:
     async def build_map(self, request: TopicLiteratureMapRequest) -> TopicLiteratureMapResponse:
         """Return a bounded literature graph for an explicit PMID set or topic query."""
         warnings: list[ProviderWarning] = []
-        seed_pmids = await self._seed_pmids(request, warnings)
+        provider_status: list[LiteratureProviderStatus] = []
+        deadline = _deadline_from_timeout_ms(request.timeout_ms)
+        seed_pmids = await self._seed_pmids(request, warnings, provider_status, deadline)
         papers_by_pmid, entities_by_pmid = await self._metadata_papers(
             seed_pmids,
             include_entities=request.include_pubtator_entities,
             warnings=warnings,
+            provider_status=provider_status,
+            operation="seed_metadata",
+            deadline=deadline,
         )
         papers: list[LiteraturePaper] = [
             papers_by_pmid.get(pmid, LiteraturePaper(pmid=pmid)) for pmid in seed_pmids
@@ -101,17 +110,30 @@ class TopicLiteratureMapService:
                 seed_pmids=seed_pmids,
                 remaining_neighbors=remaining_neighbors,
                 warnings=warnings,
+                provider_status=provider_status,
+                deadline=deadline,
             )
             papers.extend(citation_papers)
             edges.extend(citation_edges)
             candidate_pmids.extend(citation_pmids)
 
-        if request.include_related_candidates:
+        if request.include_related_candidates and _deadline_exhausted(deadline):
+            provider_status.append(
+                _topic_provider_status(
+                    "related_evidence",
+                    "candidate_enrichment",
+                    "skipped",
+                    message="Skipped because the topic map timeout budget was exhausted.",
+                )
+            )
+        elif request.include_related_candidates:
             related_papers, related_edges, related_pmids = await self._related_candidates(
                 seed_pmids=seed_pmids,
                 request=request,
                 remaining_neighbors=remaining_neighbors,
                 warnings=warnings,
+                provider_status=provider_status,
+                deadline=deadline,
             )
             papers.extend(related_papers)
             edges.extend(related_edges)
@@ -125,11 +147,24 @@ class TopicLiteratureMapService:
             for pmid in _dedupe(candidate_pmids)
             if pmid not in papers_by_pmid and pmid not in seed_pmids
         ]
-        if missing_metadata_pmids:
+        if missing_metadata_pmids and _deadline_exhausted(deadline):
+            provider_status.append(
+                _topic_provider_status(
+                    "pubmed_metadata",
+                    "metadata_backfill",
+                    "skipped",
+                    len(missing_metadata_pmids),
+                    message="Skipped because the topic map timeout budget was exhausted.",
+                )
+            )
+        elif missing_metadata_pmids:
             backfill_papers, backfill_entities = await self._metadata_papers(
                 missing_metadata_pmids,
                 include_entities=request.include_pubtator_entities,
                 warnings=warnings,
+                provider_status=provider_status,
+                operation="metadata_backfill",
+                deadline=deadline,
             )
             papers_by_pmid.update(backfill_papers)
             entities_by_pmid.update(backfill_entities)
@@ -230,9 +265,10 @@ class TopicLiteratureMapService:
                         request=request,
                         modes=("full", "nodes_edges"),
                     ),
+                    *_topic_map_recovery_commands(request, provider_status),
                     *hints,
                 ],
-                "provider_status": [],
+                "provider_status": provider_status,
             }
         )
         response = TopicLiteratureMapResponse(
@@ -248,7 +284,7 @@ class TopicLiteratureMapService:
             closed_central_pmids=closed_central_pmids,
             demoted_candidate_pmids=demoted_candidate_pmids,
             demoted_reasons_by_pmid=demoted_reasons_by_pmid,
-            provider_status=[],
+            provider_status=provider_status,
             omitted_counts=omitted_counts,
             candidate_retrieval_hints=hints,
             _meta=meta,
@@ -261,20 +297,44 @@ class TopicLiteratureMapService:
         self,
         request: TopicLiteratureMapRequest,
         warnings: list[ProviderWarning],
+        provider_status: list[LiteratureProviderStatus],
+        deadline: float | None,
     ) -> list[str]:
         seed_pmids: list[str] = []
         if request.pmids:
             seed_pmids.extend(request.pmids)
         if request.query and len(seed_pmids) < request.max_seed_papers:
             try:
-                raw = await self.search_client.search_publications(
-                    request.query,
-                    page=1,
-                    sort="score desc",
+                raw = await _await_with_deadline(
+                    self.search_client.search_publications(
+                        request.query,
+                        page=1,
+                        sort="score desc",
+                    ),
+                    deadline,
                 )
             except Exception as exc:
                 warnings.append(_provider_failed_warning("pubtator_search", exc))
+                provider_status.append(
+                    _topic_provider_status(
+                        "pubtator_search",
+                        "seed_search",
+                        "failed",
+                        retryable=True,
+                        message=_provider_exception_message(exc, "PubTator search"),
+                    )
+                )
                 raw = {"results": []}
+            else:
+                result_count = len(_pmids_from_search(raw))
+                provider_status.append(
+                    _topic_provider_status(
+                        "pubtator_search",
+                        "seed_search",
+                        "success" if result_count else "empty",
+                        result_count,
+                    )
+                )
             seed_pmids.extend(_pmids_from_search(raw))
         return _dedupe(seed_pmids)[: request.max_seed_papers]
 
@@ -284,20 +344,36 @@ class TopicLiteratureMapService:
         *,
         include_entities: bool,
         warnings: list[ProviderWarning],
+        provider_status: list[LiteratureProviderStatus] | None = None,
+        operation: str = "metadata_lookup",
+        deadline: float | None = None,
     ) -> tuple[dict[str, LiteraturePaper], dict[str, list[LiteratureEntity]]]:
         if not pmids:
             return {}, {}
         try:
-            response = await lookup_metadata_batched(
-                self.metadata_service,
-                pmids,
-                include_mesh=include_entities,
-                include_publication_types=True,
-                include_citations="none",
-                include_coverage=True,
+            response = await _await_with_deadline(
+                lookup_metadata_batched(
+                    self.metadata_service,
+                    pmids,
+                    include_mesh=include_entities,
+                    include_publication_types=True,
+                    include_citations="none",
+                    include_coverage=True,
+                ),
+                deadline,
             )
         except Exception as exc:
             warnings.append(_provider_failed_warning("pubmed_metadata", exc))
+            if provider_status is not None:
+                provider_status.append(
+                    _topic_provider_status(
+                        "pubmed_metadata",
+                        operation,
+                        "failed",
+                        retryable=True,
+                        message=_provider_exception_message(exc, "PubMed metadata"),
+                    )
+                )
             return {}, {}
         for warning in _metadata_response_warnings(response):
             warnings.append(
@@ -317,6 +393,30 @@ class TopicLiteratureMapService:
                     message=f"Metadata lookup failed for {len(response.failed_pmids)} PMID(s).",
                 )
             )
+        if provider_status is not None:
+            status: LiteratureProviderStatusValue
+            if response.metadata and response.failed_pmids:
+                status = "partial"
+            elif response.metadata:
+                status = "success"
+            elif response.failed_pmids:
+                status = "failed"
+            else:
+                status = "empty"
+            provider_status.append(
+                _topic_provider_status(
+                    "pubmed_metadata",
+                    operation,
+                    status,
+                    len(response.metadata),
+                    retryable=bool(response.failed_pmids),
+                    message=(
+                        f"failed_pmids={len(response.failed_pmids)}"
+                        if response.failed_pmids
+                        else None
+                    ),
+                )
+            )
         return (
             {metadata.pmid: _paper_from_metadata(metadata) for metadata in response.metadata},
             {
@@ -332,24 +432,35 @@ class TopicLiteratureMapService:
         seed_pmids: list[str],
         remaining_neighbors: dict[str, int],
         warnings: list[ProviderWarning],
+        provider_status: list[LiteratureProviderStatus],
+        deadline: float | None,
     ) -> tuple[list[LiteraturePaper], list[LiteratureGraphEdge], list[str], dict[str, int]]:
         papers: list[LiteraturePaper] = []
         edges: list[LiteratureGraphEdge] = []
         candidate_pmids: list[str] = []
+        failed_count = 0
+        failure_message: str | None = None
         for seed_pmid in seed_pmids:
             remaining = remaining_neighbors.get(seed_pmid, 0)
             if remaining <= 0:
                 continue
             try:
-                graph = await self.citation_graph_service.get_citation_graph(
-                    PublicationCitationGraphRequest(
-                        pmid=seed_pmid,
-                        direction="both",
-                        max_results=remaining,
-                    )
+                graph = await _await_with_deadline(
+                    self.citation_graph_service.get_citation_graph(
+                        PublicationCitationGraphRequest(
+                            pmid=seed_pmid,
+                            direction="both",
+                            max_results=remaining,
+                        )
+                    ),
+                    deadline,
                 )
             except Exception as exc:
                 warnings.append(_provider_failed_warning("citation_graph", exc))
+                failed_count += 1
+                failure_message = _provider_exception_message(exc, "Citation graph")
+                if isinstance(exc, TimeoutError):
+                    break
                 continue
             for paper in graph.references:
                 if remaining <= 0:
@@ -382,6 +493,15 @@ class TopicLiteratureMapService:
                 )
                 remaining -= 1
             remaining_neighbors[seed_pmid] = remaining
+        provider_status.append(
+            _stage_provider_status(
+                "citation_graph",
+                "neighbor_enrichment",
+                result_count=len(papers),
+                failed_count=failed_count,
+                failure_message=failure_message,
+            )
+        )
         return papers, edges, _dedupe(candidate_pmids), remaining_neighbors
 
     async def _related_candidates(
@@ -391,28 +511,39 @@ class TopicLiteratureMapService:
         request: TopicLiteratureMapRequest,
         remaining_neighbors: dict[str, int],
         warnings: list[ProviderWarning],
+        provider_status: list[LiteratureProviderStatus],
+        deadline: float | None,
     ) -> tuple[list[LiteraturePaper], list[LiteratureGraphEdge], list[str]]:
         papers: list[LiteraturePaper] = []
         edges: list[LiteratureGraphEdge] = []
         candidate_pmids: list[str] = []
+        failed_count = 0
+        failure_message: str | None = None
         for seed_pmid in seed_pmids:
             remaining = remaining_neighbors.get(seed_pmid, 0)
             if remaining <= 0:
                 continue
             try:
-                response = await self.related_evidence_service.find_candidates(
-                    RelatedEvidenceCandidatesRequest(
-                        pmid=seed_pmid,
-                        max_results=remaining,
-                        prefer_full_text=request.prefer_full_text,
-                        include_pubtator_search=True,
-                        include_citation_neighbors=False,
-                        year_min=request.year_min,
-                        year_max=request.year_max,
-                    )
+                response = await _await_with_deadline(
+                    self.related_evidence_service.find_candidates(
+                        RelatedEvidenceCandidatesRequest(
+                            pmid=seed_pmid,
+                            max_results=remaining,
+                            prefer_full_text=request.prefer_full_text,
+                            include_pubtator_search=True,
+                            include_citation_neighbors=False,
+                            year_min=request.year_min,
+                            year_max=request.year_max,
+                        )
+                    ),
+                    deadline,
                 )
             except Exception as exc:
                 warnings.append(_provider_failed_warning("related_evidence", exc))
+                failed_count += 1
+                failure_message = _provider_exception_message(exc, "Related evidence")
+                if isinstance(exc, TimeoutError):
+                    break
                 continue
             for candidate in response.candidates:
                 if remaining <= 0:
@@ -434,6 +565,15 @@ class TopicLiteratureMapService:
                 )
                 remaining -= 1
             remaining_neighbors[seed_pmid] = remaining
+        provider_status.append(
+            _stage_provider_status(
+                "related_evidence",
+                "candidate_enrichment",
+                result_count=len(papers),
+                failed_count=failed_count,
+                failure_message=failure_message,
+            )
+        )
         return papers, edges, _dedupe(candidate_pmids)
 
 
@@ -857,12 +997,124 @@ def _has_full_text(paper: LiteraturePaper) -> bool:
     return paper.status == "resolved_full_text_candidate" or paper.availability.has_pmc_full_text
 
 
+def _deadline_from_timeout_ms(timeout_ms: int) -> float | None:
+    if timeout_ms <= 0:
+        return None
+    return time.monotonic() + (timeout_ms / 1000)
+
+
+def _deadline_exhausted(deadline: float | None) -> bool:
+    return deadline is not None and deadline <= time.monotonic()
+
+
+async def _await_with_deadline(awaitable: Awaitable[Any], deadline: float | None) -> Any:
+    if deadline is None:
+        return await awaitable
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        close = getattr(awaitable, "close", None)
+        if callable(close):
+            close()
+        raise TimeoutError("topic map stage timed out before start")
+    return await asyncio.wait_for(awaitable, timeout=remaining)
+
+
+def _provider_exception_message(exc: Exception, label: str) -> str:
+    if isinstance(exc, TimeoutError):
+        return f"{label} timed out before topic map completed; retry with narrower inputs or disable this stage."
+    return str(exc) or exc.__class__.__name__
+
+
+def _topic_provider_status(
+    provider: str,
+    operation: str,
+    status: LiteratureProviderStatusValue,
+    result_count: int = 0,
+    *,
+    retryable: bool = False,
+    message: str | None = None,
+) -> LiteratureProviderStatus:
+    return LiteratureProviderStatus(
+        provider=provider,
+        operation=operation,
+        status=status,
+        result_count=result_count,
+        retryable=retryable,
+        message=message,
+    )
+
+
+def _stage_provider_status(
+    provider: str,
+    operation: str,
+    *,
+    result_count: int,
+    failed_count: int,
+    failure_message: str | None,
+) -> LiteratureProviderStatus:
+    status: LiteratureProviderStatusValue
+    if failed_count and result_count:
+        status = "partial"
+    elif failed_count:
+        status = "failed"
+    elif result_count:
+        status = "success"
+    else:
+        status = "empty"
+    message = failure_message
+    if failed_count and failure_message and result_count:
+        message = f"{failure_message} Partial results returned; failed_seed_pmids={failed_count}."
+    elif failed_count and not failure_message:
+        message = f"failed_seed_pmids={failed_count}"
+    return _topic_provider_status(
+        provider,
+        operation,
+        status,
+        result_count,
+        retryable=bool(failed_count),
+        message=message,
+    )
+
+
+def _topic_map_recovery_commands(
+    request: TopicLiteratureMapRequest,
+    provider_status: list[LiteratureProviderStatus],
+) -> list[dict[str, Any]]:
+    commands: list[dict[str, Any]] = []
+    request_args = request.model_dump(mode="json", exclude_none=True)
+    if any(
+        status.provider == "citation_graph"
+        and status.operation == "neighbor_enrichment"
+        and status.retryable
+        for status in provider_status
+    ):
+        commands.append(
+            {
+                "tool": "pubtator.build_topic_literature_map",
+                "arguments": {**request_args, "include_citations": False},
+            }
+        )
+    if any(
+        status.provider == "related_evidence"
+        and status.operation == "candidate_enrichment"
+        and status.retryable
+        for status in provider_status
+    ):
+        commands.append(
+            {
+                "tool": "pubtator.build_topic_literature_map",
+                "arguments": {**request_args, "include_related_candidates": False},
+            }
+        )
+    return commands
+
+
 def _provider_failed_warning(provider: str, exc: Exception) -> ProviderWarning:
     return ProviderWarning(
         provider=provider,
         status="provider_failed",
         retryable=True,
-        message=str(exc) or exc.__class__.__name__,
+        message=_provider_exception_message(exc, provider),
     )
 
 
