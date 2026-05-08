@@ -170,7 +170,7 @@ async def test_get_publication_metadata_impl_preserves_public_100_pmid_cap() -> 
         async def get_metadata(self, request):
             raise AssertionError("oversized public metadata request should fail validation first")
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as exc_info:
         await service_adapters.get_publication_metadata_impl(
             service=UnexpectedService(),
             pmids=[str(600000 + index) for index in range(101)],
@@ -179,6 +179,8 @@ async def test_get_publication_metadata_impl_preserves_public_100_pmid_cap() -> 
             include_citations="both",
             include_coverage=True,
         )
+    assert exc_info.value.errors()[0]["loc"] == ("pmids",)
+    assert exc_info.value.errors()[0]["type"] == "too_long"
 
 
 @pytest.mark.asyncio

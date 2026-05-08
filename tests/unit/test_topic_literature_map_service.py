@@ -13,6 +13,7 @@ from pubtator_link.models.literature_graph import (
 from pubtator_link.models.publication_metadata import (
     PublicationAuthor,
     PublicationMetadata,
+    PublicationMetadataRequest,
     PublicationMetadataResponse,
 )
 from pubtator_link.services.literature_graph_compact import TOPIC_RANKING_VERSION
@@ -95,9 +96,11 @@ class FakeMetadata:
 
 class RecordingTopicMetadata:
     def __init__(self) -> None:
-        self.requests: list[object] = []
+        self.requests: list[PublicationMetadataRequest] = []
 
-    async def get_metadata(self, request: object) -> PublicationMetadataResponse:
+    async def get_metadata(
+        self, request: PublicationMetadataRequest
+    ) -> PublicationMetadataResponse:
         self.requests.append(request)
         return PublicationMetadataResponse(
             metadata=[
@@ -115,9 +118,11 @@ class RecordingTopicMetadata:
 
 class PartialFailureTopicMetadata:
     def __init__(self) -> None:
-        self.requests: list[object] = []
+        self.requests: list[PublicationMetadataRequest] = []
 
-    async def get_metadata(self, request: object) -> PublicationMetadataResponse:
+    async def get_metadata(
+        self, request: PublicationMetadataRequest
+    ) -> PublicationMetadataResponse:
         self.requests.append(request)
         if len(self.requests) == 2:
             raise RuntimeError("metadata unavailable")
@@ -358,6 +363,32 @@ async def test_topic_metadata_papers_batches_more_than_public_cap() -> None:
     ] == [(True, True, "none", True), (True, True, "none", True)]
     assert set(papers) == set(pmids)
     assert set(entities) == set(pmids)
+    assert warnings == []
+
+
+@pytest.mark.asyncio
+async def test_topic_metadata_papers_preserves_mesh_option_when_entities_disabled() -> None:
+    metadata = RecordingTopicMetadata()
+    service = TopicLiteratureMapService(
+        search_client=FakeSearchClient(),
+        metadata_service=metadata,
+        citation_graph_service=FakeCitationGraph(),
+        related_evidence_service=FakeRelatedEvidence(),
+    )
+    warnings = []
+
+    papers, entities = await service._metadata_papers(
+        ["310000"],
+        include_entities=False,
+        warnings=warnings,
+    )
+
+    assert set(papers) == {"310000"}
+    assert entities == {}
+    assert metadata.requests[0].include_mesh is False
+    assert metadata.requests[0].include_publication_types is True
+    assert metadata.requests[0].include_citations == "none"
+    assert metadata.requests[0].include_coverage is True
     assert warnings == []
 
 
