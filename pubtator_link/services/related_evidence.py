@@ -24,6 +24,7 @@ from pubtator_link.services.literature_paper_resolution import (
     deduped_signals,
     paper_from_publication_metadata,
 )
+from pubtator_link.services.publication_metadata import lookup_metadata_batched
 
 
 class RelatedEvidenceService:
@@ -174,25 +175,25 @@ class RelatedEvidenceService:
             return [], []
 
         warnings: list[ProviderWarning] = []
-        metadata_by_pmid: dict[str, Any] = {}
-        failed_pmids: dict[str, Any] = {}
-        for batch in _chunks(pmids, 100):
-            try:
-                metadata_response = await self.metadata_service.get_metadata(
-                    PublicationMetadataRequest(
-                        pmids=batch,
-                        include_mesh=False,
-                        include_publication_types=True,
-                        include_citations="none",
-                        include_coverage=True,
-                    )
+        metadata_response = await lookup_metadata_batched(
+            self.metadata_service,
+            pmids,
+            include_mesh=False,
+            include_publication_types=True,
+            include_citations="none",
+            include_coverage=True,
+        )
+        metadata_by_pmid = {metadata.pmid: metadata for metadata in metadata_response.metadata}
+        failed_pmids = getattr(metadata_response, "failed_pmids", {})
+        for warning in metadata_response.meta.get("warnings", []):
+            warnings.append(
+                ProviderWarning(
+                    provider="pubmed_metadata",
+                    status="provider_failed",
+                    retryable=True,
+                    message=f"PubMed metadata warning: {warning}",
                 )
-                metadata_by_pmid.update(
-                    {metadata.pmid: metadata for metadata in metadata_response.metadata}
-                )
-                failed_pmids.update(getattr(metadata_response, "failed_pmids", {}))
-            except Exception as exc:
-                warnings.append(_provider_failed_warning("pubmed_metadata", exc))
+            )
 
         if failed_pmids:
             warnings.append(
@@ -353,11 +354,6 @@ def _provider_failed_warning(provider: str, exc: Exception) -> ProviderWarning:
 
 def _candidate_fetch_limit(max_results: int) -> int:
     return min(100, max(25, max_results * 5))
-
-
-def _chunks(values: list[str], size: int) -> Iterable[list[str]]:
-    for index in range(0, len(values), size):
-        yield values[index : index + size]
 
 
 def _dedupe(values: Iterable[str]) -> list[str]:
