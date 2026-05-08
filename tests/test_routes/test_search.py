@@ -526,6 +526,65 @@ class TestSearchRoutes:
         assert item["journal"] == "Rheumatology International"
 
     @patch.object(PubTator3Client, "search_publications")
+    def test_search_publications_metadata_batches_limit_none_over_public_cap(
+        self, mock_search, test_client
+    ):
+        from pubtator_link.api.routes.dependencies import get_publication_metadata_service
+        from pubtator_link.models.publication_metadata import (
+            PublicationMetadata,
+            PublicationMetadataRequest,
+            PublicationMetadataResponse,
+        )
+
+        class RecordingMetadataService:
+            def __init__(self) -> None:
+                self.requests: list[PublicationMetadataRequest] = []
+
+            async def get_metadata(
+                self, request: PublicationMetadataRequest
+            ) -> PublicationMetadataResponse:
+                self.requests.append(request)
+                return PublicationMetadataResponse(
+                    metadata=[
+                        PublicationMetadata(pmid=pmid, title=f"Metadata {pmid}")
+                        for pmid in request.pmids
+                    ],
+                    _meta={"next_commands": []},
+                )
+
+        metadata_service = RecordingMetadataService()
+
+        async def fake_metadata_service() -> RecordingMetadataService:
+            return metadata_service
+
+        mock_search.return_value = {
+            "results": [
+                {"pmid": str(700000 + index), "title": f"Result {index}"} for index in range(105)
+            ],
+            "count": 105,
+            "total_pages": 1,
+            "page_size": 105,
+        }
+        test_client.app.dependency_overrides[get_publication_metadata_service] = (
+            fake_metadata_service
+        )
+
+        try:
+            response = test_client.get(
+                "/api/search/",
+                params={"text": "MEFV", "metadata": "basic"},
+            )
+        finally:
+            test_client.app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        assert len(response.json()["results"]) == 105
+        assert [len(request.pmids) for request in metadata_service.requests] == [100, 5]
+        assert all(request.include_mesh is False for request in metadata_service.requests)
+        assert all(request.include_citations == "none" for request in metadata_service.requests)
+        assert all(request.include_coverage is False for request in metadata_service.requests)
+
+    @patch.object(PubTator3Client, "search_publications")
     def test_search_publications_merges_flat_filters(self, mock_search, test_client):
         """Test route merges raw JSON filters with flat filter query params."""
         mock_search.return_value = {"results": [], "count": 0, "total_pages": 0, "page_size": 10}

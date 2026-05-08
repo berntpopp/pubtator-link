@@ -91,6 +91,16 @@ class DiscoveryWithConversion:
         )
 
 
+class ProviderProbe:
+    created = 0
+
+    def __init__(self, *, model_name: str, dim: int, device: str = "auto") -> None:
+        type(self).created += 1
+        self.model_name = model_name
+        self.dim = dim
+        self.device = device
+
+
 @pytest.mark.asyncio
 async def test_get_review_pool_leaves_headroom_for_preparation_workers(
     monkeypatch: pytest.MonkeyPatch,
@@ -461,6 +471,75 @@ async def test_source_preflight_dependency_wires_ncbi_id_conversion() -> None:
     assert client.pmc_calls == [["PMC7811395"]]
     assert hints[0].pmcid == "PMC7811395"
     assert hints[0].coverage_reason == "pmc_oa_bioc"
+
+
+def test_review_context_service_does_not_create_embedding_provider_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fail_provider(**kwargs: Any) -> object:
+        raise AssertionError("provider should not be created")
+
+    def build_service(**kwargs: Any) -> object:
+        captured.update(kwargs)
+        return ("context", kwargs)
+
+    monkeypatch.setattr(dependencies, "SentenceTransformerEmbeddingProvider", fail_provider)
+    monkeypatch.setattr(dependencies, "ReviewContextService", build_service)
+    monkeypatch.setattr(
+        dependencies,
+        "review_rerag_config",
+        SimpleNamespace(
+            embedding_rerank_enabled=False,
+            embedding_model="BAAI/bge-small-en-v1.5",
+            embedding_dim=384,
+            embedding_top_k=50,
+            embedding_rrf_k=60,
+            retrieval_concurrency=4,
+        ),
+    )
+
+    service = dependencies._build_review_context_service(repository=object())
+
+    assert service == ("context", captured)
+    assert captured["embedding_provider"] is None
+    assert captured["embedding_rerank_enabled"] is False
+
+
+def test_review_context_service_creates_embedding_provider_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ProviderProbe.created = 0
+    captured: dict[str, Any] = {}
+
+    def build_service(**kwargs: Any) -> object:
+        captured.update(kwargs)
+        return ("context", kwargs)
+
+    monkeypatch.setattr(dependencies, "SentenceTransformerEmbeddingProvider", ProviderProbe)
+    monkeypatch.setattr(dependencies, "ReviewContextService", build_service)
+    monkeypatch.setattr(
+        dependencies,
+        "review_rerag_config",
+        SimpleNamespace(
+            embedding_rerank_enabled=True,
+            embedding_model="BAAI/bge-small-en-v1.5",
+            embedding_dim=384,
+            embedding_top_k=40,
+            embedding_rrf_k=60,
+            embedding_device="cpu",
+            retrieval_concurrency=4,
+        ),
+    )
+
+    service = dependencies._build_review_context_service(repository=object())
+
+    assert service == ("context", captured)
+    assert ProviderProbe.created == 1
+    assert captured["embedding_provider"].model_name == "BAAI/bge-small-en-v1.5"
+    assert captured["embedding_rerank_enabled"] is True
+    assert captured["embedding_top_k"] == 40
 
 
 @pytest.mark.asyncio

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any, Protocol
 from uuid import uuid4
 
@@ -41,8 +42,19 @@ from pubtator_link.repositories.review_rerag_mappers import (
     _review_inventory_item_from_row,
     _source_summary_from_row,
 )
+from pubtator_link.services.review_context.embeddings import text_hash
 
 SHORT_SAMPLE_WARNING = "Only short sample passages were available for this PMID."
+
+
+@dataclass(frozen=True)
+class ReviewPassageEmbeddingRecord:
+    review_id: str
+    passage_id: str
+    model_name: str
+    embedding_dim: int
+    text_hash: str
+    embedding: list[float]
 
 
 def _sample_warning(
@@ -61,6 +73,21 @@ def _json_value(value: Any, fallback: Any) -> Any:
     if isinstance(value, str):
         return json.loads(value)
     return value
+
+
+def _vector_literal(values: Sequence[float]) -> str:
+    return "[" + ",".join(str(float(value)) for value in values) + "]"
+
+
+def _embedding_vector_from_value(value: Any) -> list[float]:
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            stripped = stripped[1:-1]
+        if not stripped:
+            return []
+        return [float(item) for item in stripped.split(",")]
+    return [float(item) for item in value]
 
 
 def _llm_context_from_row(row: Mapping[str, Any]) -> ReviewLlmContext:
@@ -167,6 +194,30 @@ class ReviewReragRepository(Protocol):
 
     async def upsert_passages(self, passages: Sequence[ReviewPassageRow]) -> None:
         """Insert or replace prepared review passages."""
+
+    async def upsert_passage_embeddings(
+        self, records: Sequence[ReviewPassageEmbeddingRecord]
+    ) -> None:
+        """Insert or replace stored passage embeddings."""
+
+    async def get_passage_embeddings(
+        self,
+        review_id: str,
+        passage_ids: Sequence[str],
+        *,
+        model_name: str,
+        passage_text_hashes: Mapping[str, str] | None = None,
+    ) -> dict[str, list[float]]:
+        """Return current embeddings by passage ID."""
+
+    async def list_passages_missing_embeddings(
+        self,
+        review_id: str,
+        *,
+        model_name: str,
+        limit: int = 100,
+    ) -> list[ReviewPassageRow]:
+        """Return passages with absent or stale embeddings."""
 
     async def search_passages(
         self,
@@ -718,6 +769,133 @@ class PostgresReviewReragRepository:
             review_ids = sorted({passage.review_id for passage in passages})
             for review_id in review_ids:
                 await self._touch_review_on_connection(connection, review_id)
+
+    async def upsert_passage_embeddings(
+        self, records: Sequence[ReviewPassageEmbeddingRecord]
+    ) -> None:
+        if not records:
+            return
+
+        args = [
+            (
+                record.review_id,
+                record.passage_id,
+                record.model_name,
+                record.embedding_dim,
+                record.text_hash,
+                _vector_literal(record.embedding),
+            )
+            for record in records
+        ]
+        async with self._acquire() as connection:
+            await connection.executemany(
+                """
+                insert into review_passage_embeddings (
+                    review_id,
+                    passage_id,
+                    model_name,
+                    embedding_dim,
+                    text_hash,
+                    embedding
+                )
+                values ($1, $2, $3, $4, $5, $6::vector)
+                on conflict (review_id, passage_id, model_name) do update
+                set embedding_dim = excluded.embedding_dim,
+                    text_hash = excluded.text_hash,
+                    embedding = excluded.embedding,
+                    created_at = now()
+                """,
+                args,
+            )
+            review_ids = sorted({record.review_id for record in records})
+            for review_id in review_ids:
+                await self._touch_review_on_connection(connection, review_id)
+
+    async def get_passage_embeddings(
+        self,
+        review_id: str,
+        passage_ids: Sequence[str],
+        *,
+        model_name: str,
+        passage_text_hashes: Mapping[str, str] | None = None,
+    ) -> dict[str, list[float]]:
+        if not passage_ids:
+            return {}
+
+        async with self._acquire() as connection:
+            rows = await connection.fetch(
+                """
+                select passage_id, text_hash, embedding
+                from review_passage_embeddings
+                where review_id = $1
+                  and passage_id = any($2::text[])
+                  and model_name = $3
+                """,
+                review_id,
+                list(passage_ids),
+                model_name,
+            )
+        embeddings: dict[str, list[float]] = {}
+        for row in rows:
+            passage_id = str(row["passage_id"])
+            if (
+                passage_text_hashes is not None
+                and passage_text_hashes.get(passage_id) != row["text_hash"]
+            ):
+                continue
+            embeddings[passage_id] = _embedding_vector_from_value(row["embedding"])
+        return embeddings
+
+    async def list_passages_missing_embeddings(
+        self,
+        review_id: str,
+        *,
+        model_name: str,
+        limit: int = 100,
+    ) -> list[ReviewPassageRow]:
+        async with self._acquire() as connection:
+            rows = await connection.fetch(
+                """
+                select
+                    p.passage_id,
+                    p.review_id,
+                    p.source_id,
+                    p.source_kind,
+                    p.pmid,
+                    p.pmcid,
+                    p.doi,
+                    p.url,
+                    p.section,
+                    p.heading_path,
+                    p.page,
+                    p.text,
+                    p.entity_ids,
+                    p.relation_types,
+                    p.screening_status,
+                    p.source_metadata,
+                    0.0::double precision as lexical_rank,
+                    e.text_hash as embedding_text_hash
+                from review_passages p
+                left join review_passage_embeddings e
+                  on e.review_id = p.review_id
+                 and e.passage_id = p.passage_id
+                 and e.model_name = $2
+                where p.review_id = $1
+                order by p.source_id, p.passage_id
+                limit $3
+                """,
+                review_id,
+                model_name,
+                limit,
+            )
+
+        stale_or_missing: list[ReviewPassageRow] = []
+        for row in rows:
+            embedding_text_hash = row["embedding_text_hash"]
+            current_text_hash = text_hash(str(row["text"]))
+            if embedding_text_hash is None or str(embedding_text_hash) != current_text_hash:
+                stale_or_missing.append(_passage_from_row(row))
+        return stale_or_missing
 
     async def search_passages(
         self,

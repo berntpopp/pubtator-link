@@ -12,7 +12,8 @@ def test_base_compose_defines_postgres_service() -> None:
     services = compose["services"]
     postgres = services["pubtator-postgres"]
 
-    assert postgres["image"] == "postgres:18-alpine"
+    assert postgres["image"].startswith("pgvector/pgvector:")
+    assert "pg18" in postgres["image"]
     assert postgres["environment"]["POSTGRES_DB"] == "${PUBTATOR_LINK_POSTGRES_DB:-pubtator_link}"
     assert (
         postgres["environment"]["POSTGRES_USER"] == "${PUBTATOR_LINK_POSTGRES_USER:-pubtator_link}"

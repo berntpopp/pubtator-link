@@ -15,7 +15,10 @@ from pubtator_link.models.review_rerag import (
     ReviewPassageSample,
     ReviewSourceSummary,
 )
-from pubtator_link.repositories.review_rerag import PostgresReviewReragRepository
+from pubtator_link.repositories.review_rerag import (
+    PostgresReviewReragRepository,
+    ReviewPassageEmbeddingRecord,
+)
 
 
 class FakeAcquire:
@@ -401,6 +404,179 @@ async def test_upsert_passages_uses_executemany() -> None:
             '{"rank": 1}',
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_upsert_passage_embeddings_writes_embedding_records() -> None:
+    connection = FakeConnection()
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    await repository.upsert_passage_embeddings(
+        [
+            ReviewPassageEmbeddingRecord(
+                review_id="review-1",
+                passage_id="passage-1",
+                model_name="BAAI/bge-small-en-v1.5",
+                embedding_dim=384,
+                text_hash="hash-1",
+                embedding=[0.1, 0.2, 0.3],
+            )
+        ]
+    )
+
+    assert len(connection.executemany_calls) == 1
+    sql, args = connection.executemany_calls[0]
+    assert "insert into review_passage_embeddings" in sql.lower()
+    assert "$6::vector" in sql
+    assert "on conflict (review_id, passage_id, model_name)" in sql.lower()
+    assert args == [
+        (
+            "review-1",
+            "passage-1",
+            "BAAI/bge-small-en-v1.5",
+            384,
+            "hash-1",
+            "[0.1,0.2,0.3]",
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_passage_embeddings_returns_vectors_by_passage_id() -> None:
+    connection = FakeConnection()
+    connection.fetched_rows = [
+        {"passage_id": "passage-1", "text_hash": "hash-1", "embedding": [0.1, 0.2]},
+        {"passage_id": "passage-2", "text_hash": "hash-2", "embedding": [0.3, 0.4]},
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    embeddings = await repository.get_passage_embeddings(
+        "review-1",
+        ["passage-1", "passage-2"],
+        model_name="BAAI/bge-small-en-v1.5",
+    )
+
+    assert embeddings == {"passage-1": [0.1, 0.2], "passage-2": [0.3, 0.4]}
+    sql, args = connection.executed[0]
+    assert "from review_passage_embeddings" in sql.lower()
+    assert args == ("review-1", ["passage-1", "passage-2"], "BAAI/bge-small-en-v1.5")
+
+
+@pytest.mark.asyncio
+async def test_get_passage_embeddings_decodes_pgvector_text_values() -> None:
+    connection = FakeConnection()
+    connection.fetched_rows = [
+        {"passage_id": "passage-1", "text_hash": "hash-1", "embedding": "[0.1,0.2]"}
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    embeddings = await repository.get_passage_embeddings(
+        "review-1",
+        ["passage-1"],
+        model_name="BAAI/bge-small-en-v1.5",
+    )
+
+    assert embeddings == {"passage-1": [0.1, 0.2]}
+
+
+@pytest.mark.asyncio
+async def test_get_passage_embeddings_filters_stale_text_hashes() -> None:
+    connection = FakeConnection()
+    connection.fetched_rows = [
+        {"passage_id": "fresh", "text_hash": "hash-fresh", "embedding": [0.1]},
+        {"passage_id": "stale", "text_hash": "hash-old", "embedding": [0.9]},
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    embeddings = await repository.get_passage_embeddings(
+        "review-1",
+        ["fresh", "stale"],
+        model_name="BAAI/bge-small-en-v1.5",
+        passage_text_hashes={"fresh": "hash-fresh", "stale": "hash-current"},
+    )
+
+    assert embeddings == {"fresh": [0.1]}
+
+
+@pytest.mark.asyncio
+async def test_list_passages_missing_embeddings_returns_absent_and_stale_rows() -> None:
+    connection = FakeConnection()
+    connection.fetched_rows = [
+        {
+            "passage_id": "missing",
+            "review_id": "review-1",
+            "source_id": "source-1",
+            "source_kind": "pubtator_abstract",
+            "pmid": "123",
+            "pmcid": None,
+            "doi": None,
+            "url": None,
+            "section": "abstract",
+            "heading_path": None,
+            "page": None,
+            "text": "new missing text",
+            "entity_ids": [],
+            "relation_types": [],
+            "screening_status": "candidate",
+            "source_metadata": {},
+            "lexical_rank": 0.0,
+            "embedding_text_hash": None,
+        },
+        {
+            "passage_id": "stale",
+            "review_id": "review-1",
+            "source_id": "source-2",
+            "source_kind": "pubtator_abstract",
+            "pmid": "456",
+            "pmcid": None,
+            "doi": None,
+            "url": None,
+            "section": "results",
+            "heading_path": None,
+            "page": None,
+            "text": "current stale text",
+            "entity_ids": [],
+            "relation_types": [],
+            "screening_status": "candidate",
+            "source_metadata": {},
+            "lexical_rank": 0.0,
+            "embedding_text_hash": "old-hash",
+        },
+        {
+            "passage_id": "fresh",
+            "review_id": "review-1",
+            "source_id": "source-3",
+            "source_kind": "pubtator_abstract",
+            "pmid": "789",
+            "pmcid": None,
+            "doi": None,
+            "url": None,
+            "section": "discussion",
+            "heading_path": None,
+            "page": None,
+            "text": "fresh text",
+            "entity_ids": [],
+            "relation_types": [],
+            "screening_status": "candidate",
+            "source_metadata": {},
+            "lexical_rank": 0.0,
+            "embedding_text_hash": (
+                "06b05fe41cba3c2910b5069a680d10827f9a8bc13dc16a9cb583ba58f35b276a"
+            ),
+        },
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    rows = await repository.list_passages_missing_embeddings(
+        "review-1",
+        model_name="BAAI/bge-small-en-v1.5",
+        limit=50,
+    )
+
+    assert [row.passage_id for row in rows] == ["missing", "stale"]
+    sql, args = connection.executed[0]
+    assert "left join review_passage_embeddings" in sql.lower()
+    assert args == ("review-1", "BAAI/bge-small-en-v1.5", 50)
 
 
 @pytest.mark.asyncio

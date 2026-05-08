@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from typing import Any
+from typing import Any, Literal, Protocol
 
 import httpx
 from defusedxml import ElementTree
@@ -25,10 +26,156 @@ CoverageProvider = Callable[
     [list[str]],
     Awaitable[dict[str, tuple[CoverageTier, CoverageReason]]],
 ]
+PUBLICATION_METADATA_BATCH_SIZE = 100
+
+
+class PublicationMetadataLookup(Protocol):
+    """Metadata lookup interface used by internal batching helpers."""
+
+    async def get_metadata(
+        self,
+        request: PublicationMetadataRequest,
+    ) -> PublicationMetadataResponse: ...
 
 
 class _MeshXmlParseError(ValueError):
     """Internal marker for malformed PubMed EFetch XML."""
+
+
+async def lookup_metadata_batched(
+    metadata_service: PublicationMetadataLookup,
+    pmids: Sequence[str],
+    *,
+    include_mesh: bool = False,
+    include_publication_types: bool = True,
+    include_citations: Literal["none", "nlm", "bibtex", "both"] = "none",
+    include_coverage: bool = True,
+    batch_size: int = PUBLICATION_METADATA_BATCH_SIZE,
+) -> PublicationMetadataResponse:
+    """Lookup publication metadata in capped internal batches."""
+
+    if batch_size < 1:
+        raise ValueError("batch_size must be at least 1")
+
+    normalized_pmids = _normalize_metadata_batch_pmids(pmids)
+    if not normalized_pmids:
+        return _empty_metadata_batch_response()
+
+    effective_batch_size = min(batch_size, PUBLICATION_METADATA_BATCH_SIZE)
+    metadata_by_pmid: dict[str, PublicationMetadata] = {}
+    failed_pmids: dict[str, str] = {}
+    source: str | None = None
+    warning_counts: Counter[str] = Counter()
+    warnings: list[str] = []
+    failed_batch_count = 0
+    batch_failure_exception_types: list[str] = []
+
+    batches = list(_metadata_batches(normalized_pmids, effective_batch_size))
+    for batch in batches:
+        request = PublicationMetadataRequest(
+            pmids=batch,
+            include_mesh=include_mesh,
+            include_publication_types=include_publication_types,
+            include_citations=include_citations,
+            include_coverage=include_coverage,
+        )
+        try:
+            response = await metadata_service.get_metadata(request)
+        except Exception as exc:
+            failed_batch_count += 1
+            failed_pmids.update(dict.fromkeys(batch, "batch_request_failed"))
+            _record_metadata_batch_warning(
+                "pubmed_metadata_batch_failed",
+                warnings,
+                warning_counts,
+            )
+            exception_type = type(exc).__name__
+            if exception_type not in batch_failure_exception_types:
+                batch_failure_exception_types.append(exception_type)
+            continue
+
+        if source is None:
+            response_source = response.meta.get("source")
+            if isinstance(response_source, str) and response_source:
+                source = response_source
+
+        failed_pmids.update(response.failed_pmids)
+        for warning in _metadata_response_warnings(response):
+            _record_metadata_batch_warning(warning, warnings, warning_counts)
+        for metadata in response.metadata:
+            metadata_by_pmid[metadata.pmid] = metadata
+
+    metadata_records = [
+        metadata_by_pmid[pmid]
+        for pmid in normalized_pmids
+        if pmid in metadata_by_pmid and pmid not in failed_pmids
+    ]
+    meta: dict[str, Any] = {"next_commands": _next_commands(has_metadata=bool(metadata_records))}
+    if source is not None:
+        meta["source"] = source
+    if warnings:
+        meta["warnings"] = warnings
+        meta["warning_counts"] = dict(warning_counts)
+    meta["batch_count"] = len(batches)
+    meta["failed_batch_count"] = failed_batch_count
+    if batch_failure_exception_types:
+        meta["batch_failure_exception_types"] = batch_failure_exception_types
+
+    return PublicationMetadataResponse(
+        success=True,
+        metadata=metadata_records,
+        failed_pmids=failed_pmids,
+        _meta=meta,
+    )
+
+
+def _normalize_metadata_batch_pmids(pmids: Sequence[str]) -> list[str]:
+    normalized_pmids: list[str] = []
+    seen_pmids: set[str] = set()
+    for pmid in pmids:
+        clean_pmid = pmid.strip()
+        if clean_pmid.upper().startswith("PMID:"):
+            clean_pmid = clean_pmid[5:].strip()
+        if not clean_pmid:
+            continue
+        if not clean_pmid.isdigit():
+            raise ValueError("PMID must be numeric")
+        if clean_pmid not in seen_pmids:
+            normalized_pmids.append(clean_pmid)
+            seen_pmids.add(clean_pmid)
+    return normalized_pmids
+
+
+def _metadata_batches(pmids: Sequence[str], batch_size: int) -> list[list[str]]:
+    return [list(pmids[index : index + batch_size]) for index in range(0, len(pmids), batch_size)]
+
+
+def _empty_metadata_batch_response() -> PublicationMetadataResponse:
+    return PublicationMetadataResponse(
+        success=True,
+        metadata=[],
+        failed_pmids={},
+        _meta={"next_commands": []},
+    )
+
+
+def _metadata_response_warnings(response: PublicationMetadataResponse) -> list[str]:
+    warnings = response.meta.get("warnings", [])
+    if isinstance(warnings, str):
+        return [warnings]
+    if isinstance(warnings, list):
+        return [warning for warning in warnings if isinstance(warning, str) and warning]
+    return []
+
+
+def _record_metadata_batch_warning(
+    warning: str,
+    warnings: list[str],
+    warning_counts: Counter[str],
+) -> None:
+    warning_counts[warning] += 1
+    if warning not in warnings:
+        warnings.append(warning)
 
 
 class NcbiPublicationMetadataClient:

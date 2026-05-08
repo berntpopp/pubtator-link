@@ -1,6 +1,6 @@
 services:
   pubtator-postgres:
-    image: postgres:18-alpine
+    image: pgvector/pgvector:0.8.2-pg18-trixie
     container_name: pubtator_link_postgres
 
     environment:

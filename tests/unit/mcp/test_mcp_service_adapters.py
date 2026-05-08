@@ -161,6 +161,29 @@ async def test_get_publication_metadata_impl_returns_typed_payload() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_publication_metadata_impl_preserves_public_100_pmid_cap() -> None:
+    from pydantic import ValidationError
+
+    from pubtator_link.mcp import service_adapters
+
+    class UnexpectedService:
+        async def get_metadata(self, request):
+            raise AssertionError("oversized public metadata request should fail validation first")
+
+    with pytest.raises(ValidationError) as exc_info:
+        await service_adapters.get_publication_metadata_impl(
+            service=UnexpectedService(),
+            pmids=[str(600000 + index) for index in range(101)],
+            include_mesh=True,
+            include_publication_types=True,
+            include_citations="both",
+            include_coverage=True,
+        )
+    assert exc_info.value.errors()[0]["loc"] == ("pmids",)
+    assert exc_info.value.errors()[0]["type"] == "too_long"
+
+
+@pytest.mark.asyncio
 async def test_graph_adapters_default_omitted_response_mode_to_compact() -> None:
     from pubtator_link.mcp.service_adapters import (
         build_topic_literature_map_impl,
@@ -1113,6 +1136,71 @@ async def test_retrieve_review_context_batch_adapter_accepts_auto_budget_and_ver
 
 
 @pytest.mark.asyncio
+async def test_retrieve_review_context_batch_adapter_preserves_embedding_diagnostics() -> None:
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        EmbeddingRerankDiagnostics,
+        PreparationStatus,
+        RetrieveReviewContextBatchResponse,
+        RetrieveReviewContextResponse,
+        RetrieveReviewDiagnostics,
+    )
+
+    class FakeService:
+        async def retrieve_context_batch(self, review_id, request):
+            return RetrieveReviewContextBatchResponse(
+                review_id=review_id,
+                results=[
+                    RetrieveReviewContextResponse(
+                        review_id=review_id,
+                        context_pack=ContextPack(
+                            question=request.queries[0],
+                            passages=[],
+                            citation_map={},
+                        ),
+                        preparation_status=PreparationStatus(complete=1),
+                        diagnostics=RetrieveReviewDiagnostics(
+                            query=request.queries[0],
+                            query_tokens=["colchicine"],
+                            candidate_count=2,
+                            selected_count=1,
+                            message="ok",
+                            embedding_rerank=EmbeddingRerankDiagnostics(
+                                enabled=True,
+                                active=True,
+                                model_name="BAAI/bge-small-en-v1.5",
+                                embedding_dim=384,
+                                candidate_count=2,
+                                embedded_candidate_count=2,
+                                strategy="lexical_top_k_dense_rrf",
+                            ),
+                        ),
+                    )
+                ],
+                merged_context_pack=ContextPack(
+                    question=request.queries[0],
+                    passages=[],
+                    citation_map={},
+                ),
+                preparation_status=PreparationStatus(complete=1),
+                include_diagnostics=True,
+            )
+
+    result = await retrieve_review_context_batch_impl(
+        service=FakeService(),
+        review_id="rev_123",
+        queries=["colchicine"],
+        include_diagnostics=True,
+    )
+
+    embedding = result["results"][0]["diagnostics"]["embedding_rerank"]
+    assert embedding["active"] is True
+    assert embedding["model_name"] == "BAAI/bge-small-en-v1.5"
+    assert embedding["strategy"] == "lexical_top_k_dense_rrf"
+
+
+@pytest.mark.asyncio
 async def test_retrieve_review_context_batch_adapter_builds_request_from_flat_args() -> None:
     from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
     from pubtator_link.models.review_rerag import (
@@ -1839,6 +1927,57 @@ async def test_search_literature_metadata_respects_limit() -> None:
     )
 
     assert [item["pmid"] for item in result["results"]] == ["1"]
+
+
+@pytest.mark.asyncio
+async def test_search_literature_metadata_batches_limit_none_over_public_cap() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+    from pubtator_link.models.publication_metadata import (
+        PublicationMetadata,
+        PublicationMetadataResponse,
+    )
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "results": [
+                    {"pmid": str(pmid), "title": f"Search {pmid}"} for pmid in range(500000, 500105)
+                ],
+                "count": 105,
+                "total_pages": 1,
+                "page_size": 105,
+            }
+
+    class RecordingMetadata:
+        def __init__(self) -> None:
+            self.requests = []
+
+        async def get_metadata(self, request):
+            self.requests.append(request)
+            return PublicationMetadataResponse(
+                metadata=[
+                    PublicationMetadata(pmid=pmid, title=f"Metadata {pmid}")
+                    for pmid in request.pmids
+                ],
+                _meta={"next_commands": []},
+            )
+
+    metadata = RecordingMetadata()
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="MEFV",
+        limit=None,
+        metadata="basic",
+        metadata_service=metadata,
+    )
+
+    assert result["success"] is True
+    assert len(result["results"]) == 105
+    assert [len(request.pmids) for request in metadata.requests] == [100, 5]
+    assert [request.include_mesh for request in metadata.requests] == [False, False]
+    assert [request.include_citations for request in metadata.requests] == ["none", "none"]
+    assert [request.include_coverage for request in metadata.requests] == [False, False]
 
 
 @pytest.mark.asyncio

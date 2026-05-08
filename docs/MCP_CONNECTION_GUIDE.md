@@ -135,13 +135,12 @@ Useful output paths:
 - Batch zero-result guidance: `query_summaries[].next_steps`
 - Citation map: `merged_context_pack.citation_map`
 - Stable citation keys: `merged_context_pack.passages[].stable_citation_key`
-- Stable citation map: `merged_context_pack.stable_citation_map`
 - Budget estimate: `budget`
 
 Request-local citation labels such as `S1` and `S2` are only stable within the current
-response. Use `stable_citation_key` and `stable_citation_map` for durable downstream
-references across repeated retrieval calls, review index snapshots for the same passage
-identity, later responses, or exported notes.
+response. Use each passage's `stable_citation_key` and `passage_id` for durable
+downstream references across repeated retrieval calls, review index snapshots for the
+same passage identity, later responses, or exported notes.
 
 `pubtator.retrieve_review_context_batch` defaults to `budget_strategy="query_fair"`,
 which reserves a fair first-pass share of the text budget across query variants before
@@ -207,6 +206,19 @@ Use stdio only for local desktop workflows that cannot connect to HTTP MCP endpo
 | `pubtator.record_review_context` | Persist durable review decisions and selected evidence IDs |
 | `pubtator.get_server_capabilities` | Discover formats, bioconcepts, relation types, and limitations |
 
+### Optional Local Embedding Rerank
+
+Private deployments can enable local dense reranking for review retrieval:
+
+```bash
+PUBTATOR_LINK_REVIEW_EMBEDDING_RERANK_ENABLED=true
+PUBTATOR_LINK_REVIEW_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+PUBTATOR_LINK_REVIEW_EMBEDDING_DIM=384
+```
+
+The server keeps lexical retrieval as the fallback when embeddings are missing,
+the model is unavailable, or `pgvector` is not installed.
+
 ### LLM Driver Ergonomics
 
 For review-grounded work, start with `pubtator.workflow_help` or
@@ -217,7 +229,7 @@ fields an LLM should inspect:
 - `recovery` for empty, degraded, or high-drop retrievals,
 - `merged_context_pack.passages[].quote` for bounded citation snippets,
 - `merged_context_pack.passages[].confidence_for_grounding` for deterministic
-  retrieval confidence,
+  retrieval confidence as `level` plus compact `basis` codes,
 - `merged_context_pack.dropped_summary` for reason counts and suggested filters,
 - `pubtator.get_review_audit_trail` for copy-ready selected-passage audit blocks.
 - Review resources such as `pubtator://reviews/{review_id}`,

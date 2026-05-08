@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from pubtator_link.models.publication_metadata import (
+    PublicationMetadata,
     PublicationMetadataRequest,
     PublicationMetadataResponse,
 )
@@ -11,6 +12,7 @@ from pubtator_link.models.review_rerag import CoverageReason, CoverageTier
 from pubtator_link.services.publication_metadata import (
     NcbiPublicationMetadataClient,
     PublicationMetadataService,
+    lookup_metadata_batched,
 )
 
 PMID = "33454820"
@@ -86,6 +88,151 @@ async def _fetch_metadata(
                 include_citations=include_citations,
             )
         )
+
+
+@pytest.mark.asyncio
+async def test_lookup_metadata_batched_accepts_large_inputs_and_preserves_order() -> None:
+    class RecordingLookup:
+        def __init__(self) -> None:
+            self.requests: list[PublicationMetadataRequest] = []
+
+        async def get_metadata(
+            self, request: PublicationMetadataRequest
+        ) -> PublicationMetadataResponse:
+            self.requests.append(request)
+            warnings = ["coverage_lookup_failed"] if len(self.requests) == 2 else []
+            return PublicationMetadataResponse(
+                metadata=[
+                    PublicationMetadata(pmid=pmid, title=f"Paper {pmid}")
+                    for pmid in reversed(request.pmids)
+                ],
+                _meta={
+                    "source": "fake-source",
+                    "next_commands": [],
+                    "warnings": warnings,
+                },
+            )
+
+    lookup = RecordingLookup()
+    expected_pmids = [str(100000 + index) for index in range(105)]
+    response = await lookup_metadata_batched(
+        lookup,
+        [" PMID:100000 ", *expected_pmids, "100003"],
+    )
+
+    assert [request.pmids for request in lookup.requests] == [
+        expected_pmids[:100],
+        expected_pmids[100:],
+    ]
+    assert all(request.include_mesh is False for request in lookup.requests)
+    assert all(request.include_publication_types is True for request in lookup.requests)
+    assert all(request.include_citations == "none" for request in lookup.requests)
+    assert all(request.include_coverage is True for request in lookup.requests)
+    assert [item.pmid for item in response.metadata] == expected_pmids
+    assert response.failed_pmids == {}
+    assert response.meta["source"] == "fake-source"
+    assert response.meta["warnings"] == ["coverage_lookup_failed"]
+    assert response.meta["warning_counts"] == {"coverage_lookup_failed": 1}
+    assert response.meta["batch_count"] == 2
+    assert response.meta["failed_batch_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_lookup_metadata_batched_merges_partial_failures_and_warnings() -> None:
+    class PartiallyFailingLookup:
+        def __init__(self) -> None:
+            self.requests: list[PublicationMetadataRequest] = []
+
+        async def get_metadata(
+            self, request: PublicationMetadataRequest
+        ) -> PublicationMetadataResponse:
+            self.requests.append(request)
+            if request.pmids == ["3", "4"]:
+                raise RuntimeError("provider body with PMID 3 and URL https://example.test")
+            if request.pmids == ["1", "2"]:
+                return PublicationMetadataResponse(
+                    metadata=[PublicationMetadata(pmid="1", title="Paper 1")],
+                    failed_pmids={"2": "metadata_not_found"},
+                    _meta={
+                        "source": "fake-source",
+                        "next_commands": [],
+                        "warnings": [
+                            "coverage_lookup_failed",
+                            "coverage_lookup_failed",
+                        ],
+                    },
+                )
+            return PublicationMetadataResponse(
+                metadata=[PublicationMetadata(pmid="5", title="Paper 5")],
+                _meta={
+                    "source": "fake-source",
+                    "next_commands": [],
+                    "warnings": ["mesh_lookup_failed"],
+                },
+            )
+
+    response = await lookup_metadata_batched(
+        PartiallyFailingLookup(),
+        ["1", "2", "3", "4", "5"],
+        batch_size=2,
+    )
+
+    assert [item.pmid for item in response.metadata] == ["1", "5"]
+    assert response.failed_pmids == {
+        "2": "metadata_not_found",
+        "3": "batch_request_failed",
+        "4": "batch_request_failed",
+    }
+    assert response.meta["warnings"] == [
+        "coverage_lookup_failed",
+        "pubmed_metadata_batch_failed",
+        "mesh_lookup_failed",
+    ]
+    assert response.meta["warning_counts"] == {
+        "coverage_lookup_failed": 2,
+        "pubmed_metadata_batch_failed": 1,
+        "mesh_lookup_failed": 1,
+    }
+    assert response.meta["batch_count"] == 3
+    assert response.meta["failed_batch_count"] == 1
+    assert response.meta["batch_failure_exception_types"] == ["RuntimeError"]
+    assert "https://example.test" not in str(response.meta)
+    assert "PMID 3" not in str(response.meta)
+
+
+@pytest.mark.asyncio
+async def test_lookup_metadata_batched_empty_or_blank_input_returns_empty_success() -> None:
+    class UnexpectedLookup:
+        async def get_metadata(
+            self, request: PublicationMetadataRequest
+        ) -> PublicationMetadataResponse:
+            raise AssertionError("empty internal metadata lookup should not call provider")
+
+    response = await lookup_metadata_batched(UnexpectedLookup(), [" ", "PMID: "])
+
+    assert response.success is True
+    assert response.metadata == []
+    assert response.failed_pmids == {}
+    assert response.meta == {"next_commands": []}
+
+
+@pytest.mark.asyncio
+async def test_lookup_metadata_batched_rejects_nonnumeric_pmids_before_requests() -> None:
+    class RecordingLookup:
+        def __init__(self) -> None:
+            self.requests: list[PublicationMetadataRequest] = []
+
+        async def get_metadata(
+            self, request: PublicationMetadataRequest
+        ) -> PublicationMetadataResponse:
+            self.requests.append(request)
+            return PublicationMetadataResponse(metadata=[], _meta={"next_commands": []})
+
+    lookup = RecordingLookup()
+    with pytest.raises(ValueError, match="PMID must be numeric"):
+        await lookup_metadata_batched(lookup, ["1", "not-a-pmid"])
+
+    assert lookup.requests == []
 
 
 @pytest.mark.asyncio

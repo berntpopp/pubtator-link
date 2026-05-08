@@ -1,10 +1,12 @@
 import asyncio
+import logging
 from collections.abc import Sequence
 
 import pytest
 
 from pubtator_link.models.publication_metadata import (
     PublicationMetadata,
+    PublicationMetadataRequest,
     PublicationMetadataResponse,
 )
 from pubtator_link.models.review_rerag import (
@@ -21,6 +23,7 @@ from pubtator_link.models.review_rerag import (
     ReviewPassageSample,
     ReviewSourceSummary,
 )
+from pubtator_link.services.review_context.embeddings import EmbeddingProviderUnavailableError
 from pubtator_link.services.review_context_service import ReviewContextService
 
 
@@ -41,6 +44,8 @@ class FakeReviewContextRepository:
         self.available_sections_value: list[str] = []
         self.indexed_pmids_value: list[str] = []
         self.session_exists = True
+        self.embeddings_by_passage_id: dict[str, list[float]] = {}
+        self.embedding_calls: list[dict[str, object]] = []
         self.calls: dict[str, int] = {
             "preparation_status": 0,
             "indexed_pmids": 0,
@@ -213,6 +218,28 @@ class FakeReviewContextRepository:
         stop = anchor_index + after + 1
         return candidates[start:stop]
 
+    async def get_passage_embeddings(
+        self,
+        review_id: str,
+        passage_ids: Sequence[str],
+        *,
+        model_name: str,
+        passage_text_hashes: dict[str, str] | None = None,
+    ) -> dict[str, list[float]]:
+        self.embedding_calls.append(
+            {
+                "review_id": review_id,
+                "passage_ids": list(passage_ids),
+                "model_name": model_name,
+                "passage_text_hashes": passage_text_hashes,
+            }
+        )
+        return {
+            passage_id: self.embeddings_by_passage_id[passage_id]
+            for passage_id in passage_ids
+            if passage_id in self.embeddings_by_passage_id
+        }
+
 
 class FakeMetadataService:
     def __init__(self) -> None:
@@ -230,6 +257,45 @@ class FakeMetadataService:
             ],
             _meta={"next_commands": []},
         )
+
+
+class RecordingMetadataService:
+    def __init__(self) -> None:
+        self.requests: list[PublicationMetadataRequest] = []
+
+    async def get_metadata(
+        self, request: PublicationMetadataRequest
+    ) -> PublicationMetadataResponse:
+        self.requests.append(request)
+        return PublicationMetadataResponse(
+            metadata=[
+                PublicationMetadata(
+                    pmid=pmid,
+                    title=f"Citation title {pmid}",
+                    journal="Citation journal",
+                )
+                for pmid in request.pmids
+            ],
+            _meta={"next_commands": []},
+        )
+
+
+class StaticQueryEmbeddingProvider:
+    model_name = "BAAI/bge-small-en-v1.5"
+    dim = 2
+
+    def __init__(self, *, fail_query: bool = False) -> None:
+        self.fail_query = fail_query
+        self.queries: list[str] = []
+
+    async def embed_query(self, text: str) -> list[float]:
+        self.queries.append(text)
+        if self.fail_query:
+            raise EmbeddingProviderUnavailableError("query model unavailable")
+        return [1.0, 0.0]
+
+    async def embed_passages(self, texts: Sequence[str]) -> list[list[float]]:
+        return [[1.0, 0.0] for _text in texts]
 
 
 class QueryMappedReviewContextRepository(FakeReviewContextRepository):
@@ -371,6 +437,7 @@ def _passage(
     section: str = "results",
     source_kind: str = "pubtator_full_bioc",
     source_id: str | None = None,
+    source_metadata: dict[str, object] | None = None,
 ) -> ReviewPassageRow:
     return ReviewPassageRow(
         passage_id=passage_id,
@@ -381,6 +448,7 @@ def _passage(
         text=text,
         pmid=pmid,
         lexical_rank=lexical_rank,
+        source_metadata=source_metadata or {},
     )
 
 
@@ -674,6 +742,182 @@ async def test_reference_passages_rank_after_body_sections_when_scores_tie() -> 
 
 
 @pytest.mark.asyncio
+async def test_embedding_rerank_promotes_semantic_evidence_above_lexical_table(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="pubtator_link.services.review_context_service")
+    repository = FakeReviewContextRepository(
+        [
+            _passage(
+                "table-lexical",
+                pmid="111",
+                text="Table row mentions colchicine.",
+                lexical_rank=10.0,
+                section="table",
+            ),
+            _passage(
+                "semantic-evidence",
+                pmid="222",
+                text="Dose adjustment reduced attacks in responders.",
+                lexical_rank=1.0,
+                section="DISCUSS",
+            ),
+        ]
+    )
+    repository.embeddings_by_passage_id = {"semantic-evidence": [1.0, 0.0]}
+    service = ReviewContextService(
+        repository,
+        embedding_provider=StaticQueryEmbeddingProvider(),
+        embedding_rerank_enabled=True,
+        embedding_dim=2,
+    )
+
+    response = await service.retrieve_context(
+        "review-1",
+        RetrieveReviewContextRequest(
+            question="dose adjustment evidence",
+            max_passages=2,
+            include_tables=True,
+            include_diagnostics=True,
+        ),
+    )
+
+    assert [passage.passage_id for passage in response.context_pack.passages] == [
+        "semantic-evidence",
+        "table-lexical",
+    ]
+    assert response.diagnostics is not None
+    assert response.diagnostics.embedding_rerank is not None
+    assert response.diagnostics.embedding_rerank.active is True
+    assert response.diagnostics.embedding_rerank.strategy == "lexical_top_k_dense_rrf"
+    records = [
+        record for record in caplog.records if record.message == "review_embedding_rerank_completed"
+    ]
+    assert records
+    assert records[0].candidate_count == 2
+    assert records[0].embedded_candidate_count == 1
+    assert records[0].active is True
+    assert records[0].elapsed_ms >= 0
+
+
+@pytest.mark.asyncio
+async def test_embedding_rerank_keeps_ref_below_evidence() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage(
+                "semantic-ref", pmid="111", text="Reference text.", lexical_rank=10.0, section="REF"
+            ),
+            _passage(
+                "semantic-evidence",
+                pmid="222",
+                text="Evidence text.",
+                lexical_rank=1.0,
+                section="DISCUSS",
+            ),
+        ]
+    )
+    repository.embeddings_by_passage_id = {
+        "semantic-ref": [1.0, 0.0],
+        "semantic-evidence": [0.5, 0.0],
+    }
+    service = ReviewContextService(
+        repository,
+        embedding_provider=StaticQueryEmbeddingProvider(),
+        embedding_rerank_enabled=True,
+        embedding_dim=2,
+    )
+
+    response = await service.retrieve_context(
+        "review-1",
+        RetrieveReviewContextRequest(
+            question="dose adjustment evidence",
+            max_passages=2,
+            include_references=True,
+            include_diagnostics=True,
+        ),
+    )
+
+    assert [passage.passage_id for passage in response.context_pack.passages] == [
+        "semantic-evidence",
+        "semantic-ref",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_embedding_rerank_missing_embeddings_falls_back_to_lexical_diagnostics(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="pubtator_link.services.review_context_service")
+    repository = FakeReviewContextRepository(
+        [
+            _passage("lexical-first", pmid="111", text="Lexical first.", lexical_rank=10.0),
+            _passage("lexical-second", pmid="222", text="Lexical second.", lexical_rank=1.0),
+        ]
+    )
+    service = ReviewContextService(
+        repository,
+        embedding_provider=StaticQueryEmbeddingProvider(),
+        embedding_rerank_enabled=True,
+        embedding_dim=2,
+    )
+
+    response = await service.retrieve_context(
+        "review-1",
+        RetrieveReviewContextRequest(question="dose", max_passages=2, include_diagnostics=True),
+    )
+
+    assert [passage.passage_id for passage in response.context_pack.passages] == [
+        "lexical-first",
+        "lexical-second",
+    ]
+    assert response.diagnostics is not None
+    assert response.diagnostics.embedding_rerank is not None
+    assert response.diagnostics.embedding_rerank.active is False
+    assert response.diagnostics.embedding_rerank.fallback_reason == "missing_embeddings"
+    records = [
+        record for record in caplog.records if record.message == "review_embedding_rerank_fallback"
+    ]
+    assert records
+    assert records[0].fallback_reason == "missing_embeddings"
+    assert records[0].candidate_count == 2
+    assert records[0].elapsed_ms >= 0
+
+
+@pytest.mark.asyncio
+async def test_embedding_rerank_provider_unavailable_falls_back_to_lexical_diagnostics() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage("lexical-first", pmid="111", text="Lexical first.", lexical_rank=10.0),
+            _passage("semantic-second", pmid="222", text="Semantic second.", lexical_rank=1.0),
+        ]
+    )
+    repository.embeddings_by_passage_id = {
+        "lexical-first": [0.0, 1.0],
+        "semantic-second": [1.0, 0.0],
+    }
+    service = ReviewContextService(
+        repository,
+        embedding_provider=StaticQueryEmbeddingProvider(fail_query=True),
+        embedding_rerank_enabled=True,
+        embedding_dim=2,
+    )
+
+    response = await service.retrieve_context(
+        "review-1",
+        RetrieveReviewContextRequest(question="dose", max_passages=2, include_diagnostics=True),
+    )
+
+    assert [passage.passage_id for passage in response.context_pack.passages] == [
+        "lexical-first",
+        "semantic-second",
+    ]
+    assert response.diagnostics is not None
+    assert response.diagnostics.embedding_rerank is not None
+    assert response.diagnostics.embedding_rerank.active is False
+    assert response.diagnostics.embedding_rerank.fallback_reason == "query_embedding_failed"
+
+
+@pytest.mark.asyncio
 async def test_inspect_review_index_returns_sources_totals_and_failures() -> None:
     repository = FakeReviewContextRepository(
         [],
@@ -898,6 +1142,89 @@ async def test_inspect_review_index_attaches_citation_metadata() -> None:
     assert response.sources[0].citation_metadata.title == "Citation title"
     assert metadata_service.requests[0].pmids == ["111"]
     assert metadata_service.requests[0].include_mesh is False
+
+
+@pytest.mark.asyncio
+async def test_inspect_review_index_batches_metadata_for_pages_over_public_cap() -> None:
+    repository = FakeReviewContextRepository([], preparation_status={"complete": 105})
+    repository.source_summaries = [
+        ReviewSourceSummary(
+            source_id=f"source-{pmid}",
+            pmid=str(pmid),
+            source_kind="pubtator_abstract",
+            job_status="complete",
+        )
+        for pmid in range(100000, 100105)
+    ]
+    metadata_service = RecordingMetadataService()
+    service = ReviewContextService(repository, metadata_service=metadata_service)
+
+    response = await service.inspect_review_index(
+        review_id="review-1",
+        request=InspectReviewIndexRequest(include_metadata=True, metadata="basic"),
+    )
+
+    assert [len(request.pmids) for request in metadata_service.requests] == [100, 5]
+    assert response.sources[0].citation_metadata is not None
+    assert response.sources[0].citation_metadata.title == "Citation title 100000"
+    assert response.sources[-1].citation_metadata is not None
+    assert response.sources[-1].citation_metadata.title == "Citation title 100104"
+
+
+@pytest.mark.asyncio
+async def test_inspect_review_index_metadata_only_fetches_current_page() -> None:
+    repository = FakeReviewContextRepository([], preparation_status={"complete": 120})
+    repository.source_summaries = [
+        ReviewSourceSummary(
+            source_id=f"source-{pmid}",
+            pmid=str(pmid),
+            source_kind="pubtator_abstract",
+            job_status="complete",
+        )
+        for pmid in range(200000, 200120)
+    ]
+    repository.index_totals = ReviewIndexTotals(source_count=120)
+    metadata_service = RecordingMetadataService()
+    service = ReviewContextService(repository, metadata_service=metadata_service)
+
+    response = await service.inspect_review_index(
+        review_id="review-1",
+        request=InspectReviewIndexRequest(
+            include_metadata=True,
+            metadata="basic",
+            limit=25,
+        ),
+    )
+
+    assert response.page_source_count == 25
+    assert [request.pmids for request in metadata_service.requests] == [
+        [str(pmid) for pmid in range(200000, 200025)]
+    ]
+
+
+@pytest.mark.asyncio
+async def test_inspect_review_index_full_metadata_preserves_full_options() -> None:
+    repository = FakeReviewContextRepository([], preparation_status={"complete": 1})
+    repository.source_summaries = [
+        ReviewSourceSummary(
+            source_id="300001",
+            pmid="300001",
+            source_kind="pubtator_abstract",
+            job_status="complete",
+        )
+    ]
+    metadata_service = RecordingMetadataService()
+    service = ReviewContextService(repository, metadata_service=metadata_service)
+
+    await service.inspect_review_index(
+        review_id="review-1",
+        request=InspectReviewIndexRequest(include_metadata=True, metadata="full"),
+    )
+
+    assert metadata_service.requests[0].include_mesh is True
+    assert metadata_service.requests[0].include_publication_types is True
+    assert metadata_service.requests[0].include_citations == "both"
+    assert metadata_service.requests[0].include_coverage is True
 
 
 @pytest.mark.asyncio
@@ -1171,6 +1498,7 @@ async def test_batch_retrieval_returns_next_context_resource_links() -> None:
         ),
     )
 
+    assert len(result.next_context_options) == 3
     options = {option.kind: option for option in result.next_context_options}
     assert options["passage"].resource == (
         "pubtator://reviews/review%201/passages/p%201%2Ffrag?session_id=session+1"
@@ -1181,6 +1509,27 @@ async def test_batch_retrieval_returns_next_context_resource_links() -> None:
     assert options["audit"].resource == (
         "pubtator://reviews/review%201/audit/p%201%2Ffrag?session_id=session+1"
     )
+
+
+@pytest.mark.asyncio
+async def test_batch_retrieval_caps_next_context_options_to_three_total() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage(f"p{index}", pmid=str(index), text=f"evidence {index}", lexical_rank=9.0)
+            for index in range(5)
+        ]
+    )
+    service = ReviewContextService(repository)
+
+    result = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["evidence"],
+            max_total_passages=5,
+        ),
+    )
+
+    assert len(result.next_context_options) == 3
 
 
 @pytest.mark.asyncio
@@ -1549,7 +1898,7 @@ async def test_batch_dry_run_returns_diagnostics_without_passage_text() -> None:
 
 
 @pytest.mark.asyncio
-async def test_batch_context_pack_includes_stable_citation_map() -> None:
+async def test_batch_context_pack_serialization_omits_stable_citation_map() -> None:
     repository = FakeReviewContextRepository(
         [
             _passage(
@@ -1570,7 +1919,48 @@ async def test_batch_context_pack_includes_stable_citation_map() -> None:
     assert response.merged_context_pack.stable_citation_map == {
         passage.stable_citation_key: passage.passage_id
     }
+    dumped = response.model_dump(mode="json")
+    assert "stable_citation_map" not in dumped["merged_context_pack"]
     assert response.index_snapshot_date is not None
+
+
+@pytest.mark.asyncio
+async def test_batch_retrieval_auto_prioritizes_practice_guidelines() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage(
+                "regular",
+                pmid="111",
+                text="regular colchicine abstract",
+                lexical_rank=10.0,
+            ),
+            _passage(
+                "guideline",
+                pmid="222",
+                text="practice guideline colchicine abstract",
+                lexical_rank=1.0,
+                source_metadata={"publication_types": ["Practice Guideline"]},
+            ),
+        ]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["colchicine"],
+            max_total_passages=1,
+            min_passages_per_pmid=1,
+        ),
+    )
+
+    assert [passage.passage_id for passage in response.merged_context_pack.passages] == [
+        "guideline"
+    ]
+    guideline_summary = next(
+        summary for summary in response.pmid_status_summary if summary.pmid == "222"
+    )
+    assert guideline_summary.prioritized is True
 
 
 @pytest.mark.asyncio

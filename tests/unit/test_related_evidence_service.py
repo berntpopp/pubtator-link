@@ -227,6 +227,46 @@ class RecordingMetadata:
         )
 
 
+class RecordingRequestMetadata:
+    def __init__(self) -> None:
+        self.requests = []
+
+    async def get_metadata(self, request):
+        self.requests.append(request)
+        return PublicationMetadataResponse(
+            metadata=[
+                PublicationMetadata(
+                    pmid=pmid,
+                    title=f"Resolved metadata {pmid}",
+                    pub_year=2024,
+                    coverage="abstract_only",
+                )
+                for pmid in request.pmids
+            ],
+        )
+
+
+class PartialFailureMetadata:
+    def __init__(self) -> None:
+        self.requests = []
+
+    async def get_metadata(self, request):
+        self.requests.append(request)
+        if len(self.requests) == 3:
+            raise RuntimeError("metadata unavailable")
+        return PublicationMetadataResponse(
+            metadata=[
+                PublicationMetadata(
+                    pmid=pmid,
+                    title=f"Resolved metadata {pmid}",
+                    pub_year=2024,
+                    coverage="abstract_only",
+                )
+                for pmid in request.pmids
+            ],
+        )
+
+
 @pytest.mark.asyncio
 async def test_ranks_full_text_candidate_when_neighbor_scores_tie() -> None:
     service = RelatedEvidenceService(
@@ -393,6 +433,62 @@ async def test_related_evidence_batches_large_metadata_candidate_sets() -> None:
     )
     assert all(candidate.paper.title for candidate in response.candidates)
     assert not any(warning.provider == "pubmed_metadata" for warning in response.meta.warnings)
+
+
+@pytest.mark.asyncio
+async def test_related_evidence_candidate_metadata_preserves_internal_options() -> None:
+    metadata = RecordingRequestMetadata()
+    service = RelatedEvidenceService(
+        discovery_service=ManyCandidateDiscovery(),
+        metadata_service=metadata,
+        citation_graph_service=ManyCandidateCitationGraph(),
+    )
+
+    await service.find_candidates(
+        RelatedEvidenceCandidatesRequest(
+            pmid="123",
+            max_results=25,
+            include_citation_neighbors=True,
+        )
+    )
+
+    candidate_requests = metadata.requests[1:]
+    assert [len(request.pmids) for request in candidate_requests] == [100, 100, 10]
+    assert all(request.include_mesh is False for request in candidate_requests)
+    assert all(request.include_publication_types is True for request in candidate_requests)
+    assert all(request.include_citations == "none" for request in candidate_requests)
+    assert all(request.include_coverage is True for request in candidate_requests)
+
+
+@pytest.mark.asyncio
+async def test_related_evidence_partial_metadata_batch_failure_keeps_successful_candidates() -> (
+    None
+):
+    metadata = PartialFailureMetadata()
+    service = RelatedEvidenceService(
+        discovery_service=ManyCandidateDiscovery(),
+        metadata_service=metadata,
+        citation_graph_service=ManyCandidateCitationGraph(),
+    )
+
+    response = await service.find_candidates(
+        RelatedEvidenceCandidatesRequest(
+            pmid="123",
+            max_results=25,
+            include_citation_neighbors=True,
+        )
+    )
+
+    assert [len(request.pmids) for request in metadata.requests] == [1, 100, 100, 10]
+    assert response.candidates
+    assert any(candidate.paper.title for candidate in response.candidates)
+    assert any(
+        warning.provider == "pubmed_metadata" and warning.status == "provider_failed"
+        for warning in response.meta.warnings
+    )
+    warning_messages = [warning.message for warning in response.meta.warnings]
+    assert "PubMed metadata warning: pubmed_metadata_batch_failed" in warning_messages
+    assert "Metadata lookup failed for 100 PMID(s)." in warning_messages
 
 
 @pytest.mark.asyncio

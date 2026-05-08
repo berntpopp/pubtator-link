@@ -20,6 +20,12 @@ from pubtator_link.models.review_rerag import (
     passage_id_for_pmcid,
     passage_id_for_pmid,
 )
+from pubtator_link.repositories.review_rerag import ReviewPassageEmbeddingRecord
+from pubtator_link.services.review_context.embeddings import (
+    EmbeddingProvider,
+    EmbeddingProviderUnavailableError,
+    text_hash,
+)
 
 if TYPE_CHECKING:
     from pubtator_link.repositories.review_rerag import ReviewReragRepository
@@ -81,6 +87,9 @@ class FullTextPreparationService:
         safe_url_fetcher: Any | None = None,
         source_preflight_service: Any | None = None,
         europe_pmc_client: Any | None = None,
+        embedding_provider: EmbeddingProvider | None = None,
+        embedding_model: str = "BAAI/bge-small-en-v1.5",
+        embedding_dim: int = 384,
     ) -> None:
         self.config = config
         self.repository = repository
@@ -89,6 +98,9 @@ class FullTextPreparationService:
         self.safe_url_fetcher = safe_url_fetcher
         self.source_preflight_service = source_preflight_service
         self.europe_pmc_client = europe_pmc_client
+        self.embedding_provider = embedding_provider
+        self.embedding_model = embedding_model
+        self.embedding_dim = embedding_dim
 
     async def prepare_pmid(self, review_id: str, pmid: str) -> JobStatus:
         """Prepare passages for a PMID from full-text PubTator, then abstract fallback."""
@@ -122,6 +134,7 @@ class FullTextPreparationService:
 
         if passages:
             await self.repository.upsert_passages(passages)
+            await self._upsert_passage_embeddings(passages)
             await self._record_pmid_attempt(
                 review_id=review_id,
                 pmid=pmid,
@@ -153,6 +166,7 @@ class FullTextPreparationService:
             passages = europe_pmc_result.passages
             if passages:
                 await self.repository.upsert_passages(passages)
+                await self._upsert_passage_embeddings(passages)
                 await self._record_pmid_attempt(
                     review_id=review_id,
                     pmid=pmid,
@@ -224,6 +238,7 @@ class FullTextPreparationService:
                 },
             )
             await self.repository.upsert_passages(passages)
+            await self._upsert_passage_embeddings(passages)
 
         status = "success" if passages else "failed"
         await self._record_pmid_attempt(
@@ -247,6 +262,54 @@ class FullTextPreparationService:
             },
         )
         return "complete" if passages else "failed"
+
+    async def _upsert_passage_embeddings(self, passages: list[ReviewPassageRow]) -> None:
+        if (
+            not passages
+            or not self.config.embedding_rerank_enabled
+            or self.embedding_provider is None
+        ):
+            return
+
+        started = time.monotonic()
+        try:
+            vectors = await self.embedding_provider.embed_passages(
+                [passage.text for passage in passages]
+            )
+        except EmbeddingProviderUnavailableError as exc:
+            self.logger.warning(
+                "Review passage embedding generation skipped",
+                extra={
+                    "reason": str(exc),
+                    "passage_count": len(passages),
+                    "model_name": self.embedding_model,
+                    "embedding_dim": self.embedding_dim,
+                    "elapsed_ms": round((time.monotonic() - started) * 1000, 2),
+                },
+            )
+            return
+
+        records = [
+            ReviewPassageEmbeddingRecord(
+                review_id=passage.review_id,
+                passage_id=passage.passage_id,
+                model_name=self.embedding_model,
+                embedding_dim=self.embedding_dim,
+                text_hash=text_hash(passage.text),
+                embedding=vector,
+            )
+            for passage, vector in zip(passages, vectors, strict=True)
+        ]
+        await self.repository.upsert_passage_embeddings(records)
+        self.logger.info(
+            "Review passage embedding generation completed",
+            extra={
+                "passage_count": len(passages),
+                "model_name": self.embedding_model,
+                "embedding_dim": self.embedding_dim,
+                "elapsed_ms": round((time.monotonic() - started) * 1000, 2),
+            },
+        )
 
     async def _coverage_hint_for_pmid(self, pmid: str) -> SourceCoverageHint | None:
         if self.source_preflight_service is None:

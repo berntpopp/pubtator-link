@@ -68,7 +68,10 @@ from pubtator_link.services.entity_matching import (
     matched_terms_from_match_text,
     synonyms_from_entity_item,
 )
-from pubtator_link.services.publication_metadata import PublicationMetadataService
+from pubtator_link.services.publication_metadata import (
+    PublicationMetadataService,
+    lookup_metadata_batched,
+)
 from pubtator_link.services.publication_passage_service import PublicationPassageService
 from pubtator_link.services.publication_service import PublicationService
 from pubtator_link.services.related_evidence import RelatedEvidenceService
@@ -538,14 +541,13 @@ async def _search_metadata_by_pmid(
     include_metadata_citations: IncludeCitations = (
         "both" if metadata == "full" and include_citations == "none" else include_citations
     )
-    response = await metadata_service.get_metadata(
-        PublicationMetadataRequest(
-            pmids=pmids,
-            include_mesh=metadata == "full",
-            include_publication_types=True,
-            include_citations=include_metadata_citations if metadata == "full" else "none",
-            include_coverage=False,
-        )
+    response = await lookup_metadata_batched(
+        metadata_service,
+        pmids,
+        include_mesh=metadata == "full",
+        include_publication_types=True,
+        include_citations=include_metadata_citations if metadata == "full" else "none",
+        include_coverage=False,
     )
     return {item.pmid: item.model_dump() for item in response.metadata}
 

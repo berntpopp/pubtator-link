@@ -50,6 +50,11 @@ from ...services.publication_service import PublicationService
 from ...services.related_evidence import RelatedEvidenceService
 from ...services.research_session import ResearchSessionSearchProvider, ResearchSessionService
 from ...services.review_audit import ReviewAuditService
+from ...services.review_context.embeddings import (
+    EmbeddingProvider,
+    EmbeddingProviderUnavailableError,
+    SentenceTransformerEmbeddingProvider,
+)
 from ...services.review_context_service import ReviewContextService
 from ...services.review_evidence_certainty import ReviewEvidenceCertaintyService
 from ...services.review_index_lifecycle import ReviewIndexLifecycleService
@@ -738,14 +743,39 @@ def _build_review_context_service(
     repository: PostgresReviewReragRepository,
     publication_metadata_service: PublicationMetadataService | None = None,
 ) -> ReviewContextService:
+    embedding_provider = _build_embedding_provider()
     try:
         return ReviewContextService(
             repository=repository,
             metadata_service=publication_metadata_service,
             retrieval_concurrency=getattr(review_rerag_config, "retrieval_concurrency", 4),
+            embedding_provider=embedding_provider,
+            embedding_rerank_enabled=getattr(
+                review_rerag_config, "embedding_rerank_enabled", False
+            ),
+            embedding_model=getattr(
+                review_rerag_config, "embedding_model", "BAAI/bge-small-en-v1.5"
+            ),
+            embedding_dim=getattr(review_rerag_config, "embedding_dim", 384),
+            embedding_top_k=getattr(review_rerag_config, "embedding_top_k", 50),
+            embedding_rrf_k=getattr(review_rerag_config, "embedding_rrf_k", 60),
         )
     except TypeError:
         return ReviewContextService(repository)
+
+
+def _build_embedding_provider() -> EmbeddingProvider | None:
+    if not getattr(review_rerag_config, "embedding_rerank_enabled", False):
+        return None
+    try:
+        return SentenceTransformerEmbeddingProvider(
+            model_name=getattr(review_rerag_config, "embedding_model", "BAAI/bge-small-en-v1.5"),
+            dim=getattr(review_rerag_config, "embedding_dim", 384),
+            device=getattr(review_rerag_config, "embedding_device", "auto"),
+        )
+    except EmbeddingProviderUnavailableError as exc:
+        logger.warning("Review embedding provider unavailable; lexical fallback active: %s", exc)
+        return None
 
 
 async def get_source_preflight_service() -> SourcePreflightService:
@@ -823,15 +853,35 @@ def _build_full_text_preparation(
     logger_instance: FilteringBoundLogger,
     europe_pmc_client: EuropePmcClient | None,
 ) -> FullTextPreparationService:
+    embedding_provider = _build_embedding_provider()
     kwargs: dict[str, Any] = {
         "config": review_rerag_config,
         "repository": repository,
         "pubtator_client": client,
         "logger": logger_instance,
+        "embedding_provider": embedding_provider,
+        "embedding_model": getattr(
+            review_rerag_config, "embedding_model", "BAAI/bge-small-en-v1.5"
+        ),
+        "embedding_dim": getattr(review_rerag_config, "embedding_dim", 384),
     }
     if europe_pmc_client is not None:
         kwargs["europe_pmc_client"] = europe_pmc_client
-    return FullTextPreparationService(**kwargs)
+    try:
+        return FullTextPreparationService(**kwargs)
+    except TypeError:
+        legacy_kwargs = {
+            key: value
+            for key, value in kwargs.items()
+            if key
+            not in {
+                "embedding_provider",
+                "embedding_model",
+                "embedding_dim",
+                "europe_pmc_client",
+            }
+        }
+        return FullTextPreparationService(**legacy_kwargs)
 
 
 async def get_review_audit_service() -> ReviewAuditService:

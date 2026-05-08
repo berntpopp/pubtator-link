@@ -11,7 +11,10 @@ from pubtator_link.models.literature_graph import (
     LiteraturePaper,
     PublicationCitationGraphRequest,
 )
-from pubtator_link.models.publication_metadata import PublicationMetadataResponse
+from pubtator_link.models.publication_metadata import (
+    PublicationMetadataRequest,
+    PublicationMetadataResponse,
+)
 from pubtator_link.services.citation_graph import CitationGraphService
 
 
@@ -294,6 +297,44 @@ class RecordingMetadata:
     async def get_metadata(self, request):
         self.called = True
         return PublicationMetadataResponse(metadata=[], failed_pmids={})
+
+
+@pytest.mark.asyncio
+async def test_citation_graph_metadata_resolution_remains_single_pmid_public_request() -> None:
+    from pubtator_link.models.publication_metadata import PublicationMetadata
+
+    class SinglePmidMetadata:
+        def __init__(self) -> None:
+            self.requests: list[object] = []
+
+        async def get_metadata(self, request):
+            self.requests.append(request)
+            return PublicationMetadataResponse(
+                metadata=[
+                    PublicationMetadata(
+                        pmid="28386255",
+                        title="Fake service metadata title",
+                    )
+                ],
+                failed_pmids={},
+            )
+
+    metadata = SinglePmidMetadata()
+    service = CitationGraphService(metadata_service=metadata)
+
+    result = await service._metadata_for_pmid("28386255")
+
+    assert result is not None
+    assert result.pmid == "28386255"
+    assert result.title == "Fake service metadata title"
+    assert len(metadata.requests) == 1
+    request = metadata.requests[0]
+    assert isinstance(request, PublicationMetadataRequest)
+    assert request.pmids == ["28386255"]
+    assert request.include_mesh is False
+    assert request.include_publication_types is True
+    assert request.include_citations == "none"
+    assert request.include_coverage is True
 
 
 class BatchResolvingDiscovery:

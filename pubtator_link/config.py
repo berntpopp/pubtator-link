@@ -164,6 +164,13 @@ class ServerSettings(BaseSettings):
     unpaywall_email: str | None = Field(
         default=None, description="Required email for optional Unpaywall API use"
     )
+    review_embedding_rerank_enabled: bool = False
+    review_embedding_model: str = "BAAI/bge-small-en-v1.5"
+    review_embedding_dim: int = Field(default=384, ge=1, le=2000)
+    review_embedding_top_k: int = Field(default=50, ge=1, le=100)
+    review_embedding_rrf_k: int = Field(default=60, ge=1, le=1000)
+    review_embedding_batch_size: int = Field(default=32, ge=1, le=256)
+    review_embedding_device: str = "auto"
 
     @field_validator("mcp_path")
     @classmethod
@@ -302,6 +309,13 @@ class ReviewReragConfig:
     europe_pmc_rate_limit_per_second: float = 1.0
     europe_pmc_timeout_seconds: int = 20
     europe_pmc_max_concurrency: int = 1
+    embedding_rerank_enabled: bool = False
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    embedding_dim: int = 384
+    embedding_top_k: int = 50
+    embedding_rrf_k: int = 60
+    embedding_batch_size: int = 32
+    embedding_device: str = "auto"
 
     @classmethod
     def from_settings(cls, server_settings: ServerSettings) -> "ReviewReragConfig":
@@ -326,6 +340,13 @@ class ReviewReragConfig:
             europe_pmc_rate_limit_per_second=server_settings.europe_pmc_rate_limit_per_second,
             europe_pmc_timeout_seconds=server_settings.europe_pmc_timeout_seconds,
             europe_pmc_max_concurrency=server_settings.europe_pmc_max_concurrency,
+            embedding_rerank_enabled=server_settings.review_embedding_rerank_enabled,
+            embedding_model=server_settings.review_embedding_model,
+            embedding_dim=server_settings.review_embedding_dim,
+            embedding_top_k=server_settings.review_embedding_top_k,
+            embedding_rrf_k=server_settings.review_embedding_rrf_k,
+            embedding_batch_size=server_settings.review_embedding_batch_size,
+            embedding_device=server_settings.review_embedding_device,
         )
 
 

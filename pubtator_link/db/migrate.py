@@ -49,6 +49,7 @@ def required_review_schema_items() -> RequiredSchemaItems:
                 "review_evidence_certainty",
                 "review_llm_context",
                 "review_llm_context_events",
+                "review_passage_embeddings",
             }
         ),
         columns=frozenset(

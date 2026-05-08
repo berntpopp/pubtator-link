@@ -319,7 +319,7 @@ def _response(
         "review_retrieval_fields": (
             "After retrieval, prefer top-level recovery for empty/high-drop queries, "
             "use passages[].quote for short verbatim snippets, "
-            "passages[].confidence_for_grounding for retrieval confidence, and "
+            "passages[].confidence_for_grounding level/basis for retrieval confidence, and "
             "pubtator.get_review_audit_trail for selected passage audit blocks."
         ),
     }

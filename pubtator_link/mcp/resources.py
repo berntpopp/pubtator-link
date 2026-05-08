@@ -182,7 +182,10 @@ def get_llm_driver_contract() -> dict[str, Any]:
         "response_contracts": {
             "recovery": "Top-level recovery hints appear on empty, degraded, or high-drop retrievals.",
             "quote": "Context passages include optional quote offsets for returned text and original passage text.",
-            "confidence_for_grounding": "Deterministic retrieval confidence for source grounding, not clinical certainty.",
+            "confidence_for_grounding": (
+                "Deterministic retrieval confidence for source grounding, not clinical "
+                "certainty. Serialized passages expose level plus compact basis codes."
+            ),
             "dropped_summary": "Structured dropped-passage reason counts plus bounded filter and budget advice.",
         },
     }
@@ -564,7 +567,6 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
             "batch_next_steps": "query_summaries[].next_steps",
             "citation_map": "merged_context_pack.citation_map",
             "stable_citation_key": "merged_context_pack.passages[].stable_citation_key",
-            "stable_citation_map": "merged_context_pack.stable_citation_map",
             "search_metadata": "results[].authors, results[].journal, results[].doi",
             "publication_metadata": "metadata[]",
             "discovery_candidate_pmids": "candidate_pmids",
@@ -597,9 +599,9 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
         "citation_keys": {
             "stable_citation_key": (
                 "Stable across repeated retrieval calls and review index snapshots for the "
-                "same passage_id; use stable_citation_map for render-time numbering."
+                "same passage_id; use passage_id or citation_map for render-time numbering."
             ),
-            "stable_citation_map": "Maps stable_citation_key values back to passage_id values.",
+            "citation_map": "Maps response-local citation keys such as S1 back to passage_id values.",
         },
         "section_taxonomy": {
             "canonical_case": "lowercase",

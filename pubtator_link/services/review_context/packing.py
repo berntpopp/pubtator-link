@@ -115,6 +115,7 @@ def context_passage_from_row(
             truncated=truncated,
             query_tokens=tokens,
         ),
+        publication_types=_publication_types_from_metadata(row.source_metadata),
     )
 
 
@@ -131,6 +132,16 @@ def effective_passage_len(
 def _tail_preview(text: str, end_char: int) -> str | None:
     preview = text[end_char : end_char + 120].strip()
     return preview or None
+
+
+def _publication_types_from_metadata(source_metadata: dict[str, object]) -> list[str]:
+    raw_types = source_metadata.get("publication_types", [])
+    if isinstance(raw_types, list):
+        return [item for item in (str(value).strip() for value in raw_types) if item]
+    if isinstance(raw_types, str):
+        publication_type = raw_types.strip()
+        return [publication_type] if publication_type else []
+    return []
 
 
 def is_table_section(section: str) -> bool:

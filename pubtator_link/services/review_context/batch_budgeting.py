@@ -79,7 +79,12 @@ def merge_batch_context(
     total_chars = 0
     total_quote_payload_chars = 0
     max_response_chars = cast(int, request.max_response_chars)
-    prioritized_pmids = set(request.prioritize_pmids)
+    prioritized_pmid_order = (
+        list(request.prioritize_pmids)
+        if request.prioritize_pmids
+        else _auto_prioritized_guideline_pmids(query_results)
+    )
+    prioritized_pmids = set(prioritized_pmid_order)
 
     for result in query_results:
         dropped.extend(result.context_pack.dropped)
@@ -264,9 +269,9 @@ def merge_batch_context(
             ) -> tuple[int, int, int]:
                 query_index, passage_index, passage = candidate
                 priority_index = (
-                    request.prioritize_pmids.index(passage.pmid)
+                    prioritized_pmid_order.index(passage.pmid)
                     if passage.pmid in prioritized_pmids
-                    else len(request.prioritize_pmids)
+                    else len(prioritized_pmid_order)
                 )
                 return priority_index, query_index, passage_index
 
@@ -296,6 +301,7 @@ def merge_batch_context(
                     request=request,
                     query_index=query_index,
                     passages=result.context_pack.passages,
+                    prioritized_pmid_order=prioritized_pmid_order,
                 )
                 for passage_index, passage in passages:
                     try_merge_passage(
@@ -309,6 +315,7 @@ def merge_batch_context(
                     request=request,
                     query_index=query_index,
                     passages=result.context_pack.passages,
+                    prioritized_pmid_order=prioritized_pmid_order,
                 )
                 for passage_index, passage in passages:
                     try_merge_passage(
@@ -459,18 +466,50 @@ def _ordered_passages_for_mode(
     request: RetrieveReviewContextBatchRequest,
     query_index: int,
     passages: list[ContextPassage],
+    prioritized_pmid_order: list[str],
 ) -> list[tuple[int, ContextPassage]]:
     indexed = list(enumerate(passages))
+    prioritized_pmid_rank = {pmid: index for index, pmid in enumerate(prioritized_pmid_order)}
+
+    def priority_rank(passage: ContextPassage) -> int:
+        if passage.pmid is None:
+            return len(prioritized_pmid_rank)
+        return prioritized_pmid_rank.get(passage.pmid, len(prioritized_pmid_rank))
+
     if request.response_mode != "quotes":
-        return indexed
+        return sorted(indexed, key=lambda item: (priority_rank(item[1]), item[0]))
     query = request.queries[query_index] if query_index < len(request.queries) else ""
     return sorted(
         indexed,
         key=lambda item: (
+            priority_rank(item[1]),
             -_claim_density_score(item[1], query=query),
             item[0],
         ),
     )
+
+
+def _auto_prioritized_guideline_pmids(
+    query_results: list[RetrieveReviewContextResponse],
+) -> list[str]:
+    pmids: list[str] = []
+    seen: set[str] = set()
+    for result in query_results:
+        for passage in result.context_pack.passages:
+            if passage.pmid is None or passage.pmid in seen:
+                continue
+            if _has_guideline_publication_type(passage):
+                seen.add(passage.pmid)
+                pmids.append(passage.pmid)
+    return pmids
+
+
+def _has_guideline_publication_type(passage: ContextPassage) -> bool:
+    for publication_type in passage.publication_types:
+        normalized = publication_type.strip().lower().replace("-", " ")
+        if "practice guideline" in normalized:
+            return True
+    return False
 
 
 def _claim_density_score(passage: ContextPassage, *, query: str) -> float:

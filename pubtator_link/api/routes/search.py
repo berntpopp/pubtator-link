@@ -5,9 +5,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from ...models.publication_metadata import PublicationMetadataRequest
 from ...models.requests import SearchRequest, SearchSection, SearchSortOrder
 from ...models.responses import SearchResponse
+from ...services.publication_metadata import lookup_metadata_batched
 from ...services.search_coverage import SearchCoverageMode, attach_preflight_coverage
 from ...services.search_shaping import (
     IncludeCitations,
@@ -463,16 +463,13 @@ async def search_publications(
                     if metadata == "full" and include_citations == "none"
                     else include_citations
                 )
-                metadata_response = await publication_metadata_service.get_metadata(
-                    PublicationMetadataRequest(
-                        pmids=pmids,
-                        include_mesh=metadata == "full",
-                        include_publication_types=True,
-                        include_citations=include_metadata_citations
-                        if metadata == "full"
-                        else "none",
-                        include_coverage=False,
-                    )
+                metadata_response = await lookup_metadata_batched(
+                    publication_metadata_service,
+                    pmids,
+                    include_mesh=metadata == "full",
+                    include_publication_types=True,
+                    include_citations=include_metadata_citations if metadata == "full" else "none",
+                    include_coverage=False,
                 )
                 metadata_by_pmid = {
                     item.pmid: item.model_dump() for item in metadata_response.metadata

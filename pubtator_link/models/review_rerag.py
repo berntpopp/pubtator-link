@@ -501,6 +501,7 @@ class ContextPassage(BaseModel):
     score: PassageScore | None = None
     quote: PassageQuote | None = None
     confidence_for_grounding: GroundingConfidence | None = None
+    publication_types: list[str] = Field(default_factory=list)
     matched_queries: list[str] = Field(default_factory=list)
     matched_query_indices: list[int] = Field(default_factory=list)
 
@@ -521,9 +522,50 @@ class ContextPassage(BaseModel):
         if confidence is not None:
             data["confidence_for_grounding"] = {
                 "level": confidence.level,
-                "explanation": confidence.explanation,
+                "basis": _grounding_confidence_basis(confidence),
             }
         return data
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, core_schema: Any, handler: Any) -> dict[str, Any]:
+        schema = cast(dict[str, Any], handler(core_schema))
+        properties = schema.setdefault("properties", {})
+        properties["confidence_for_grounding"] = {
+            "anyOf": [
+                {
+                    "type": "object",
+                    "properties": {
+                        "level": {
+                            "enum": ["high", "moderate", "low", "unknown"],
+                            "type": "string",
+                        },
+                        "basis": {
+                            "type": "array",
+                            "items": {
+                                "enum": [
+                                    "lexical",
+                                    "section",
+                                    "coverage",
+                                    "entity_overlap",
+                                    "truncation",
+                                ],
+                                "type": "string",
+                            },
+                            "description": (
+                                "Compact deterministic basis codes for grounding confidence: "
+                                "lexical=term/rank match, section=evidence section weighting, "
+                                "coverage=source coverage, entity_overlap=entity matches, "
+                                "truncation=passage truncation penalty."
+                            ),
+                        },
+                    },
+                    "required": ["level", "basis"],
+                },
+                {"type": "null"},
+            ],
+            "default": None,
+        }
+        return schema
 
 
 class ContextPack(BaseModel):
@@ -551,6 +593,36 @@ class ContextPack(BaseModel):
             }
         return self
 
+    @model_serializer(mode="wrap")
+    def serialize_without_duplicate_stable_map(self, handler: Any) -> dict[str, Any]:
+        data = cast(dict[str, Any], handler(self))
+        data.pop("stable_citation_map", None)
+        return data
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, core_schema: Any, handler: Any) -> dict[str, Any]:
+        schema = cast(dict[str, Any], handler(core_schema))
+        properties = schema.get("properties")
+        if isinstance(properties, dict):
+            properties.pop("stable_citation_map", None)
+        return schema
+
+
+def _grounding_confidence_basis(confidence: GroundingConfidence) -> list[str]:
+    basis: list[str] = []
+    factor_names = {name.lower() for name in confidence.factors}
+    if any("lexical" in name or "rank" in name for name in factor_names):
+        basis.append("lexical")
+    if any("section" in name for name in factor_names):
+        basis.append("section")
+    if any("coverage" in name for name in factor_names):
+        basis.append("coverage")
+    if any("entity" in name for name in factor_names):
+        basis.append("entity_overlap")
+    if any("truncation" in name for name in factor_names):
+        basis.append("truncation")
+    return basis or ["lexical", "section", "coverage"]
+
 
 class RetrieveReviewContextResponse(BaseModel):
     """Response for context retrieval."""
@@ -567,6 +639,20 @@ class RetrieveReviewContextResponse(BaseModel):
     recovery: RecoveryHint | None = None
 
 
+class EmbeddingRerankDiagnostics(BaseModel):
+    """Diagnostics for optional embedding-based review context reranking."""
+
+    enabled: bool = False
+    active: bool = False
+    model_name: str | None = None
+    embedding_dim: int | None = None
+    candidate_count: int = Field(default=0, ge=0)
+    embedded_candidate_count: int = Field(default=0, ge=0)
+    missing_embedding_count: int = Field(default=0, ge=0)
+    strategy: str | None = None
+    fallback_reason: str | None = None
+
+
 class RetrieveReviewDiagnostics(BaseModel):
     """Actionable diagnostics for review context retrieval."""
 
@@ -580,6 +666,7 @@ class RetrieveReviewDiagnostics(BaseModel):
     failed_sources: list["FailedSourceSummary"] = Field(default_factory=list)
     filter_summary: dict[str, list[str]] = Field(default_factory=dict)
     suggested_queries: list[str] = Field(default_factory=list)
+    embedding_rerank: EmbeddingRerankDiagnostics | None = None
     message: str
 
 
