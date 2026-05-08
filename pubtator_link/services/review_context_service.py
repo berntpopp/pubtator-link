@@ -5,10 +5,9 @@ import logging
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol
 from urllib.parse import quote, urlencode
 
-from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 from pubtator_link.models.review_rerag import (
     BudgetSource,
     ContextPack,
@@ -35,6 +34,10 @@ from pubtator_link.models.review_rerag import (
     stable_citation_key_for_passage,
 )
 from pubtator_link.services.provenance import corpus_snapshot_date, stable_cache_key
+from pubtator_link.services.publication_metadata import (
+    PublicationMetadataLookup,
+    lookup_metadata_batched,
+)
 from pubtator_link.services.review_context.batch_budgeting import merge_batch_context
 from pubtator_link.services.review_context.budgets import (
     REVIEW_BATCH_DEFAULT_MAX_CHARS,
@@ -165,11 +168,6 @@ class ReviewContextRepository(Protocol):
         passage_text_hashes: dict[str, str] | None = None,
     ) -> dict[str, list[float]]:
         """Return stored passage embeddings keyed by passage ID."""
-
-
-class PublicationMetadataLookup(Protocol):
-    async def get_metadata(self, request: PublicationMetadataRequest) -> Any:
-        """Return publication metadata for PMIDs."""
 
 
 @dataclass(frozen=True)
@@ -776,14 +774,13 @@ class ReviewContextService:
         metadata_service = self.metadata_service
         if not pmids or metadata_service is None:
             return
-        response = await metadata_service.get_metadata(
-            PublicationMetadataRequest(
-                pmids=pmids,
-                include_mesh=metadata_mode == "full",
-                include_publication_types=True,
-                include_citations="both" if metadata_mode == "full" else "none",
-                include_coverage=True,
-            )
+        response = await lookup_metadata_batched(
+            metadata_service,
+            pmids,
+            include_mesh=metadata_mode == "full",
+            include_publication_types=True,
+            include_citations="both" if metadata_mode == "full" else "none",
+            include_coverage=True,
         )
         metadata_by_pmid = {item.pmid: item for item in getattr(response, "metadata", [])}
         for source in sources:

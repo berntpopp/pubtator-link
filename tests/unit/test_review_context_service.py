@@ -6,6 +6,7 @@ import pytest
 
 from pubtator_link.models.publication_metadata import (
     PublicationMetadata,
+    PublicationMetadataRequest,
     PublicationMetadataResponse,
 )
 from pubtator_link.models.review_rerag import (
@@ -253,6 +254,25 @@ class FakeMetadataService:
                     title="Citation title",
                     journal="Citation journal",
                 )
+            ],
+            _meta={"next_commands": []},
+        )
+
+
+class RecordingMetadataService:
+    def __init__(self) -> None:
+        self.requests: list[PublicationMetadataRequest] = []
+
+    async def get_metadata(self, request: PublicationMetadataRequest) -> PublicationMetadataResponse:
+        self.requests.append(request)
+        return PublicationMetadataResponse(
+            metadata=[
+                PublicationMetadata(
+                    pmid=pmid,
+                    title=f"Citation title {pmid}",
+                    journal="Citation journal",
+                )
+                for pmid in request.pmids
             ],
             _meta={"next_commands": []},
         )
@@ -1120,6 +1140,89 @@ async def test_inspect_review_index_attaches_citation_metadata() -> None:
     assert response.sources[0].citation_metadata.title == "Citation title"
     assert metadata_service.requests[0].pmids == ["111"]
     assert metadata_service.requests[0].include_mesh is False
+
+
+@pytest.mark.asyncio
+async def test_inspect_review_index_batches_metadata_for_pages_over_public_cap() -> None:
+    repository = FakeReviewContextRepository([], preparation_status={"complete": 105})
+    repository.source_summaries = [
+        ReviewSourceSummary(
+            source_id=f"source-{pmid}",
+            pmid=str(pmid),
+            source_kind="pubtator_abstract",
+            job_status="complete",
+        )
+        for pmid in range(100000, 100105)
+    ]
+    metadata_service = RecordingMetadataService()
+    service = ReviewContextService(repository, metadata_service=metadata_service)
+
+    response = await service.inspect_review_index(
+        review_id="review-1",
+        request=InspectReviewIndexRequest(include_metadata=True, metadata="basic"),
+    )
+
+    assert [len(request.pmids) for request in metadata_service.requests] == [100, 5]
+    assert response.sources[0].citation_metadata is not None
+    assert response.sources[0].citation_metadata.title == "Citation title 100000"
+    assert response.sources[-1].citation_metadata is not None
+    assert response.sources[-1].citation_metadata.title == "Citation title 100104"
+
+
+@pytest.mark.asyncio
+async def test_inspect_review_index_metadata_only_fetches_current_page() -> None:
+    repository = FakeReviewContextRepository([], preparation_status={"complete": 120})
+    repository.source_summaries = [
+        ReviewSourceSummary(
+            source_id=f"source-{pmid}",
+            pmid=str(pmid),
+            source_kind="pubtator_abstract",
+            job_status="complete",
+        )
+        for pmid in range(200000, 200120)
+    ]
+    repository.index_totals = ReviewIndexTotals(source_count=120)
+    metadata_service = RecordingMetadataService()
+    service = ReviewContextService(repository, metadata_service=metadata_service)
+
+    response = await service.inspect_review_index(
+        review_id="review-1",
+        request=InspectReviewIndexRequest(
+            include_metadata=True,
+            metadata="basic",
+            limit=25,
+        ),
+    )
+
+    assert response.page_source_count == 25
+    assert [request.pmids for request in metadata_service.requests] == [
+        [str(pmid) for pmid in range(200000, 200025)]
+    ]
+
+
+@pytest.mark.asyncio
+async def test_inspect_review_index_full_metadata_preserves_full_options() -> None:
+    repository = FakeReviewContextRepository([], preparation_status={"complete": 1})
+    repository.source_summaries = [
+        ReviewSourceSummary(
+            source_id="300001",
+            pmid="300001",
+            source_kind="pubtator_abstract",
+            job_status="complete",
+        )
+    ]
+    metadata_service = RecordingMetadataService()
+    service = ReviewContextService(repository, metadata_service=metadata_service)
+
+    await service.inspect_review_index(
+        review_id="review-1",
+        request=InspectReviewIndexRequest(include_metadata=True, metadata="full"),
+    )
+
+    assert metadata_service.requests[0].include_mesh is True
+    assert metadata_service.requests[0].include_publication_types is True
+    assert metadata_service.requests[0].include_citations == "both"
+    assert metadata_service.requests[0].include_coverage is True
 
 
 @pytest.mark.asyncio
