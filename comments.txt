@@ -1,0 +1,137 @@
+● MCP Evaluation v2: pubtator-link (after two end-to-end runs)
+
+  Aspects a good MCP should excel at
+
+  1. Discoverability — tool naming, descriptions, capability/help endpoints, "what next" hints
+  2. Schema clarity / input ergonomics — flat args, sane defaults, predictable types
+  3. Context/payload management — compact modes, truncation honesty, budget feedback, omission counts
+  4. Latency — round-trip cost vs. work done
+  5. Composability — does each call hand the next call its inputs?
+  6. Provenance & trust — source attribution, snapshot dates, version pins, scope guardrails
+  7. Graceful degradation — partial results, surfaced warnings, no silent data loss
+  8. Reproducibility / determinism — stable cache keys, snapshot dates, ranking versions
+  9. State / idempotence — session model, repeated-call safety
+  10. Safety scoping — research-use disclaimers, refusal of patient-care framing
+
+  Ratings (1–10) — updated based on two runs
+
+  ┌─────────────────┬────────┬───────────────────────────────────────────────────────────────────────────────────────────┐
+  │     Aspect      │ Score  │                                Evidence from this session                                 │
+  ├─────────────────┼────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Discoverability │ 8.5    │ workflow_help, get_server_capabilities, MCP instructions block, action-oriented           │
+  │                 │        │ descriptions, embedded next_actions/next_commands.                                        │
+  ├─────────────────┼────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+  │                 │        │ Flat top-level args (explicitly enforced — clearly a hard-won lesson), anyOf + nullable   │
+  │ Schema clarity  │ 8.5    │ defaults, well-named flags. Dense parameter set on build_topic_literature_map is the only │
+  │                 │        │  friction.                                                                                │
+  ├─────────────────┼────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+  │                 │ 8 (↑   │ author_summary field has appeared in compact mode since my first run — that exact         │
+  │ Context         │ from   │ recommendation is now live, and payloads are visibly leaner                               │
+  │ management      │ 7)     │ (omitted_counts.summary_papers is now a single counter). inspect_review_index still has   │
+  │                 │        │ no compact mode and blew my token budget — same gap.                                      │
+  ├─────────────────┼────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Latency         │ 7.5    │ Topic map ~heavy but proportional; idempotent re-index returned in 0 ms (waited_ms: 0);   │
+  │                 │        │ retrieval consistently sub-second.                                                        │
+  ├─────────────────┼────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+  │                 │        │ Best-in-class. Every response carries candidate_pmids, next_actions, next_commands, and   │
+  │ Composability   │ 9.5    │ stable citation_key IDs. The next_context_options block in retrieval (passage /           │
+  │                 │        │ neighboring_passages / audit URIs) is especially useful.                                  │
+  ├─────────────────┼────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Provenance &    │ 9      │ provider_status per upstream, index_snapshot_date, ranking_version, cache_key,            │
+  │ trust           │        │ _meta.research_use_only, "Graph relatedness is not evidence quality" caveats baked in.    │
+  ├─────────────────┼────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+  │                 │        │ Unpaywall 404 and pubmed_metadata 100-item Pydantic overflow surface as warnings, not     │
+  │ Graceful        │ 8      │ failures. The metadata overflow still silently strips titles from candidates of           │
+  │ degradation     │        │ high-citation seeds (e.g., 28386255 candidates came back as bare PMIDs in run 1 — same in │
+  │                 │        │  run 2 if not paginated).                                                                 │
+  ├─────────────────┼────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+  │                 │ 9.5 (↑ │ Two-run sanity check passed: identical cache_key: review_context_batch:58c19707d128bc79   │
+  │ Reproducibility │  from  │ and identical stable_citation_map hashes. corpus_snapshot_date and index_snapshot_date    │
+  │                 │ 8.5)   │ advanced 2026-05-03 → 2026-05-04 but selected passage content was unchanged. This is      │
+  │                 │        │ exactly what reproducibility-via-cache-keys is supposed to look like.                     │
+  ├─────────────────┼────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+  │ State /         │ 9.5 (↑ │ Re-indexing the same 8 PMIDs returned already_prepared: 8, newly_queued: 0, waited_ms: 0  │
+  │ idempotence     │  from  │ with zero side effects. Lifecycle note clearly states "repeated calls are no-ops".        │
+  │                 │ 9)     │ Textbook idempotent design.                                                               │
+  ├─────────────────┼────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Safety scoping  │ 9      │ Research-use disclaimers in MCP instructions and in every _meta block; no destructive     │
+  │                 │        │ cache ops exposed.                                                                        │
+  └─────────────────┴────────┴───────────────────────────────────────────────────────────────────────────────────────────┘
+
+  Overall LLM-experience score: 8.7 / 10 (up from 8.3 after seeing reproducibility, idempotence, and the author_summary
+  improvement in action across two runs)
+
+  Updated judgement on the three new features
+
+  pubtator.build_topic_literature_map — 8.5 / 10 (↑ from 8)
+
+  What's now great:
+  - author_summary ("Batu ED, Şener S, Arslanoglu Aydin E et al. (32 authors)") has replaced the full author array in compact
+  mode — payload visibly smaller. Exactly the improvement I asked for.
+  - omitted_counts now includes doi_only_unresolved as a single tally rather than padding the response with empty-DOI rows.
+  - bias_toward (guideline, pediatric, genotype_phenotype, treatment) remains the standout: I added treatment to my second-run
+   call and the corpus stayed coherent.
+  - Two runs produced identical seed_pmids and recommended_next_pmids — deterministic on a stable corpus.
+
+  What still hurts:
+  - response_size_class:"large" and truncated:true come after the bytes are spent. A dry_run/estimate=true mode would let me
+  right-size before paying.
+  - nodes and edges arrays are documented but always empty in compact mode — confusing. Either populate or hide.
+
+  pubtator.get_publication_citation_graph — 7.5 / 10 (unchanged)
+
+  What's great:
+  - One call, both directions, OA status, identifier resolution status per provider, ready-to-feed candidate_pmids.
+  - metadata_only_count vs actionable_pmid_count is a useful triage signal at a glance.
+  - references_status and cited_by_status per provider make graceful-degradation visible.
+
+  What still hurts:
+  - In compact mode, references and cited_by are empty while reference_candidates / cited_by_candidates carry the data. Two
+  parallel shapes for one concept; compact_status: "candidates_only" is the disambiguator but easy to miss.
+  - DOI-only unresolved entries with score: null, relevance_to_query: null and zero metadata still consume a slot — they
+  should collapse to a count in compact mode.
+
+  pubtator.find_related_evidence_candidates — 7.5 / 10 (↑ from 7)
+
+  What's great:
+  - match_reasons semantic flags (pediatric_match, population_match, treatment_match, variant_or_genotype_match) map directly
+  onto LLM-side selection rationales — the single best feature for LLM consumption.
+  - caution: "related ≠ evidence" is responsible.
+  - normalized_neighbor_score (0–1) is the right primary signal.
+
+  What still hurts:
+  - Raw score: 49188573 next to normalized_neighbor_score: 1.0 — undocumented unit and easy to misread. Either hide or
+  document.
+  - The 100-item PubMed metadata batching limit still bites: when you hit it (run 1, seed 28386255), candidates come back as
+  bare PMIDs with status: "unresolved_reference". The fix is internal pagination, not user-side.
+
+  Recommended improvements (priority-ordered, refreshed)
+
+  1. inspect_review_index needs a compact mode + pagination. Still the biggest pain point — 71 KB JSON for 33 sources forced
+  me to drop into Bash/jq twice. Add summary_only=true or section-level pagination.
+  2. Auto-batch upstream PubMed metadata in find_related_evidence_candidates to dodge the 100-item Pydantic ceiling. Silent
+  title loss is the only "broken-feeling" failure mode I've observed.
+  3. Add dry_run/estimate=true to build_topic_literature_map (the pattern already exists in retrieve_review_context_batch).
+  Predict size before paying.
+  4. Unify the references vs reference_candidates shape in get_publication_citation_graph. Two parallel shapes for the same
+  concept invite reader bugs.
+  5. Document the score scale on find_related_evidence_candidates (or hide it). pubmed_neighbor_score: 49188573 is meaningless
+   without a unit; normalized_neighbor_score is the usable one.
+  6. Hoist the _meta.research_use_only banner to a single per-session declaration. Repeating it per response wastes tokens.
+  7. Surface auto-included PMIDs in index_review_evidence. I selected 8, the index materialised 33 — useful, but only learned
+  the count from inspect_review_index. Add auto_included_pmids + rationale.
+  8. Stable_citation_key is excellent — confirmed reproducible across runs. Please document the hashing scheme and
+  snapshot-date sensitivity guarantees.
+  9. Cache-key surfacing on heavy tools — retrieve_review_context_batch exposes cache_key, but build_topic_literature_map and
+  get_publication_citation_graph return cache_key: null. Populate them for free reproducibility.
+  10. Streaming progress for indexing larger corpora beyond wait_until_ready's blocking model.
+
+  Bottom line
+
+  The two-run comparison strengthens my read: this is a deliberately opinionated, LLM-first MCP that already shipped one of
+  the improvements I asked for last round (author_summary in compact mode). Reproducibility and idempotence both held up
+  cleanly. The graph trio (build_topic_literature_map / get_publication_citation_graph / find_related_evidence_candidates) is
+  the single most workflow-shaping addition — they collapse what would be 15–20 PubMed search calls into 3–4 well-scoped graph
+   calls and hand back exactly the candidate IDs you need to feed index_review_evidence. The remaining rough edges are still
+  mostly about payload economics and one graceful-degradation miss in upstream batching, not about the underlying capability
+  model.
