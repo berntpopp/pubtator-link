@@ -11,7 +11,10 @@ from pubtator_link.models.literature_graph import (
     LiteraturePaper,
     PublicationCitationGraphRequest,
 )
-from pubtator_link.models.publication_metadata import PublicationMetadataResponse
+from pubtator_link.models.publication_metadata import (
+    PublicationMetadataRequest,
+    PublicationMetadataResponse,
+)
 from pubtator_link.services.citation_graph import CitationGraphService
 
 
@@ -310,7 +313,7 @@ async def test_citation_graph_metadata_resolution_remains_single_pmid_public_req
                 metadata=[
                     PublicationMetadata(
                         pmid="28386255",
-                        title="Familial Mediterranean Fever",
+                        title="Fake service metadata title",
                     )
                 ],
                 failed_pmids={},
@@ -323,11 +326,15 @@ async def test_citation_graph_metadata_resolution_remains_single_pmid_public_req
 
     assert result is not None
     assert result.pmid == "28386255"
+    assert result.title == "Fake service metadata title"
     assert len(metadata.requests) == 1
-    assert metadata.requests[0].pmids == ["28386255"]
-    assert metadata.requests[0].include_mesh is False
-    assert metadata.requests[0].include_citations == "none"
-    assert metadata.requests[0].include_coverage is True
+    request = metadata.requests[0]
+    assert isinstance(request, PublicationMetadataRequest)
+    assert request.pmids == ["28386255"]
+    assert request.include_mesh is False
+    assert request.include_publication_types is True
+    assert request.include_citations == "none"
+    assert request.include_coverage is True
 
 
 class BatchResolvingDiscovery:
