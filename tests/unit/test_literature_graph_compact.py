@@ -1,15 +1,24 @@
 from __future__ import annotations
 
+import json
+
 from pubtator_link.models.literature_graph import (
     LiteratureAvailability,
+    LiteratureGraphResponseMeta,
     LiteraturePaper,
     ProviderWarning,
+    PublicationCitationGraphRequest,
 )
 from pubtator_link.services.literature_graph_compact import (
+    COMPACT_BUDGET_BYTES,
     access_flags,
     access_summary,
     coalesced_provider_warnings,
+    graph_detail_next_commands,
+    graph_payload_json_bytes,
+    graph_request_metadata,
     intent_flags_for_query,
+    mark_graph_payload_truncated,
     response_size_class,
 )
 
@@ -68,3 +77,61 @@ def test_intent_flags_are_normalized_and_plural_aware() -> None:
         "variant_intent",
         "treatment_intent",
     }
+
+
+def test_graph_request_signature_metadata_is_deterministic_for_request() -> None:
+    request = PublicationCitationGraphRequest(pmid="123", response_mode="compact")
+
+    first = graph_request_metadata(
+        tool_name="pubtator.get_publication_citation_graph",
+        request=request,
+        source_versions={"pubmed": "live"},
+    )
+    second = graph_request_metadata(
+        tool_name="pubtator.get_publication_citation_graph",
+        request=request,
+        source_versions={"pubmed": "live"},
+    )
+
+    assert first.request_signature == second.request_signature
+    assert first.request_signature is not None
+    assert first.cache_key == first.request_signature
+    assert first.snapshot_date is not None
+    assert first.source_versions["pubmed"] == "live"
+
+
+def test_graph_payload_json_bytes_uses_compact_json() -> None:
+    payload = {"source": LiteraturePaper(pmid="123").model_dump(mode="json")}
+    expected = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+    assert graph_payload_json_bytes(payload) == len(expected)
+    assert 0 < graph_payload_json_bytes(payload) < 1024
+
+
+def test_graph_detail_next_commands_preserve_request_args() -> None:
+    request = PublicationCitationGraphRequest(pmid="123", response_mode="compact")
+
+    commands = graph_detail_next_commands(
+        tool_name="pubtator.get_publication_citation_graph",
+        request=request,
+        modes=("full", "nodes_edges"),
+    )
+
+    assert commands[0]["tool"] == "pubtator.get_publication_citation_graph"
+    assert commands[0]["arguments"]["pmid"] == "123"
+    assert commands[0]["arguments"]["response_mode"] == "full"
+    assert commands[1]["arguments"]["response_mode"] == "nodes_edges"
+
+
+def test_mark_graph_payload_truncated_merges_counts_and_budget_advice() -> None:
+    meta = LiteratureGraphResponseMeta(response_mode="compact")
+
+    updated = mark_graph_payload_truncated(
+        meta,
+        omitted_counts={"candidate_details": 3},
+        budget_bytes=COMPACT_BUDGET_BYTES,
+    )
+
+    assert updated.truncated is True
+    assert updated.omitted_counts["candidate_details"] == 3
+    assert "12000" in updated.budget_advice or "12 KiB" in updated.budget_advice

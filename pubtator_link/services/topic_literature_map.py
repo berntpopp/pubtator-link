@@ -13,7 +13,6 @@ from pubtator_link.models.literature_graph import (
     LiteratureGraphEdge,
     LiteratureGraphNode,
     LiteratureGraphProvenance,
-    LiteratureGraphResponseMeta,
     LiteraturePaper,
     LiteratureQueryRelevance,
     ProviderWarning,
@@ -31,8 +30,13 @@ from pubtator_link.services.literature_graph_compact import (
     candidate_summary,
     coalesced_provider_warnings,
     compact_author_summary,
+    graph_budget_bytes,
+    graph_detail_next_commands,
+    graph_payload_json_bytes,
+    graph_request_metadata,
     intent_flags_for_query,
     json_size_class,
+    mark_graph_payload_truncated,
     normalize_query_text,
 )
 from pubtator_link.services.literature_paper_resolution import (
@@ -205,6 +209,32 @@ class TopicLiteratureMapService:
                 "top_candidates": len(ranked_candidates),
             }
 
+        meta = graph_request_metadata(
+            tool_name="pubtator.build_topic_literature_map",
+            request=request,
+            source_versions={
+                "pubtator_search": "live",
+                "pubmed": "live",
+                "citation_graph": "live",
+                "related_evidence": "live",
+            },
+        ).model_copy(
+            update={
+                "truncated": any(count > 0 for count in omitted_counts.values()),
+                "omitted_counts": omitted_counts,
+                "ranking_version": TOPIC_RANKING_VERSION,
+                "warnings": coalesced_provider_warnings(warnings),
+                "next_commands": [
+                    *graph_detail_next_commands(
+                        tool_name="pubtator.build_topic_literature_map",
+                        request=request,
+                        modes=("full", "nodes_edges"),
+                    ),
+                    *hints,
+                ],
+                "provider_status": [],
+            }
+        )
         response = TopicLiteratureMapResponse(
             query=request.query,
             seed_pmids=seed_pmids,
@@ -221,16 +251,9 @@ class TopicLiteratureMapService:
             provider_status=[],
             omitted_counts=omitted_counts,
             candidate_retrieval_hints=hints,
-            _meta=LiteratureGraphResponseMeta(
-                response_mode=request.response_mode,
-                truncated=any(count > 0 for count in omitted_counts.values()),
-                omitted_counts=omitted_counts,
-                ranking_version=TOPIC_RANKING_VERSION,
-                warnings=coalesced_provider_warnings(warnings),
-                next_commands=hints,
-                provider_status=[],
-            ),
+            _meta=meta,
         )
+        response = _enforce_topic_map_budget(response)
         response.meta.response_size_class = json_size_class(response.model_dump(by_alias=True))
         return response
 
@@ -692,16 +715,18 @@ def _compact_summary(
     recommended_next_pmids: list[str],
 ) -> TopicLiteratureMapSummary:
     return TopicLiteratureMapSummary(
-        central_papers=[_compact_paper(paper) for paper in summary.central_papers[:5]],
-        recent_connected_papers=[
-            _compact_paper(paper) for paper in summary.recent_connected_papers[:5]
+        central_papers=[_compact_paper(paper) for paper in summary.central_papers if paper.pmid][
+            :5
         ],
-        bridge_papers=[_compact_paper(paper) for paper in summary.bridge_papers[:5]],
+        recent_connected_papers=[
+            _compact_paper(paper) for paper in summary.recent_connected_papers if paper.pmid
+        ][:5],
+        bridge_papers=[_compact_paper(paper) for paper in summary.bridge_papers if paper.pmid][:5],
         dominant_author_groups=summary.dominant_author_groups,
         accessible_full_text_candidates=[],
         closed_central_sources=[
-            _compact_paper(paper) for paper in summary.closed_central_sources[:5]
-        ],
+            _compact_paper(paper) for paper in summary.closed_central_sources if paper.pmid
+        ][:5],
         recommended_next_pmids=recommended_next_pmids,
     )
 
@@ -725,6 +750,60 @@ def _summary_paper_count(summary: TopicLiteratureMapSummary) -> int:
         + len(summary.accessible_full_text_candidates)
         + len(summary.closed_central_sources)
     )
+
+
+def _enforce_topic_map_budget(response: TopicLiteratureMapResponse) -> TopicLiteratureMapResponse:
+    budget = graph_budget_bytes(response.response_mode)
+    if budget is None:
+        return response
+    if graph_payload_json_bytes(response) <= budget:
+        return response
+
+    omitted: dict[str, int] = {}
+    compacted = response.model_copy(
+        update={
+            "demoted_candidate_pmids": [],
+            "demoted_reasons_by_pmid": {},
+            "candidate_retrieval_hints": response.candidate_retrieval_hints[:1],
+        }
+    )
+    if response.demoted_candidate_pmids:
+        omitted["demoted_candidates"] = len(response.demoted_candidate_pmids)
+    compacted, dropped = _drop_topic_candidates_to_budget(compacted, budget=budget)
+    if dropped:
+        omitted["top_candidates"] = omitted.get("top_candidates", 0) + dropped
+    return compacted.model_copy(
+        update={
+            "meta": mark_graph_payload_truncated(
+                compacted.meta,
+                omitted_counts=omitted,
+                budget_bytes=budget,
+            )
+        }
+    )
+
+
+def _drop_topic_candidates_to_budget(
+    response: TopicLiteratureMapResponse,
+    *,
+    budget: int,
+) -> tuple[TopicLiteratureMapResponse, int]:
+    overage = graph_payload_json_bytes(response) - budget
+    if overage <= 0:
+        return response, 0
+    reclaimed = 0
+    dropped = 0
+    for candidate in reversed(response.top_candidates):
+        reclaimed += graph_payload_json_bytes(candidate)
+        dropped += 1
+        if reclaimed >= overage:
+            break
+    trimmed = response.model_copy(
+        update={"top_candidates": response.top_candidates[: len(response.top_candidates) - dropped]}
+    )
+    if graph_payload_json_bytes(trimmed) <= budget:
+        return trimmed, dropped
+    return trimmed.model_copy(update={"top_candidates": []}), len(response.top_candidates)
 
 
 def _edge(

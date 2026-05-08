@@ -465,6 +465,41 @@ async def test_inspect_review_index_returns_sources_and_failures() -> None:
 
 
 @pytest.mark.asyncio
+async def test_inspect_review_index_route_accepts_limit_and_cursor() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.inspect_review_index.return_value = InspectReviewIndexResponse(
+        review_id="rev_123",
+        response_mode="compact",
+        preparation_status=PreparationStatus(complete=1),
+        sources=[],
+        totals=ReviewIndexTotals(source_count=2),
+        failed_sources=[],
+        next_cursor="cursor-2",
+        page_source_count=1,
+        omitted_counts={"sources": 1},
+    )
+    app.dependency_overrides[get_review_context_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/reviews/rev_123/index",
+            params={
+                "response_mode": "compact",
+                "limit": "1",
+                "cursor": "cursor-1",
+            },
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["next_cursor"] == "cursor-2"
+    request = service.inspect_review_index.await_args.kwargs["request"]
+    assert request.limit == 1
+    assert request.cursor == "cursor-1"
+
+
+@pytest.mark.asyncio
 async def test_retrieve_review_context_batch_returns_merged_context() -> None:
     app = UnifiedServerManager().create_app()
     service = AsyncMock()
@@ -544,3 +579,32 @@ async def test_retrieve_review_context_batch_accepts_response_mode() -> None:
     assert data["response_mode"] == "diagnostics"
     assert "results" not in data
     assert data["query_summaries"][0]["zero_result_reason"] == "no_candidate_matches"
+
+
+@pytest.mark.asyncio
+async def test_retrieve_review_context_batch_route_accepts_auto_budget_and_verbosity() -> None:
+    app = UnifiedServerManager().create_app()
+    service = AsyncMock()
+    service.retrieve_context_batch.return_value = RetrieveReviewContextBatchResponse(
+        review_id="rev_123",
+        response_mode="compact",
+        results=[],
+        merged_context_pack=ContextPack(question="MEFV", passages=[], citation_map={}),
+        preparation_status=PreparationStatus(complete=1),
+    )
+    app.dependency_overrides[get_review_context_service] = lambda: service
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/reviews/rev_123/context/batch",
+            json={
+                "queries": ["MEFV"],
+                "verbosity": "lean",
+                "max_response_chars": "auto",
+            },
+        )
+
+    assert response.status_code == 200
+    request = service.retrieve_context_batch.await_args.kwargs["request"]
+    assert request.verbosity == "lean"
+    assert request.max_response_chars == "auto"

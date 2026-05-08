@@ -78,6 +78,7 @@ def test_literature_graph_tools_expose_response_mode_and_size_guidance() -> None
     ):
         tool = catalog[name]
         assert "response_mode" in tool.input_schema["properties"]
+        assert "response_mode='compact'" in tool.description
         assert "response_size_class" in tool.description
         assert "full can be large" in tool.description
 

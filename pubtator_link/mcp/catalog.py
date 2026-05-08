@@ -72,9 +72,9 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         profiles=("full",),
         stability="advanced",
         purpose=(
-            "Use this when a user needs a topic literature graph. Compact mode returns "
-            "candidate lanes and bounded summaries; full can be large. Returns "
-            "response_size_class."
+            "Use this when a user needs a topic literature graph. response_mode='compact' "
+            "is the MCP default for candidate lanes and bounded summaries; full can be "
+            "large. Returns response_size_class."
         ),
         do_not_use_for=("claim-level evidence support", "substitute evidence selection"),
         example='{"query":"familial Mediterranean fever colchicine","max_seed_papers":10}',
@@ -146,8 +146,8 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         stability="lean",
         purpose=(
             "Use this when a user has one PMID and needs related evidence candidates. "
-            "Compact mode returns candidate lanes and bounded summaries; full can be "
-            "large. Returns response_size_class."
+            "response_mode='compact' is the MCP default for candidate lanes and bounded "
+            "summaries; full can be large. Returns response_size_class."
         ),
         do_not_use_for=("claim-level evidence support", "substitute evidence selection"),
         example='{"pmid":"40562663","max_results":25,"prefer_full_text":true}',
@@ -184,8 +184,8 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         stability="lean",
         purpose=(
             "Use this when a user needs reference or cited-by neighborhoods for one "
-            "publication. Compact mode returns candidate lanes and bounded summaries; "
-            "full can be large. Returns response_size_class."
+            "publication. response_mode='compact' is the MCP default for candidate lanes "
+            "and bounded summaries; full can be large. Returns response_size_class."
         ),
         do_not_use_for=("claim-level evidence support", "publisher full-text retrieval"),
         example='{"pmid":"40562663","direction":"both","max_results":50}',

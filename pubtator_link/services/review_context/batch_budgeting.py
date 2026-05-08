@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from typing import cast
 
 from pubtator_link.models.review_rerag import (
     ContextDropReason,
@@ -77,6 +78,7 @@ def merge_batch_context(
     pmid_order: list[str] = []
     total_chars = 0
     total_quote_payload_chars = 0
+    max_response_chars = cast(int, request.max_response_chars)
     prioritized_pmids = set(request.prioritize_pmids)
 
     for result in query_results:
@@ -218,7 +220,7 @@ def merge_batch_context(
                 passage,
                 matched_queries=[request.queries[query_index]],
             )
-            if next_quote_payload_chars > request.max_response_chars:
+            if next_quote_payload_chars > max_response_chars:
                 drop_passage(
                     query_index,
                     passage,
@@ -232,7 +234,7 @@ def merge_batch_context(
                 text_chars=total_chars + passage_len,
                 dropped_count=len(dropped),
             )
-            if next_budget.estimated_total_chars > request.max_response_chars:
+            if next_budget.estimated_total_chars > max_response_chars:
                 drop_passage(
                     query_index,
                     passage,
@@ -500,6 +502,7 @@ def build_dropped_summary(
     by_reason = dict(Counter(item.reason for item in dropped))
     section_counts = Counter(item.section for item in dropped if item.section)
     pmid_counts = Counter(item.pmid for item in dropped if item.pmid)
+    max_response_chars = cast(int, request.max_response_chars)
     budget_reasons = {
         "char_budget_exceeded",
         "response_char_budget_exceeded",
@@ -515,8 +518,8 @@ def build_dropped_summary(
         increase_max_response_chars_to = min(
             100000,
             max(
-                request.max_response_chars + 4000,
-                int(request.max_response_chars * 1.5),
+                max_response_chars + 4000,
+                int(max_response_chars * 1.5),
             ),
         )
         lower_max_passages_per_query_to = max(1, request.max_passages_per_query // 2)

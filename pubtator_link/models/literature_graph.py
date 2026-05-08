@@ -290,6 +290,7 @@ class LiteratureGraphResponseMeta(LiteratureResponseMeta):
     truncated: bool = False
     omitted_counts: dict[str, int] = Field(default_factory=dict)
     budget_advice: str | None = None
+    request_signature: str | None = None
     cache_key: str | None = None
     snapshot_date: str | None = None
     source_versions: dict[str, str] = Field(default_factory=dict)
@@ -433,6 +434,19 @@ class RelatedEvidenceCandidatesResponse(BaseModel):
     def coerce_legacy_meta(cls, value: Any) -> Any:
         return _coerce_graph_response_meta(value)
 
+    @model_serializer(mode="wrap")
+    def omit_raw_scores_for_compact(self, handler: Any) -> Any:
+        data = handler(self)
+        if not isinstance(data, dict) or self.meta.response_mode != "compact":
+            return data
+        for candidate in data.get("candidates", []):
+            if not isinstance(candidate, dict):
+                continue
+            if candidate.get("normalized_neighbor_score") is not None:
+                candidate.pop("score", None)
+                candidate.pop("pubmed_neighbor_score", None)
+        return data
+
 
 class TopicLiteratureMapRequest(BaseModel):
     """Request a bounded topic-level literature map."""
@@ -530,6 +544,16 @@ class TopicLiteratureMapResponse(BaseModel):
     @classmethod
     def coerce_legacy_meta(cls, value: Any) -> Any:
         return _coerce_graph_response_meta(value)
+
+    @model_serializer(mode="wrap")
+    def omit_empty_topology_for_compact(self, handler: Any) -> Any:
+        data = handler(self)
+        if not isinstance(data, dict) or self.response_mode != "compact":
+            return data
+        for field in ("nodes", "edges"):
+            if not data.get(field):
+                data.pop(field, None)
+        return data
 
 
 def _paper_dedupe_keys(paper: LiteraturePaper) -> set[str]:

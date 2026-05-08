@@ -50,6 +50,8 @@ CoverageReason = Literal[
 ]
 BudgetStrategy = Literal["query_fair", "source_fair", "scarcity_first"]
 BudgetSource = Literal["caller", "auto_fit", "default"]
+ReviewResponseVerbosity = Literal["lean", "standard", "full"]
+MaxResponseChars = int | Literal["auto"]
 EvidenceCertaintyLabel = Literal["high", "moderate", "low", "very_low", "not_rated"]
 ZeroResultReason = Literal[
     "review_not_indexed",
@@ -661,7 +663,8 @@ class RetrieveReviewContextBatchRequest(BaseModel):
     max_passages_per_query: int = Field(default=8, ge=1, le=30)
     max_total_passages: int = Field(default=20, ge=1, le=60)
     max_chars: int = Field(default=24000, ge=500, le=50000)
-    max_response_chars: int = Field(default=48000, ge=2000, le=100000)
+    max_response_chars: MaxResponseChars = 48000
+    verbosity: ReviewResponseVerbosity = "standard"
     budget_source: BudgetSource = "default"
     deduplicate_passages: bool = True
     budget_strategy: BudgetStrategy = "query_fair"
@@ -1067,6 +1070,8 @@ class InspectReviewIndexRequest(BaseModel):
     sample_section_policy: SampleSectionPolicy = "evidence_first"
     include_metadata: bool = False
     metadata: Literal["basic", "full"] = "basic"
+    limit: int | None = Field(default=None, ge=1, le=100)
+    cursor: str | None = None
 
 
 class InspectReviewIndexResponse(BaseModel):
@@ -1081,6 +1086,10 @@ class InspectReviewIndexResponse(BaseModel):
     failed_sources: list[FailedSourceSummary]
     coverage_summary: dict[str, int] = Field(default_factory=dict)
     index_snapshot_date: str | None = None
+    next_cursor: str | None = None
+    page_source_count: int = Field(default=0, ge=0)
+    page_failed_source_count: int = Field(default=0, ge=0)
+    omitted_counts: dict[str, int] = Field(default_factory=dict)
 
     @model_serializer(mode="wrap")
     def omit_bulky_fields_for_compact(self, handler: Any) -> dict[str, Any]:

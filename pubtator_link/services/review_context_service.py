@@ -33,6 +33,13 @@ from pubtator_link.models.review_rerag import (
 )
 from pubtator_link.services.provenance import corpus_snapshot_date, stable_cache_key
 from pubtator_link.services.review_context.batch_budgeting import merge_batch_context
+from pubtator_link.services.review_context.budgets import (
+    REVIEW_BATCH_DEFAULT_MAX_CHARS,
+    REVIEW_BATCH_DEFAULT_MAX_RESPONSE_CHARS,
+    REVIEW_BATCH_MAX_CHARS_CAP,
+    REVIEW_BATCH_MAX_RESPONSE_CHARS_CAP,
+    resolve_batch_budget_args,
+)
 from pubtator_link.services.review_context.diagnostics import (
     build_diagnostics,
     query_summary,
@@ -44,17 +51,18 @@ from pubtator_link.services.review_context.packing import (
     pack_passages,
     pack_totals,
 )
+from pubtator_link.services.review_context.pagination import (
+    InspectReviewIndexCursor,
+    decode_inspect_review_index_cursor,
+    encode_inspect_review_index_cursor,
+    inspect_review_index_scope_hash,
+)
 from pubtator_link.services.review_context.quotes import quotes_from_passages
 from pubtator_link.services.review_context.ranking import (
     SOURCE_COVERAGE_SCARCITY_PRIORITY,
     rerank_key,
 )
 from pubtator_link.services.review_state import index_snapshot_date
-
-REVIEW_BATCH_DEFAULT_MAX_CHARS = 24_000
-REVIEW_BATCH_DEFAULT_MAX_RESPONSE_CHARS = 48_000
-REVIEW_BATCH_MAX_CHARS_CAP = 50_000
-REVIEW_BATCH_MAX_RESPONSE_CHARS_CAP = 100_000
 
 
 class ReviewContextRepository(Protocol):
@@ -91,11 +99,18 @@ class ReviewContextRepository(Protocol):
         min_sample_chars: int = 80,
         sample_section_policy: SampleSectionPolicy = "evidence_first",
         session_id: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[ReviewSourceSummary]:
         """Return index source summaries for a review."""
 
     async def list_review_failed_sources(
-        self, review_id: str, *, session_id: str | None = None
+        self,
+        review_id: str,
+        *,
+        session_id: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[FailedSourceSummary]:
         """Return failed source summaries for a review."""
 
@@ -279,6 +294,24 @@ class ReviewContextService:
     ) -> RetrieveReviewContextBatchResponse:
         """Retrieve multiple query variants and merge selected passages."""
         await self._ensure_session_exists(review_id, request.session_id)
+        if (
+            isinstance(request.max_response_chars, str)
+            and request.max_response_chars.lower() == "auto"
+        ):
+            resolved_budgets = resolve_batch_budget_args(
+                max_total_passages=request.max_total_passages,
+                max_chars_per_passage=request.max_chars_per_passage,
+                max_chars=request.max_chars,
+                max_response_chars=request.max_response_chars,
+                verbosity=request.verbosity,
+            )
+            request = request.model_copy(
+                update={
+                    "max_chars": resolved_budgets.max_chars,
+                    "max_response_chars": resolved_budgets.max_response_chars,
+                    "budget_source": resolved_budgets.budget_source,
+                }
+            )
         budget_source = _effective_batch_budget_source(request)
         if budget_source != request.budget_source:
             request = request.model_copy(update={"budget_source": budget_source})
@@ -486,21 +519,70 @@ class ReviewContextService:
         preparation_status = await self._preparation_status(
             review_id, session_id=request.session_id
         )
-        sources = await self.repository.list_review_sources(
-            review_id,
-            request.pmids,
-            include_passage_samples=request.include_passage_samples,
-            sample_per_pmid=request.sample_per_pmid,
-            min_sample_chars=request.min_sample_chars,
-            sample_section_policy=request.sample_section_policy,
+        scope_hash = inspect_review_index_scope_hash(
+            review_id=review_id,
             session_id=request.session_id,
+            pmids=request.pmids,
         )
+        source_offset = 0
+        failed_source_offset = 0
+        if request.cursor:
+            cursor = decode_inspect_review_index_cursor(
+                request.cursor,
+                expected_scope_hash=scope_hash,
+            )
+            source_offset = cursor.source_offset
+            failed_source_offset = cursor.failed_source_offset
+
         totals = await self.repository.review_index_totals(review_id, session_id=request.session_id)
-        failed_sources = await self.repository.list_review_failed_sources(
-            review_id, session_id=request.session_id
+        sources = (
+            []
+            if request.limit is not None and source_offset >= totals.source_count
+            else await self.repository.list_review_sources(
+                review_id,
+                request.pmids,
+                include_passage_samples=request.include_passage_samples,
+                sample_per_pmid=request.sample_per_pmid,
+                min_sample_chars=request.min_sample_chars,
+                sample_section_policy=request.sample_section_policy,
+                session_id=request.session_id,
+                limit=request.limit,
+                offset=source_offset,
+            )
+        )
+        failed_sources = (
+            []
+            if request.limit is not None and failed_source_offset >= totals.failed_source_count
+            else await self.repository.list_review_failed_sources(
+                review_id,
+                session_id=request.session_id,
+                limit=request.limit,
+                offset=failed_source_offset,
+            )
         )
         if request.include_metadata and self.metadata_service is not None:
             await self._attach_source_metadata(sources, request.metadata)
+        next_source_offset = source_offset + len(sources)
+        next_failed_source_offset = failed_source_offset + len(failed_sources)
+        remaining_sources = max(0, totals.source_count - next_source_offset)
+        remaining_failed_sources = max(0, totals.failed_source_count - next_failed_source_offset)
+        next_cursor = None
+        if request.limit is not None and (remaining_sources > 0 or remaining_failed_sources > 0):
+            next_cursor = encode_inspect_review_index_cursor(
+                InspectReviewIndexCursor(
+                    scope_hash=scope_hash,
+                    source_offset=next_source_offset,
+                    failed_source_offset=next_failed_source_offset,
+                )
+            )
+        omitted_counts = {
+            key: value
+            for key, value in {
+                "sources": remaining_sources,
+                "failed_sources": remaining_failed_sources,
+            }.items()
+            if request.limit is not None and value > 0
+        }
         coverage_summary = {"full_text": 0, "abstract_only": 0, "title_only": 0, "unknown": 0}
         for source in sources:
             coverage_summary[source.coverage] = coverage_summary.get(source.coverage, 0) + 1
@@ -513,6 +595,10 @@ class ReviewContextService:
             failed_sources=failed_sources,
             coverage_summary=coverage_summary,
             index_snapshot_date=index_snapshot_date(),
+            next_cursor=next_cursor,
+            page_source_count=len(sources),
+            page_failed_source_count=len(failed_sources),
+            omitted_counts=omitted_counts,
         )
 
     async def _attach_source_metadata(
@@ -803,23 +889,14 @@ def _batch_auto_fit_budgets(
 def _effective_batch_budget_source(
     request: RetrieveReviewContextBatchRequest,
 ) -> BudgetSource:
-    auto_max_chars, auto_max_response_chars, auto_source = _batch_auto_fit_budgets(
-        max_total_passages=request.max_total_passages,
-        max_chars_per_passage=request.max_chars_per_passage,
-    )
     is_default_budget = (
         request.max_chars == REVIEW_BATCH_DEFAULT_MAX_CHARS
         and request.max_response_chars == REVIEW_BATCH_DEFAULT_MAX_RESPONSE_CHARS
     )
-    is_auto_fit_budget = (
-        request.max_chars == auto_max_chars
-        and request.max_response_chars == auto_max_response_chars
-        and auto_source == "auto_fit"
-    )
     if request.budget_source == "auto_fit":
-        if is_auto_fit_budget:
-            return "auto_fit"
-        return "default" if is_default_budget else "caller"
+        if is_default_budget:
+            return "default"
+        return "auto_fit"
     if request.budget_source == "caller":
         return "default" if is_default_budget else "caller"
     return "default" if is_default_budget else "caller"

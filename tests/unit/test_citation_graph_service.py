@@ -864,6 +864,64 @@ async def test_citation_graph_compact_hides_unresolved_doi_candidate_rows() -> N
 
 
 @pytest.mark.asyncio
+async def test_citation_graph_compact_populates_cache_snapshot_and_versions() -> None:
+    service = CitationGraphService(
+        crossref=FakeCrossref(),
+        discovery_service=FakeDiscovery(),
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            doi="10.1016/j.ard.2025.05.020",
+            direction="references",
+            response_mode="compact",
+        )
+    )
+
+    assert response.meta.request_signature is not None
+    assert response.meta.cache_key == response.meta.request_signature
+    assert response.meta.snapshot_date is not None
+    assert response.meta.source_versions["payload_contract"] == (
+        "literature_graph_payload_controls_v1"
+    )
+    assert response.meta.source_versions["pubmed"] == "live"
+    assert response.meta.source_versions["crossref"] == "live"
+    assert any(
+        command["arguments"]["response_mode"] == "full" for command in response.meta.next_commands
+    )
+    assert any(
+        command["arguments"]["response_mode"] == "nodes_edges"
+        for command in response.meta.next_commands
+    )
+
+
+@pytest.mark.asyncio
+async def test_citation_graph_compact_reports_budget_truncation() -> None:
+    service = CitationGraphService(
+        crossref=LargeCrossref(),
+        discovery_service=FakeDiscovery(),
+        metadata_service=FakeMetadata(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            doi="10.1016/j.ard.2025.05.020",
+            direction="references",
+            response_mode="compact",
+            resolve_reference_pmids=False,
+            max_results=25,
+        )
+    )
+
+    assert response.meta.truncated is True
+    assert response.meta.budget_advice is not None
+    assert response.meta.omitted_counts
+    assert response.meta.request_signature is not None
+    assert response.meta.cache_key == response.meta.request_signature
+
+
+@pytest.mark.asyncio
 async def test_citation_graph_compact_status_marks_unrequested_direction() -> None:
     service = CitationGraphService(
         crossref=FakeCrossref(),

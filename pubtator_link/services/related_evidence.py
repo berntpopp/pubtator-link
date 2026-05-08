@@ -6,7 +6,6 @@ from collections.abc import Iterable
 from typing import Any
 
 from pubtator_link.models.literature_graph import (
-    LiteratureGraphResponseMeta,
     LiteraturePaper,
     ProviderWarning,
     PublicationCitationGraphRequest,
@@ -17,6 +16,8 @@ from pubtator_link.models.literature_graph import (
 from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 from pubtator_link.services.literature_graph_compact import (
     coalesced_provider_warnings,
+    graph_detail_next_commands,
+    graph_request_metadata,
     json_size_class,
 )
 from pubtator_link.services.literature_paper_resolution import (
@@ -94,19 +95,44 @@ class RelatedEvidenceService:
         )
         warnings.extend(metadata_warnings)
         candidates.sort(key=lambda candidate: _ranking_key(candidate, request))
+        candidate_count_before_limit = len(candidates)
         candidates = candidates[: request.max_results]
+        omitted_counts = {
+            "candidates": max(0, candidate_count_before_limit - len(candidates)),
+        }
         _attach_normalized_scores(candidates)
         ordered_pmids = [candidate.paper.pmid for candidate in candidates if candidate.paper.pmid]
+        meta = graph_request_metadata(
+            tool_name="pubtator.find_related_evidence_candidates",
+            request=request,
+            source_versions={
+                "pubmed": "live",
+                "ncbi_elink": "live",
+                "citation_graph": "live",
+            },
+        ).model_copy(
+            update={
+                "warnings": coalesced_provider_warnings(warnings),
+                "next_commands": [
+                    *graph_detail_next_commands(
+                        tool_name="pubtator.find_related_evidence_candidates",
+                        request=request,
+                        modes=("full",),
+                    ),
+                    *_next_commands(ordered_pmids),
+                ],
+                "truncated": any(count > 0 for count in omitted_counts.values()),
+                "omitted_counts": {
+                    key: value for key, value in omitted_counts.items() if value > 0
+                },
+            }
+        )
 
         response = RelatedEvidenceCandidatesResponse(
             source=source,
             candidates=candidates,
             candidate_pmids=ordered_pmids,
-            _meta=LiteratureGraphResponseMeta(
-                response_mode=request.response_mode,
-                warnings=coalesced_provider_warnings(warnings),
-                next_commands=_next_commands(ordered_pmids),
-            ),
+            _meta=meta,
         )
         response.meta.response_size_class = json_size_class(response.model_dump(by_alias=True))
         return response

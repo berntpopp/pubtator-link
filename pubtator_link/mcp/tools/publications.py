@@ -89,7 +89,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             pmids: Annotated[list[str] | None, Field(min_length=1, max_length=100)] = None,
             max_seed_papers: Annotated[int, Field(ge=1, le=50)] = 25,
             max_neighbors_per_paper: Annotated[int, Field(ge=1, le=20)] = 10,
-            response_mode: LiteratureGraphResponseModeArg | None = None,
+            response_mode: LiteratureGraphResponseModeArg = "compact",
             max_candidates: Annotated[int, Field(ge=1, le=50)] = 12,
             include_demoted: bool = True,
             max_demoted: Annotated[int, Field(ge=0, le=20)] = 3,
@@ -104,7 +104,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             year_max: int | None = None,
             prefer_full_text: bool = True,
         ) -> dict[str, Any]:
-            """Use this when a user needs a bounded topic-level literature map from a query or seed PMIDs. Returns response_size_class. response_mode='compact' is for LLM candidate selection; response_mode full can be large and is for legacy/debug graph inspection. Next: pubtator.get_publication_passages."""
+            """Use this when a user needs a bounded topic-level literature map from a query or seed PMIDs. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: pubtator.get_publication_passages."""
 
             async def call() -> dict[str, Any]:
                 service = await get_topic_literature_map_service()
@@ -212,7 +212,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         pmid: str | None = None,
         doi: str | None = None,
         direction: Literal["references", "cited_by", "both"] = "both",
-        response_mode: LiteratureGraphResponseModeArg | None = None,
+        response_mode: LiteratureGraphResponseModeArg = "compact",
         resolve_metadata: bool = True,
         resolve_reference_pmids: bool = True,
         max_reference_resolution: Annotated[int, Field(ge=0, le=100)] = 20,
@@ -220,7 +220,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         include_open_access_status: bool = True,
         max_results: Annotated[int, Field(ge=1, le=100)] = 50,
     ) -> dict[str, Any]:
-        """Use this when a user needs reference or cited-by neighbors for one publication. Returns response_size_class. response_mode='compact' is for LLM candidate selection; response_mode full can be large and is for legacy/debug graph inspection. Next: pubtator.get_publication_passages."""
+        """Use this when a user needs reference or cited-by neighbors for one publication. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: pubtator.get_publication_passages."""
 
         async def call() -> dict[str, Any]:
             service = await get_citation_graph_service()
@@ -253,7 +253,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
     async def find_related_evidence_candidates(
         pmid: str,
         max_results: Annotated[int, Field(ge=1, le=100)] = 25,
-        response_mode: LiteratureGraphResponseModeArg | None = None,
+        response_mode: LiteratureGraphResponseModeArg = "compact",
         prefer_full_text: bool = True,
         include_pubtator_search: bool = True,
         include_citation_neighbors: bool = True,
@@ -261,7 +261,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         year_min: int | None = None,
         year_max: int | None = None,
     ) -> dict[str, Any]:
-        """Use this when a user has one PMID and needs related full-text-preferred candidates. Returns response_size_class. response_mode='compact' is for LLM candidate selection; response_mode full can be large and is for legacy/debug graph inspection. Next: pubtator.get_publication_passages."""
+        """Use this when a user has one PMID and needs related full-text-preferred candidates. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: pubtator.get_publication_passages."""
 
         async def call() -> dict[str, Any]:
             service = await get_related_evidence_service()

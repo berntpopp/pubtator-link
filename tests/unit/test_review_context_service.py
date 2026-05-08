@@ -10,6 +10,8 @@ from pubtator_link.models.publication_metadata import (
 from pubtator_link.models.review_rerag import (
     FailedSourceSummary,
     InspectReviewIndexRequest,
+    InspectReviewIndexResponse,
+    PreparationStatus,
     ResolverAttemptSummary,
     RetrieveReviewContextBatchRequest,
     RetrieveReviewContextRequest,
@@ -89,6 +91,8 @@ class FakeReviewContextRepository:
         min_sample_chars: int = 80,
         sample_section_policy: str = "evidence_first",
         session_id: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[ReviewSourceSummary]:
         self.inspect_calls.append(
             {
@@ -100,18 +104,25 @@ class FakeReviewContextRepository:
                 "min_sample_chars": min_sample_chars,
                 "sample_section_policy": sample_section_policy,
                 "session_id": session_id,
+                "limit": limit,
+                "offset": offset,
             }
         )
         if self.source_summaries:
+            start = offset or 0
+            stop = None if limit is None else start + limit
             if pmids:
                 pmid_set = set(pmids)
-                return [summary for summary in self.source_summaries if summary.pmid in pmid_set]
-            return self.source_summaries
+                summaries = [
+                    summary for summary in self.source_summaries if summary.pmid in pmid_set
+                ]
+                return summaries[start:stop]
+            return self.source_summaries[start:stop]
         seen_pmids = list(dict.fromkeys(row.pmid for row in self.passages if row.pmid is not None))
         if pmids:
             pmid_set = set(pmids)
             seen_pmids = [pmid for pmid in seen_pmids if pmid in pmid_set]
-        return [
+        summaries = [
             ReviewSourceSummary(
                 source_id=f"source-{pmid}",
                 pmid=pmid,
@@ -121,9 +132,17 @@ class FakeReviewContextRepository:
             )
             for pmid in seen_pmids
         ]
+        start = offset or 0
+        stop = None if limit is None else start + limit
+        return summaries[start:stop]
 
     async def list_review_failed_sources(
-        self, review_id: str, *, session_id: str | None = None
+        self,
+        review_id: str,
+        *,
+        session_id: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[FailedSourceSummary]:
         self.calls["list_review_failed_sources"] += 1
         self.inspect_calls.append(
@@ -131,9 +150,13 @@ class FakeReviewContextRepository:
                 "method": "list_review_failed_sources",
                 "review_id": review_id,
                 "session_id": session_id,
+                "limit": limit,
+                "offset": offset,
             }
         )
-        return self.failed_source_summaries
+        start = offset or 0
+        stop = None if limit is None else start + limit
+        return self.failed_source_summaries[start:stop]
 
     async def review_index_totals(
         self, review_id: str, *, session_id: str | None = None
@@ -715,6 +738,7 @@ async def test_inspect_review_index_returns_sources_totals_and_failures() -> Non
     assert response.failed_sources[0].error == "not available"
     assert response.index_snapshot_date is not None
     assert repository.inspect_calls == [
+        {"method": "review_index_totals", "review_id": "review-1", "session_id": None},
         {
             "method": "list_review_sources",
             "review_id": "review-1",
@@ -724,10 +748,93 @@ async def test_inspect_review_index_returns_sources_totals_and_failures() -> Non
             "min_sample_chars": 90,
             "sample_section_policy": "original_order",
             "session_id": None,
+            "limit": None,
+            "offset": 0,
         },
-        {"method": "review_index_totals", "review_id": "review-1", "session_id": None},
-        {"method": "list_review_failed_sources", "review_id": "review-1", "session_id": None},
+        {
+            "method": "list_review_failed_sources",
+            "review_id": "review-1",
+            "session_id": None,
+            "limit": None,
+            "offset": 0,
+        },
     ]
+
+
+def test_inspect_review_index_response_serializes_pagination_fields() -> None:
+    response = InspectReviewIndexResponse(
+        review_id="review-1",
+        response_mode="compact",
+        preparation_status=PreparationStatus(),
+        sources=[],
+        totals=ReviewIndexTotals(source_count=12, failed_source_count=2),
+        failed_sources=[],
+        next_cursor="abc",
+        page_source_count=5,
+        page_failed_source_count=1,
+        omitted_counts={"sources": 7, "failed_sources": 1},
+    )
+
+    data = response.model_dump()
+
+    assert data["next_cursor"] == "abc"
+    assert data["page_source_count"] == 5
+    assert data["page_failed_source_count"] == 1
+    assert data["omitted_counts"] == {"sources": 7, "failed_sources": 1}
+
+
+@pytest.mark.asyncio
+async def test_inspect_review_index_paginates_sources_and_failed_sources() -> None:
+    repository = FakeReviewContextRepository([], preparation_status={"complete": 3, "failed": 2})
+    repository.source_summaries = [
+        ReviewSourceSummary(
+            source_id=f"PMID:{pmid}",
+            pmid=pmid,
+            source_kind="pubtator_abstract",
+            job_status="complete",
+            coverage="abstract_only",
+        )
+        for pmid in ("111", "222", "333")
+    ]
+    repository.failed_source_summaries = [
+        FailedSourceSummary(
+            source_id=f"PMID:{pmid}",
+            pmid=pmid,
+            source_kind="pubtator_full_bioc",
+            job_status="failed",
+        )
+        for pmid in ("444", "555")
+    ]
+    repository.index_totals = ReviewIndexTotals(
+        source_count=3,
+        failed_source_count=2,
+        passage_count=3,
+    )
+    service = ReviewContextService(repository)
+
+    first = await service.inspect_review_index(
+        "review-1",
+        InspectReviewIndexRequest(response_mode="compact", limit=2),
+    )
+    second = await service.inspect_review_index(
+        "review-1",
+        InspectReviewIndexRequest(
+            response_mode="compact",
+            limit=2,
+            cursor=first.next_cursor,
+        ),
+    )
+
+    assert [source.pmid for source in first.sources] == ["111", "222"]
+    assert [source.pmid for source in second.sources] == ["333"]
+    assert [source.pmid for source in first.failed_sources] == ["444", "555"]
+    assert second.failed_sources == []
+    assert first.next_cursor is not None
+    assert second.next_cursor is None
+    assert first.page_source_count == 2
+    assert first.page_failed_source_count == 2
+    assert first.totals.source_count == 3
+    assert first.omitted_counts["sources"] == 1
 
 
 @pytest.mark.asyncio

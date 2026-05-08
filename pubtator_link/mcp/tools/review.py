@@ -56,6 +56,7 @@ from pubtator_link.models.review_rerag import (
     ListEvidenceCertaintyResponse,
     ListResearchSessionsResponse,
     ListReviewIndexesResponse,
+    MaxResponseChars,
     McpReviewAuditBundleResponse,
     PreflightReviewSourcesResponse,
     RecordReviewContextResponse,
@@ -68,6 +69,7 @@ from pubtator_link.models.review_rerag import (
     ReviewLlmContextEventType,
     ReviewPassageLookupResponse,
     ReviewQuickstartResponse,
+    ReviewResponseVerbosity,
     ReviewTableMode,
     SampleSectionPolicy,
     StageResearchSessionResponse,
@@ -311,6 +313,8 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         guideline_boost: bool = True,
         wait_until_ready: bool = True,
         timeout_ms: Annotated[int, Field(ge=0, le=120_000)] = 30_000,
+        verbosity: ReviewResponseVerbosity = "lean",
+        max_response_chars: MaxResponseChars = "auto",
     ) -> dict[str, Any]:
         """Use this when a user wants one compact grounded evidence workflow from a question: search literature, index candidate PMIDs, inspect readiness, and retrieve citable review context."""
 
@@ -329,6 +333,8 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
                 guideline_boost=guideline_boost,
                 wait_until_ready=wait_until_ready,
                 timeout_ms=timeout_ms,
+                verbosity=verbosity,
+                max_response_chars=max_response_chars,
             )
 
         return await run_mcp_tool("pubtator.ground_question", call)
@@ -486,6 +492,8 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         include_metadata: bool = False,
         metadata: Literal["basic", "full"] = "basic",
         response_mode: Literal["compact", "full"] = "compact",
+        limit: Annotated[int | None, Field(ge=1, le=100)] = 50,
+        cursor: str | None = None,
     ) -> dict[str, Any]:
         """Use this when a user needs to inspect indexed PMIDs, sections, passage counts, and failures for a review_id, including source coverage."""
 
@@ -503,6 +511,8 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
                 include_metadata=include_metadata,
                 metadata=metadata,
                 response_mode=response_mode,
+                limit=limit,
+                cursor=cursor,
             )
 
         return await run_mcp_tool("pubtator.inspect_review_index", call, pmids=pmids)
@@ -700,7 +710,8 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         max_passages_per_query: int = 8,
         max_total_passages: int = 20,
         max_chars: int | None = None,
-        max_response_chars: int | None = None,
+        max_response_chars: MaxResponseChars = "auto",
+        verbosity: ReviewResponseVerbosity = "standard",
         deduplicate_passages: bool = True,
         budget_strategy: BudgetStrategy | None = "query_fair",
         min_passages_per_source: int = 1,
@@ -734,6 +745,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
                 max_total_passages=max_total_passages,
                 max_chars=max_chars,
                 max_response_chars=max_response_chars,
+                verbosity=verbosity,
                 deduplicate_passages=deduplicate_passages,
                 budget_strategy=budget_strategy or "query_fair",
                 min_passages_per_source=min_passages_per_source,

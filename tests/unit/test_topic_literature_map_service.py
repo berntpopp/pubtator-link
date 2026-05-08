@@ -417,6 +417,25 @@ async def test_topic_map_compact_keeps_summary_papers_and_candidate_signals() ->
 
 
 @pytest.mark.asyncio
+async def test_topic_map_compact_serialization_omits_empty_nodes_edges() -> None:
+    response = await _service().build_map(
+        TopicLiteratureMapRequest(query="FMF", response_mode="compact")
+    )
+
+    payload = response.model_dump(by_alias=True)
+
+    assert "nodes" not in payload
+    assert "edges" not in payload
+    assert response.meta.omitted_counts["nodes"] > 0
+    assert response.meta.omitted_counts["edges"] > 0
+    assert response.meta.request_signature is not None
+    assert response.meta.cache_key == response.meta.request_signature
+    assert any(
+        command["arguments"]["response_mode"] == "full" for command in response.meta.next_commands
+    )
+
+
+@pytest.mark.asyncio
 async def test_topic_map_compact_omitted_summary_papers_count_only_hidden_papers() -> None:
     request_args = {
         "query": "FMF colchicine guideline child",
@@ -460,6 +479,28 @@ async def test_topic_map_compact_hides_doi_only_top_candidates() -> None:
 
     assert all(candidate.pmid for candidate in response.top_candidates)
     assert response.omitted_counts["doi_only_unresolved"] == 1
+    assert response.meta.omitted_counts["doi_only_unresolved"] == 1
+
+
+@pytest.mark.asyncio
+async def test_topic_map_compact_filters_doi_only_summary_papers() -> None:
+    service = TopicLiteratureMapService(
+        search_client=FakeSearchClient(),
+        metadata_service=FakeMetadata(),
+        citation_graph_service=DoiOnlyCitationGraph(),
+        related_evidence_service=EmptyRelatedEvidence(),
+    )
+
+    response = await service.build_map(
+        TopicLiteratureMapRequest(
+            pmids=["111"],
+            response_mode="compact",
+            max_neighbors_per_paper=1,
+        )
+    )
+
+    summary_payload = response.summary.model_dump(mode="json")
+    assert "10.1000/unresolved-topic" not in str(summary_payload)
     assert response.meta.omitted_counts["doi_only_unresolved"] == 1
 
 

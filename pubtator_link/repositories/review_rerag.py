@@ -212,11 +212,18 @@ class ReviewReragRepository(Protocol):
         min_sample_chars: int = 80,
         sample_section_policy: SampleSectionPolicy = "evidence_first",
         session_id: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[ReviewSourceSummary]:
         """List review source summaries, optionally with passage samples."""
 
     async def list_review_failed_sources(
-        self, review_id: str, *, session_id: str | None = None
+        self,
+        review_id: str,
+        *,
+        session_id: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[FailedSourceSummary]:
         """List failed review sources with audit reasons."""
 
@@ -1005,6 +1012,8 @@ class PostgresReviewReragRepository:
         min_sample_chars: int = 80,
         sample_section_policy: SampleSectionPolicy = "evidence_first",
         session_id: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[ReviewSourceSummary]:
         pmid_filter = _filter_or_none(pmids)
         async with self._acquire() as connection:
@@ -1150,10 +1159,14 @@ class PostgresReviewReragRepository:
                    and p.source_id = s.source_id
                 where $2::text[] is null or s.pmid = any($2::text[])
                 order by s.source_id
+                limit coalesce($4::int, 2147483647)
+                offset $5::int
                 """,
                 review_id,
                 pmid_filter,
                 session_id,
+                limit,
+                offset,
             )
             sources = [_source_summary_from_row(row) for row in rows]
             if include_passage_samples and sources and sample_per_pmid > 0:
@@ -1246,7 +1259,12 @@ class PostgresReviewReragRepository:
         return sources
 
     async def list_review_failed_sources(
-        self, review_id: str, *, session_id: str | None = None
+        self,
+        review_id: str,
+        *,
+        session_id: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[FailedSourceSummary]:
         async with self._acquire() as connection:
             rows = await connection.fetch(
@@ -1344,9 +1362,13 @@ class PostgresReviewReragRepository:
                 having s.job_status = 'failed'
                     or bool_or(a.status is not null and a.status <> 'success')
                 order by s.source_id
+                limit coalesce($3::int, 2147483647)
+                offset $4::int
                 """,
                 review_id,
                 session_id,
+                limit,
+                offset,
             )
         return [_failed_source_summary_from_row(row) for row in rows]
 

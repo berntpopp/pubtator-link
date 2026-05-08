@@ -396,6 +396,35 @@ async def test_related_evidence_batches_large_metadata_candidate_sets() -> None:
 
 
 @pytest.mark.asyncio
+async def test_related_evidence_compact_populates_cache_and_omitted_candidate_count() -> None:
+    metadata = RecordingMetadata()
+    service = RelatedEvidenceService(
+        discovery_service=ManyCandidateDiscovery(),
+        metadata_service=metadata,
+        citation_graph_service=ManyCandidateCitationGraph(),
+    )
+
+    response = await service.find_candidates(
+        RelatedEvidenceCandidatesRequest(
+            pmid="123",
+            max_results=10,
+            response_mode="compact",
+            include_citation_neighbors=True,
+        )
+    )
+
+    assert response.meta.request_signature is not None
+    assert response.meta.cache_key == response.meta.request_signature
+    assert response.meta.snapshot_date is not None
+    assert response.meta.source_versions["pubmed"] == "live"
+    assert response.meta.truncated is True
+    assert response.meta.omitted_counts["candidates"] > 0
+    assert any(
+        command["arguments"]["response_mode"] == "full" for command in response.meta.next_commands
+    )
+
+
+@pytest.mark.asyncio
 async def test_related_evidence_enriches_match_reasons_for_intents_and_access() -> None:
     service = RelatedEvidenceService(
         discovery_service=IntentDiscovery(),
@@ -465,3 +494,25 @@ async def test_related_evidence_adds_normalized_neighbor_score_and_signals() -> 
     assert by_pmid["222"].normalized_neighbor_score == 1.0
     assert by_pmid["111"].normalized_neighbor_score == 0.0
     assert by_pmid["222"].signals == by_pmid["222"].match_reasons
+
+
+@pytest.mark.asyncio
+async def test_related_evidence_compact_uses_normalized_neighbor_score() -> None:
+    service = RelatedEvidenceService(
+        discovery_service=ScoreRangeDiscovery(),
+        metadata_service=FakeMetadata(),
+        citation_graph_service=FakeCitationGraph(),
+    )
+
+    response = await service.find_candidates(
+        RelatedEvidenceCandidatesRequest(
+            pmid="123",
+            response_mode="compact",
+            include_citation_neighbors=False,
+        )
+    )
+    payload = response.model_dump(by_alias=True)
+
+    assert payload["candidates"][0]["normalized_neighbor_score"] is not None
+    assert "pubmed_neighbor_score" not in payload["candidates"][0]
+    assert "score" not in payload["candidates"][0]

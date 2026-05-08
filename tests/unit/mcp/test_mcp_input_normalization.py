@@ -36,6 +36,21 @@ def test_normalizes_enum_casing() -> None:
     assert {warning["field"] for warning in warnings} == {"queries", "response_mode"}
 
 
+def test_retrieve_batch_normalizes_verbosity_casing_and_auto_budget() -> None:
+    normalized, warnings = normalize_retrieve_review_context_batch_args(
+        {
+            "queries": ["MEFV"],
+            "verbosity": "Lean",
+            "max_response_chars": "Auto",
+        }
+    )
+
+    assert normalized["verbosity"] == "lean"
+    assert normalized["max_response_chars"] == "auto"
+    assert any(warning["field"] == "verbosity" for warning in warnings)
+    assert any(warning["field"] == "max_response_chars" for warning in warnings)
+
+
 def test_rejects_ambiguous_query_and_queries() -> None:
     with pytest.raises(InputNormalizationError) as error:
         normalize_retrieve_review_context_batch_args(

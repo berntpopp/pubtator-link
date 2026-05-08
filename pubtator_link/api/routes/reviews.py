@@ -250,6 +250,8 @@ async def inspect_review_index(
     include_metadata: bool = False,
     metadata: Literal["basic", "full"] = "basic",
     response_mode: Literal["compact", "full"] = "full",
+    limit: int | None = Query(default=None, ge=1, le=100),
+    cursor: str | None = None,
 ) -> InspectReviewIndexResponse:
     pmid_list = [pmid.strip() for pmid in pmids.split(",") if pmid.strip()] if pmids else []
     return await service.inspect_review_index(
@@ -264,6 +266,8 @@ async def inspect_review_index(
             sample_section_policy=sample_section_policy,
             include_metadata=include_metadata,
             metadata=metadata,
+            limit=limit,
+            cursor=cursor,
         ),
     )
 

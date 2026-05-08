@@ -81,6 +81,23 @@ def _normalize_enum_casing(
     return []
 
 
+def _normalize_auto_literal(
+    normalized: dict[str, Any],
+    warnings: list[dict[str, str]],
+    *,
+    field: str,
+) -> None:
+    value = normalized.get(field)
+    if not isinstance(value, str):
+        return
+    if value.strip().lower() != "auto":
+        return
+    if value == "auto":
+        return
+    normalized[field] = "auto"
+    warnings.append(_warning(field, field, f"Normalized '{field}' auto casing."))
+
+
 def normalize_retrieve_review_context_batch_args(
     args: dict[str, Any],
 ) -> tuple[dict[str, Any], list[dict[str, str]]]:
@@ -121,6 +138,14 @@ def normalize_retrieve_review_context_batch_args(
         _normalize_enum_casing(
             normalized,
             warnings,
+            field="verbosity",
+            allowed_values={"lean", "standard", "full"},
+        )
+    )
+    field_errors.extend(
+        _normalize_enum_casing(
+            normalized,
+            warnings,
             field="table_mode",
             allowed_values={"off", "preview", "full"},
         )
@@ -133,6 +158,7 @@ def normalize_retrieve_review_context_batch_args(
             allowed_values={"evidence_first", "original_order"},
         )
     )
+    _normalize_auto_literal(normalized, warnings, field="max_response_chars")
 
     if field_errors:
         raise InputNormalizationError(

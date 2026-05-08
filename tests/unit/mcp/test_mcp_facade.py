@@ -211,6 +211,20 @@ def test_topic_literature_map_tool_schema_is_flat() -> None:
     assert tool.output_schema["title"] == "TopicLiteratureMapResponse"
 
 
+def test_literature_graph_mcp_schemas_default_to_compact() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tools = create_pubtator_mcp(profile="full")._tool_manager._tools
+    for name in (
+        "pubtator.get_publication_citation_graph",
+        "pubtator.find_related_evidence_candidates",
+        "pubtator.build_topic_literature_map",
+    ):
+        response_mode = tools[name].parameters["properties"]["response_mode"]
+        assert response_mode["default"] == "compact"
+        assert "full" in _schema_enum_values(response_mode)
+
+
 def test_review_retrieval_schema_hides_resolver_trace_by_default() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
@@ -260,6 +274,16 @@ def test_ground_question_schema_exposes_one_call_arguments() -> None:
     assert properties["max_pmids"]["maximum"] == 20
     assert properties["wait_until_ready"]["default"] is True
     assert tool.output_schema["title"] == "GroundQuestionResponse"
+
+
+def test_ground_question_schema_exposes_verbosity_and_auto_budget() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp()._tool_manager._tools["pubtator.ground_question"]
+    properties = tool.parameters["properties"]
+
+    assert properties["verbosity"]["default"] == "lean"
+    assert properties["max_response_chars"]["default"] == "auto"
 
 
 def test_index_review_evidence_schema_does_not_expose_prepare_mode() -> None:

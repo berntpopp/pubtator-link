@@ -13,7 +13,6 @@ from pubtator_link.models.literature_graph import (
     LiteratureGraphEdge,
     LiteratureGraphNode,
     LiteratureGraphProvenance,
-    LiteratureGraphResponseMeta,
     LiteraturePaper,
     LiteratureProviderStatus,
     LiteratureProviderStatusValue,
@@ -26,7 +25,12 @@ from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 from pubtator_link.services.literature_graph_compact import (
     candidate_summary,
     coalesced_provider_warnings,
+    graph_budget_bytes,
+    graph_detail_next_commands,
+    graph_payload_json_bytes,
+    graph_request_metadata,
     json_size_class,
+    mark_graph_payload_truncated,
 )
 from pubtator_link.services.literature_identifier_resolution import (
     DoiPmidResolver,
@@ -334,6 +338,31 @@ class CitationGraphService:
             cited_by_status = []
             identifier_resolution_status = []
             open_access_status = []
+        meta = graph_request_metadata(
+            tool_name="pubtator.get_publication_citation_graph",
+            request=request,
+            source_versions=_citation_source_versions(request, self),
+        ).model_copy(
+            update={
+                "truncated": bool(compact_omitted_counts),
+                "omitted_counts": compact_omitted_counts,
+                "warnings": coalesced_provider_warnings(warnings),
+                "next_commands": [
+                    *_next_commands(candidate_pmids),
+                    *graph_detail_next_commands(
+                        tool_name="pubtator.get_publication_citation_graph",
+                        request=request,
+                        modes=("full", "nodes_edges"),
+                    ),
+                ],
+                "provider_status": [
+                    *references_status,
+                    *cited_by_status,
+                    *identifier_resolution_status,
+                    *open_access_status,
+                ],
+            }
+        )
         response = PublicationCitationGraphResponse(
             source=source,
             references=response_references,
@@ -353,20 +382,9 @@ class CitationGraphService:
             cited_by_status=cited_by_status,
             identifier_resolution_status=identifier_resolution_status,
             open_access_status=open_access_status,
-            _meta=LiteratureGraphResponseMeta(
-                response_mode=request.response_mode,
-                truncated=bool(compact_omitted_counts),
-                omitted_counts=compact_omitted_counts,
-                warnings=coalesced_provider_warnings(warnings),
-                next_commands=_next_commands(candidate_pmids),
-                provider_status=[
-                    *references_status,
-                    *cited_by_status,
-                    *identifier_resolution_status,
-                    *open_access_status,
-                ],
-            ),
+            _meta=meta,
         )
+        response = _enforce_citation_graph_budget(response)
         response.meta.response_size_class = json_size_class(response.model_dump(by_alias=True))
         return response
 
@@ -882,3 +900,161 @@ def _next_commands(candidate_pmids: list[str]) -> list[dict[str, Any]]:
             "arguments": {"pmids": candidate_pmids},
         },
     ]
+
+
+def _citation_source_versions(
+    request: PublicationCitationGraphRequest,
+    service: CitationGraphService,
+) -> dict[str, str]:
+    versions: dict[str, str] = {"pubmed": "live"}
+    if service.crossref is not None:
+        versions[CROSSREF_PROVIDER] = "live"
+    if service.europe_pmc is not None:
+        versions[EUROPE_PMC_PROVIDER] = "live"
+    if service.openalex is not None:
+        versions[OPENALEX_PROVIDER] = "live"
+    if request.include_open_access_status and service.unpaywall is not None:
+        versions[UNPAYWALL_PROVIDER] = "live"
+    return versions
+
+
+def _enforce_citation_graph_budget(
+    response: PublicationCitationGraphResponse,
+) -> PublicationCitationGraphResponse:
+    budget = graph_budget_bytes(response.response_mode)
+    if budget is None:
+        return response
+    if graph_payload_json_bytes(response) <= budget:
+        if response.meta.truncated and response.meta.budget_advice is None:
+            return response.model_copy(
+                update={
+                    "meta": mark_graph_payload_truncated(
+                        response.meta,
+                        omitted_counts={},
+                        budget_bytes=budget,
+                    )
+                }
+            )
+        return response
+
+    omitted: dict[str, int] = {}
+    reference_candidates = [
+        _budget_compact_candidate(candidate) for candidate in response.reference_candidates
+    ]
+    cited_by_candidates = [
+        _budget_compact_candidate(candidate) for candidate in response.cited_by_candidates
+    ]
+    compacted = response.model_copy(
+        update={
+            "reference_candidates": reference_candidates,
+            "cited_by_candidates": cited_by_candidates,
+        }
+    )
+    if graph_payload_json_bytes(compacted) <= budget:
+        omitted["candidate_details"] = len(response.reference_candidates) + len(
+            response.cited_by_candidates
+        )
+        return compacted.model_copy(
+            update={
+                "meta": mark_graph_payload_truncated(
+                    compacted.meta,
+                    omitted_counts=omitted,
+                    budget_bytes=budget,
+                )
+            }
+        )
+
+    compacted, omitted = _drop_citation_candidates_to_budget(
+        compacted,
+        budget=budget,
+        omitted_counts=omitted,
+    )
+    return compacted.model_copy(
+        update={
+            "meta": mark_graph_payload_truncated(
+                compacted.meta,
+                omitted_counts=omitted,
+                budget_bytes=budget,
+            )
+        }
+    )
+
+
+def _drop_citation_candidates_to_budget(
+    response: PublicationCitationGraphResponse,
+    *,
+    budget: int,
+    omitted_counts: dict[str, int],
+) -> tuple[PublicationCitationGraphResponse, dict[str, int]]:
+    overage = graph_payload_json_bytes(response) - budget
+    if overage <= 0:
+        return response, omitted_counts
+
+    cited_by_candidates, dropped_cited_by, overage = _drop_suffix_by_estimated_bytes(
+        response.cited_by_candidates,
+        overage,
+    )
+    reference_candidates, dropped_references, overage = _drop_suffix_by_estimated_bytes(
+        response.reference_candidates,
+        overage,
+    )
+    if dropped_cited_by:
+        omitted_counts["cited_by_candidates"] = (
+            omitted_counts.get("cited_by_candidates", 0) + dropped_cited_by
+        )
+    if dropped_references:
+        omitted_counts["reference_candidates"] = (
+            omitted_counts.get("reference_candidates", 0) + dropped_references
+        )
+
+    trimmed = response.model_copy(
+        update={
+            "reference_candidates": reference_candidates,
+            "cited_by_candidates": cited_by_candidates,
+        }
+    )
+    if graph_payload_json_bytes(trimmed) <= budget:
+        return trimmed, omitted_counts
+
+    omitted_counts["reference_candidates"] = omitted_counts.get("reference_candidates", 0) + len(
+        trimmed.reference_candidates
+    )
+    omitted_counts["cited_by_candidates"] = omitted_counts.get("cited_by_candidates", 0) + len(
+        trimmed.cited_by_candidates
+    )
+    return trimmed.model_copy(
+        update={"reference_candidates": [], "cited_by_candidates": []}
+    ), omitted_counts
+
+
+def _drop_suffix_by_estimated_bytes(
+    candidates: list[LiteratureCandidateSummary],
+    overage: int,
+) -> tuple[list[LiteratureCandidateSummary], int, int]:
+    reclaimed = 0
+    dropped = 0
+    for candidate in reversed(candidates):
+        reclaimed += graph_payload_json_bytes(candidate)
+        dropped += 1
+        if reclaimed >= overage:
+            break
+    if dropped == 0:
+        return candidates, 0, overage
+    return candidates[: len(candidates) - dropped], dropped, max(0, overage - reclaimed)
+
+
+def _budget_compact_candidate(
+    candidate: LiteratureCandidateSummary,
+) -> LiteratureCandidateSummary:
+    return candidate.model_copy(
+        update={
+            "publication_types": candidate.publication_types[:3],
+            "access_flags": {},
+            "relevance_to_query": None,
+            "rank_reasons": candidate.rank_reasons[:3],
+            "demotion_reasons": candidate.demotion_reasons[:3],
+            "signals": candidate.signals[:5],
+            "source_tools": [],
+            "next_actions": [],
+        }
+    )

@@ -639,9 +639,40 @@ async def test_list_review_sources_aggregates_jobs_attempts_passages_and_samples
     assert "review_preparation_jobs" in summary_sql
     assert "full_text_retrieval_attempts" in summary_sql
     assert "review_passages" in summary_sql
-    assert summary_args == ("review-1", ["111"], None)
+    assert summary_args == ("review-1", ["111"], None, None, 0)
     assert "row_number()" in sample_sql.lower()
     assert sample_args == ("review-1", ["111"], ["111"], 1, "evidence_first", 80, None)
+
+
+@pytest.mark.asyncio
+async def test_list_review_sources_applies_limit_and_offset() -> None:
+    connection = FakeConnection()
+    connection.fetched_rows = [
+        {
+            "source_id": "222",
+            "pmid": "222",
+            "source_kind": "pubtator_abstract",
+            "job_status": "complete",
+            "error": None,
+            "attempt_statuses": ["success"],
+            "sections": ["abstract"],
+            "passage_count": 1,
+            "char_count": 20,
+            "coverage_reason": "abstract_fallback_used",
+            "pmcid": None,
+            "doi": None,
+            "license_or_access_hint": None,
+            "pmc_fallback_available": False,
+            "resolver_attempts": [],
+        }
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    sources = await repository.list_review_sources("review-1", limit=1, offset=1)
+    _sql, args = connection.executed[0]
+
+    assert [source.pmid for source in sources] == ["222"]
+    assert args[-2:] == (1, 1)
 
 
 @pytest.mark.asyncio
@@ -993,7 +1024,7 @@ async def test_list_review_sources_derives_pmid_from_prefixed_source_ids() -> No
     sql, args = connection.executed[0]
     assert "PMID:(.+)$" in sql
     assert "s.pmid = any($2::text[])" in sql
-    assert args == ("review-1", ["40234174"], None)
+    assert args == ("review-1", ["40234174"], None, None, 0)
 
 
 @pytest.mark.asyncio
@@ -1027,7 +1058,49 @@ async def test_list_review_failed_sources_includes_failure_reasons() -> None:
     assert "review_preparation_jobs" in sql
     assert "full_text_retrieval_attempts" in sql
     assert "reason" in sql
-    assert args == ("review-1", None)
+    assert args == ("review-1", None, None, 0)
+
+
+@pytest.mark.asyncio
+async def test_list_review_failed_sources_applies_limit_and_offset() -> None:
+    connection = FakeConnection()
+    connection.fetched_rows = [
+        {
+            "source_id": "222",
+            "pmid": "222",
+            "source_kind": "pubtator_full_bioc",
+            "job_status": "failed",
+            "error": "not available",
+            "attempt_statuses": ["failed"],
+            "coverage_reason": "upstream_404",
+            "pmcid": None,
+            "doi": None,
+            "license_or_access_hint": None,
+            "pmc_fallback_available": False,
+            "resolver_attempts": [],
+        },
+        {
+            "source_id": "333",
+            "pmid": "333",
+            "source_kind": "pubtator_full_bioc",
+            "job_status": "failed",
+            "error": "not available",
+            "attempt_statuses": ["failed"],
+            "coverage_reason": "upstream_404",
+            "pmcid": None,
+            "doi": None,
+            "license_or_access_hint": None,
+            "pmc_fallback_available": False,
+            "resolver_attempts": [],
+        },
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    failed = await repository.list_review_failed_sources("review-1", limit=2, offset=1)
+    _sql, args = connection.executed[0]
+
+    assert [source.pmid for source in failed] == ["222", "333"]
+    assert args[-2:] == (2, 1)
 
 
 @pytest.mark.asyncio
