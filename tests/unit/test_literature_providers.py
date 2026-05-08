@@ -3,6 +3,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
+from pubtator_link.api.retry import RetryPolicy
 from pubtator_link.models.literature_graph import LiteratureAvailability, ProviderWarning
 from pubtator_link.services.literature_providers import (
     PROVIDER_DISABLED,
@@ -38,6 +39,17 @@ class StatusTransport:
     async def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
         return httpx.Response(self.status_code, json=self.payload, request=request)
+
+
+class SequentialStatusTransport:
+    def __init__(self, responses: list[tuple[int, dict[str, object]]]) -> None:
+        self.responses = responses
+        self.requests: list[httpx.Request] = []
+
+    async def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        status_code, payload = self.responses[min(len(self.requests) - 1, len(self.responses) - 1)]
+        return httpx.Response(status_code, json=payload, request=request)
 
 
 class SequentialTransport:
@@ -114,6 +126,27 @@ async def test_europe_pmc_literature_client_get_citations_maps_citation_list_pay
     assert citations[0].pmid == "41910911"
     assert citations[0].journal == "Clin Rheumatol"
     assert citations[0].year == 2026
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_europe_pmc_literature_client_retries_transient_status() -> None:
+    transport = SequentialStatusTransport(
+        [
+            (503, {"error": "temporarily unavailable"}),
+            (200, EUROPE_PMC_CITATIONS_40562663),
+        ]
+    )
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = EuropePmcLiteratureClient(
+        http_client=http_client,
+        retry_policy=RetryPolicy(max_attempts=2, base_delay_ms=0, max_delay_ms=0),
+    )
+
+    citations = await client.get_citations("40562663", limit=1)
+
+    assert len(transport.requests) == 2
+    assert citations[0].pmid == "40600001"
     await client.close()
 
 
@@ -204,6 +237,28 @@ async def test_openalex_client_get_cited_by_falls_back_to_cites_filter() -> None
 
 
 @pytest.mark.asyncio
+async def test_openalex_client_retries_transient_work_lookup_status() -> None:
+    transport = SequentialStatusTransport(
+        [
+            (502, {"error": "bad gateway"}),
+            (200, OPENALEX_WORK),
+        ]
+    )
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = OpenAlexClient(
+        http_client=http_client,
+        mailto="curator@example.org",
+        retry_policy=RetryPolicy(max_attempts=2, base_delay_ms=0, max_delay_ms=0),
+    )
+
+    paper = await client.get_work_by_doi("10.1000/primary-study")
+
+    assert len(transport.requests) == 2
+    assert paper.pmid == "39596913"
+    await client.close()
+
+
+@pytest.mark.asyncio
 async def test_unpaywall_client_without_email_returns_provider_disabled_warning() -> None:
     client = UnpaywallClient(email=None)
 
@@ -241,4 +296,27 @@ async def test_unpaywall_client_404_returns_no_match_warning() -> None:
     assert isinstance(result, ProviderWarning)
     assert result.status == "provider_no_match"
     assert result.retryable is False
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_unpaywall_client_retries_transient_status_before_availability() -> None:
+    transport = SequentialStatusTransport(
+        [
+            (504, {"error": "timeout"}),
+            (200, UNPAYWALL_WORK),
+        ]
+    )
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = UnpaywallClient(
+        http_client=http_client,
+        email="curator@example.org",
+        retry_policy=RetryPolicy(max_attempts=2, base_delay_ms=0, max_delay_ms=0),
+    )
+
+    availability = await client.get_availability("10.1000/primary-study")
+
+    assert len(transport.requests) == 2
+    assert isinstance(availability, LiteratureAvailability)
+    assert availability.is_open_access is True
     await client.close()

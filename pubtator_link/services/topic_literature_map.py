@@ -48,6 +48,8 @@ from pubtator_link.services.literature_paper_resolution import (
 )
 from pubtator_link.services.publication_metadata import lookup_metadata_batched
 
+TOPIC_STAGE_CONCURRENCY = 4
+
 
 class TopicSearchClient(Protocol):
     """Search behavior needed to collect seed PMIDs."""
@@ -109,9 +111,10 @@ class TopicLiteratureMapService:
             ) = await self._citation_neighbors(
                 seed_pmids=seed_pmids,
                 remaining_neighbors=remaining_neighbors,
+                request=request,
                 warnings=warnings,
                 provider_status=provider_status,
-                deadline=deadline,
+                deadline=_stage_deadline(deadline, request.citation_graph_timeout_ms),
             )
             papers.extend(citation_papers)
             edges.extend(citation_edges)
@@ -133,7 +136,7 @@ class TopicLiteratureMapService:
                 remaining_neighbors=remaining_neighbors,
                 warnings=warnings,
                 provider_status=provider_status,
-                deadline=deadline,
+                deadline=_stage_deadline(deadline, request.related_evidence_timeout_ms),
             )
             papers.extend(related_papers)
             edges.extend(related_edges)
@@ -164,7 +167,7 @@ class TopicLiteratureMapService:
                 warnings=warnings,
                 provider_status=provider_status,
                 operation="metadata_backfill",
-                deadline=deadline,
+                deadline=_stage_deadline(deadline, request.metadata_backfill_timeout_ms),
             )
             papers_by_pmid.update(backfill_papers)
             entities_by_pmid.update(backfill_entities)
@@ -188,6 +191,8 @@ class TopicLiteratureMapService:
             seed_pmids=seed_pmids,
             candidate_pmids=_dedupe(candidate_pmids),
             accessible_candidates=dedupe_papers(accessible_candidates),
+            query=request.query,
+            bias_toward=request.bias_toward,
         )
         ranked_candidates = rank_topic_candidates(
             deduped_papers,
@@ -198,8 +203,13 @@ class TopicLiteratureMapService:
             bias_toward=request.bias_toward,
         )
         recommended_next_pmids = _recommended_next_pmids(ranked_candidates, seed_pmids)
+        recommended_next_candidates = _recommended_next_candidates(
+            ranked_candidates,
+            recommended_next_pmids,
+        )
         accessible_full_text_pmids = _accessible_full_text_pmids(ranked_candidates)
         closed_central_pmids = _closed_central_pmids(ranked_candidates, summary)
+        bias_score_by_pmid = _bias_score_by_pmid(ranked_candidates)
         demoted_candidate_pmids, demoted_reasons_by_pmid = _demoted_candidates(
             ranked_candidates,
             seed_pmids=seed_pmids,
@@ -210,8 +220,9 @@ class TopicLiteratureMapService:
         response_nodes = nodes
         response_edges = deduped_edges
         response_summary = summary
-        top_candidates = ranked_candidates[: request.max_candidates]
+        top_candidates = _top_actionable_candidates(ranked_candidates)[: request.max_candidates]
         omitted_counts: dict[str, int] = {}
+        graph_inspection_hint: str | None = None
 
         if request.response_mode == "compact":
             response_nodes = []
@@ -232,6 +243,10 @@ class TopicLiteratureMapService:
             }
             if omitted_doi_only:
                 omitted_counts["doi_only_unresolved"] = omitted_doi_only
+            if nodes or deduped_edges:
+                graph_inspection_hint = (
+                    "Use response_mode='nodes_edges' to inspect omitted graph nodes and edges."
+                )
         elif request.response_mode == "nodes_edges":
             response_nodes = nodes[: request.max_graph_nodes]
             response_edges = deduped_edges[: request.max_graph_edges]
@@ -280,12 +295,15 @@ class TopicLiteratureMapService:
             response_mode=request.response_mode,
             top_candidates=top_candidates,
             recommended_next_pmids=recommended_next_pmids,
+            recommended_next_candidates=recommended_next_candidates,
             accessible_full_text_pmids=accessible_full_text_pmids,
             closed_central_pmids=closed_central_pmids,
             demoted_candidate_pmids=demoted_candidate_pmids,
             demoted_reasons_by_pmid=demoted_reasons_by_pmid,
+            bias_score_by_pmid=bias_score_by_pmid,
             provider_status=provider_status,
             omitted_counts=omitted_counts,
+            graph_inspection_hint=graph_inspection_hint,
             candidate_retrieval_hints=hints,
             _meta=meta,
         )
@@ -335,8 +353,67 @@ class TopicLiteratureMapService:
                         result_count,
                     )
                 )
-            seed_pmids.extend(_pmids_from_search(raw))
+            search_pmids = _pmids_from_search(raw)
+            needed = request.max_seed_papers - len(seed_pmids)
+            seed_pmids.extend(
+                await self._screen_query_seed_pmids(
+                    search_pmids,
+                    request=request,
+                    limit=needed,
+                    warnings=warnings,
+                    provider_status=provider_status,
+                    deadline=deadline,
+                )
+            )
         return _dedupe(seed_pmids)[: request.max_seed_papers]
+
+    async def _screen_query_seed_pmids(
+        self,
+        pmids: list[str],
+        *,
+        request: TopicLiteratureMapRequest,
+        limit: int,
+        warnings: list[ProviderWarning],
+        provider_status: list[LiteratureProviderStatus],
+        deadline: float | None,
+    ) -> list[str]:
+        if not pmids or limit <= 0:
+            return []
+        screening_pmids = _dedupe(pmids)[: min(len(pmids), max(limit * 3, limit))]
+        papers_by_pmid, _entities = await self._metadata_papers(
+            screening_pmids,
+            include_entities=False,
+            warnings=warnings,
+            provider_status=provider_status,
+            operation="seed_screening",
+            deadline=deadline,
+        )
+        if not papers_by_pmid:
+            return screening_pmids[:limit]
+        query_terms = _query_terms(request.query)
+        intents = intent_flags_for_query(request.query)
+        bias: set[str] = set(request.bias_toward or [])
+        rank_by_pmid: dict[str, tuple[float, int]] = {}
+        for index, pmid in enumerate(screening_pmids):
+            paper = papers_by_pmid.get(pmid, LiteraturePaper(pmid=pmid))
+            score, _reasons, demotions, _matched = _topic_candidate_score(
+                paper=paper,
+                query_terms=query_terms,
+                intents=intents,
+                seed_set=set(),
+                candidate_set={pmid},
+                accessible_set=set(),
+                bias_toward=bias,
+            )
+            if "conference_abstract_collection" in demotions:
+                score -= 8.0
+            if "off_topic_title" in demotions:
+                score -= 6.0
+            rank_by_pmid[pmid] = (score, index)
+        return sorted(
+            screening_pmids,
+            key=lambda pmid: (-rank_by_pmid[pmid][0], rank_by_pmid[pmid][1]),
+        )[:limit]
 
     async def _metadata_papers(
         self,
@@ -431,37 +508,44 @@ class TopicLiteratureMapService:
         *,
         seed_pmids: list[str],
         remaining_neighbors: dict[str, int],
+        request: TopicLiteratureMapRequest,
         warnings: list[ProviderWarning],
         provider_status: list[LiteratureProviderStatus],
         deadline: float | None,
     ) -> tuple[list[LiteraturePaper], list[LiteratureGraphEdge], list[str], dict[str, int]]:
-        papers: list[LiteraturePaper] = []
-        edges: list[LiteratureGraphEdge] = []
-        candidate_pmids: list[str] = []
-        failed_count = 0
-        failure_message: str | None = None
-        for seed_pmid in seed_pmids:
+        semaphore = asyncio.Semaphore(TOPIC_STAGE_CONCURRENCY)
+
+        async def collect_seed(
+            seed_pmid: str,
+        ) -> tuple[
+            str,
+            int,
+            list[LiteraturePaper],
+            list[LiteratureGraphEdge],
+            list[str],
+            Exception | None,
+        ]:
             remaining = remaining_neighbors.get(seed_pmid, 0)
             if remaining <= 0:
-                continue
+                return seed_pmid, remaining, [], [], [], None
             try:
-                graph = await _await_with_deadline(
-                    self.citation_graph_service.get_citation_graph(
-                        PublicationCitationGraphRequest(
-                            pmid=seed_pmid,
-                            direction="both",
-                            max_results=remaining,
-                        )
-                    ),
-                    deadline,
-                )
+                async with semaphore:
+                    graph = await _await_with_deadline(
+                        self.citation_graph_service.get_citation_graph(
+                            PublicationCitationGraphRequest(
+                                pmid=seed_pmid,
+                                direction="both",
+                                max_results=remaining,
+                                query=request.query,
+                            )
+                        ),
+                        deadline,
+                    )
             except Exception as exc:
-                warnings.append(_provider_failed_warning("citation_graph", exc))
-                failed_count += 1
-                failure_message = _provider_exception_message(exc, "Citation graph")
-                if isinstance(exc, TimeoutError):
-                    break
-                continue
+                return seed_pmid, remaining, [], [], [], exc
+            papers: list[LiteraturePaper] = []
+            edges: list[LiteratureGraphEdge] = []
+            candidate_pmids: list[str] = []
             for paper in graph.references:
                 if remaining <= 0:
                     break
@@ -493,6 +577,24 @@ class TopicLiteratureMapService:
                 )
                 remaining -= 1
             remaining_neighbors[seed_pmid] = remaining
+            return seed_pmid, remaining, papers, edges, candidate_pmids, None
+
+        results = await asyncio.gather(*(collect_seed(seed_pmid) for seed_pmid in seed_pmids))
+        papers: list[LiteraturePaper] = []
+        edges: list[LiteratureGraphEdge] = []
+        candidate_pmids: list[str] = []
+        failed_count = 0
+        failure_message: str | None = None
+        for seed_pmid, remaining, seed_papers, seed_edges, seed_pmids, exc in results:
+            if exc is not None:
+                warnings.append(_provider_failed_warning("citation_graph", exc))
+                failed_count += 1
+                failure_message = _provider_exception_message(exc, "Citation graph")
+                continue
+            remaining_neighbors[seed_pmid] = remaining
+            papers.extend(seed_papers)
+            edges.extend(seed_edges)
+            candidate_pmids.extend(seed_pmids)
         provider_status.append(
             _stage_provider_status(
                 "citation_graph",
@@ -514,37 +616,42 @@ class TopicLiteratureMapService:
         provider_status: list[LiteratureProviderStatus],
         deadline: float | None,
     ) -> tuple[list[LiteraturePaper], list[LiteratureGraphEdge], list[str]]:
-        papers: list[LiteraturePaper] = []
-        edges: list[LiteratureGraphEdge] = []
-        candidate_pmids: list[str] = []
-        failed_count = 0
-        failure_message: str | None = None
-        for seed_pmid in seed_pmids:
+        semaphore = asyncio.Semaphore(TOPIC_STAGE_CONCURRENCY)
+
+        async def collect_seed(
+            seed_pmid: str,
+        ) -> tuple[
+            str,
+            int,
+            list[LiteraturePaper],
+            list[LiteratureGraphEdge],
+            list[str],
+            Exception | None,
+        ]:
             remaining = remaining_neighbors.get(seed_pmid, 0)
             if remaining <= 0:
-                continue
+                return seed_pmid, remaining, [], [], [], None
             try:
-                response = await _await_with_deadline(
-                    self.related_evidence_service.find_candidates(
-                        RelatedEvidenceCandidatesRequest(
-                            pmid=seed_pmid,
-                            max_results=remaining,
-                            prefer_full_text=request.prefer_full_text,
-                            include_pubtator_search=True,
-                            include_citation_neighbors=False,
-                            year_min=request.year_min,
-                            year_max=request.year_max,
-                        )
-                    ),
-                    deadline,
-                )
+                async with semaphore:
+                    response = await _await_with_deadline(
+                        self.related_evidence_service.find_candidates(
+                            RelatedEvidenceCandidatesRequest(
+                                pmid=seed_pmid,
+                                max_results=remaining,
+                                prefer_full_text=request.prefer_full_text,
+                                include_pubtator_search=True,
+                                include_citation_neighbors=False,
+                                year_min=request.year_min,
+                                year_max=request.year_max,
+                            )
+                        ),
+                        deadline,
+                    )
             except Exception as exc:
-                warnings.append(_provider_failed_warning("related_evidence", exc))
-                failed_count += 1
-                failure_message = _provider_exception_message(exc, "Related evidence")
-                if isinstance(exc, TimeoutError):
-                    break
-                continue
+                return seed_pmid, remaining, [], [], [], exc
+            papers: list[LiteraturePaper] = []
+            edges: list[LiteratureGraphEdge] = []
+            candidate_pmids: list[str] = []
             for candidate in response.candidates:
                 if remaining <= 0:
                     break
@@ -565,6 +672,24 @@ class TopicLiteratureMapService:
                 )
                 remaining -= 1
             remaining_neighbors[seed_pmid] = remaining
+            return seed_pmid, remaining, papers, edges, candidate_pmids, None
+
+        results = await asyncio.gather(*(collect_seed(seed_pmid) for seed_pmid in seed_pmids))
+        papers: list[LiteraturePaper] = []
+        edges: list[LiteratureGraphEdge] = []
+        candidate_pmids: list[str] = []
+        failed_count = 0
+        failure_message: str | None = None
+        for seed_pmid, remaining, seed_papers, seed_edges, seed_pmids, exc in results:
+            if exc is not None:
+                warnings.append(_provider_failed_warning("related_evidence", exc))
+                failed_count += 1
+                failure_message = _provider_exception_message(exc, "Related evidence")
+                continue
+            remaining_neighbors[seed_pmid] = remaining
+            papers.extend(seed_papers)
+            edges.extend(seed_edges)
+            candidate_pmids.extend(seed_pmids)
         provider_status.append(
             _stage_provider_status(
                 "related_evidence",
@@ -719,9 +844,16 @@ def _summary(
     seed_pmids: list[str],
     candidate_pmids: list[str],
     accessible_candidates: list[LiteraturePaper],
+    query: str | None,
+    bias_toward: Sequence[str] | None,
 ) -> TopicLiteratureMapSummary:
     paper_by_key = {paper.key: paper for paper in papers}
     seed_rank = {pmid: index for index, pmid in enumerate(seed_pmids)}
+    candidate_set = set(candidate_pmids)
+    accessible_set = {paper.pmid for paper in accessible_candidates if paper.pmid}
+    query_terms = _query_terms(query)
+    intents = intent_flags_for_query(query)
+    bias = set(bias_toward or [])
     degree = Counter[str]()
     for edge in edges:
         if edge.edge_type not in {"cites", "cited_by", "related_by_elink"}:
@@ -729,15 +861,32 @@ def _summary(
         degree[edge.source] += 1
         degree[edge.target] += 1
 
-    central_papers = sorted(
-        papers,
-        key=lambda paper: (
+    def centrality_key(paper: LiteraturePaper) -> tuple[float, int, int, int, int, str]:
+        score, _rank_reasons, demotion_reasons, _matched_terms = _topic_candidate_score(
+            paper=paper,
+            query_terms=query_terms,
+            intents=intents,
+            seed_set=set(seed_pmids),
+            candidate_set=candidate_set,
+            accessible_set=accessible_set,
+            bias_toward=bias,
+        )
+        if "low_query_overlap" in demotion_reasons:
+            score -= 5.0
+        if "conference_abstract_collection" in demotion_reasons:
+            score -= 8.0
+        return (
+            -score,
             paper.pmid not in seed_rank,
             -degree[paper.key],
             seed_rank.get(paper.pmid or "", len(seed_rank)),
             -(paper.year or 0),
             paper.pmid or paper.key,
-        ),
+        )
+
+    central_papers = sorted(
+        papers,
+        key=centrality_key,
     )[:10]
     recent_connected_papers = sorted(
         [paper for paper in papers if degree[paper.key] > 0],
@@ -807,6 +956,23 @@ def _recommended_next_pmids(
     return _dedupe([candidate.pmid or "" for candidate in selected])[:20]
 
 
+def _recommended_next_candidates(
+    candidates: list[LiteratureCandidateSummary],
+    recommended_pmids: list[str],
+) -> list[LiteratureCandidateSummary]:
+    recommended_set = set(recommended_pmids)
+    return [candidate for candidate in candidates if candidate.pmid in recommended_set][
+        : len(recommended_pmids)
+    ]
+
+
+def _top_actionable_candidates(
+    candidates: list[LiteratureCandidateSummary],
+) -> list[LiteratureCandidateSummary]:
+    actionable = [candidate for candidate in candidates if not candidate.demotion_reasons]
+    return actionable if actionable else candidates
+
+
 def _accessible_full_text_pmids(candidates: list[LiteratureCandidateSummary]) -> list[str]:
     return _dedupe(
         [
@@ -853,10 +1019,25 @@ def _demoted_candidates(
     }
 
 
+def _bias_score_by_pmid(candidates: list[LiteratureCandidateSummary]) -> dict[str, float]:
+    scores: dict[str, float] = {}
+    for candidate in candidates:
+        if not candidate.pmid or candidate.relevance_to_query is None:
+            continue
+        matched_intents = candidate.relevance_to_query.matched_intents
+        if matched_intents:
+            scores[candidate.pmid] = min(1.0, len(matched_intents) / 3)
+    return scores
+
+
 def _compact_actionable_topic_candidates(
     candidates: list[LiteratureCandidateSummary],
 ) -> tuple[list[LiteratureCandidateSummary], int]:
-    actionable = [candidate for candidate in candidates if candidate.pmid]
+    actionable = [
+        candidate for candidate in candidates if candidate.pmid and not candidate.demotion_reasons
+    ]
+    if not actionable:
+        actionable = [candidate for candidate in candidates if candidate.pmid]
     omitted_doi_only = sum(1 for candidate in candidates if candidate.doi and not candidate.pmid)
     return actionable, omitted_doi_only
 
@@ -889,7 +1070,9 @@ def _compact_summary(
         ][:5],
         bridge_papers=[_compact_paper(paper) for paper in summary.bridge_papers if paper.pmid][:5],
         dominant_author_groups=summary.dominant_author_groups,
-        accessible_full_text_candidates=[],
+        accessible_full_text_candidates=[
+            _compact_paper(paper) for paper in summary.accessible_full_text_candidates if paper.pmid
+        ][:5],
         closed_central_sources=[
             _compact_paper(paper) for paper in summary.closed_central_sources if paper.pmid
         ][:5],
@@ -1001,6 +1184,15 @@ def _deadline_from_timeout_ms(timeout_ms: int) -> float | None:
     if timeout_ms <= 0:
         return None
     return time.monotonic() + (timeout_ms / 1000)
+
+
+def _stage_deadline(global_deadline: float | None, timeout_ms: int | None) -> float | None:
+    stage_deadline = time.monotonic() + (timeout_ms / 1000) if timeout_ms is not None else None
+    if global_deadline is None:
+        return stage_deadline
+    if stage_deadline is None:
+        return global_deadline
+    return min(global_deadline, stage_deadline)
 
 
 def _deadline_exhausted(deadline: float | None) -> bool:

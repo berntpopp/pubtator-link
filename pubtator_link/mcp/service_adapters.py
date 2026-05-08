@@ -281,6 +281,7 @@ async def get_publication_citation_graph_impl(
     service: CitationGraphService,
     pmid: str | None = None,
     doi: str | None = None,
+    query: str | None = None,
     direction: Literal["references", "cited_by", "both"] = "both",
     response_mode: LiteratureGraphResponseModeArg | None = None,
     resolve_metadata: bool = True,
@@ -295,6 +296,7 @@ async def get_publication_citation_graph_impl(
         PublicationCitationGraphRequest(
             pmid=pmid,
             doi=doi,
+            query=query,
             direction=direction,
             response_mode=effective_response_mode,
             resolve_metadata=resolve_metadata,
@@ -360,6 +362,10 @@ async def build_topic_literature_map_impl(
     year_max: int | None = None,
     prefer_full_text: bool = True,
     timeout_ms: int = 25_000,
+    partial_ok: bool = True,
+    citation_graph_timeout_ms: int | None = None,
+    related_evidence_timeout_ms: int | None = None,
+    metadata_backfill_timeout_ms: int | None = None,
 ) -> dict[str, Any]:
     effective_response_mode = response_mode or "compact"
     response = await service.build_map(
@@ -383,6 +389,10 @@ async def build_topic_literature_map_impl(
             year_max=year_max,
             prefer_full_text=prefer_full_text,
             timeout_ms=timeout_ms,
+            partial_ok=partial_ok,
+            citation_graph_timeout_ms=citation_graph_timeout_ms,
+            related_evidence_timeout_ms=related_evidence_timeout_ms,
+            metadata_backfill_timeout_ms=metadata_backfill_timeout_ms,
         )
     )
     return response.model_dump(by_alias=True)

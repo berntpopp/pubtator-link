@@ -102,10 +102,12 @@ class EuropePmcLiteratureClient:
         *,
         http_client: httpx.AsyncClient | None = None,
         base_url: str = "https://www.ebi.ac.uk/europepmc/webservices/rest",
+        retry_policy: RetryPolicy | None = None,
     ) -> None:
         self._client = http_client or httpx.AsyncClient()
         self._owns_client = http_client is None
         self.base_url = base_url.rstrip("/")
+        self.retry_policy = retry_policy or RetryPolicy()
 
     async def close(self) -> None:
         if self._owns_client:
@@ -113,9 +115,12 @@ class EuropePmcLiteratureClient:
 
     async def get_citations(self, pmid: str, *, limit: int) -> list[LiteraturePaper]:
         url = f"{self.base_url}/MED/{pmid}/citations"
-        response = await self._client.get(
-            url,
-            params={"format": "json", "pageSize": str(limit)},
+        response, _metadata = await call_with_retries(
+            lambda: self._client.get(
+                url,
+                params={"format": "json", "pageSize": str(limit)},
+            ),
+            policy=self.retry_policy,
         )
         response.raise_for_status()
         payload = response.json()
@@ -143,11 +148,13 @@ class OpenAlexClient:
         http_client: httpx.AsyncClient | None = None,
         base_url: str = "https://api.openalex.org",
         mailto: str | None = None,
+        retry_policy: RetryPolicy | None = None,
     ) -> None:
         self._client = http_client or httpx.AsyncClient()
         self._owns_client = http_client is None
         self.base_url = base_url.rstrip("/")
         self.mailto = mailto
+        self.retry_policy = retry_policy or RetryPolicy()
 
     async def close(self) -> None:
         if self._owns_client:
@@ -192,7 +199,10 @@ class OpenAlexClient:
                 return []
             url = f"{self.base_url}/works"
             params["filter"] = f"cites:{source_work_id}"
-        response = await self._client.get(url, params=params)
+        response, _metadata = await call_with_retries(
+            lambda: self._client.get(url, params=params),
+            policy=self.retry_policy,
+        )
         response.raise_for_status()
         cited_payload = response.json()
         if not isinstance(cited_payload, Mapping):
@@ -207,7 +217,10 @@ class OpenAlexClient:
         if self.mailto:
             params["mailto"] = self.mailto
         encoded_doi = quote(f"https://doi.org/{doi}", safe="")
-        response = await self._client.get(f"{self.base_url}/works/{encoded_doi}", params=params)
+        response, _metadata = await call_with_retries(
+            lambda: self._client.get(f"{self.base_url}/works/{encoded_doi}", params=params),
+            policy=self.retry_policy,
+        )
         response.raise_for_status()
         payload = response.json()
         return payload if isinstance(payload, Mapping) else {}
@@ -222,11 +235,13 @@ class UnpaywallClient:
         http_client: httpx.AsyncClient | None = None,
         base_url: str = "https://api.unpaywall.org/v2",
         email: str | None,
+        retry_policy: RetryPolicy | None = None,
     ) -> None:
         self._client = http_client or httpx.AsyncClient()
         self._owns_client = http_client is None
         self.base_url = base_url.rstrip("/")
         self.email = email
+        self.retry_policy = retry_policy or RetryPolicy()
 
     async def close(self) -> None:
         if self._owns_client:
@@ -240,9 +255,12 @@ class UnpaywallClient:
                 retryable=False,
                 message="Unpaywall email is not configured.",
             )
-        response = await self._client.get(
-            f"{self.base_url}/{quote(doi, safe='')}",
-            params={"email": self.email},
+        response, _metadata = await call_with_retries(
+            lambda: self._client.get(
+                f"{self.base_url}/{quote(doi, safe='')}",
+                params={"email": self.email},
+            ),
+            policy=self.retry_policy,
         )
         if response.status_code == 404:
             return ProviderWarning(

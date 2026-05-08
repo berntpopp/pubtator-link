@@ -56,6 +56,44 @@ class LargeCrossref:
         ]
 
 
+class MixedLargeCrossref:
+    async def get_work(self, doi: str) -> dict[str, str]:
+        return {"DOI": doi}
+
+    def references_from_work(self, work: dict[str, str]) -> list[LiteraturePaper]:
+        return [
+            LiteraturePaper(
+                pmid=f"30{index}",
+                doi=f"10.1000/reference-{index}",
+                title=(
+                    f"Familial Mediterranean fever colchicine reference {index}"
+                    if index < 4
+                    else f"Methodology reference {index} " + ("risk of bias reporting " * 30)
+                ),
+                year=2020 + (index % 5),
+            )
+            for index in range(20)
+        ]
+
+
+class LargeEuropePmc:
+    async def get_citations(self, pmid: str, *, limit: int) -> list[LiteraturePaper]:
+        return [
+            LiteraturePaper(
+                pmid=f"40{index}",
+                doi=f"10.1000/cited-by-{index}",
+                title=(
+                    f"EULAR familial Mediterranean fever update citing paper {index}"
+                    if index < 4
+                    else f"Broad immunology citing paper {index} "
+                    + ("long compact payload text " * 30)
+                ),
+                year=2021 + (index % 4),
+            )
+            for index in range(min(limit, 20))
+        ]
+
+
 class FakeEuropePmc:
     async def get_citations(self, pmid: str, *, limit: int) -> list[LiteraturePaper]:
         assert pmid == "40562663"
@@ -268,6 +306,24 @@ class ResolvingDiscovery:
 class FakeMetadata:
     async def get_metadata(self, request):
         return PublicationMetadataResponse(metadata=[], failed_pmids={})
+
+
+class MetadataWithSourceDoi:
+    async def get_metadata(self, request):
+        from pubtator_link.models.publication_metadata import PublicationMetadata
+
+        return PublicationMetadataResponse(
+            metadata=[
+                PublicationMetadata(
+                    pmid=request.pmids[0],
+                    doi="10.1016/j.ard.2025.05.020",
+                    title="EULAR/PReS familial Mediterranean fever recommendations",
+                    journal="Annals of the Rheumatic Diseases",
+                    pub_year=2025,
+                )
+            ],
+            failed_pmids={},
+        )
 
 
 class MetadataWithPmcid:
@@ -960,6 +1016,84 @@ async def test_citation_graph_compact_reports_budget_truncation() -> None:
     assert response.meta.omitted_counts
     assert response.meta.request_signature is not None
     assert response.meta.cache_key == response.meta.request_signature
+
+
+@pytest.mark.asyncio
+async def test_citation_graph_compact_preserves_cited_by_stubs_under_budget_pressure() -> None:
+    service = CitationGraphService(
+        crossref=MixedLargeCrossref(),
+        europe_pmc=LargeEuropePmc(),
+        discovery_service=FakeDiscovery(),
+        metadata_service=MetadataWithSourceDoi(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            pmid="40562663",
+            direction="both",
+            response_mode="compact",
+            max_results=20,
+            resolve_reference_pmids=False,
+        )
+    )
+
+    assert response.meta.truncated is True
+    assert len(response.cited_by_candidates) >= 3
+    assert response.cited_by_top_pmids[:3] == [
+        candidate.pmid for candidate in response.cited_by_candidates[:3]
+    ]
+    assert response.reference_top_pmids
+
+
+@pytest.mark.asyncio
+async def test_citation_graph_compact_exposes_hidden_lane_counts_and_samples() -> None:
+    service = CitationGraphService(
+        crossref=MixedLargeCrossref(),
+        europe_pmc=LargeEuropePmc(),
+        metadata_service=MetadataWithSourceDoi(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            pmid="40562663",
+            direction="both",
+            response_mode="compact",
+            max_results=20,
+            query="familial Mediterranean fever",
+        )
+    )
+
+    assert response.reference_pmid_count == 20
+    assert response.cited_by_pmid_count == 20
+    assert response.reference_sample_pmids[:3] == ["300", "301", "302"]
+    assert response.cited_by_sample_pmids[:3] == ["400", "401", "402"]
+
+
+@pytest.mark.asyncio
+async def test_citation_graph_scores_candidates_against_query() -> None:
+    service = CitationGraphService(
+        crossref=MixedLargeCrossref(),
+        europe_pmc=LargeEuropePmc(),
+        discovery_service=FakeDiscovery(),
+        metadata_service=MetadataWithSourceDoi(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            pmid="40562663",
+            direction="both",
+            response_mode="compact",
+            max_results=8,
+            resolve_reference_pmids=False,
+            query="familial Mediterranean fever colchicine guideline",
+        )
+    )
+
+    candidates = [*response.reference_candidates, *response.cited_by_candidates]
+    assert candidates
+    assert all(candidate.score is not None for candidate in candidates)
+    assert all(candidate.relevance_to_query is not None for candidate in candidates)
+    assert "query_term_overlap" in candidates[0].rank_reasons
 
 
 @pytest.mark.asyncio

@@ -222,6 +222,8 @@ class ProviderWarning(BaseModel):
     status: str
     retryable: bool = False
     message: str
+    code: str | None = None
+    next_steps: list[str] = Field(default_factory=list)
 
 
 class LiteratureQueryRelevance(BaseModel):
@@ -312,6 +314,7 @@ class PublicationCitationGraphRequest(BaseModel):
 
     pmid: str | None = None
     doi: str | None = None
+    query: str | None = Field(default=None, min_length=1, max_length=1000)
     direction: CitationGraphDirection = "both"
     response_mode: LiteratureGraphResponseMode = "full"
     resolve_metadata: bool = True
@@ -351,6 +354,12 @@ class PublicationCitationGraphResponse(BaseModel):
     response_mode: LiteratureGraphResponseMode = "full"
     reference_candidates: list[LiteratureCandidateSummary] = Field(default_factory=list)
     cited_by_candidates: list[LiteratureCandidateSummary] = Field(default_factory=list)
+    reference_top_pmids: list[str] = Field(default_factory=list)
+    cited_by_top_pmids: list[str] = Field(default_factory=list)
+    reference_pmid_count: int = 0
+    cited_by_pmid_count: int = 0
+    reference_sample_pmids: list[str] = Field(default_factory=list)
+    cited_by_sample_pmids: list[str] = Field(default_factory=list)
     candidate_pmids: list[str] = Field(default_factory=list)
     actionable_pmid_count: int = 0
     metadata_only_count: int = 0
@@ -420,6 +429,11 @@ class RelatedEvidenceCandidatesResponse(BaseModel):
     source: LiteraturePaper
     candidates: list[RelatedEvidenceCandidate] = Field(default_factory=list)
     candidate_pmids: list[str] = Field(default_factory=list)
+    omitted_candidate_preview: list[LiteratureCandidateSummary] = Field(default_factory=list)
+    score_explanation: str = (
+        "normalized_neighbor_score is scaled within the returned candidate window; "
+        "0 does not mean irrelevant."
+    )
     caution: str = (
         "Related candidates are not substitutes and require passage-level review before use as "
         "evidence."
@@ -482,6 +496,10 @@ class TopicLiteratureMapRequest(BaseModel):
     year_max: int | None = None
     prefer_full_text: bool = True
     timeout_ms: int = Field(default=25_000, ge=0, le=120_000)
+    partial_ok: bool = True
+    citation_graph_timeout_ms: int | None = Field(default=None, ge=1, le=120_000)
+    related_evidence_timeout_ms: int | None = Field(default=None, ge=1, le=120_000)
+    metadata_backfill_timeout_ms: int | None = Field(default=None, ge=1, le=120_000)
 
     @field_validator("pmids")
     @classmethod
@@ -514,6 +532,11 @@ class TopicLiteratureMapSummary(BaseModel):
     accessible_full_text_candidates: list[LiteraturePaper] = Field(default_factory=list)
     closed_central_sources: list[LiteraturePaper] = Field(default_factory=list)
     recommended_next_pmids: list[str] = Field(default_factory=list)
+    recent_connected_definition: str = (
+        "Papers from the most recent 24 months in the result set, or the latest connected papers "
+        "when no 24-month window contains connected records; each has at least one edge to the "
+        "topic graph."
+    )
 
 
 class TopicLiteratureMapResponse(BaseModel):
@@ -529,12 +552,15 @@ class TopicLiteratureMapResponse(BaseModel):
     response_mode: LiteratureGraphResponseMode = "full"
     top_candidates: list[LiteratureCandidateSummary] = Field(default_factory=list)
     recommended_next_pmids: list[str] = Field(default_factory=list)
+    recommended_next_candidates: list[LiteratureCandidateSummary] = Field(default_factory=list)
     accessible_full_text_pmids: list[str] = Field(default_factory=list)
     closed_central_pmids: list[str] = Field(default_factory=list)
     demoted_candidate_pmids: list[str] = Field(default_factory=list)
     demoted_reasons_by_pmid: dict[str, list[str]] = Field(default_factory=dict)
+    bias_score_by_pmid: dict[str, float] = Field(default_factory=dict)
     provider_status: list[LiteratureProviderStatus] = Field(default_factory=list)
     omitted_counts: dict[str, int] = Field(default_factory=dict)
+    graph_inspection_hint: str | None = None
     candidate_retrieval_hints: list[dict[str, Any]] = Field(default_factory=list)
     meta: LiteratureGraphResponseMeta = Field(
         default_factory=LiteratureGraphResponseMeta,

@@ -104,6 +104,10 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             year_max: int | None = None,
             prefer_full_text: bool = True,
             timeout_ms: Annotated[int, Field(ge=0, le=120_000)] = 25_000,
+            partial_ok: bool = True,
+            citation_graph_timeout_ms: Annotated[int | None, Field(ge=1, le=120_000)] = None,
+            related_evidence_timeout_ms: Annotated[int | None, Field(ge=1, le=120_000)] = None,
+            metadata_backfill_timeout_ms: Annotated[int | None, Field(ge=1, le=120_000)] = None,
         ) -> dict[str, Any]:
             """Use this when a user needs a bounded topic-level literature map from a query or seed PMIDs. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: pubtator.get_publication_passages."""
 
@@ -130,6 +134,10 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                     year_max=year_max,
                     prefer_full_text=prefer_full_text,
                     timeout_ms=timeout_ms,
+                    partial_ok=partial_ok,
+                    citation_graph_timeout_ms=citation_graph_timeout_ms,
+                    related_evidence_timeout_ms=related_evidence_timeout_ms,
+                    metadata_backfill_timeout_ms=metadata_backfill_timeout_ms,
                 )
 
             return await run_mcp_tool(
@@ -213,6 +221,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
     async def get_publication_citation_graph(
         pmid: str | None = None,
         doi: str | None = None,
+        query: Annotated[str | None, Field(min_length=1, max_length=1000)] = None,
         direction: Literal["references", "cited_by", "both"] = "both",
         response_mode: LiteratureGraphResponseModeArg = "compact",
         resolve_metadata: bool = True,
@@ -230,6 +239,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 service=service,
                 pmid=pmid,
                 doi=doi,
+                query=query,
                 direction=direction,
                 response_mode=response_mode,
                 resolve_metadata=resolve_metadata,

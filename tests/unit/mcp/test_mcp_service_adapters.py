@@ -243,12 +243,18 @@ async def test_graph_adapters_default_omitted_response_mode_to_compact() -> None
         service=topic,
         query="FMF",
         timeout_ms=1234,
+        citation_graph_timeout_ms=100,
+        related_evidence_timeout_ms=200,
+        metadata_backfill_timeout_ms=300,
     )
 
     assert citation.request.response_mode == "compact"
     assert related.request.response_mode == "compact"
     assert topic.request.response_mode == "compact"
     assert topic.request.timeout_ms == 1234
+    assert topic.request.citation_graph_timeout_ms == 100
+    assert topic.request.related_evidence_timeout_ms == 200
+    assert topic.request.metadata_backfill_timeout_ms == 300
     assert citation_result["response_mode"] == "compact"
     assert related_result["_meta"]["response_mode"] == "compact"
     assert topic_result["response_mode"] == "compact"

@@ -16,6 +16,7 @@ from pubtator_link.models.literature_graph import (
     LiteraturePaper,
     LiteratureProviderStatus,
     LiteratureProviderStatusValue,
+    LiteratureQueryRelevance,
     ProviderWarning,
     PublicationCitationGraphRequest,
     PublicationCitationGraphResponse,
@@ -31,6 +32,7 @@ from pubtator_link.services.literature_graph_compact import (
     graph_request_metadata,
     json_size_class,
     mark_graph_payload_truncated,
+    normalize_query_text,
 )
 from pubtator_link.services.literature_identifier_resolution import (
     DoiPmidResolver,
@@ -303,8 +305,22 @@ class CitationGraphService:
             if request.response_mode == "compact"
             else {}
         )
-        reference_candidates = _citation_candidates(references, "source_reference")
-        cited_by_candidates = _citation_candidates(cited_by, "source_cited_by")
+        reference_candidates = _citation_candidates(
+            references,
+            "source_reference",
+            query=request.query,
+        )
+        cited_by_candidates = _citation_candidates(
+            cited_by,
+            "source_cited_by",
+            query=request.query,
+        )
+        reference_top_pmids = _top_candidate_pmids(reference_candidates)
+        cited_by_top_pmids = _top_candidate_pmids(cited_by_candidates)
+        reference_pmid_count = len(_candidate_pmids(references))
+        cited_by_pmid_count = len(_candidate_pmids(cited_by))
+        reference_sample_pmids = _candidate_pmids(references)[:3]
+        cited_by_sample_pmids = _candidate_pmids(cited_by)[:3]
         compact_omitted_counts: dict[str, int] = {}
         response_references = references
         response_cited_by = cited_by
@@ -372,6 +388,12 @@ class CitationGraphService:
             response_mode=request.response_mode,
             reference_candidates=response_reference_candidates,
             cited_by_candidates=response_cited_by_candidates,
+            reference_top_pmids=reference_top_pmids,
+            cited_by_top_pmids=cited_by_top_pmids,
+            reference_pmid_count=reference_pmid_count,
+            cited_by_pmid_count=cited_by_pmid_count,
+            reference_sample_pmids=reference_sample_pmids,
+            cited_by_sample_pmids=cited_by_sample_pmids,
             candidate_pmids=candidate_pmids,
             actionable_pmid_count=actionable_pmid_count,
             metadata_only_count=metadata_only_count,
@@ -798,6 +820,8 @@ def _append_unique_status(
 def _citation_candidates(
     papers: Sequence[LiteraturePaper],
     source_reason: str,
+    *,
+    query: str | None,
 ) -> list[LiteratureCandidateSummary]:
     candidates: list[LiteratureCandidateSummary] = []
     for paper in papers:
@@ -811,15 +835,92 @@ def _citation_candidates(
                 rank_reasons.append("resolved_pmid_from_doi")
         else:
             demotion_reasons.append("doi_only_unresolved")
+        score, relevance, scoring_reasons = _citation_query_score(
+            paper,
+            query=query,
+            source_reason=source_reason,
+        )
+        rank_reasons.extend(scoring_reasons)
         candidates.append(
             candidate_summary(
                 paper,
+                score=score,
+                relevance_to_query=relevance,
                 rank_reasons=rank_reasons,
                 demotion_reasons=demotion_reasons,
                 source_tools=["citation_graph"],
             )
         )
-    return candidates
+    return sorted(
+        candidates,
+        key=lambda candidate: (
+            -float(candidate.score or 0),
+            -(candidate.year or 0),
+            candidate.pmid or candidate.doi or candidate.title or "",
+        ),
+    )
+
+
+def _citation_query_score(
+    paper: LiteraturePaper,
+    *,
+    query: str | None,
+    source_reason: str,
+) -> tuple[float | None, LiteratureQueryRelevance | None, list[str]]:
+    if not query:
+        return None, None, []
+    query_terms = _query_terms(query)
+    searchable = normalize_query_text(
+        " ".join(
+            value
+            for value in [
+                paper.title or "",
+                paper.journal or "",
+                " ".join(paper.publication_types),
+            ]
+            if value
+        )
+    )
+    matched_terms = [term for term in query_terms if term in searchable]
+    score = 0.0
+    reasons: list[str] = []
+    if matched_terms:
+        score += min(len(matched_terms), 6) * 0.14
+        reasons.append("query_term_overlap")
+    if paper.availability.has_pmc_full_text or paper.availability.is_open_access:
+        score += 0.08
+        reasons.append("accessible_candidate")
+    if paper.year:
+        score += max(0.0, min(0.12, (paper.year - 2015) * 0.012))
+        reasons.append("recency")
+    title = normalize_query_text(paper.title)
+    if any(term in title for term in ("guideline", "recommendation", "consensus", "eular")):
+        score += 0.18
+        reasons.append("guideline_signal")
+    if source_reason == "source_cited_by":
+        score += 0.05
+        reasons.append("cited_by_signal")
+    score = max(0.0, min(1.0, score))
+    return (
+        score,
+        LiteratureQueryRelevance(
+            score=score,
+            matched_terms=matched_terms[:8],
+            reasons=reasons[:8],
+        ),
+        reasons,
+    )
+
+
+def _query_terms(query: str | None) -> list[str]:
+    normalized = normalize_query_text(query)
+    terms = normalized.replace("/", " ").replace("-", " ").split()
+    stop_words = {"and", "or", "the", "for", "with", "of", "in", "a", "an", "to"}
+    return list(dict.fromkeys(term for term in terms if len(term) > 1 and term not in stop_words))
+
+
+def _top_candidate_pmids(candidates: Sequence[LiteratureCandidateSummary]) -> list[str]:
+    return [candidate.pmid for candidate in candidates if candidate.pmid][:20]
 
 
 def _compact_actionable_candidates(
@@ -993,10 +1094,12 @@ def _drop_citation_candidates_to_budget(
     cited_by_candidates, dropped_cited_by, overage = _drop_suffix_by_estimated_bytes(
         response.cited_by_candidates,
         overage,
+        min_keep=3 if response.cited_by_top_pmids else 0,
     )
     reference_candidates, dropped_references, overage = _drop_suffix_by_estimated_bytes(
         response.reference_candidates,
         overage,
+        min_keep=3 if response.reference_top_pmids else 0,
     )
     if dropped_cited_by:
         omitted_counts["cited_by_candidates"] = (
@@ -1016,24 +1119,34 @@ def _drop_citation_candidates_to_budget(
     if graph_payload_json_bytes(trimmed) <= budget:
         return trimmed, omitted_counts
 
-    omitted_counts["reference_candidates"] = omitted_counts.get("reference_candidates", 0) + len(
-        trimmed.reference_candidates
+    keep_cited_by = trimmed.cited_by_candidates[:3] if response.cited_by_top_pmids else []
+    keep_references = trimmed.reference_candidates[:3] if response.reference_top_pmids else []
+    omitted_counts["reference_candidates"] = omitted_counts.get("reference_candidates", 0) + max(
+        0,
+        len(trimmed.reference_candidates) - len(keep_references),
     )
-    omitted_counts["cited_by_candidates"] = omitted_counts.get("cited_by_candidates", 0) + len(
-        trimmed.cited_by_candidates
+    omitted_counts["cited_by_candidates"] = omitted_counts.get("cited_by_candidates", 0) + max(
+        0,
+        len(trimmed.cited_by_candidates) - len(keep_cited_by),
     )
     return trimmed.model_copy(
-        update={"reference_candidates": [], "cited_by_candidates": []}
+        update={
+            "reference_candidates": keep_references,
+            "cited_by_candidates": keep_cited_by,
+        }
     ), omitted_counts
 
 
 def _drop_suffix_by_estimated_bytes(
     candidates: list[LiteratureCandidateSummary],
     overage: int,
+    *,
+    min_keep: int = 0,
 ) -> tuple[list[LiteratureCandidateSummary], int, int]:
     reclaimed = 0
     dropped = 0
-    for candidate in reversed(candidates):
+    droppable = candidates[min_keep:]
+    for candidate in reversed(droppable):
         reclaimed += graph_payload_json_bytes(candidate)
         dropped += 1
         if reclaimed >= overage:
@@ -1050,7 +1163,6 @@ def _budget_compact_candidate(
         update={
             "publication_types": candidate.publication_types[:3],
             "access_flags": {},
-            "relevance_to_query": None,
             "rank_reasons": candidate.rank_reasons[:3],
             "demotion_reasons": candidate.demotion_reasons[:3],
             "signals": candidate.signals[:5],

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterable
 from typing import Any
 
@@ -15,6 +16,7 @@ from pubtator_link.models.literature_graph import (
 )
 from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 from pubtator_link.services.literature_graph_compact import (
+    candidate_summary,
     coalesced_provider_warnings,
     graph_detail_next_commands,
     graph_request_metadata,
@@ -52,11 +54,29 @@ class RelatedEvidenceService:
         citation_pmids: set[str] = set()
         candidate_fetch_limit = _candidate_fetch_limit(request.max_results)
 
-        try:
-            related_scores = await self._find_related_article_scores(
-                [request.pmid],
-                candidate_fetch_limit,
+        elink_task = asyncio.create_task(
+            self._find_related_article_scores([request.pmid], candidate_fetch_limit)
+        )
+        source_task = asyncio.create_task(self._source_paper(request.pmid))
+        graph_task = (
+            asyncio.create_task(
+                self.citation_graph_service.get_citation_graph(
+                    PublicationCitationGraphRequest(
+                        pmid=request.pmid,
+                        direction="both",
+                        max_results=candidate_fetch_limit,
+                    )
+                )
             )
+            if request.include_citation_neighbors
+            else None
+        )
+
+        try:
+            related_scores = await elink_task
+        except Exception as exc:
+            warnings.append(_provider_failed_warning("ncbi_elink", exc))
+        else:
             for record in related_scores:
                 pmid = str(record.pmid)
                 if pmid == request.pmid:
@@ -66,28 +86,24 @@ class RelatedEvidenceService:
                     int(record.neighbor_score),
                 )
                 candidate_pmids.append(pmid)
+        try:
+            source, source_warnings = await source_task
         except Exception as exc:
-            warnings.append(_provider_failed_warning("ncbi_elink", exc))
-
-        if request.include_citation_neighbors:
+            source = LiteraturePaper(pmid=request.pmid)
+            warnings.append(_provider_failed_warning("pubmed_metadata", exc))
+        else:
+            warnings.extend(source_warnings)
+        if graph_task is not None:
             try:
-                graph = await self.citation_graph_service.get_citation_graph(
-                    PublicationCitationGraphRequest(
-                        pmid=request.pmid,
-                        direction="both",
-                        max_results=candidate_fetch_limit,
-                    )
-                )
+                graph = await graph_task
+            except Exception as exc:
+                warnings.append(_provider_failed_warning("citation_graph", exc))
+            else:
                 graph_candidate_pmids = [pmid for pmid in graph.candidate_pmids if pmid]
                 citation_pmids.update(graph_candidate_pmids)
                 candidate_pmids.extend(graph_candidate_pmids)
                 warnings.extend(graph.meta.warnings)
-            except Exception as exc:
-                warnings.append(_provider_failed_warning("citation_graph", exc))
-
         deduped_pmids = [pmid for pmid in _dedupe(candidate_pmids) if pmid != request.pmid]
-        source, source_warnings = await self._source_paper(request.pmid)
-        warnings.extend(source_warnings)
         candidates, metadata_warnings = await self._metadata_candidates(
             request=request,
             pmids=deduped_pmids,
@@ -97,6 +113,15 @@ class RelatedEvidenceService:
         warnings.extend(metadata_warnings)
         candidates.sort(key=lambda candidate: _ranking_key(candidate, request))
         candidate_count_before_limit = len(candidates)
+        omitted_candidate_preview = [
+            candidate_summary(
+                candidate.paper,
+                score=candidate.score,
+                rank_reasons=candidate.match_reasons,
+                source_tools=["related_evidence"],
+            )
+            for candidate in candidates[request.max_results : request.max_results + 5]
+        ]
         candidates = candidates[: request.max_results]
         omitted_counts = {
             "candidates": max(0, candidate_count_before_limit - len(candidates)),
@@ -133,6 +158,7 @@ class RelatedEvidenceService:
             source=source,
             candidates=candidates,
             candidate_pmids=ordered_pmids,
+            omitted_candidate_preview=omitted_candidate_preview,
             _meta=meta,
         )
         response.meta.response_size_class = json_size_class(response.model_dump(by_alias=True))
@@ -192,6 +218,8 @@ class RelatedEvidenceService:
                     status="provider_failed",
                     retryable=True,
                     message=f"PubMed metadata warning: {warning}",
+                    code=_metadata_warning_code(warning),
+                    next_steps=_metadata_warning_next_steps(warning),
                 )
             )
 
@@ -350,6 +378,23 @@ def _provider_failed_warning(provider: str, exc: Exception) -> ProviderWarning:
         retryable=True,
         message=f"{provider} lookup failed: {exc}",
     )
+
+
+def _metadata_warning_code(warning: object) -> str | None:
+    if isinstance(warning, str) and warning:
+        return warning
+    return None
+
+
+def _metadata_warning_next_steps(warning: object) -> list[str]:
+    if warning == "coverage_lookup_failed":
+        return [
+            "Retry with include_citation_neighbors=false or continue with metadata-only ranking; "
+            "coverage can be rechecked during index_review_evidence."
+        ]
+    if isinstance(warning, str) and warning:
+        return ["Retry with narrower candidate inputs or response_mode='full' for diagnostics."]
+    return []
 
 
 def _candidate_fetch_limit(max_results: int) -> int:
