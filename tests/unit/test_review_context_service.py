@@ -263,7 +263,9 @@ class RecordingMetadataService:
     def __init__(self) -> None:
         self.requests: list[PublicationMetadataRequest] = []
 
-    async def get_metadata(self, request: PublicationMetadataRequest) -> PublicationMetadataResponse:
+    async def get_metadata(
+        self, request: PublicationMetadataRequest
+    ) -> PublicationMetadataResponse:
         self.requests.append(request)
         return PublicationMetadataResponse(
             metadata=[
