@@ -8,17 +8,18 @@ contract. It is the next P0 sprint after the MCP payload-controls work and the
 optional dense-rerank merge.
 
 The public `PublicationMetadataRequest.pmids` validation remains capped at 100
-PMIDs. Internal services that naturally gather larger source, seed, candidate,
-or graph PMID lists will call a shared batching helper that chunks requests into
-PubMed-sized batches and merges partial results.
+PMIDs. Internal services that naturally gather larger source, seed, or
+candidate PMID lists will call a shared batching helper that chunks requests
+into public-cap-sized batches and merges partial results.
 
 ## Goals
 
 - Keep public REST and MCP publication metadata requests capped at 100 PMIDs.
 - Add a shared internal metadata batching helper for larger PMID sequences.
 - Preserve first-seen input order while deduplicating repeated PMIDs.
-- Chunk internal lookups into batches no larger than the public PubMed metadata
-  request size.
+- Chunk internal lookups into batches no larger than the public metadata request
+  cap. This reuses PubTator-Link's public contract and validation path; it is
+  not an upstream PubMed limit.
 - Merge successful metadata records, `failed_pmids`, and provider warnings from
   every batch.
 - Treat a failed batch as a partial failure, not an all-or-nothing failure.
@@ -27,8 +28,8 @@ PubMed-sized batches and merges partial results.
   page contains more than 100 sources.
 - Make topic map metadata enrichment tolerate more than 100 seed and candidate
   PMIDs.
-- Use the helper in citation graph code where metadata enrichment could grow
-  beyond one PMID.
+- Use the helper in citation graph's existing source metadata path for
+  consistency, without adding new neighbor metadata enrichment in this sprint.
 - Preserve existing REST and MCP compatibility.
 
 ## Non-Goals
@@ -72,35 +73,42 @@ Current oversized or duplicated internal patterns:
   enrichment behavior. These paths should preserve public request validation and
   route/tool compatibility.
 
-Existing tests already cover the public 100-PMID cap and some related-evidence
-batching behavior. The implementation sprint needs focused tests for the new
-shared helper and for every service path that can exceed one public metadata
-request.
+Existing tests already cover the public 100-PMID cap
+(`test_publication_metadata_request_rejects_too_many_pmids`) and
+related-evidence batching behavior
+(`test_related_evidence_batches_large_metadata_candidate_sets`). The
+implementation sprint needs focused tests for the new shared helper and for
+every service path that can exceed one public metadata request.
 
 ## Recommended Design
 
-Add a service-level internal batching API on `PublicationMetadataService`:
+Add one module-level internal batching helper in
+`pubtator_link/services/publication_metadata.py`:
 
 ```python
-async def get_metadata_batched(
-    self,
+async def lookup_metadata_batched(
+    metadata_service: Any,
     pmids: Sequence[str],
     *,
     include_mesh: bool = True,
     include_publication_types: bool = True,
-    include_citations: IncludeCitations = "both",
+    include_citations: Literal["none", "nlm", "bibtex", "both"] = "both",
     include_coverage: bool = True,
     batch_size: int = 100,
 ) -> PublicationMetadataResponse:
     ...
 ```
 
-The method accepts large internal sequences, normalizes and validates PMIDs with
+The helper accepts large internal sequences, normalizes and validates PMIDs with
 the same rules as `PublicationMetadataRequest`, deduplicates repeated IDs while
 preserving first-seen order, chunks unique PMIDs into batches of at most 100, and
-calls existing `get_metadata(PublicationMetadataRequest(...))` for each batch.
+calls `metadata_service.get_metadata(PublicationMetadataRequest(...))` for each
+batch.
 
-The public method remains unchanged:
+The helper accepts `Sequence[str]` for internal ergonomics, but every chunk is
+converted to `list[str]` before constructing `PublicationMetadataRequest`.
+
+`PublicationMetadataService` keeps its existing public method unchanged:
 
 ```python
 async def get_metadata(
@@ -111,7 +119,14 @@ async def get_metadata(
 ```
 
 Public REST and MCP callers continue to construct `PublicationMetadataRequest`
-directly and therefore keep the 100-PMID cap.
+directly and therefore keep the 100-PMID cap. Internal services call
+`lookup_metadata_batched(...)` instead of calling `get_metadata()` directly for
+PMID lists that can exceed one public request.
+
+This design keeps protocol-like metadata dependencies simple. For example,
+`PublicationMetadataLookup` in `review_context_service.py` can continue
+requiring only `get_metadata()`, and test doubles do not need to implement a
+second method. There is one merge implementation: the module-level helper.
 
 ## Helper Semantics
 
@@ -125,18 +140,25 @@ The helper uses the same PMID normalization rules as the public model:
 - Reject non-numeric PMIDs.
 - Preserve the first occurrence of each valid PMID.
 
-If normalization leaves no valid PMID, the helper raises the same validation
-error shape as constructing `PublicationMetadataRequest` with no usable PMIDs.
-This keeps internal misuse visible during development.
+If normalization leaves no valid PMID, the helper raises
+`ValueError("at least one PMID is required")`. Internal non-numeric PMIDs also
+raise `ValueError("PMID must be numeric")`. Direct public calls still receive
+Pydantic validation errors from `PublicationMetadataRequest`.
 
 ### Chunking
 
-The helper chunks normalized unique PMIDs into batches of 100 by default. The
-implementation may keep `batch_size` configurable for tests, but production call
-sites should rely on the default.
+The helper chunks normalized unique PMIDs into batches of 100 by default. This
+is PubTator-Link's public metadata request cap, not an upstream PubMed limit.
+The implementation may keep `batch_size` configurable for tests, but production
+call sites should rely on the default.
 
 Every batch should still be represented by a public `PublicationMetadataRequest`
 so the lower-level client behavior and public cap remain exercised.
+
+Batches run sequentially in this sprint. The loop should be isolated in the
+helper so a future concurrency change can replace the sequential executor
+without changing service call sites. Warning merge order is therefore
+deterministic first-seen order in this sprint.
 
 ### Merge Order
 
@@ -151,17 +173,22 @@ Duplicate PMIDs are looked up once and appear once in the merged response.
 One failed batch must not discard successful batches. If `get_metadata()` raises
 for a batch, the helper:
 
-- Adds each PMID in that failed batch to `failed_pmids`.
-- Adds a provider warning indicating `pubmed_metadata_batch_failed`.
+- Adds each PMID in that failed batch to `failed_pmids` with reason
+  `batch_request_failed`.
+- Adds a warning string `pubmed_metadata_batch_failed`.
 - Continues with later batches.
 
 If a batch returns normally with `failed_pmids`, those failures are merged into
 the final response. Batch-level `_meta.warnings` are appended and deduplicated in
 first-seen order.
 
-The final `PublicationMetadataResponse.success` remains `True` because the
-helper response can contain partial data and explicit failures. Consumers should
-use `metadata`, `failed_pmids`, and `_meta.warnings` for status.
+The final `PublicationMetadataResponse.success` uses the existing metadata
+service convention: `success=True` means the helper returned a structured
+response, not that every PMID resolved. Consumers must use `metadata`,
+`failed_pmids`, and `_meta.warnings` for data availability. If every batch
+raises, the helper still returns `success=True`, an empty `metadata` list,
+`failed_pmids` containing every normalized PMID with `batch_request_failed`, and
+`_meta.warnings` containing `pubmed_metadata_batch_failed`.
 
 ### Response Metadata
 
@@ -178,32 +205,16 @@ The implementation should avoid adding public-facing schema fields for internal
 batch diagnostics. If internal diagnostics are needed, they can use `_meta` keys
 that are safe for clients to ignore, such as `batch_count`.
 
-## Internal Compatibility Helper
+## Shared Helper Boundary
 
 Several services type their metadata dependency as a protocol-like object with a
-`get_metadata()` method. To avoid brittle test rewrites and to support alternate
-internal metadata services, add a small shared helper that prefers
-`get_metadata_batched()` when present and otherwise performs the same chunked
-fallback around `get_metadata()`.
+`get_metadata()` method. The shared helper is deliberately a free function so
+those protocols stay minimal and alternate metadata services can be used without
+duck-typing for optional methods.
 
-This helper should live with publication metadata service code, not inside an
-individual graph or review service. A suitable private helper name is:
-
-```python
-async def get_metadata_batched(
-    metadata_service: Any,
-    pmids: Sequence[str],
-    *,
-    include_mesh: bool,
-    include_publication_types: bool,
-    include_citations: IncludeCitations,
-    include_coverage: bool,
-) -> PublicationMetadataResponse:
-    ...
-```
-
-The public service method and the module-level helper can share one internal
-merge implementation to avoid divergent behavior.
+The helper should live with publication metadata service code, not inside an
+individual graph or review service. It is the only internal batching and merge
+implementation for this sprint.
 
 ## Service Integration
 
@@ -229,6 +240,8 @@ must remain:
 - Candidates without metadata remain unresolved references rather than being
   dropped solely due to metadata failure.
 
+Remove `related_evidence.py`'s private `_chunks()` helper if it becomes unused.
+
 ### Topic Literature Map
 
 `TopicLiteratureMapService._metadata_papers()` should call the shared helper for
@@ -239,12 +252,16 @@ from successful batches.
 
 ### Citation Graph
 
-`CitationGraphService` currently fetches metadata one PMID at a time. The
-implementation should leave single-PMID source resolution behavior compatible,
-but use the shared helper if metadata enrichment is refactored or extended to
-multiple PMIDs in the sprint. Tests should cover the citation graph path where
-metadata enrichment could grow beyond one PMID, even if the first implementation
-only verifies the helper-compatible single-PMID behavior.
+`CitationGraphService` currently fetches metadata one PMID at a time. This
+sprint should update `_metadata_for_pmid()` to call `lookup_metadata_batched()`
+with a one-item sequence so citation graph source resolution uses the shared
+metadata boundary without introducing new graph enrichment behavior.
+
+The sprint should not add neighbor metadata enrichment for references or
+`cited_by` papers. That is a separate graph-quality feature with ranking and
+payload implications. The acceptance criterion for citation graph in this sprint
+is compatibility: the existing source metadata path still works and uses the
+shared helper.
 
 ### REST And MCP Adapters
 
@@ -252,11 +269,15 @@ only verifies the helper-compatible single-PMID behavior.
 Route and MCP compatibility tests should prove that sending more than 100 PMIDs
 to the public metadata request still fails validation.
 
-Search enrichment in `pubtator_link/api/routes/search.py` and
-`pubtator_link/mcp/service_adapters.py` may continue using public requests if
-their selected result limits remain within the cap. If a search path can exceed
-100 enriched PMIDs, it should use the shared internal helper without changing
-the public metadata endpoint cap.
+Search enrichment in `pubtator_link/api/routes/search.py` is bounded by the
+route `limit` query parameter with `le=50` before metadata enrichment. MCP
+search enrichment in `pubtator_link/mcp/service_adapters.py` defaults to
+`limit=5`; if callers pass `limit=None`, it enriches the current PubTator page.
+These paths are not the primary implementation targets for this sprint. Add
+compatibility tests that keep their response shapes stable and keep direct
+public metadata requests capped at 100. Do not broaden search batching scope
+unless a focused test proves an existing search path can construct more than 100
+metadata PMIDs.
 
 ## Error Handling
 
@@ -267,7 +288,9 @@ availability into complete feature loss:
   100 PMIDs.
 - Internal non-numeric PMIDs still raise validation errors instead of being
   silently dropped.
-- A provider exception for one batch marks only that batch as failed.
+- A provider exception for one batch marks only that batch as failed with
+  `batch_request_failed`; PubMed records that are not found in a successful batch
+  keep the existing `metadata_not_found` reason.
 - Existing `mesh_lookup_failed` and `coverage_lookup_failed` warnings merge
   across batches.
 - Duplicate warnings are collapsed in first-seen order.
@@ -281,7 +304,8 @@ for each behavioral requirement.
 
 Core helper tests in `tests/unit/test_publication_metadata_service.py`:
 
-- Public `PublicationMetadataRequest` still rejects 101 PMIDs.
+- Existing `test_publication_metadata_request_rejects_too_many_pmids` continues
+  proving the public cap rejects 101 PMIDs.
 - Internal helper accepts more than 100 PMIDs and calls `get_metadata()` in
   batches no larger than 100.
 - Metadata output preserves first-seen input order.
@@ -306,8 +330,8 @@ Review tests in `tests/unit/test_review_context_service.py`:
 
 Related evidence tests in `tests/unit/test_related_evidence_service.py`:
 
-- Existing large candidate batching behavior still passes after local chunking
-  is replaced.
+- Existing `test_related_evidence_batches_large_metadata_candidate_sets` still
+  passes after local chunking is replaced.
 - Partial metadata batch failure still returns candidates from successful
   batches and emits PubMed metadata warnings.
 
@@ -320,17 +344,20 @@ Topic map tests in `tests/unit/test_topic_literature_map_service.py`:
 Citation graph tests in `tests/unit/test_citation_graph_service.py`:
 
 - Metadata enrichment remains compatible for source PMID resolution.
-- Any multi-PMID metadata enrichment path introduced in the sprint uses the
-  shared helper and tolerates more than 100 PMIDs.
+- Source PMID metadata resolution uses `lookup_metadata_batched()` and preserves
+  the existing single-PMID response behavior.
 
 MCP and route tests:
 
-- `tests/unit/mcp/test_mcp_service_adapters.py` keeps public
-  `get_publication_metadata_impl()` capped at 100.
+- `tests/unit/mcp/test_mcp_service_adapters.py`
+  `test_get_publication_metadata_impl_returns_typed_payload` remains compatible,
+  and a new public-cap regression keeps `get_publication_metadata_impl()` capped
+  at 100.
 - MCP service paths that call review inspect, related evidence, topic map, or
   citation graph continue returning compatible response shapes.
-- `tests/test_routes/test_search.py` preserves search metadata enrichment
-  compatibility and does not loosen the public metadata endpoint contract.
+- `tests/test_routes/test_search.py`
+  `test_search_publications_can_enrich_basic_metadata` preserves search metadata
+  enrichment compatibility.
 
 Focused implementation checks should run after each task. Final verification for
 the future implementation must end with:
@@ -351,8 +378,8 @@ make ci-local
 - `RelatedEvidenceService._metadata_candidates()` uses the helper instead of
   local chunking.
 - `TopicLiteratureMapService._metadata_papers()` uses the helper.
-- Citation graph metadata enrichment uses the helper wherever it handles more
-  than one PMID.
+- `CitationGraphService._metadata_for_pmid()` uses the shared helper for its
+  existing single-PMID source metadata path.
 - `inspect_review_index(include_metadata=True)` works for more than 100 sources.
 - Topic map enrichment works for more than 100 seed/candidate PMIDs.
 - REST and MCP public metadata compatibility is preserved.
@@ -361,7 +388,7 @@ make ci-local
 
 ## Design Rationale
 
-The service-level helper keeps the public/private boundary clear. Public clients
+The module-level helper keeps the public/private boundary clear. Public clients
 still receive fast validation and a manageable request contract, while internal
 services get a single correct implementation for larger workflows. Reusing
 `PublicationMetadataRequest` inside each chunk keeps the existing PubMed lookup
