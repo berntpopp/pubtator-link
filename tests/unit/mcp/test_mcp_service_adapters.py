@@ -1939,8 +1939,7 @@ async def test_search_literature_metadata_batches_limit_none_over_public_cap() -
         async def search_publications(self, **kwargs):
             return {
                 "results": [
-                    {"pmid": str(pmid), "title": f"Search {pmid}"}
-                    for pmid in range(500000, 500105)
+                    {"pmid": str(pmid), "title": f"Search {pmid}"} for pmid in range(500000, 500105)
                 ],
                 "count": 105,
                 "total_pages": 1,
