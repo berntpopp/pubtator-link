@@ -60,6 +60,25 @@ must not be used in acceptance criteria or trend claims. The recurring
 recommendations were auto-splitting large PMID batches, better budget hints,
 `pmids_needing_retry`, minimal output mode, and clearer fallback reasons.
 
+A BioASQ ideal-answer smoke on 2026-05-09 used the public `jmhb/BioASQ`
+Hugging Face mirror, `summary` split, with three generated-answer cases and 13
+gold PMIDs. This was a generated-answer benchmark rather than a yes/no
+classifier. Claude Code `claude-sonnet-4-6` compared `mcp_oracle_pmid` against
+`no_tools`:
+
+| Mode | Cases | Runtime | Cost | Mean token F1 vs reference | Mean ROUGE-L F1 vs reference | Gold PMID citation recall | Citation precision |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| BioASQ ideal answer, MCP oracle-PMID | 3 | 83.88s | $0.1740 | 0.372 | 0.174 | 1.000 | 1.000 |
+| BioASQ ideal answer, no tools | 3 | 35.93s | $0.0635 | 0.302 | 0.167 | 0.000 | 0.000 |
+
+A frozen-output judge comparing candidates to reference ideal answers preferred
+MCP for all 3/3 cases. The important qualitative failure was not low lexical
+overlap; no-tools introduced off-reference or contradictory knowledge, including
+an ivabradine/HFpEF answer that contradicted the BioASQ reference by relying on
+an off-reference EDIFY-style claim. All 13 gold PMIDs were returned only as
+abstract-level evidence through PubTator-Link. Therefore abstract-only coverage
+must be measured as a first-class benchmark signal, not treated as a footnote.
+
 ## Goals
 
 - Provide reproducible benchmark runs for PubTator-Link MCP quality.
@@ -320,10 +339,42 @@ rubrics:
   and abstract-only overclaiming,
 - answer utility: completeness, concision, organization, uncertainty handling,
   and biomedical research-use safety,
+- dangerous-error checks: direction flips, wrong endpoint, wrong comparator,
+  wrong population, wrong significance, wrong measure or unit, and scope
+  inflation,
 - pairwise cross-model judging for prose quality, using frozen candidate
   outputs and a judge model from a different family than the answer model,
 - optional lexical metrics such as ROUGE/BERTScore only as weak diagnostics, not
   acceptance gates for biomedical synthesis quality.
+
+Generated-answer reports must separate source-access quality from answer prose.
+For each case, report whether each required PMID was available as full text,
+abstract-only, metadata-only, or missing. Abstract-only answers can be useful,
+but they are not equivalent to full-text-grounded synthesis and must be labeled
+as such.
+
+### Evidence Direction And Contradiction Datasets
+
+BioASQ ideal answers test generated biomedical summaries, but they do not
+directly stress clinically dangerous direction errors. Add Evidence Inference
+2.0 as the first dedicated directionality benchmark after BioASQ summary smoke.
+
+Use Evidence Inference for:
+
+- intervention/comparator/outcome extraction,
+- evidence sentence or abstract retrieval,
+- direction label accuracy (`significantly increased`, `significantly
+  decreased`, `no significant difference`, or dataset-native labels),
+- generated rationale faithfulness,
+- wrong-direction count,
+- wrong-endpoint count,
+- wrong-population count,
+- wrong-comparator count,
+- wrong-significance count.
+
+This suite should require the model to answer with both a structured direction
+label and a short evidence-grounded rationale. A direction flip in a
+clinical-trial setting is high severity even when the prose sounds plausible.
 
 ## Prompt Versioning
 
@@ -723,9 +774,22 @@ Fields:
 - `confusion_matrix jsonb`
 - `retrieval_recall_at_k jsonb`
 - `coverage_passage_rate numeric`
+- `gold_source_access_rate jsonb`
+- `abstract_only_rate numeric`
+- `full_text_rate numeric`
 - `metadata_only_fallback_rate numeric`
+- `missing_source_rate numeric`
 - `json_parse_success_rate numeric`
 - `empty_output_count integer`
+- `unsupported_claim_count integer`
+- `contradicted_claim_count integer`
+- `wrong_direction_count integer`
+- `wrong_endpoint_count integer`
+- `wrong_comparator_count integer`
+- `wrong_population_count integer`
+- `wrong_significance_count integer`
+- `wrong_measure_count integer`
+- `scope_inflation_count integer`
 - `expected_calibration_error numeric`
 - `brier_score numeric`
 - `score_details jsonb not null default '{}'::jsonb`
@@ -1208,6 +1272,12 @@ For open retrieval:
 - target PMID recall@10,
 - required source recall,
 - retrieved evidence coverage,
+- gold source access by source: `full_text`, `abstract_only`, `metadata_only`,
+  `missing`,
+- abstract-only rate,
+- full-text rate,
+- metadata-only rate,
+- missing-source rate,
 - full-text versus abstract-only ranking,
 - mean reciprocal rank where target sources are ordered.
 
@@ -1217,12 +1287,26 @@ For synthesis tasks:
 
 - required claim coverage,
 - unsupported claim count,
+- contradicted claim count,
 - citation correctness,
 - citation provenance correctness,
 - abstract-only overclaiming,
 - metadata-only overclaiming,
+- wrong direction count,
+- wrong endpoint count,
+- wrong comparator count,
+- wrong population count,
+- wrong significance count,
+- wrong measure or unit count,
+- scope inflation count,
 - forbidden claim violations,
 - research-use safety compliance.
+
+Dangerous biomedical errors are reported separately from prose quality. The
+benchmark treats a direction flip, wrong endpoint, wrong comparator, wrong
+population, wrong significance, wrong measure, or unsupported clinical-scope
+expansion as high-severity even when lexical overlap with the reference is
+acceptable.
 
 `summarize_run` refuses to print combined accuracy across mixed datasets or task
 types unless `--combine-mixed-task` is passed. When that flag is used, the
@@ -1274,6 +1358,9 @@ Initial local smoke target:
 - PubMedQA PQA-L article-local, 10 cases, balanced-ish labels, as the
   cross-stack quick smoke for Claude Code, Codex CLI, and Gemini CLI.
 - BioASQ yes/no oracle-PMID, 20 cases, balanced labels.
+- BioASQ ideal-answer generated-summary smoke, 3-5 cases from a pinned public
+  mirror or official prepared file, with gold PMIDs hidden from no-tools and
+  provided only in oracle-PMID mode.
 - Modes: `no_tools` and `mcp_oracle_pmid`.
 - Answer stacks: at least one canonical Claude Code stack for CI/manual
   continuity; optional local cross-stack smoke with Codex CLI and Gemini CLI
@@ -1313,6 +1400,9 @@ Smoke pass criteria:
 - summary includes Wilson CIs and McNemar p-values for paired label comparisons,
 - PubMedQA no-tools floor is reported and `pubmedqa_memorization_risk` is
   surfaced when applicable,
+- generated-answer summaries include source-access rates, citation recall and
+  precision, unsupported/contradicted claim counts, dangerous-error counts, and
+  pairwise judge results,
 - cost and timeout controls are enforced,
 - every successful prediction has `cost_source` populated as exact or estimated.
 
@@ -1331,6 +1421,8 @@ Manual suite target:
 - PubMedQA PQA-L article-local, 300 or 500 cases.
 - BioASQ yes/no, factoid, and list cases.
 - BioASQ ideal-answer or MEDIQA-AnS generated-summary cases.
+- Evidence Inference 2.0 directionality cases for intervention/comparator/
+  outcome reasoning and wrong-direction risk.
 - One multi-document synthesis suite from MS2 or a curated PubTator-Link review
   set after licensing and source mapping are documented.
 - SciFact-style claim verification after PMID mapping audit.
@@ -1364,6 +1456,11 @@ Manual suite target:
 - PubTator drift canary status is recorded and surfaced in summaries.
 - Generated-answer suites report deterministic citation/faithfulness checks
   separately from pairwise judge prose-quality results.
+- Source-access coverage distinguishes full text, abstract-only, metadata-only,
+  and missing sources for every required PMID.
+- Complex biomedical suites report high-severity dangerous-error counts,
+  including contradiction, wrong direction, wrong endpoint, wrong comparator,
+  wrong population, wrong significance, wrong measure, and scope inflation.
 
 ## Design Decisions For First Implementation
 
