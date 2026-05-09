@@ -16,12 +16,12 @@ run logs, self-judgment, and reproducible summaries.
 
 The design is based on the larger smoke tests run on 2026-05-09:
 
-| Dataset | Mode | Cases | Accuracy | Macro F1 | Runtime | Cost |
+| Dataset | Mode | Cases | Accuracy (Wilson 95% CI) | Macro F1 | Runtime | Cost |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| PubMedQA PQA-L | MCP oracle-PMID | 60 | 65.0% | 0.636 | 396.5s | ~$0.65 |
-| PubMedQA PQA-L | no tools | 60 | 40.0% | 0.355 | 117.1s | ~$0.22 |
-| BioASQ yes/no | MCP oracle-PMID | 40 | 95.0% | 0.950 | 435.8s | ~$0.66 |
-| BioASQ yes/no | no tools | 40 | 87.5% | 0.873 | 80.2s | ~$0.11 |
+| PubMedQA PQA-L | MCP oracle-PMID | 60 | 65.0% [52.4, 75.8] | 0.636 | 396.5s | ~$0.65 |
+| PubMedQA PQA-L | no tools | 60 | 40.0% [28.6, 52.6] | 0.355 | 117.1s | ~$0.22 |
+| BioASQ yes/no | MCP oracle-PMID | 40 | 95.0% [83.5, 98.6] | 0.950 | 435.8s | ~$0.66 |
+| BioASQ yes/no | no tools | 40 | 87.5% [73.9, 94.5] | 0.873 | 80.2s | ~$0.11 |
 
 These are single-run point estimates from small smoke samples. They are useful
 for shaping the benchmark, not for acceptance gates. The combined accuracy
@@ -33,11 +33,11 @@ be consumed by Claude Code, Codex CLI, and Gemini CLI through the same local
 Streamable HTTP MCP endpoint. A 10-case PubMedQA PQA-L paired smoke compared
 `mcp_oracle_pmid` against `no_tools` for each stack:
 
-| Answer stack | MCP correct | No-tools correct | Delta | MCP runtime | No-tools runtime |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Claude Code + `claude-sonnet-4-6` | 7/10 | 4/10 | +30 pp | 68s | 38s |
-| Codex CLI + `gpt-5.4` | 8/10 | 2/10 | +60 pp | 39s | 15s |
-| Gemini CLI + `gemini-3.1-pro-preview` | 8/10 | 4/10 | +40 pp | 39s | 21s |
+| Answer stack | MCP correct (Wilson 95% CI) | No-tools correct (Wilson 95% CI) | Delta | Exact McNemar p | MCP runtime | No-tools runtime |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Claude Code + `claude-sonnet-4-6` | 7/10 [39.7, 89.2] | 4/10 [16.8, 68.7] | +30 pp | 0.250 | 68s | 38s |
+| Codex CLI + `gpt-5.4` | 8/10 [49.0, 94.3] | 2/10 [5.7, 51.0] | +60 pp | 0.031 | 39s | 15s |
+| Gemini CLI + `gemini-3.1-pro-preview` | 8/10 [49.0, 94.3] | 4/10 [16.8, 68.7] | +40 pp | 0.125 | 39s | 21s |
 
 The smoke used fixed seed `20260509`, hid gold labels from prompts, hid PMIDs in
 the no-tools condition, and verified that no-tools runs made zero MCP calls.
@@ -54,11 +54,11 @@ The main observed MCP failure modes were:
 - long single-session runtime for 40-60 case Claude runs,
 - ambiguity between truly missing passages and budget-pressure retryable drops.
 
-Self-judgment from resumed MCP runs scored the PubMedQA MCP experience 7/10 and
-BioASQ 8/10. Those absolute scores are diagnostics only and are not acceptance
-criteria. The recurring recommendations were auto-splitting large PMID batches,
-better budget hints, `pmids_needing_retry`, minimal output mode, and clearer
-fallback reasons.
+Self-judgment from resumed MCP runs produced absolute 1-10 scores, but those
+were same-stack trace diagnostics rather than cross-model judgments. The scores
+must not be used in acceptance criteria or trend claims. The recurring
+recommendations were auto-splitting large PMID batches, better budget hints,
+`pmids_needing_retry`, minimal output mode, and clearer fallback reasons.
 
 ## Goals
 
@@ -102,7 +102,7 @@ Each case can run in one or more modes:
   evidence PMIDs and must use PubTator-Link MCP to retrieve evidence.
 - `mcp_open_retrieval`: the answer stack receives only the question or topic and
   must use PubTator-Link MCP to discover evidence.
-- `mcp_self_judge`: a resumed run asks the same or another model to evaluate the
+- `mcp_self_judge`: a post-run judge asks another model to evaluate the
   MCP consumer experience from the run trace only.
 - `grounding_judge`: optional judged evaluation for synthesis answers where no
   deterministic gold label exists.
@@ -114,7 +114,7 @@ sample seed, case order, answer model, and prompt version:
 
 - Evidence value: `oracle_context - no_tools`
 - MCP oracle-PMID overhead or benefit: `mcp_oracle_pmid - oracle_context`
-- Open-retrieval penalty: `mcp_open_retrieval - mcp_oracle_pmid`
+- Open-vs-oracle retrieval delta: `mcp_open_retrieval - mcp_oracle_pmid`
 - Open-retrieval value over model prior: `mcp_open_retrieval - no_tools`
 - MCP-attributable open-retrieval contribution:
   `mcp_open_retrieval - no_tools - evidence_value`
@@ -130,12 +130,15 @@ contribution is measured against `oracle_context`, while the MCP server's
 real-world value is measured in open retrieval where source discovery is part of
 the task.
 
-Paired comparisons must also store:
+Pairwise comparison records must also store:
 
 - Wilson 95% confidence interval for each accuracy,
 - paired McNemar p-value for label accuracy deltas,
 - bootstrap confidence interval for macro F1,
-- minimum detectable effect for the suite size.
+- minimum detectable effect for the suite size,
+- Benjamini-Hochberg adjusted q-values for grouped families of comparisons, or
+  an explicit report flag saying p-values are descriptive rank-ordering signals
+  rather than significance claims.
 
 ## Datasets
 
@@ -180,6 +183,9 @@ claim:
 - natural-distribution sampling for published-number style reporting.
 
 Balanced-label smoke accuracy is not comparable to published PubMedQA numbers.
+If `no_tools` accuracy exceeds 70% on a full-abstract PubMedQA sample,
+`summary.md` must surface `pubmedqa_memorization_risk: high` and avoid claiming
+that MCP evidence caused the score without supporting paired deltas.
 
 ### BioASQ
 
@@ -234,6 +240,16 @@ SciFact support requires a checked-in mapping file such as
 Cases are excluded when the gold rationale depends on full-text sentences that
 are absent from the PubMed abstract available through PubTator-Link.
 
+Mapping audit rules:
+
+- High confidence: exact title, first author, and publication year match.
+- Medium confidence: title/year match with minor normalization differences and
+  reviewer initials recorded.
+- Low confidence: manual judgment or incomplete metadata; excluded from v1.
+- Medium-confidence mappings require a second reviewer or are excluded.
+- The mapping file includes `mapping_audit_log` or a reference to a tracked audit
+  artifact.
+
 ### PubTator-Link Review Synthesis Cases
 
 Use curated local cases for realistic MCP-assisted review workflows, including
@@ -248,6 +264,66 @@ Metrics:
 - abstract-only overclaiming,
 - research-use safety language,
 - self-judgment ratings.
+
+### More Diverse Generated-Answer Datasets
+
+The suite should add at least one generated-answer benchmark before making broad
+claims about MCP usefulness for biomedical research workflows. These datasets
+exercise synthesis quality, evidence selection, citation grounding, and prose
+quality rather than only yes/no or exact-match classification.
+
+Recommended v1.1 candidates:
+
+- BioASQ Task B ideal answers: biomedical expert questions with relevant
+  articles, snippets, exact answers, and paragraph-style ideal answers. This is
+  the closest fit because it evaluates biomedical retrieval plus concise
+  synthesis, but the suite must pin the edition and use official scripts or
+  label scores as internal diagnostics.
+- MS2: multi-document summarization of medical studies, with systematic-review
+  summaries over many source documents. This is the strongest biomedical
+  stress test for contradictory evidence synthesis, but requires careful source
+  licensing and PMID/source mapping before using PubTator-Link as the evidence
+  provider.
+- MEDIQA-AnS: question-driven consumer health answer summarization with
+  manually written extractive and abstractive summaries. This is useful for
+  evaluating readable, consumer-facing summaries, but benchmark prompts must
+  stay research-use scoped and avoid clinical advice claims.
+- Evidence Inference 2.0: clinical-trial article reasoning over intervention,
+  comparator, outcome, and evidence spans. This is not primarily elegant prose,
+  but it tests whether the MCP evidence path preserves the clinical relation
+  needed for a concise generated rationale.
+- EBM-NLP or related PICO extraction corpora: span/entity extraction from RCT
+  abstracts. This tests structured evidence extraction and context management,
+  not final answer style.
+- QASPER: scientific-paper QA with extractive, yes/no, unanswerable, and
+  free-form answers plus evidence annotations. It is not biomedical, but it is
+  an open, well-documented benchmark for full-paper evidence selection and
+  abstractive answers.
+- ScholarQABench/OpenScholar-style literature synthesis: multi-domain
+  literature-search questions with long-form expert answers and citation
+  evaluation. Use only if the dataset license and artifact access allow
+  redistribution, and treat it as a long-form synthesis benchmark rather than a
+  PubMed-only benchmark.
+- BEIR biomedical retrieval tasks such as TREC-COVID, BioASQ retrieval, and
+  NFCorpus: retrieval-only suites for `mcp_open_retrieval`, reported with
+  recall@k, nDCG@k, and MRR before answer synthesis is judged.
+
+Generated-answer evaluation should combine deterministic checks and judged
+rubrics:
+
+- deterministic citation checks: cited PMID exists, citation appears in retrieved
+  evidence, required sources are cited, and unsupported PMID hallucinations are
+  counted,
+- evidence coverage: required claim/source coverage and missing required
+  evidence,
+- faithfulness: unsupported claim count, contradiction with retrieved evidence,
+  and abstract-only overclaiming,
+- answer utility: completeness, concision, organization, uncertainty handling,
+  and biomedical research-use safety,
+- pairwise cross-model judging for prose quality, using frozen candidate
+  outputs and a judge model from a different family than the answer model,
+- optional lexical metrics such as ROUGE/BERTScore only as weak diagnostics, not
+  acceptance gates for biomedical synthesis quality.
 
 ## Prompt Versioning
 
@@ -365,6 +441,19 @@ max output tokens, tool-choice behavior, and any CLI flags that affect tool use.
 If the provider exposes only an alias rather than a dated snapshot, the run is
 reproducible only within that provider alias window.
 
+Benchmark defaults:
+
+- `temperature=0`,
+- `top_p=1` where configurable,
+- fixed max output tokens per suite,
+- fixed tool allowlist or denylist per mode,
+- `--n-trials 1` for smoke and `--n-trials 3` recommended for full suites that
+  support the cost.
+
+Even with deterministic settings, provider and CLI outputs are not guaranteed
+bit-for-bit reproducible across regions or dates. Multi-trial runs report
+per-case agreement, mean score, and variance by answer stack.
+
 The manifest must also record:
 
 - MCP server git commit,
@@ -373,6 +462,11 @@ The manifest must also record:
 - PubTator API base URL,
 - PubTator API health-check payload or status at run start,
 - corpus or API snapshot dates returned by MCP tool responses.
+
+Each run also performs a PubTator drift canary check before scoring. The canary
+set contains 5-10 PMIDs with recorded annotation or passage hashes. If a canary
+hash changes, the run continues but `run_metadata.dataset_drift_detected` is set
+to true and `summary.md` surfaces the drift warning.
 
 ## Repository Layout
 
@@ -500,6 +594,7 @@ Fields:
 - `finished_at timestamptz`
 - `duration_ms integer`
 - `cost_usd numeric(12,6)`
+- `cost_source text not null default 'unknown'`
 - `answer_stack text`
 - `cli_adapter text`
 - `cli_version text`
@@ -521,7 +616,25 @@ Fields:
 - `pubtator_api_health jsonb not null default '{}'::jsonb`
 - `run_metadata jsonb not null default '{}'::jsonb`
 
-Use UUIDv7 when available so run IDs remain time-sortable.
+Use `gen_random_uuid()` from `pgcrypto` for v1 and index `started_at` for
+time-series queries. Migrate to native UUIDv7 once the supported PostgreSQL
+version provides it.
+
+JSONB columns are not schemaless dumping grounds. Every JSONB field must have a
+Pydantic model in `pubtator_link/benchmarks/models.py`, include a
+`_schema_version` key, and be validated before insertion. Malformed JSONB blobs
+are hard failures.
+
+`cost_source` is one of:
+
+- `exact_from_cli`,
+- `estimated_from_tokens`,
+- `unknown`.
+
+For benchmark reports, `unknown` is allowed only at the run level when a run
+fails before any model call. Successful predictions must have exact or estimated
+cost. Token-based estimates use a tracked posted-price table artifact keyed by
+model alias and date range.
 
 `claude_cli_version` and `claude_session_id` are retained for backward
 compatibility with the first Claude-only experiments. New code should populate
@@ -541,6 +654,8 @@ Fields:
 - `gold_label text`
 - `gold_answer jsonb`
 - `gold_evidence_pmids text[]`
+- `dataset_license text`
+- `dataset_use_restriction text`
 - `case_metadata jsonb not null default '{}'::jsonb`
 - primary key `(dataset, dataset_version, case_id)`
 
@@ -556,12 +671,13 @@ Fields:
 - `dataset text not null`
 - `dataset_version text not null`
 - `case_id text not null`
+- `attempt_index integer not null default 1`
 - `case_order integer not null`
 - `mode text not null`
 - `prompt_template_hash text`
 - `prompt_resolved_hash text`
 - `run_case_metadata jsonb not null default '{}'::jsonb`
-- primary key `(run_id, case_id)`
+- primary key `(run_id, case_id, attempt_index)`
 
 Run cases reference canonical dataset cases. Gold labels are used only by
 scorers and must not be rendered into answer prompts.
@@ -574,6 +690,8 @@ Fields:
 
 - `run_id uuid references benchmark_runs(run_id)`
 - `case_id text`
+- `attempt_index integer not null default 1`
+- `is_final_attempt boolean not null default true`
 - `predicted_label text`
 - `predicted_answer text`
 - `confidence text`
@@ -583,8 +701,10 @@ Fields:
 - `reason_short text`
 - `raw_prediction_json jsonb not null default '{}'::jsonb`
 - `is_correct boolean`
+- `cost_usd numeric(12,6)`
+- `cost_source text not null default 'unknown'`
 - `score_details jsonb not null default '{}'::jsonb`
-- primary key `(run_id, case_id)`
+- primary key `(run_id, case_id, attempt_index)`
 
 ### `benchmark_scores`
 
@@ -606,9 +726,34 @@ Fields:
 - `metadata_only_fallback_rate numeric`
 - `json_parse_success_rate numeric`
 - `empty_output_count integer`
-- `paired_mcnemar_p numeric`
-- `minimum_detectable_effect jsonb`
+- `expected_calibration_error numeric`
+- `brier_score numeric`
 - `score_details jsonb not null default '{}'::jsonb`
+
+### `benchmark_pairwise_comparisons`
+
+Aggregate paired statistics for two aligned runs. Pairwise statistics do not
+belong on `benchmark_scores` because a score row represents one run.
+
+Fields:
+
+- `left_run_id uuid references benchmark_runs(run_id)`
+- `right_run_id uuid references benchmark_runs(run_id)`
+- `dataset text not null`
+- `dataset_version text not null`
+- `paired_n integer not null`
+- `mcnemar_p numeric`
+- `mcnemar_b integer`
+- `mcnemar_c integer`
+- `accuracy_diff numeric`
+- `accuracy_diff_ci jsonb`
+- `macro_f1_diff numeric`
+- `macro_f1_diff_ci jsonb`
+- `minimum_detectable_effect jsonb`
+- `bh_q_value numeric`
+- `comparison_metadata jsonb not null default '{}'::jsonb`
+- `created_at timestamptz not null default now()`
+- primary key `(left_run_id, right_run_id)`
 
 ### `benchmark_tool_calls`
 
@@ -619,6 +764,7 @@ Fields:
 - `id bigserial primary key`
 - `run_id uuid references benchmark_runs(run_id)`
 - `case_id text`
+- `benchmark_run_id_header text`
 - `tool_name text`
 - `started_at timestamptz`
 - `finished_at timestamptz`
@@ -640,6 +786,7 @@ Fields:
 
 - `id bigserial primary key`
 - `run_id uuid references benchmark_runs(run_id)`
+- `benchmark_run_id_header text`
 - `source text not null`
 - `logged_at timestamptz`
 - `level text`
@@ -745,6 +892,8 @@ Minimum indexes:
 
 - `benchmark_runs(dataset, suite, mode, sample_seed)`
 - `benchmark_runs(answer_model, self_judge_model)`
+- `benchmark_runs(started_at)`
+- `benchmark_run_cases(prompt_resolved_hash)`
 - `benchmark_tool_calls(run_id, tool_name)`
 - `benchmark_tool_calls(run_id, status)`
 - `benchmark_log_events(run_id, event_type)`
@@ -772,36 +921,50 @@ select
     s.accuracy_wilson_ci,
     s.macro_f1,
     s.macro_f1_bootstrap_ci,
-    s.paired_mcnemar_p,
-    s.minimum_detectable_effect,
     r.cost_usd,
+    r.cost_source,
     r.duration_ms,
     r.run_id
 from benchmark_runs r
 join benchmark_scores s using (run_id);
 ```
 
+Add a separate paired-comparison view over `benchmark_pairwise_comparisons`
+joined to left and right `benchmark_runs`. It should expose both run IDs, both
+answer stacks, both modes, paired `n`, deltas, McNemar counts, p-value, q-value,
+and minimum detectable effect.
+
 ## Build Versus Buy
 
-Before implementing the runner, evaluate whether to build on an existing
-evaluation framework:
+Decision for v1: build the benchmark runner on Inspect AI unless a short spike
+documents a blocker. Inspect already provides task, dataset, solver, scorer,
+model-role, cache, log, concurrency, MCP-tool, and external-agent concepts that
+match this benchmark. PubTator-Link should not reimplement those generic eval
+mechanics unless the spike fails.
 
-- Inspect AI,
-- OpenAI Evals,
-- promptfoo,
-- lm-eval-harness.
+The required spike is one 10-case `mcp_oracle_pmid` PubMedQA task that verifies:
 
-The first implementation may still be in-house because PubTator-Link needs:
+- PubTator-Link HTTP MCP tools can be registered and called,
+- Claude Code, Codex CLI, and Gemini CLI can be represented either as Inspect
+  external agents or as explicitly documented in-house CLI adapters,
+- Inspect logs contain enough per-sample model/tool trace data to persist into
+  the benchmark schema,
+- a custom scorer can write PubMedQA gold scoring and paired comparison
+  artifacts,
+- the run can still emit `X-Benchmark-Run-Id` on MCP calls.
 
-- database-backed run logs tied to existing project migrations,
-- PubTator-specific coverage and fallback event analysis,
-- MCP server structured-event analysis,
-- custom paired-mode deltas for MCP attribution,
-- strict separation of hidden gold from prompts.
+If the spike passes, PubTator-Link owns only the domain-specific pieces:
 
-If Inspect AI or another framework can provide model abstraction, trace storage,
-or dataset execution without weakening those requirements, the implementation
-plan should reuse it rather than duplicating generic runner functionality.
+- dataset loaders and pinned case files,
+- PubTator-specific MCP/log instrumentation,
+- storage into the project migration schema,
+- custom scorers for PubMedQA, BioASQ, Evidence Inference, and synthesis
+  grounding,
+- summary generation and MCP-specific recommendations.
+
+If the spike fails, the blocker must be documented in the spec implementation
+plan and the in-house runner must preserve the same Task/Solver/Scorer
+boundaries so that a later Inspect migration remains possible.
 
 ## Runner Flow
 
@@ -811,14 +974,16 @@ plan should reuse it rather than duplicating generic runner functionality.
 3. Create `benchmark_runs` row with `status="running"`.
 4. Write `manifest.json`, prompt copies, cases, and gold files.
 5. Capture Docker and MCP server pre-run state.
-6. Run the selected CLI adapter with either no tools or explicit MCP tools.
+6. Run the selected CLI adapter with either no tools or explicit MCP tools. MCP
+   benchmark calls must include `X-Benchmark-Run-Id: <run_id>` and the MCP
+   server must bind that value into structured logs.
 7. Store raw answer output, CLI event streams, and debug logs.
 8. Parse predictions and persist `benchmark_predictions`.
 9. Score against hidden gold and persist `benchmark_scores`.
 10. Parse structured MCP server events into `benchmark_tool_calls` and
     `benchmark_log_events`. Parse CLI debug or event logs only as a secondary
     source for model-side behavior that the server cannot observe.
-11. Optionally resume the run for MCP self-judgment and persist
+11. Optionally run MCP self-judgment over frozen traces and persist
     `benchmark_self_judgments` and `benchmark_recommendations`.
 12. Generate `summary.md`.
 13. Update `benchmark_runs.status`, duration, token usage, and cost.
@@ -858,9 +1023,16 @@ Important flags:
 - `--max-cost-usd`
 - `--per-case-timeout`
 - `--max-concurrency`
+- `--n-trials`
+
+Out of scope for v1:
+
 - `--shard`
 - `--shard-of`
 - `--resume`
+
+V1 uses `--max-concurrency=1` for local MCP runs. Sharding and resume require a
+separate merge/checkpoint design before they can write to the database.
 
 The existing project CLI should expose the same functionality as a benchmark
 subcommand for discoverability:
@@ -869,6 +1041,32 @@ subcommand for discoverability:
 pubtator-link benchmark run --suite smoke
 pubtator-link benchmark analyze --run-id RUN_ID
 pubtator-link benchmark compare --left RUN_ID --right RUN_ID
+```
+
+Suites are declarative YAML files. CLI flags override suite values; they are not
+the primary configuration surface.
+
+Example:
+
+```yaml
+name: smoke
+dataset: pubmedqa
+dataset_version: pqa_l_article_local_v1
+case_file: benchmarks/cases/pubmedqa/article_local_smoke_30.jsonl
+modes: [no_tools, mcp_oracle_pmid]
+sample_seed: 20260509
+case_count: 30
+sampling_mode: balanced
+prompt_versions:
+  answer: answer_pubmedqa_article_local_v1.md
+  self_judge: self_judge_mcp_consumer_v1.md
+defaults:
+  per_case_timeout_s: 120
+  max_cost_usd: 5.00
+  temperature: 0
+  top_p: 1
+  n_trials: 1
+  max_concurrency: 1
 ```
 
 ## Make Targets
@@ -927,6 +1125,12 @@ the observed failure modes:
 - retryable budget-pressure drop,
 - terminal no-record failure.
 
+Benchmark mode requires request attribution. The MCP server must accept an
+`X-Benchmark-Run-Id` HTTP header, bind it to request-local log context, and emit
+it on every structured server-side tool event. If a CLI cannot propagate that
+header through its MCP transport, the benchmark must use a dedicated per-run MCP
+server instance instead of shared-server concurrency.
+
 CLI debug and event log formats are adapter-specific and may change; they are
 useful for audit but must not be the primary source for server-side metrics.
 
@@ -956,8 +1160,27 @@ The runner validates JSON output and stores each dimension separately.
 
 Self-judgment is diagnostic. It does not gate benchmark success. If a
 self-judge score is used in a report rather than just stored as a diagnostic,
-the judge model should be different from the answer model. Cross-run claims
-should prefer pairwise trace comparison prompts over absolute 1-10 scores.
+the judge model must be from a different model family than the answer model.
+Cross-run claims must prefer pairwise trace comparison prompts over absolute
+1-10 scores.
+
+Each dimension must have an anchored rubric before it is used. Example anchors:
+
+- `argument_clarity`: 9-10 means all required tool arguments were obvious from
+  schema/description and no failed call was caused by argument confusion; 5-6
+  means the model needed schema rereading, retries, or trial-and-error; 1-2
+  means it failed to construct valid arguments after multiple attempts.
+- `context_management`: 9-10 means retrieved passages fit the answer task with
+  no important evidence dropped; 5-6 means one budget warning or retry was
+  needed but the answer remained grounded; 1-2 means budget handling caused
+  missing or misleading evidence.
+- `diagnostics_recovery`: 9-10 means fallback reasons and retry hints were
+  machine-actionable; 5-6 means the model could infer the issue from logs or
+  text; 1-2 means failures were opaque or indistinguishable from no evidence.
+
+Dimensions without stable anchors are removed rather than scored. Before using
+self-judgment trends, calibrate the rubric once on 5-10 known-good and known-bad
+traces and store those calibration artifacts.
 
 ## Scoring
 
@@ -973,6 +1196,11 @@ For PubMedQA and BioASQ yes/no:
 Accuracy reports include Wilson 95% confidence intervals. Paired mode
 comparisons include McNemar's test where the same cases were run in both modes.
 Macro-F1 reports include bootstrap confidence intervals.
+
+Comparison summaries apply Benjamini-Hochberg correction within each
+dataset/suite family when reporting many pairwise tests. If a summary chooses
+not to correct, it must label p-values as descriptive and must not use
+"statistically significant" language.
 
 ### Retrieval Metrics
 
@@ -997,6 +1225,10 @@ For synthesis tasks:
 - metadata-only overclaiming,
 - forbidden claim violations,
 - research-use safety compliance.
+
+`summarize_run` refuses to print combined accuracy across mixed datasets or task
+types unless `--combine-mixed-task` is passed. When that flag is used, the
+output labels the number as a non-headline diagnostic.
 
 ## Safety And Data Handling
 
@@ -1028,6 +1260,10 @@ Integration tests:
   artifacts,
 - analyzer groups synthetic log events into recommendations,
 - compare command reports expected deltas.
+- JSONB validation rejects a malformed `cli_invocation` payload.
+- two concurrent synthetic suites against a shared MCP server attribute tool
+  calls to the correct run via `X-Benchmark-Run-Id`, or the test is skipped only
+  when v1 explicitly uses per-run MCP server instances.
 
 No test should require paid LLM calls. Live Claude, Codex, and Gemini runs are
 manual benchmark commands, not CI requirements.
@@ -1049,15 +1285,15 @@ Initial local smoke target:
 - Runtime is measured and reported, not used as a pass/fail gate in the first
   implementation.
 
-Shard semantics:
+V1 concurrency semantics:
 
-- `--shard N --shard-of M` runs a deterministic subset of the sampled case list.
-- Shards have separate run IDs and artifact directories.
-- A merge step creates an aggregate run summary without re-running Claude.
-- `--max-concurrency` controls parallel shards and defaults to 1 for local MCP
-  stacks.
-- Interleaved server logs are attributed by run ID where structured events carry
-  run metadata; otherwise they remain run-level diagnostics only.
+- Local MCP runs default to `--max-concurrency=1`.
+- Shared-server concurrency is allowed only when all MCP calls carry
+  `X-Benchmark-Run-Id` and structured events include that value.
+- If header propagation is unavailable, concurrent benchmark runs must use
+  dedicated per-run MCP server instances.
+- Sharding and resume are v1.1 features and are not accepted without an explicit
+  aggregate/checkpoint schema.
 
 Smoke pass criteria:
 
@@ -1072,13 +1308,19 @@ Smoke pass criteria:
 - summaries report `answer_stack`, `cli_adapter`, requested model, and resolved
   model where available,
 - self-judgment dimensions are parsed,
-- summary includes paired-mode deltas with confidence information where enough
-  paired cases exist,
-- cost and timeout controls are enforced.
+- summary includes all four decomposition components when the required paired
+  runs exist: evidence value, MCP oracle-PMID overhead or benefit,
+  open-vs-oracle retrieval delta, and MCP-attributable open-retrieval
+  contribution,
+- summary includes Wilson CIs and McNemar p-values for paired label comparisons,
+- PubMedQA no-tools floor is reported and `pubmedqa_memorization_risk` is
+  surfaced when applicable,
+- cost and timeout controls are enforced,
+- every successful prediction has `cost_source` populated as exact or estimated.
 
 Safety controls:
 
-- `--max-cost-usd` aborts or prevents additional shards once the configured
+- `--max-cost-usd` aborts or prevents additional cases once the configured
   budget would be exceeded.
 - `--per-case-timeout` bounds case execution.
 - A circuit breaker aborts a run after five consecutive empty outputs or JSON
@@ -1090,9 +1332,13 @@ Manual suite target:
 
 - PubMedQA PQA-L article-local, 300 or 500 cases.
 - BioASQ yes/no, factoid, and list cases.
+- BioASQ ideal-answer or MEDIQA-AnS generated-summary cases.
+- One multi-document synthesis suite from MS2 or a curated PubTator-Link review
+  set after licensing and source mapping are documented.
 - SciFact-style claim verification after PMID mapping audit.
 - PubTator-Link review synthesis cases.
-- Shard live CLI runs into 20-30 case batches.
+- Run live CLI batches in 20-30 case chunks. Do not call them shards until the
+  v1.1 aggregate/checkpoint schema exists.
 - Aggregate batch scores by dataset, mode, answer stack, and model.
 
 ## Acceptance Criteria
@@ -1112,6 +1358,14 @@ Manual suite target:
 - Recommendations are deduplicated and grouped under known themes.
 - The MCP-vs-no-tools delta is reported as an observed diagnostic, not as a
   universal acceptance threshold.
+- Pairwise statistics are stored in `benchmark_pairwise_comparisons`, not
+  `benchmark_scores`.
+- All JSONB writes validate against versioned Pydantic models.
+- MCP tool calls are attributable to the run via `X-Benchmark-Run-Id` or by
+  dedicated per-run MCP server instance.
+- PubTator drift canary status is recorded and surfaced in summaries.
+- Generated-answer suites report deterministic citation/faithfulness checks
+  separately from pairwise judge prose-quality results.
 
 ## Design Decisions For First Implementation
 
@@ -1129,3 +1383,19 @@ Manual suite target:
 - Live PubMedQA and BioASQ dataset downloaders should be explicit preparation
   commands. Routine smoke runs should use pinned sampled case files checked into
   the repository.
+- If Inspect AI is not used, the in-house runner must provide a
+  content-addressed model-call cache under `benchmarks/cache/` keyed by model
+  identity, resolved prompt, generation settings, active tools, and tool-choice
+  policy. The cache directory remains gitignored, while cache manifest schemas
+  are tracked.
+
+## Future Work
+
+- Sharding, resume, aggregate run rows, and checkpoint recovery.
+- Prompt-injection probes in retrieved passages.
+- MCP error-injection suites for malformed JSON, timeout, and partial upstream
+  failure.
+- Tool-overload probes that verify the model can discover the correct
+  PubTator-Link tool without irrelevant tool calls.
+- Multimodal scientific-paper QA if PubTator-Link later exposes figure/table
+  evidence.
