@@ -54,6 +54,7 @@ def score_pubmedqa(
     correct = 0
     gold_distribution: Counter[str] = Counter()
     predicted_distribution: Counter[str] = Counter()
+    access_counts = {access.value: 0 for access in SourceAccess}
     for case in gold_cases:
         gold = case.gold_label or "maybe"
         prediction = by_case.get(case.case_id)
@@ -70,6 +71,9 @@ def score_pubmedqa(
         confusion[gold][predicted] += 1
         if predicted == gold:
             correct += 1
+        for pmid in case.gold_evidence_pmids:
+            access = case.source_access.get(pmid, SourceAccess.ABSTRACT_ONLY)
+            access_counts[access.value] += 1
     total = len(gold_cases)
     f1_by_class: dict[str, Decimal] = {}
     for label in PUBMEDQA_LABELS:
@@ -80,8 +84,19 @@ def score_pubmedqa(
         recall = tp / (tp + fn) if tp + fn else 0.0
         f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
         f1_by_class[label] = _decimal(f1)
+    maybe_cases = [case for case in gold_cases if case.gold_label == "maybe"]
+    maybe_decisive_overcalls = sum(
+        1
+        for case in maybe_cases
+        if (prediction := by_case.get(case.case_id)) is not None
+        and prediction.predicted_label in {"yes", "no"}
+    )
+    maybe_decisive_overcall_rate = (
+        maybe_decisive_overcalls / len(maybe_cases) if maybe_cases else 0.0
+    )
     accuracy = correct / total if total else 0.0
     ci_low, ci_high = _wilson(correct, total)
+    access_total = sum(access_counts.values()) or 1
     return BenchmarkScore(
         dataset="pubmedqa",
         accuracy=_decimal(accuracy),
@@ -92,8 +107,16 @@ def score_pubmedqa(
         confusion_matrix=confusion,
         label_distribution=dict(gold_distribution),
         predicted_label_distribution=dict(predicted_distribution),
+        gold_source_access_rate={
+            access: count / access_total for access, count in access_counts.items()
+        },
         empty_output_count=empty,
-        score_details={"invalid_label_count": invalid},
+        score_details={
+            "invalid_label_count": invalid,
+            "maybe_decisive_overcall_count": maybe_decisive_overcalls,
+            "maybe_decisive_overcall_rate": maybe_decisive_overcall_rate,
+            "source_access_counts": access_counts,
+        },
         pubmedqa_memorization_risk="high" if mode == "no_tools" and accuracy > 0.70 else None,
     )
 

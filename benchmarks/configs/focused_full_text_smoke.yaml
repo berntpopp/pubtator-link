@@ -1,0 +1,27 @@
+name: focused_full_text_smoke
+artifact_root: benchmarks/results/focused_full_text_smoke
+report_path: benchmarks/reports/focused-full-text-smoke-report.md
+analysis:
+  title: Focused Full-Text Smoke Report
+  slowest_case_count: 5
+runs:
+  - run_name: pubmedqa_full_text_smoke_claude
+    suite: benchmarks/suites/pubmedqa_full_text_smoke.yaml
+    mode: no_tools
+    provider: claude
+    model: sonnet
+    max_cases: 12
+    timeout_s: 180
+    prompt: benchmarks/prompts/provider_pubmedqa_single_v4.md
+    prompt_version: pubmedqa_no_tools_v4_context_policy
+    tool_workflow: none
+  - run_name: pubmedqa_full_text_smoke_claude_mcp
+    suite: benchmarks/suites/pubmedqa_full_text_smoke.yaml
+    mode: mcp_oracle_pmid
+    provider: claude
+    model: sonnet
+    max_cases: 12
+    timeout_s: 300
+    prompt: benchmarks/prompts/provider_pubmedqa_mcp_article_local_v1.md
+    prompt_version: pubmedqa_mcp_article_local_v1
+    tool_workflow: preflight_review_sources>get_publication_passages

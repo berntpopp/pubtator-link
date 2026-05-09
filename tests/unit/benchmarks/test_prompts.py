@@ -28,3 +28,14 @@ def test_render_pubmedqa_prompt_hides_gold() -> None:
     assert "gold_label" not in prompt.text
     assert "yes" not in prompt.text.lower().split("gold", 1)[-1]
     assert len(prompt.resolved_hash) == 64
+
+
+def test_pubmedqa_mcp_prompt_mentions_full_abstract_and_maybe_calibration() -> None:
+    prompt = Path("benchmarks/prompts/provider_pubmedqa_mcp_article_local_v1.md").read_text()
+
+    assert "mode='full_abstract'" in prompt
+    assert "If preflight fails, call pubtator.get_publication_passages" in prompt
+    assert (
+        "Do not convert conditional, underpowered, mixed, or method-limited evidence into yes/no"
+        in prompt
+    )

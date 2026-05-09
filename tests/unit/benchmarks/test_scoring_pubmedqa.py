@@ -52,3 +52,21 @@ def test_invalid_label_counts_incorrect_and_parse_failure() -> None:
 
     assert scores.empty_output_count == 0
     assert scores.score_details["invalid_label_count"] == 1
+
+
+def test_pubmedqa_scores_decisive_overcall_rate_for_maybe_cases() -> None:
+    cases = [
+        _case("c1", "maybe"),
+        _case("c2", "maybe"),
+        _case("c3", "yes"),
+    ]
+    predictions = [
+        PredictionRecord(case_id="c1", predicted_label="yes"),
+        PredictionRecord(case_id="c2", predicted_label="maybe"),
+        PredictionRecord(case_id="c3", predicted_label="yes"),
+    ]
+
+    score = score_pubmedqa(cases, predictions, mode="mcp_oracle_pmid")
+
+    assert score.score_details["maybe_decisive_overcall_count"] == 1
+    assert score.score_details["maybe_decisive_overcall_rate"] == 0.5

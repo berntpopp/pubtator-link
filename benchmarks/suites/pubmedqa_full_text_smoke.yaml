@@ -1,0 +1,15 @@
+name: pubmedqa_full_text_smoke
+dataset: pubmedqa
+dataset_version: pqa_l_full_text_smoke_12_v1
+case_file: benchmarks/cases/pubmedqa/full_text_smoke.jsonl
+modes:
+  - no_tools
+  - mcp_oracle_pmid
+sample_seed: 20260509
+case_count: 12
+sampling_mode: full_text_smoke_balanced
+prompt_versions:
+  answer: benchmarks/prompts/provider_pubmedqa_single_v4.md
+defaults:
+  timeout_s: 240
+  max_cases_per_run: 12

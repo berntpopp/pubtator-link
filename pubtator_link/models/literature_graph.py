@@ -407,14 +407,16 @@ class RelatedEvidenceCandidatesRequest(BaseModel):
     """Request related candidate papers for passage-level evidence review."""
 
     pmid: str
-    max_results: int = Field(default=25, ge=1, le=100)
+    max_results: int = Field(default=12, ge=1, le=100)
     response_mode: LiteratureGraphResponseMode = "compact"
     prefer_full_text: bool = True
     include_pubtator_search: bool = True
-    include_citation_neighbors: bool = True
+    include_citation_neighbors: bool = False
     publication_types: list[str] | None = None
     year_min: int | None = None
     year_max: int | None = None
+    citation_graph_timeout_ms: int = Field(default=15_000, ge=1, le=120_000)
+    metadata_timeout_ms: int = Field(default=20_000, ge=1, le=120_000)
 
     @field_validator("pmid")
     @classmethod
@@ -480,10 +482,10 @@ class TopicLiteratureMapRequest(BaseModel):
 
     query: str | None = Field(default=None, min_length=1, max_length=1000)
     pmids: list[str] | None = Field(default=None, min_length=1, max_length=100)
-    max_seed_papers: int = Field(default=25, ge=1, le=50)
-    max_neighbors_per_paper: int = Field(default=10, ge=1, le=20)
+    max_seed_papers: int = Field(default=10, ge=1, le=50)
+    max_neighbors_per_paper: int = Field(default=5, ge=1, le=20)
     response_mode: LiteratureGraphResponseMode = "full"
-    max_candidates: int = Field(default=12, ge=1, le=50)
+    max_candidates: int = Field(default=8, ge=1, le=50)
     include_demoted: bool = True
     max_demoted: int = Field(default=3, ge=0, le=20)
     bias_toward: (
@@ -511,9 +513,9 @@ class TopicLiteratureMapRequest(BaseModel):
     timeout_ms: int = Field(default=45_000, ge=0, le=120_000)
     partial_ok: bool = True
     expand_query_seeds: bool = False
-    citation_graph_timeout_ms: int | None = Field(default=None, ge=1, le=120_000)
-    related_evidence_timeout_ms: int | None = Field(default=None, ge=1, le=120_000)
-    metadata_backfill_timeout_ms: int | None = Field(default=None, ge=1, le=120_000)
+    citation_graph_timeout_ms: int | None = Field(default=15_000, ge=1, le=120_000)
+    related_evidence_timeout_ms: int | None = Field(default=20_000, ge=1, le=120_000)
+    metadata_backfill_timeout_ms: int | None = Field(default=10_000, ge=1, le=120_000)
 
     @field_validator("pmids")
     @classmethod

@@ -90,6 +90,43 @@ async def test_preflight_sets_after_index_expectation_for_abstract_fallback() ->
 
 
 @pytest.mark.asyncio
+async def test_preflight_reports_abstract_only_with_actionable_confidence() -> None:
+    async def id_converter(_pmid: str):
+        return {"id_resolution_status": "unresolved", "id_resolution_reason": "no_pmcid"}
+
+    async def abstract_available(_pmid: str) -> bool:
+        return True
+
+    service = SourcePreflightService(
+        id_converter=id_converter,
+        pubtator_abstract_available=abstract_available,
+    )
+
+    [hint] = await service.preflight_pmids(["15053041"])
+
+    assert hint.expected_coverage == "abstract_only"
+    assert hint.expected_coverage_after_index == "abstract_only"
+    assert hint.expected_coverage_confidence == "moderate"
+    assert hint.coverage_resolution_stage == "preflight_resolver_chain"
+    assert hint.coverage_reason in {"no_pmcid", "abstract_fallback_used"}
+    assert hint.pmc_fallback_available is False
+
+
+@pytest.mark.asyncio
+async def test_preflight_timeout_recommends_passage_fallback() -> None:
+    async def id_converter(_pmid: str):
+        raise TimeoutError("converter timed out")
+
+    service = SourcePreflightService(id_converter=id_converter)
+
+    [hint] = await service.preflight_pmids(["15053041"])
+
+    assert hint.expected_coverage == "unknown"
+    assert hint.coverage_reason == "upstream_timeout"
+    assert hint.resolver_attempts[0].terminal_reason == "upstream_timeout"
+
+
+@pytest.mark.asyncio
 async def test_preflight_marks_unknown_after_index_when_no_resolver_succeeds() -> None:
     service = SourcePreflightService()
 

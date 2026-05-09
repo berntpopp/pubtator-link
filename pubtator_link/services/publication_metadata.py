@@ -193,27 +193,35 @@ class NcbiPublicationMetadataClient:
         self._timeout = timeout
         self._tool_name = tool_name
         self._retry_policy = RetryPolicy()
+        self._esummary_cache: dict[str, dict[str, Any]] = {}
 
     async def close(self) -> None:
         if self._owns_client:
             await self._http_client.aclose()
 
     async def fetch_esummary(self, pmids: list[str]) -> dict[str, dict[str, Any]]:
-        params = {"db": "pubmed", "id": ",".join(pmids), "retmode": "json"}
+        cached = {
+            pmid: self._esummary_cache[pmid] for pmid in pmids if pmid in self._esummary_cache
+        }
+        missing_pmids = [pmid for pmid in pmids if pmid not in cached]
+        if not missing_pmids:
+            return cached
+        params = {"db": "pubmed", "id": ",".join(missing_pmids), "retmode": "json"}
         data = await self._get_json("esummary.fcgi", params=params)
         result = data.get("result", {})
         if not isinstance(result, dict):
-            return {}
+            return cached
         uids = result.get("uids", [])
         if not isinstance(uids, list):
-            return {}
+            return cached
 
-        records: dict[str, dict[str, Any]] = {}
+        records: dict[str, dict[str, Any]] = dict(cached)
         for pmid in uids:
             pmid_key = str(pmid)
             record = result.get(pmid_key)
             if isinstance(record, dict) and "error" not in record:
                 records[pmid_key] = record
+                self._esummary_cache[pmid_key] = record
         return records
 
     async def fetch_mesh_headings(self, pmids: list[str]) -> dict[str, list[str]]:

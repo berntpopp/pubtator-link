@@ -16,6 +16,12 @@ def render_summary(run: RunMetadata, scores: BenchmarkScore, analysis: EventAnal
         f"- mcp_tool_call_count: {analysis.mcp_tool_call_count}",
         "",
     ]
+    source_access_counts = scores.score_details.get("source_access_counts")
+    if isinstance(source_access_counts, dict) and source_access_counts:
+        lines.append("## Source Coverage Counts")
+        for key, value in sorted(source_access_counts.items()):
+            lines.append(f"- {key}: {value}")
+        lines.append("")
     if scores.accuracy is not None:
         lines.extend(
             [

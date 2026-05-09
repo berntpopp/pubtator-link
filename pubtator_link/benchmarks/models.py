@@ -41,7 +41,7 @@ class SuiteConfig(BaseModel):
     modes: list[BenchmarkMode]
     sample_seed: int
     case_count: int
-    sampling_mode: Literal["balanced", "natural"]
+    sampling_mode: Literal["balanced", "natural", "full_text_smoke_balanced"]
     prompt_versions: dict[str, str]
     defaults: SuiteDefaults = Field(default_factory=SuiteDefaults)
 

@@ -314,14 +314,16 @@ async def find_related_evidence_candidates_impl(
     *,
     service: RelatedEvidenceService,
     pmid: str,
-    max_results: int = 25,
+    max_results: int = 12,
     response_mode: LiteratureGraphResponseModeArg | None = None,
     prefer_full_text: bool = True,
     include_pubtator_search: bool = True,
-    include_citation_neighbors: bool = True,
+    include_citation_neighbors: bool = False,
     publication_types: list[str] | None = None,
     year_min: int | None = None,
     year_max: int | None = None,
+    citation_graph_timeout_ms: int = 15_000,
+    metadata_timeout_ms: int = 20_000,
 ) -> dict[str, Any]:
     effective_response_mode = response_mode or "compact"
     response = await service.find_candidates(
@@ -335,6 +337,8 @@ async def find_related_evidence_candidates_impl(
             publication_types=publication_types,
             year_min=year_min,
             year_max=year_max,
+            citation_graph_timeout_ms=citation_graph_timeout_ms,
+            metadata_timeout_ms=metadata_timeout_ms,
         )
     )
     return response.model_dump(by_alias=True)
@@ -345,10 +349,10 @@ async def build_topic_literature_map_impl(
     service: TopicLiteratureMapService,
     query: str | None = None,
     pmids: list[str] | None = None,
-    max_seed_papers: int = 25,
-    max_neighbors_per_paper: int = 10,
+    max_seed_papers: int = 10,
+    max_neighbors_per_paper: int = 5,
     response_mode: LiteratureGraphResponseModeArg | None = None,
-    max_candidates: int = 12,
+    max_candidates: int = 8,
     include_demoted: bool = True,
     max_demoted: int = 3,
     bias_toward: list[LiteratureGraphBias] | None = None,
@@ -364,9 +368,9 @@ async def build_topic_literature_map_impl(
     timeout_ms: int = 45_000,
     partial_ok: bool = True,
     expand_query_seeds: bool = False,
-    citation_graph_timeout_ms: int | None = None,
-    related_evidence_timeout_ms: int | None = None,
-    metadata_backfill_timeout_ms: int | None = None,
+    citation_graph_timeout_ms: int | None = 15_000,
+    related_evidence_timeout_ms: int | None = 20_000,
+    metadata_backfill_timeout_ms: int | None = 10_000,
 ) -> dict[str, Any]:
     effective_response_mode = response_mode or "compact"
     response = await service.build_map(

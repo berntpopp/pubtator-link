@@ -73,6 +73,20 @@ def _successful_handler(request: httpx.Request) -> httpx.Response:
     return httpx.Response(404)
 
 
+class CountingEsummaryHandler:
+    def __init__(self) -> None:
+        self.esummary_calls = 0
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if "esummary.fcgi" in url:
+            self.esummary_calls += 1
+            return httpx.Response(200, json=_esummary_json())
+        if "efetch.fcgi" in url:
+            return httpx.Response(200, text=_mesh_xml())
+        return httpx.Response(404)
+
+
 async def _fetch_metadata(
     *,
     include_mesh: bool = False,
@@ -88,6 +102,20 @@ async def _fetch_metadata(
                 include_citations=include_citations,
             )
         )
+
+
+@pytest.mark.asyncio
+async def test_ncbi_esummary_client_reuses_cached_pmid_records() -> None:
+    handler = CountingEsummaryHandler()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = NcbiPublicationMetadataClient(http_client=http_client)
+
+        first = await client.fetch_esummary([PMID])
+        second = await client.fetch_esummary([PMID])
+
+    assert first[PMID]["title"] == TITLE
+    assert second[PMID]["title"] == TITLE
+    assert handler.esummary_calls == 1
 
 
 @pytest.mark.asyncio

@@ -297,6 +297,15 @@ class ManyCandidateCitationGraph:
         )
 
 
+class SlowRelatedCitationGraph:
+    async def get_citation_graph(self, request):
+        await asyncio.sleep(0.2)
+        return PublicationCitationGraphResponse(
+            source=LiteraturePaper(pmid=request.pmid),
+            candidate_pmids=["333"],
+        )
+
+
 class RecordingMetadata:
     def __init__(self) -> None:
         self.calls: list[list[str]] = []
@@ -356,6 +365,21 @@ class PartialFailureMetadata:
         )
 
 
+class SlowCandidateMetadata:
+    async def get_metadata(self, request):
+        if request.pmids == ["123"]:
+            return PublicationMetadataResponse(
+                metadata=[PublicationMetadata(pmid="123", title="Seed review")]
+            )
+        await asyncio.sleep(0.2)
+        return PublicationMetadataResponse(
+            metadata=[
+                PublicationMetadata(pmid=pmid, title=f"Resolved metadata {pmid}")
+                for pmid in request.pmids
+            ]
+        )
+
+
 @pytest.mark.asyncio
 async def test_ranks_full_text_candidate_when_neighbor_scores_tie() -> None:
     service = RelatedEvidenceService(
@@ -383,7 +407,9 @@ async def test_related_evidence_runs_independent_network_inputs_concurrently() -
     )
 
     response = await asyncio.wait_for(
-        service.find_candidates(RelatedEvidenceCandidatesRequest(pmid="123")),
+        service.find_candidates(
+            RelatedEvidenceCandidatesRequest(pmid="123", include_citation_neighbors=True)
+        ),
         timeout=0.5,
     )
 
@@ -466,7 +492,9 @@ async def test_related_evidence_exposes_top_level_timed_provider_status() -> Non
         citation_graph_service=FakeCitationGraph(),
     )
 
-    response = await service.find_candidates(RelatedEvidenceCandidatesRequest(pmid="123"))
+    response = await service.find_candidates(
+        RelatedEvidenceCandidatesRequest(pmid="123", include_citation_neighbors=True)
+    )
 
     assert response.provider_status == response.meta.provider_status
     statuses = {(status.provider, status.operation): status for status in response.provider_status}
@@ -484,7 +512,9 @@ async def test_reports_elink_failure_warning_while_returning_citation_graph_cand
         citation_graph_service=FakeCitationGraph(),
     )
 
-    response = await service.find_candidates(RelatedEvidenceCandidatesRequest(pmid="123"))
+    response = await service.find_candidates(
+        RelatedEvidenceCandidatesRequest(pmid="123", include_citation_neighbors=True)
+    )
 
     assert response.candidate_pmids == ["333"]
     assert any(
@@ -608,13 +638,63 @@ async def test_related_evidence_partial_metadata_batch_failure_keeps_successful_
     assert [len(request.pmids) for request in metadata.requests] == [1, 100, 100, 10]
     assert response.candidates
     assert any(candidate.paper.title for candidate in response.candidates)
+
+
+@pytest.mark.asyncio
+async def test_related_evidence_citation_stage_timeout_returns_degraded_candidates() -> None:
+    service = RelatedEvidenceService(
+        discovery_service=FakeDiscovery(),
+        metadata_service=FakeMetadata(),
+        citation_graph_service=SlowRelatedCitationGraph(),
+    )
+
+    response = await service.find_candidates(
+        RelatedEvidenceCandidatesRequest(
+            pmid="123",
+            include_citation_neighbors=True,
+            citation_graph_timeout_ms=1,
+        )
+    )
+
+    statuses = {(status.provider, status.operation): status for status in response.provider_status}
+    assert response.candidate_pmids == ["222", "111"]
+    assert statuses[("citation_graph", "candidate_neighbors")].status == "failed"
+    assert statuses[("citation_graph", "candidate_neighbors")].retryable is True
+    assert "timed out" in statuses[("citation_graph", "candidate_neighbors")].message
+    assert any(
+        command["tool"] == "pubtator.find_related_evidence_candidates"
+        and command["arguments"]["include_citation_neighbors"] is False
+        for command in response.meta.next_commands
+    )
+
+
+@pytest.mark.asyncio
+async def test_related_evidence_metadata_timeout_keeps_unresolved_candidates() -> None:
+    service = RelatedEvidenceService(
+        discovery_service=FakeDiscovery(),
+        metadata_service=SlowCandidateMetadata(),
+        citation_graph_service=FakeCitationGraph(),
+    )
+
+    response = await service.find_candidates(
+        RelatedEvidenceCandidatesRequest(
+            pmid="123",
+            include_citation_neighbors=False,
+            metadata_timeout_ms=1,
+        )
+    )
+
+    statuses = {(status.provider, status.operation): status for status in response.provider_status}
+    assert response.candidate_pmids == ["111", "222"]
+    assert all(
+        candidate.paper.status == "unresolved_reference" for candidate in response.candidates
+    )
+    assert statuses[("pubmed_metadata", "candidate_metadata")].status == "failed"
+    assert "timed out" in statuses[("pubmed_metadata", "candidate_metadata")].message
     assert any(
         warning.provider == "pubmed_metadata" and warning.status == "provider_failed"
         for warning in response.meta.warnings
     )
-    warning_messages = [warning.message for warning in response.meta.warnings]
-    assert "PubMed metadata warning: pubmed_metadata_batch_failed" in warning_messages
-    assert "Metadata lookup failed for 100 PMID(s)." in warning_messages
 
 
 @pytest.mark.asyncio

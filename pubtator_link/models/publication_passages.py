@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 from pubtator_link.services.degradation import DegradedMode
 
-PublicationPassageMode = Literal["abstracts", "compact_passages", "section_text"]
+PublicationPassageMode = Literal["abstracts", "full_abstract", "compact_passages", "section_text"]
 PublicationCoverage = Literal["full_text", "abstract_only", "title_only", "unknown"]
 Verbosity = Literal["lean", "standard", "full"]
 PassageDropReasonCode = Literal[

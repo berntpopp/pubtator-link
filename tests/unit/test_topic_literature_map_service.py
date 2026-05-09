@@ -772,6 +772,17 @@ async def test_topic_map_provider_status_reports_elapsed_and_budget_ms() -> None
     assert statuses[("pubmed_metadata", "metadata_backfill")].budget_ms == 1000
 
 
+def test_topic_map_defaults_are_llm_interactive_and_timeout_bounded() -> None:
+    request = TopicLiteratureMapRequest(query="FMF")
+
+    assert request.max_seed_papers == 10
+    assert request.max_neighbors_per_paper == 5
+    assert request.max_candidates == 8
+    assert request.citation_graph_timeout_ms == 15_000
+    assert request.related_evidence_timeout_ms == 20_000
+    assert request.metadata_backfill_timeout_ms == 10_000
+
+
 @pytest.mark.asyncio
 async def test_build_map_records_provider_status_for_completed_stages() -> None:
     response = await _service().build_map(

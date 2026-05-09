@@ -16,6 +16,17 @@ def test_load_suite_resolves_case_file_from_repo_root() -> None:
     assert suite.case_file == Path("benchmarks/cases/pubmedqa/article_local_smoke_10.jsonl")
 
 
+def test_load_full_text_smoke_suite_and_cases() -> None:
+    suite = load_suite(Path("benchmarks/suites/pubmedqa_full_text_smoke.yaml"))
+    cases = load_cases(suite.case_file)
+
+    assert suite.name == "pubmedqa_full_text_smoke"
+    assert suite.sampling_mode == "full_text_smoke_balanced"
+    assert len(cases) == 12
+    assert {case.gold_label for case in cases} == {"yes", "no", "maybe"}
+    assert all(case.case_metadata["full_text_expected"] is True for case in cases)
+
+
 def test_case_prompt_context_excludes_gold_label() -> None:
     case = load_cases(Path("benchmarks/cases/pubmedqa/article_local_smoke_10.jsonl"))[0]
 

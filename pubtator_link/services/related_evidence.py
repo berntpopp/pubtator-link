@@ -141,7 +141,24 @@ class RelatedEvidenceService:
             )
         if graph_task is not None:
             try:
-                graph = await graph_task
+                graph = await asyncio.wait_for(
+                    graph_task,
+                    timeout=request.citation_graph_timeout_ms / 1000,
+                )
+            except TimeoutError as exc:
+                graph_task.cancel()
+                warnings.append(_provider_failed_warning("citation_graph", exc))
+                provider_status.append(
+                    _provider_status(
+                        "citation_graph",
+                        "candidate_neighbors",
+                        "failed",
+                        retryable=True,
+                        message="citation_graph timed out; retry with include_citation_neighbors=false.",
+                        elapsed_ms=_elapsed_ms(graph_started),
+                        budget_ms=request.citation_graph_timeout_ms,
+                    )
+                )
             except Exception as exc:
                 warnings.append(_provider_failed_warning("citation_graph", exc))
                 provider_status.append(
@@ -152,6 +169,7 @@ class RelatedEvidenceService:
                         retryable=True,
                         message=str(exc),
                         elapsed_ms=_elapsed_ms(graph_started),
+                        budget_ms=request.citation_graph_timeout_ms,
                     )
                 )
             else:
@@ -167,6 +185,7 @@ class RelatedEvidenceService:
                         len(graph_candidate_pmids),
                         retryable=bool(graph.meta.warnings),
                         elapsed_ms=_elapsed_ms(graph_started),
+                        budget_ms=request.citation_graph_timeout_ms,
                     )
                 )
         deduped_pmids = [pmid for pmid in _dedupe(candidate_pmids) if pmid != request.pmid]
@@ -212,6 +231,7 @@ class RelatedEvidenceService:
                         request=request,
                         modes=("full",),
                     ),
+                    *_recovery_commands(request, provider_status),
                     *_next_commands(ordered_pmids),
                 ],
                 "truncated": any(count > 0 for count in omitted_counts.values()),
@@ -285,13 +305,45 @@ class RelatedEvidenceService:
 
         warnings: list[ProviderWarning] = []
         try:
-            metadata_response = await lookup_metadata_batched(
-                self.metadata_service,
-                pmids,
-                include_mesh=False,
-                include_publication_types=True,
-                include_citations="none",
-                include_coverage=True,
+            metadata_response = await asyncio.wait_for(
+                lookup_metadata_batched(
+                    self.metadata_service,
+                    pmids,
+                    include_mesh=False,
+                    include_publication_types=True,
+                    include_citations="none",
+                    include_coverage=True,
+                ),
+                timeout=request.metadata_timeout_ms / 1000,
+            )
+        except TimeoutError as exc:
+            warnings.append(_provider_failed_warning("pubmed_metadata", exc))
+            return (
+                [
+                    RelatedEvidenceCandidate(
+                        paper=LiteraturePaper(pmid=pmid, status="unresolved_reference"),
+                        score=float(neighbor_scores.get(pmid) or 0),
+                        match_reasons=_match_reasons(
+                            pmid=pmid,
+                            paper=LiteraturePaper(pmid=pmid, status="unresolved_reference"),
+                            request=request,
+                            neighbor_scores=neighbor_scores,
+                            citation_pmids=citation_pmids,
+                        ),
+                        pubmed_neighbor_score=neighbor_scores.get(pmid),
+                    )
+                    for pmid in pmids
+                ],
+                warnings,
+                _provider_status(
+                    "pubmed_metadata",
+                    "candidate_metadata",
+                    "failed",
+                    retryable=True,
+                    message="pubmed_metadata timed out; retry with fewer max_results or metadata_timeout_ms.",
+                    elapsed_ms=_elapsed_ms(started),
+                    budget_ms=request.metadata_timeout_ms,
+                ),
             )
         except Exception as exc:
             warnings.append(_provider_failed_warning("pubmed_metadata", exc))
@@ -305,6 +357,7 @@ class RelatedEvidenceService:
                     retryable=True,
                     message=str(exc),
                     elapsed_ms=_elapsed_ms(started),
+                    budget_ms=request.metadata_timeout_ms,
                 ),
             )
         metadata_by_pmid = {metadata.pmid: metadata for metadata in metadata_response.metadata}
@@ -377,6 +430,7 @@ class RelatedEvidenceService:
                 retryable=bool(failed_pmids),
                 message=f"failed_pmids={len(failed_pmids)}" if failed_pmids else None,
                 elapsed_ms=_elapsed_ms(started),
+                budget_ms=request.metadata_timeout_ms,
             ),
         )
 
@@ -507,6 +561,7 @@ def _provider_status(
     retryable: bool = False,
     message: str | None = None,
     elapsed_ms: int | None = None,
+    budget_ms: int | None = None,
 ) -> LiteratureProviderStatus:
     return LiteratureProviderStatus(
         provider=provider,
@@ -516,6 +571,7 @@ def _provider_status(
         retryable=retryable,
         message=message,
         elapsed_ms=elapsed_ms,
+        budget_ms=budget_ms,
     )
 
 
@@ -561,5 +617,27 @@ def _next_commands(candidate_pmids: list[str]) -> list[dict[str, Any]]:
         {
             "tool": "pubtator.get_publication_passages",
             "arguments": {"pmids": candidate_pmids},
+        }
+    ]
+
+
+def _recovery_commands(
+    request: RelatedEvidenceCandidatesRequest,
+    provider_status: list[LiteratureProviderStatus],
+) -> list[dict[str, Any]]:
+    if not any(
+        status.provider == "citation_graph"
+        and status.operation == "candidate_neighbors"
+        and status.retryable
+        for status in provider_status
+    ):
+        return []
+    return [
+        {
+            "tool": "pubtator.find_related_evidence_candidates",
+            "arguments": {
+                **request.model_dump(mode="json", exclude_none=True),
+                "include_citation_neighbors": False,
+            },
         }
     ]

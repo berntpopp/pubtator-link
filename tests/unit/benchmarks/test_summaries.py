@@ -45,6 +45,30 @@ def test_summary_includes_source_access_and_dangerous_errors() -> None:
     assert "wrong_direction_count" in text
 
 
+def test_summary_highlights_source_coverage_counts_before_scores() -> None:
+    run = RunMetadata(
+        run_id="run-coverage",
+        suite="pubmedqa_full_text_smoke",
+        dataset="pubmedqa",
+        mode="mcp_oracle_pmid",
+        sample_seed=20260509,
+    )
+    scores = BenchmarkScore(
+        dataset="pubmedqa",
+        accuracy=0.75,
+        macro_f1=0.74,
+        gold_source_access_rate={"full_text": 0.5, "abstract_only": 0.5},
+        score_details={"source_access_counts": {"full_text": 6, "abstract_only": 6}},
+    )
+    analysis = analyze_events([])
+
+    text = render_summary(run, scores, analysis)
+
+    assert text.index("## Source Coverage Counts") < text.index("## Label Metrics")
+    assert "- full_text: 6" in text
+    assert "- abstract_only: 6" in text
+
+
 def test_summary_refuses_mixed_dataset_combined_accuracy() -> None:
     pubmedqa_scores = BenchmarkScore(dataset="pubmedqa")
     bioasq_scores = BenchmarkScore(dataset="bioasq_ideal")

@@ -140,6 +140,12 @@ def _run_label(manifest: dict[str, Any]) -> str:
 
 def _pubmedqa_details(scores: dict[str, Any]) -> list[str]:
     lines = ["", "#### PubMedQA Class Metrics", ""]
+    details = scores.get("score_details", {})
+    if "maybe_decisive_overcall_rate" in details:
+        lines.append(
+            f"- maybe decisive-overcall rate: {float(details['maybe_decisive_overcall_rate']):.3f}"
+        )
+        lines.append("")
     lines.append("| Class | F1 |")
     lines.append("| --- | ---: |")
     for label, value in scores["f1_by_class"].items():
