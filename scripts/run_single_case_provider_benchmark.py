@@ -57,9 +57,6 @@ def _prompt_payload(case: BenchmarkCase, mode: BenchmarkMode) -> dict[str, Any]:
         "case_id": case.case_id,
         "question": case.question,
     }
-    abstract_context = case.case_metadata.get("abstract_context")
-    if isinstance(abstract_context, str) and abstract_context:
-        payload["abstract_context"] = abstract_context
     if mode != BenchmarkMode.NO_TOOLS:
         payload["target_pmids"] = case.target_pmids
         payload["evidence_pmids"] = case.gold_evidence_pmids
@@ -87,11 +84,8 @@ def _case_prompt(case: BenchmarkCase, mode: BenchmarkMode, prompt_template: str 
     )
 
 
-def _run_provider(provider: str, model: str, prompt: str, timeout_s: int) -> dict[str, Any]:
+def _provider_command(provider: str, model: str, prompt: str) -> list[str]:
     if provider == "claude":
-        tools: list[str] = []
-        if "pubtator." in prompt:
-            tools = ["mcp__pubtator-link"]
         command = [
             "claude",
             "--print",
@@ -104,10 +98,10 @@ def _run_provider(provider: str, model: str, prompt: str, timeout_s: int) -> dic
             model,
             prompt,
         ]
-        if tools:
-            command[2:2] = ["--allowedTools", ",".join(tools)]
+        if "pubtator." in prompt:
+            command[2:2] = ["--allowedTools", "mcp__pubtator-link"]
         else:
-            command[2:2] = ["--tools", ""]
+            command[2:2] = ["--tools", "WebSearch,WebFetch"]
     elif provider == "codex":
         command = [
             "codex",
@@ -138,7 +132,11 @@ def _run_provider(provider: str, model: str, prompt: str, timeout_s: int) -> dic
         ]
     else:
         raise ValueError(f"unknown provider: {provider}")
+    return command
 
+
+def _run_provider(provider: str, model: str, prompt: str, timeout_s: int) -> dict[str, Any]:
+    command = _provider_command(provider, model, prompt)
     started = time.monotonic()
     completed = subprocess.run(  # noqa: S603 - provider command is selected from fixed adapters.
         command,
