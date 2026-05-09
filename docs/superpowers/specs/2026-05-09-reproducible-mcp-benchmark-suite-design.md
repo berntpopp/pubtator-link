@@ -936,35 +936,33 @@ and minimum detectable effect.
 
 ## Build Versus Buy
 
-Decision for v1: build the benchmark runner on Inspect AI unless a short spike
-documents a blocker. Inspect already provides task, dataset, solver, scorer,
-model-role, cache, log, concurrency, MCP-tool, and external-agent concepts that
-match this benchmark. PubTator-Link should not reimplement those generic eval
-mechanics unless the spike fails.
+Decision for v1: implement the benchmark runner in-house. External evaluation
+frameworks are out of scope for the first implementation.
 
-The required spike is one 10-case `mcp_oracle_pmid` PubMedQA task that verifies:
+The in-house runner still uses explicit boundaries so the code does not collapse
+into a one-off script:
 
-- PubTator-Link HTTP MCP tools can be registered and called,
-- Claude Code, Codex CLI, and Gemini CLI can be represented either as Inspect
-  external agents or as explicitly documented in-house CLI adapters,
-- Inspect logs contain enough per-sample model/tool trace data to persist into
-  the benchmark schema,
-- a custom scorer can write PubMedQA gold scoring and paired comparison
-  artifacts,
-- the run can still emit `X-Benchmark-Run-Id` on MCP calls.
+- suite loader,
+- case sampler,
+- prompt renderer,
+- CLI adapter,
+- scorer,
+- pairwise comparator,
+- log analyzer,
+- storage writer,
+- summary writer.
 
-If the spike passes, PubTator-Link owns only the domain-specific pieces:
+This decision is intentional because PubTator-Link needs tight control over:
 
-- dataset loaders and pinned case files,
-- PubTator-specific MCP/log instrumentation,
-- storage into the project migration schema,
-- custom scorers for PubMedQA, BioASQ, Evidence Inference, and synthesis
-  grounding,
-- summary generation and MCP-specific recommendations.
+- database-backed run logs tied to existing project migrations,
+- PubTator-specific coverage and fallback event analysis,
+- MCP server structured-event attribution,
+- custom paired-mode deltas for MCP attribution,
+- strict separation of hidden gold from prompts,
+- local CLI adapters for Claude Code, Codex CLI, and Gemini CLI.
 
-If the spike fails, the blocker must be documented in the spec implementation
-plan and the in-house runner must preserve the same Task/Solver/Scorer
-boundaries so that a later Inspect migration remains possible.
+External frameworks can be reconsidered later only as an implementation detail
+behind these boundaries, not as a v1 requirement.
 
 ## Runner Flow
 
@@ -1383,11 +1381,10 @@ Manual suite target:
 - Live PubMedQA and BioASQ dataset downloaders should be explicit preparation
   commands. Routine smoke runs should use pinned sampled case files checked into
   the repository.
-- If Inspect AI is not used, the in-house runner must provide a
-  content-addressed model-call cache under `benchmarks/cache/` keyed by model
-  identity, resolved prompt, generation settings, active tools, and tool-choice
-  policy. The cache directory remains gitignored, while cache manifest schemas
-  are tracked.
+- The in-house runner should provide a content-addressed model-call cache under
+  `benchmarks/cache/` keyed by model identity, resolved prompt, generation
+  settings, active tools, and tool-choice policy. The cache directory remains
+  gitignored, while cache manifest schemas are tracked.
 
 ## Future Work
 
