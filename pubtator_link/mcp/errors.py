@@ -146,6 +146,11 @@ def error_code_for_exception(exc: Exception) -> str:
 def _fallback_for_context(context: McpErrorContext) -> tuple[str | None, dict[str, Any] | None]:
     if context.fallback_tool is not None:
         return context.fallback_tool, context.fallback_args or {}
+    if context.tool_name == "pubtator.preflight_review_sources" and context.pmids:
+        return (
+            "pubtator.get_publication_passages",
+            {"pmids": context.pmids, "mode": "full_abstract"},
+        )
     if (
         context.tool_name
         in {
@@ -159,6 +164,19 @@ def _fallback_for_context(context: McpErrorContext) -> tuple[str | None, dict[st
             {"pmids": context.pmids, "mode": "compact_passages"},
         )
     return None, None
+
+
+def _recovery_text_for_context(context: McpErrorContext, fallback_tool: str | None) -> str:
+    if context.tool_name == "pubtator.preflight_review_sources" and fallback_tool:
+        return (
+            "Call pubtator.get_publication_passages with the same PMIDs. "
+            "Use mode='full_abstract' for article-local answering; run diagnostics only if "
+            "passage retrieval also fails."
+        )
+    return (
+        "Run pubtator.diagnostics. If the review schema is stale, apply database migrations "
+        "and retry."
+    )
 
 
 def _pmids_for_exception(exc: Exception) -> list[str] | None:
@@ -213,7 +231,7 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> ToolError:
         "retryable": False,
         "fallback_tool": fallback_tool,
         "fallback_args": fallback_args,
-        "recovery": "Run pubtator.diagnostics. If the review schema is stale, apply database migrations and retry.",
+        "recovery": _recovery_text_for_context(context, fallback_tool),
         "_meta": {
             "next_commands": next_commands,
             "unsafe_for_clinical_use": True,

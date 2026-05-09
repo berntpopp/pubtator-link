@@ -1,0 +1,15 @@
+name: pubmedqa_smoke
+dataset: pubmedqa
+dataset_version: pqa_l_article_local_v1
+case_file: benchmarks/cases/pubmedqa/article_local_smoke_10.jsonl
+modes:
+  - no_tools
+  - mcp_oracle_pmid
+sample_seed: 20260509
+case_count: 10
+sampling_mode: balanced
+prompt_versions:
+  answer: benchmarks/prompts/answer_pubmedqa_article_local_v1.md
+defaults:
+  timeout_s: 120
+  max_cases_per_run: 30

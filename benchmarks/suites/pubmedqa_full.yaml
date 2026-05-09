@@ -1,0 +1,15 @@
+name: pubmedqa_full
+dataset: pubmedqa
+dataset_version: pqa_l_full_1000_v1
+case_file: benchmarks/cases/pubmedqa/pqa_l_full_1000.jsonl
+modes:
+  - no_tools
+  - mcp_oracle_pmid
+sample_seed: 20260509
+case_count: 1000
+sampling_mode: natural
+prompt_versions:
+  answer: benchmarks/prompts/answer_pubmedqa_article_local_v1.md
+defaults:
+  timeout_s: 900
+  max_cases_per_run: 1000

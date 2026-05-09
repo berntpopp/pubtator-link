@@ -1,0 +1,59 @@
+name: focused_default
+artifact_root: benchmarks/results/focused_default
+report_path: benchmarks/reports/focused-default-report.md
+analysis:
+  title: Focused Default Benchmark Report
+  slowest_case_count: 5
+runs:
+  - run_name: pubmedqa_balanced_51_claude
+    suite: benchmarks/suites/pubmedqa_balanced_51.yaml
+    mode: no_tools
+    provider: claude
+    model: sonnet
+    max_cases: 51
+    timeout_s: 180
+    prompt: benchmarks/prompts/provider_pubmedqa_single_v4.md
+    prompt_version: pubmedqa_no_tools_v4_context_policy
+    tool_workflow: none
+  - run_name: bioasq_complex_12_claude
+    suite: benchmarks/suites/bioasq_complex_12.yaml
+    mode: no_tools
+    provider: claude
+    model: sonnet
+    max_cases: 12
+    timeout_s: 240
+    prompt: benchmarks/prompts/provider_bioasq_single_v1.md
+    prompt_version: bioasq_no_tools_v1
+    tool_workflow: none
+  - run_name: pubmedqa_balanced_51_claude_mcp_article_local
+    suite: benchmarks/suites/pubmedqa_balanced_51.yaml
+    mode: mcp_oracle_pmid
+    provider: claude
+    model: sonnet
+    max_cases: 51
+    timeout_s: 240
+    prompt: benchmarks/prompts/provider_pubmedqa_mcp_article_local_v1.md
+    prompt_version: pubmedqa_mcp_article_local_v1
+    tool_workflow: get_publication_passages
+  - run_name: bioasq_complex_12_claude_mcp_review_rag
+    suite: benchmarks/suites/bioasq_complex_12.yaml
+    mode: mcp_oracle_pmid
+    provider: claude
+    model: sonnet
+    max_cases: 12
+    timeout_s: 300
+    prompt: benchmarks/prompts/provider_bioasq_mcp_review_rag_v1.md
+    prompt_version: bioasq_mcp_review_rag_v1
+    tool_workflow: index_review_evidence>inspect_review_index>retrieve_review_context_batch
+judge:
+  provider: claude
+  model: sonnet
+  timeout_s: 300
+  prompt: benchmarks/prompts/focused_benchmark_judge_v1.md
+  output: benchmarks/reports/focused-default-judge.md
+self_assessment:
+  provider: claude
+  model: sonnet
+  timeout_s: 300
+  prompt: benchmarks/prompts/focused_experience_self_assessment_v1.md
+  output: benchmarks/reports/focused-default-self-assessment.md

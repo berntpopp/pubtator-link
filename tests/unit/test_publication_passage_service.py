@@ -68,6 +68,25 @@ class LongPublicationService:
         }
 
 
+class LongStructuredAbstractService:
+    async def export_publications_list(self, pmids: list[str], format: str, full: bool):
+        return {
+            "documents": [
+                {
+                    "id": "15053041",
+                    "passages": [
+                        {"infons": {"section_type": "TITLE"}, "text": "Aortic stiffness title"},
+                        {"infons": {"section_type": "ABSTRACT"}, "text": "Background"},
+                        {"infons": {"section_type": "ABSTRACT"}, "text": "Methods"},
+                        {"infons": {"section_type": "ABSTRACT"}, "text": "Results"},
+                        {"infons": {"section_type": "ABSTRACT"}, "text": "Conclusion"},
+                        {"infons": {"section_type": "METHODS"}, "text": "Full text methods"},
+                    ],
+                }
+            ]
+        }
+
+
 class RaisingPublicationService:
     async def export_publications_list(self, pmids: list[str], format: str, full: bool):
         raise RuntimeError("upstream unavailable")
@@ -206,6 +225,30 @@ async def test_get_publication_passages_accepts_export_response_models() -> None
 
 
 @pytest.mark.asyncio
+async def test_publication_passages_unescapes_html_entities() -> None:
+    class HtmlEntityPublicationService:
+        async def export_publications_list(self, pmids: list[str], format: str, full: bool):
+            return {
+                "documents": [
+                    {
+                        "id": "11978239",
+                        "passages": [
+                            {
+                                "infons": {"section_type": "ABSTRACT"},
+                                "text": "p &lt; 0.05 and CRP &amp; fibrinogen improved.",
+                            }
+                        ],
+                    }
+                ]
+            }
+
+    service = PublicationPassageService(HtmlEntityPublicationService())
+    response = await service.get_passages(PublicationPassageRequest(pmids=["11978239"]))
+
+    assert response.passages[0].text == "p < 0.05 and CRP & fibrinogen improved."
+
+
+@pytest.mark.asyncio
 async def test_section_text_warns_when_only_abstract_passages_returned() -> None:
     class AbstractOnlyPublicationService:
         async def export_publications_list(self, pmids, format, full):
@@ -295,6 +338,33 @@ async def test_abstracts_mode_returns_only_title_and_abstract_passages() -> None
     assert any(
         drop.reason == "section_filtered" and drop.section == "table" for drop in response.dropped
     )
+
+
+@pytest.mark.asyncio
+async def test_full_abstract_mode_returns_all_title_and_abstract_passages() -> None:
+    service = PublicationPassageService(LongStructuredAbstractService())
+
+    response = await service.get_passages(
+        PublicationPassageRequest(
+            pmids=["15053041"],
+            mode="full_abstract",
+            max_passages_per_pmid=2,
+        )
+    )
+
+    assert [passage.text for passage in response.passages] == [
+        "Aortic stiffness title",
+        "Background",
+        "Methods",
+        "Results",
+        "Conclusion",
+    ]
+    assert all(passage.section in {"title", "abstract"} for passage in response.passages)
+    assert not any(drop.reason == "max_passages_per_pmid_exceeded" for drop in response.dropped)
+    assert any(
+        drop.reason == "section_filtered" and drop.section == "methods" for drop in response.dropped
+    )
+    assert response.context_estimate.recommended_mode == "full_abstract"
 
 
 @pytest.mark.asyncio

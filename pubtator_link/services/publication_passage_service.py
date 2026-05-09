@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
+from html import unescape
 from typing import Any, Protocol, cast
 
 from pubtator_link.models.publication_passages import (
@@ -109,7 +110,7 @@ class PublicationPassageService:
             sections=self._effective_sections(request.mode, request.sections),
             include_tables=request.include_tables,
             include_references=request.include_references,
-            max_passages_per_pmid=request.max_passages_per_pmid,
+            max_passages_per_pmid=self._effective_max_passages_per_pmid(request),
         )
         if request.dry_run:
             estimate = self._estimate_from_passages(passages, request.pmids, request.mode)
@@ -187,7 +188,7 @@ class PublicationPassageService:
             sections=self._effective_sections(request.mode, request.sections),
             include_tables=request.include_tables,
             include_references=request.include_references,
-            max_passages_per_pmid=request.max_passages_per_pmid,
+            max_passages_per_pmid=self._effective_max_passages_per_pmid(request),
         )
         estimate = self._estimate_from_passages(passages, request.pmids, request.mode)
         warning = estimate.warning
@@ -234,6 +235,7 @@ class PublicationPassageService:
                 text = _string_or_none(raw_passage.get("text"))
                 if not text:
                     continue
+                text = unescape(text)
 
                 section = normalize_publication_section(_section_from_passage(raw_passage))
                 section_index = section_counts.get(section, 0)
@@ -367,9 +369,17 @@ class PublicationPassageService:
 
     @staticmethod
     def _effective_sections(mode: PublicationPassageMode, sections: list[str]) -> list[str]:
-        if mode == "abstracts" and not sections:
+        if mode in {"abstracts", "full_abstract"} and not sections:
             return ["title", "abstract"]
         return sections
+
+    @staticmethod
+    def _effective_max_passages_per_pmid(
+        request: PublicationPassageRequest | PublicationContextEstimateRequest,
+    ) -> int:
+        if request.mode == "full_abstract":
+            return 30
+        return request.max_passages_per_pmid
 
     def _coverage_summary(
         self,

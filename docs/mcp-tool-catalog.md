@@ -30,7 +30,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"query":"familial Mediterranean fever colchicine","max_seed_papers":10}`
 - Next tools by profile: full: `pubtator.get_publication_passages`, `pubtator.index_review_evidence`
 - Resource links: None
-- Input schema: `query` (string | null; default: `None`); `pmids` (array | null; default: `None`); `max_seed_papers` (integer; default: `25`); `max_neighbors_per_paper` (integer; default: `10`); `response_mode` (string; enum: `compact`, `nodes_edges`, `full`; default: `compact`); `max_candidates` (integer; default: `12`); `include_demoted` (boolean; default: `True`); `max_demoted` (integer; default: `3`); `bias_toward` (array | null; default: `None`); `max_graph_nodes` (integer; default: `30`); `max_graph_edges` (integer; default: `60`); `include_authors` (boolean; default: `True`); `include_citations` (boolean; default: `True`); `include_pubtator_entities` (boolean; default: `True`); `include_related_candidates` (boolean; default: `True`); `year_min` (integer | null; default: `None`); `year_max` (integer | null; default: `None`); `prefer_full_text` (boolean; default: `True`)
+- Input schema: `query` (string | null; default: `None`); `pmids` (array | null; default: `None`); `max_seed_papers` (integer; default: `10`); `max_neighbors_per_paper` (integer; default: `5`); `response_mode` (string; enum: `compact`, `nodes_edges`, `full`; default: `compact`); `max_candidates` (integer; default: `8`); `include_demoted` (boolean; default: `True`); `max_demoted` (integer; default: `3`); `bias_toward` (array | null; default: `None`); `max_graph_nodes` (integer; default: `30`); `max_graph_edges` (integer; default: `60`); `include_authors` (boolean; default: `True`); `include_citations` (boolean; default: `True`); `include_pubtator_entities` (boolean; default: `True`); `include_related_candidates` (boolean; default: `True`); `year_min` (integer | null; default: `None`); `year_max` (integer | null; default: `None`); `prefer_full_text` (boolean; default: `True`); `timeout_ms` (integer; default: `45000`); `partial_ok` (boolean; default: `True`); `expand_query_seeds` (boolean; default: `False`); `citation_graph_timeout_ms` (integer | null; default: `15000`); `related_evidence_timeout_ms` (integer | null; default: `20000`); `metadata_backfill_timeout_ms` (integer | null; default: `10000`)
 - Output schema: `TopicLiteratureMapResponse`; has_output_schema: `yes`
 
 ## `pubtator.convert_article_ids`
@@ -75,7 +75,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"pmids":["12345"],"max_passages_per_pmid":6}`
 - Next tools by profile: full: `pubtator.get_publication_passages`; readonly: `pubtator.get_publication_passages`
 - Resource links: None
-- Input schema: `pmids` (array); `sections` (array | null; default: `None`); `mode` (string; enum: `abstracts`, `compact_passages`, `section_text`; default: `compact_passages`); `full` (boolean; default: `False`); `max_passages_per_pmid` (integer; default: `6`); `include_tables` (boolean; default: `True`); `include_references` (boolean; default: `False`)
+- Input schema: `pmids` (array); `sections` (array | null; default: `None`); `mode` (string; enum: `abstracts`, `full_abstract`, `compact_passages`, `section_text`; default: `compact_passages`); `full` (boolean; default: `False`); `max_passages_per_pmid` (integer; default: `6`); `include_tables` (boolean; default: `True`); `include_references` (boolean; default: `False`)
 - Output schema: `PublicationContextEstimateResponse`; has_output_schema: `yes`
 
 ## `pubtator.export_review_audit_bundle`
@@ -165,7 +165,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"pmid":"40562663","max_results":25,"prefer_full_text":true}`
 - Next tools by profile: lean: `pubtator.get_publication_passages`; full: `pubtator.get_publication_passages`; readonly: `pubtator.get_publication_passages`
 - Resource links: None
-- Input schema: `pmid` (string); `max_results` (integer; default: `25`); `response_mode` (string; enum: `compact`, `nodes_edges`, `full`; default: `compact`); `prefer_full_text` (boolean; default: `True`); `include_pubtator_search` (boolean; default: `True`); `include_citation_neighbors` (boolean; default: `True`); `publication_types` (array | null; default: `None`); `year_min` (integer | null; default: `None`); `year_max` (integer | null; default: `None`)
+- Input schema: `pmid` (string); `max_results` (integer; default: `12`); `response_mode` (string; enum: `compact`, `nodes_edges`, `full`; default: `compact`); `prefer_full_text` (boolean; default: `True`); `include_pubtator_search` (boolean; default: `True`); `include_citation_neighbors` (boolean; default: `False`); `publication_types` (array | null; default: `None`); `year_min` (integer | null; default: `None`); `year_max` (integer | null; default: `None`); `citation_graph_timeout_ms` (integer; default: `15000`); `metadata_timeout_ms` (integer; default: `20000`)
 - Output schema: `RelatedEvidenceCandidatesResponse`; has_output_schema: `yes`
 
 ## `pubtator.get_evidence_certainty`
@@ -210,7 +210,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"pmid":"40562663","direction":"both","max_results":50}`
 - Next tools by profile: lean: `pubtator.find_related_evidence_candidates`, `pubtator.get_publication_passages`; full: `pubtator.find_related_evidence_candidates`, `pubtator.get_publication_passages`; readonly: `pubtator.find_related_evidence_candidates`, `pubtator.get_publication_passages`
 - Resource links: None
-- Input schema: `pmid` (string | null; default: `None`); `doi` (string | null; default: `None`); `direction` (string; enum: `references`, `cited_by`, `both`; default: `both`); `response_mode` (string; enum: `compact`, `nodes_edges`, `full`; default: `compact`); `resolve_metadata` (boolean; default: `True`); `resolve_reference_pmids` (boolean; default: `True`); `max_reference_resolution` (integer; default: `20`); `include_provider_status` (boolean; default: `True`); `include_open_access_status` (boolean; default: `True`); `max_results` (integer; default: `50`)
+- Input schema: `pmid` (string | null; default: `None`); `doi` (string | null; default: `None`); `query` (string | null; default: `None`); `direction` (string; enum: `references`, `cited_by`, `both`; default: `both`); `response_mode` (string; enum: `compact`, `nodes_edges`, `full`; default: `compact`); `resolve_metadata` (boolean; default: `True`); `resolve_reference_pmids` (boolean; default: `True`); `max_reference_resolution` (integer; default: `20`); `include_provider_status` (boolean; default: `True`); `include_open_access_status` (boolean; default: `True`); `max_results` (integer; default: `50`)
 - Output schema: `PublicationCitationGraphResponse`; has_output_schema: `yes`
 
 ## `pubtator.get_publication_metadata`
@@ -235,12 +235,12 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `publication`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user needs compact citable publication passages from PMIDs without raw BioC. Do not use this for prepared review RAG; use pubtator.retrieve_review_context_batch. Next: pubtator.retrieve_review_context_batch.
+- Description: Use this when a user needs compact citable publication passages from PMIDs without raw BioC. For article-local answering, use mode='full_abstract' first; it returns all title/abstract passages without truncating structured abstracts. If full=True returns only abstracts, inspect coverage_by_pmid and answer from available evidence. Do not use for prepared review RAG; use pubtator.retrieve_review_context_batch.
 - Do not use for: `prepared review RAG retrieval`
 - Example: `{"pmids":["12345"],"max_passages_per_pmid":6,"verbosity":"standard"}`
 - Next tools by profile: lean: `pubtator.preflight_review_sources`; full: `pubtator.preflight_review_sources`; readonly: `pubtator.preflight_review_sources`
 - Resource links: None
-- Input schema: `pmids` (array); `sections` (array | null; default: `None`); `mode` (string; enum: `abstracts`, `compact_passages`, `section_text`; default: `compact_passages`); `full` (boolean; default: `False`); `max_passages_per_pmid` (integer; default: `6`); `max_chars` (integer; default: `12000`); `include_tables` (boolean; default: `True`); `include_references` (boolean; default: `False`); `dry_run` (boolean; default: `False`); `verbosity` (string; enum: `lean`, `standard`, `full`; default: `standard`)
+- Input schema: `pmids` (array); `sections` (array | null; default: `None`); `mode` (string; enum: `abstracts`, `full_abstract`, `compact_passages`, `section_text`; default: `compact_passages`); `full` (boolean; default: `False`); `max_passages_per_pmid` (integer; default: `6`); `max_chars` (integer; default: `12000`); `include_tables` (boolean; default: `True`); `include_references` (boolean; default: `False`); `dry_run` (boolean; default: `False`); `verbosity` (string; enum: `lean`, `standard`, `full`; default: `standard`)
 - Output schema: `PublicationPassageResponse`; has_output_schema: `yes`
 
 ## `pubtator.get_research_session_status`

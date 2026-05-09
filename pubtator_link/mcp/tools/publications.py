@@ -87,10 +87,10 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         async def build_topic_literature_map(
             query: Annotated[str | None, Field(min_length=1, max_length=1000)] = None,
             pmids: Annotated[list[str] | None, Field(min_length=1, max_length=100)] = None,
-            max_seed_papers: Annotated[int, Field(ge=1, le=50)] = 25,
-            max_neighbors_per_paper: Annotated[int, Field(ge=1, le=20)] = 10,
+            max_seed_papers: Annotated[int, Field(ge=1, le=50)] = 10,
+            max_neighbors_per_paper: Annotated[int, Field(ge=1, le=20)] = 5,
             response_mode: LiteratureGraphResponseModeArg = "compact",
-            max_candidates: Annotated[int, Field(ge=1, le=50)] = 12,
+            max_candidates: Annotated[int, Field(ge=1, le=50)] = 8,
             include_demoted: bool = True,
             max_demoted: Annotated[int, Field(ge=0, le=20)] = 3,
             bias_toward: list[LiteratureGraphBias] | None = None,
@@ -103,6 +103,12 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             year_min: int | None = None,
             year_max: int | None = None,
             prefer_full_text: bool = True,
+            timeout_ms: Annotated[int, Field(ge=0, le=120_000)] = 45_000,
+            partial_ok: bool = True,
+            expand_query_seeds: bool = False,
+            citation_graph_timeout_ms: Annotated[int | None, Field(ge=1, le=120_000)] = 15_000,
+            related_evidence_timeout_ms: Annotated[int | None, Field(ge=1, le=120_000)] = 20_000,
+            metadata_backfill_timeout_ms: Annotated[int | None, Field(ge=1, le=120_000)] = 10_000,
         ) -> dict[str, Any]:
             """Use this when a user needs a bounded topic-level literature map from a query or seed PMIDs. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: pubtator.get_publication_passages."""
 
@@ -128,6 +134,12 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                     year_min=year_min,
                     year_max=year_max,
                     prefer_full_text=prefer_full_text,
+                    timeout_ms=timeout_ms,
+                    partial_ok=partial_ok,
+                    expand_query_seeds=expand_query_seeds,
+                    citation_graph_timeout_ms=citation_graph_timeout_ms,
+                    related_evidence_timeout_ms=related_evidence_timeout_ms,
+                    metadata_backfill_timeout_ms=metadata_backfill_timeout_ms,
                 )
 
             return await run_mcp_tool(
@@ -154,7 +166,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         dry_run: bool = False,
         verbosity: Verbosity = "standard",
     ) -> dict[str, Any]:
-        """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. Do not use this for prepared review RAG; use pubtator.retrieve_review_context_batch. Next: pubtator.retrieve_review_context_batch."""
+        """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. For article-local answering, use mode='full_abstract' first; it returns all title/abstract passages without truncating structured abstracts. If full=True returns only abstracts, inspect coverage_by_pmid and answer from available evidence. Do not use for prepared review RAG; use pubtator.retrieve_review_context_batch."""
 
         async def call() -> dict[str, Any]:
             service = await get_publication_passage_service()
@@ -211,6 +223,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
     async def get_publication_citation_graph(
         pmid: str | None = None,
         doi: str | None = None,
+        query: Annotated[str | None, Field(min_length=1, max_length=1000)] = None,
         direction: Literal["references", "cited_by", "both"] = "both",
         response_mode: LiteratureGraphResponseModeArg = "compact",
         resolve_metadata: bool = True,
@@ -228,6 +241,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 service=service,
                 pmid=pmid,
                 doi=doi,
+                query=query,
                 direction=direction,
                 response_mode=response_mode,
                 resolve_metadata=resolve_metadata,
@@ -252,14 +266,16 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
     )
     async def find_related_evidence_candidates(
         pmid: str,
-        max_results: Annotated[int, Field(ge=1, le=100)] = 25,
+        max_results: Annotated[int, Field(ge=1, le=100)] = 12,
         response_mode: LiteratureGraphResponseModeArg = "compact",
         prefer_full_text: bool = True,
         include_pubtator_search: bool = True,
-        include_citation_neighbors: bool = True,
+        include_citation_neighbors: bool = False,
         publication_types: list[str] | None = None,
         year_min: int | None = None,
         year_max: int | None = None,
+        citation_graph_timeout_ms: Annotated[int, Field(ge=1, le=120_000)] = 15_000,
+        metadata_timeout_ms: Annotated[int, Field(ge=1, le=120_000)] = 20_000,
     ) -> dict[str, Any]:
         """Use this when a user has one PMID and needs related full-text-preferred candidates. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: pubtator.get_publication_passages."""
 
@@ -276,6 +292,8 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 publication_types=publication_types,
                 year_min=year_min,
                 year_max=year_max,
+                citation_graph_timeout_ms=citation_graph_timeout_ms,
+                metadata_timeout_ms=metadata_timeout_ms,
             )
 
         return await run_mcp_tool(

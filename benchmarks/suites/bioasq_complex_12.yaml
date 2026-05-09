@@ -1,0 +1,14 @@
+name: bioasq_complex_12
+dataset: bioasq_ideal
+dataset_version: jmhb_bioasq_summary_complex_12_v1
+case_file: benchmarks/cases/bioasq/complex_12.jsonl
+modes:
+  - no_tools
+sample_seed: 20260509
+case_count: 12
+sampling_mode: natural
+prompt_versions:
+  answer: benchmarks/prompts/answer_bioasq_ideal_v1.md
+defaults:
+  timeout_s: 240
+  max_cases_per_run: 12

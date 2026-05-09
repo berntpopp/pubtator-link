@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from pubtator_link.models.literature_graph import (
     LiteratureAvailability,
+    LiteratureCandidateSummary,
     LiteraturePaper,
     PublicationCitationGraphResponse,
     RelatedEvidenceCandidate,
     RelatedEvidenceCandidatesResponse,
     TopicLiteratureMapRequest,
+    TopicLiteratureMapResponse,
+    TopicLiteratureMapSummary,
 )
 from pubtator_link.models.publication_metadata import (
     PublicationAuthor,
@@ -19,6 +24,7 @@ from pubtator_link.models.publication_metadata import (
 from pubtator_link.services.literature_graph_compact import TOPIC_RANKING_VERSION
 from pubtator_link.services.topic_literature_map import (
     TopicLiteratureMapService,
+    _drop_topic_candidates_to_budget,
     rank_topic_candidates,
 )
 
@@ -41,6 +47,9 @@ def _summary_paper_count(summary: object) -> int:
 
 
 class FakeSearchClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
     async def search_publications(
         self,
         text: str,
@@ -51,7 +60,58 @@ class FakeSearchClient:
         assert "FMF" in text
         assert page == 1
         assert sort == "score desc"
+        self.calls += 1
         return {"results": [{"pmid": "111"}, {"pmid": "222"}]}
+
+
+class NoopSearchClient:
+    async def search_publications(
+        self,
+        text: str,
+        *,
+        page: int = 1,
+        sort: str | None = None,
+    ) -> dict[str, object]:
+        return {"results": []}
+
+
+class MixedQualitySeedSearchClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def search_publications(
+        self,
+        text: str,
+        *,
+        page: int = 1,
+        sort: str | None = None,
+    ) -> dict[str, object]:
+        assert page == 1
+        assert sort == "score desc"
+        self.calls += 1
+        return {
+            "results": [
+                {"pmid": "33822308", "score": 100.0},
+                {"pmid": "40616106", "score": 90.0},
+                {"pmid": "40234174", "score": 80.0},
+                {"pmid": "26802180", "score": 70.0},
+            ]
+        }
+
+
+class ManySearchSeedClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def search_publications(
+        self,
+        text: str,
+        *,
+        page: int = 1,
+        sort: str | None = None,
+    ) -> dict[str, object]:
+        self.calls += 1
+        return {"results": [{"pmid": str(900000 + index)} for index in range(30)]}
 
 
 class FakeMetadata:
@@ -76,7 +136,7 @@ class FakeMetadata:
             ),
             "333": PublicationMetadata(
                 pmid="333",
-                title="Paper 333",
+                title="Familial Mediterranean fever colchicine guideline child paper 333",
                 journal="Journal C",
                 pub_year=2022,
                 pmcid="PMC333",
@@ -86,6 +146,36 @@ class FakeMetadata:
             "444": PublicationMetadata(
                 pmid="444",
                 title="Metadata only title",
+            ),
+            "33822308": PublicationMetadata(
+                pmid="33822308",
+                title="CIS annual meeting selected abstracts",
+                journal="Clinical immunology abstracts",
+                pub_year=2021,
+                publication_types=["Congress", "Abstract"],
+            ),
+            "40616106": PublicationMetadata(
+                pmid="40616106",
+                title="Behcet disease and trisomy 8 case report",
+                journal="Rheumatology reports",
+                pub_year=2025,
+                publication_types=["Case Reports"],
+            ),
+            "40234174": PublicationMetadata(
+                pmid="40234174",
+                title=(
+                    "EULAR/PReS recommendations for the management of familial Mediterranean fever"
+                ),
+                journal="Annals of the Rheumatic Diseases",
+                pub_year=2024,
+                publication_types=["Practice Guideline"],
+            ),
+            "26802180": PublicationMetadata(
+                pmid="26802180",
+                title="EULAR recommendations for the management of familial Mediterranean fever",
+                journal="Annals of the Rheumatic Diseases",
+                pub_year=2016,
+                publication_types=["Guideline"],
             ),
         }
         pmids = request.pmids
@@ -140,6 +230,28 @@ class PartialFailureTopicMetadata:
         )
 
 
+class AllFailedTopicMetadata:
+    async def get_metadata(
+        self, request: PublicationMetadataRequest
+    ) -> PublicationMetadataResponse:
+        return PublicationMetadataResponse(
+            metadata=[],
+            failed_pmids=dict.fromkeys(request.pmids, "metadata unavailable"),
+        )
+
+
+class CoverageWarningTopicMetadata(FakeMetadata):
+    async def get_metadata(
+        self, request: PublicationMetadataRequest
+    ) -> PublicationMetadataResponse:
+        response = await super().get_metadata(request)
+        return PublicationMetadataResponse(
+            metadata=response.metadata,
+            failed_pmids=response.failed_pmids,
+            _meta={"warnings": ["coverage_lookup_failed"]},
+        )
+
+
 class FakeCitationGraph:
     async def get_citation_graph(self, request: object) -> PublicationCitationGraphResponse:
         pmid = request.pmid
@@ -171,6 +283,17 @@ class FakeRelatedEvidence:
         )
 
 
+class OneFailingCitationGraph:
+    async def get_citation_graph(self, request: object) -> PublicationCitationGraphResponse:
+        if request.pmid == "222":
+            raise RuntimeError("citation provider unavailable")
+        return PublicationCitationGraphResponse(
+            source=LiteraturePaper(pmid=request.pmid),
+            references=[LiteraturePaper(pmid="333", title="Paper 333")],
+            candidate_pmids=["333"],
+        )
+
+
 class WideCitationGraph:
     async def get_citation_graph(self, request: object) -> PublicationCitationGraphResponse:
         return PublicationCitationGraphResponse(
@@ -181,6 +304,29 @@ class WideCitationGraph:
             ],
             cited_by=[LiteraturePaper(pmid="555", title="Extra citing")],
             candidate_pmids=["333", "444", "555"],
+        )
+
+
+class EmptyCitationGraph:
+    async def get_citation_graph(self, request: object) -> PublicationCitationGraphResponse:
+        return PublicationCitationGraphResponse(source=LiteraturePaper(pmid=request.pmid))
+
+
+class OffTopicHighDegreeCitationGraph:
+    async def get_citation_graph(self, request: object) -> PublicationCitationGraphResponse:
+        if request.pmid == "40616106":
+            return PublicationCitationGraphResponse(
+                source=LiteraturePaper(pmid=request.pmid),
+                references=[
+                    LiteraturePaper(pmid=f"90{index}", title=f"Atopy neighbor {index}")
+                    for index in range(6)
+                ],
+                candidate_pmids=[f"90{index}" for index in range(6)],
+            )
+        return PublicationCitationGraphResponse(
+            source=LiteraturePaper(pmid=request.pmid),
+            references=[LiteraturePaper(pmid="27679472", title="Discontinuing colchicine")],
+            candidate_pmids=["27679472"],
         )
 
 
@@ -227,6 +373,56 @@ class DoiOnlyCitationGraph:
                 )
             ],
             candidate_pmids=[],
+        )
+
+
+class SlowCitationGraph:
+    async def get_citation_graph(self, request: object) -> PublicationCitationGraphResponse:
+        await asyncio.sleep(0.2)
+        return PublicationCitationGraphResponse(
+            source=LiteraturePaper(pmid=request.pmid),
+            references=[LiteraturePaper(pmid="999", title="Slow reference")],
+            candidate_pmids=["999"],
+        )
+
+
+class ConcurrentCitationGraph:
+    def __init__(self) -> None:
+        self.in_flight = 0
+        self.max_in_flight = 0
+
+    async def get_citation_graph(self, request: object) -> PublicationCitationGraphResponse:
+        self.in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        await asyncio.sleep(0.01)
+        self.in_flight -= 1
+        return PublicationCitationGraphResponse(
+            source=LiteraturePaper(pmid=request.pmid),
+            references=[LiteraturePaper(pmid=f"9{request.pmid}", title="Concurrent reference")],
+            candidate_pmids=[f"9{request.pmid}"],
+        )
+
+
+class ConcurrentRelatedEvidence:
+    def __init__(self) -> None:
+        self.in_flight = 0
+        self.max_in_flight = 0
+
+    async def find_candidates(self, request: object) -> RelatedEvidenceCandidatesResponse:
+        self.in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        await asyncio.sleep(0.01)
+        self.in_flight -= 1
+        return RelatedEvidenceCandidatesResponse(
+            source=LiteraturePaper(pmid=request.pmid),
+            candidates=[
+                RelatedEvidenceCandidate(
+                    paper=LiteraturePaper(pmid=f"8{request.pmid}", title="Concurrent related"),
+                    score=1.0,
+                    match_reasons=["pubmed_neighbor_score"],
+                )
+            ],
+            candidate_pmids=[f"8{request.pmid}"],
         )
 
 
@@ -329,7 +525,7 @@ async def test_build_map_enforces_total_neighbor_bound_and_prefers_metadata() ->
     )
 
     assert len(neighbor_edges) == 1
-    assert paper_333.title == "Paper 333"
+    assert paper_333.title == "Familial Mediterranean fever colchicine guideline child paper 333"
     assert paper_333.authors[0].name == "Bea"
 
 
@@ -472,6 +668,369 @@ async def test_build_map_degrades_with_provider_warnings() -> None:
         "citation_graph",
         "related_evidence",
     }
+    assert response.degraded is True
+    assert response.degraded_reasons
+    assert "pubmed_metadata:seed_metadata:failed" in response.degraded_reasons
+
+
+@pytest.mark.asyncio
+async def test_topic_map_partial_ok_false_raises_on_degraded_stages() -> None:
+    provider = FailingProvider()
+    service = TopicLiteratureMapService(
+        search_client=FakeSearchClient(),
+        metadata_service=provider,
+        citation_graph_service=provider,
+        related_evidence_service=provider,
+    )
+
+    with pytest.raises(RuntimeError, match="Topic literature map degraded"):
+        await service.build_map(
+            TopicLiteratureMapRequest(
+                pmids=["111"],
+                max_seed_papers=1,
+                max_neighbors_per_paper=1,
+                partial_ok=False,
+            )
+        )
+
+
+@pytest.mark.asyncio
+async def test_topic_map_explicit_pmids_do_not_auto_expand_query_seeds_by_default() -> None:
+    search = ManySearchSeedClient()
+    service = TopicLiteratureMapService(
+        search_client=search,
+        metadata_service=FakeMetadata(),
+        citation_graph_service=EmptyCitationGraph(),
+        related_evidence_service=EmptyRelatedEvidence(),
+    )
+
+    response = await service.build_map(
+        TopicLiteratureMapRequest(
+            query="FMF colchicine guideline",
+            pmids=["111", "222", "333", "40234174"],
+            include_citations=False,
+            include_related_candidates=False,
+        )
+    )
+
+    assert search.calls == 0
+    assert response.seed_pmids == ["111", "222", "333", "40234174"]
+    seed_status = next(
+        status
+        for status in response.provider_status
+        if status.provider == "pubtator_search" and status.operation == "seed_search"
+    )
+    assert seed_status.status == "skipped"
+    assert "explicit PMIDs" in (seed_status.message or "")
+
+
+@pytest.mark.asyncio
+async def test_topic_map_can_opt_in_to_query_seed_expansion_with_explicit_pmids() -> None:
+    search = MixedQualitySeedSearchClient()
+    service = TopicLiteratureMapService(
+        search_client=search,
+        metadata_service=FakeMetadata(),
+        citation_graph_service=EmptyCitationGraph(),
+        related_evidence_service=EmptyRelatedEvidence(),
+    )
+
+    response = await service.build_map(
+        TopicLiteratureMapRequest(
+            query="colchicine pediatric familial Mediterranean fever MEFV variants guideline",
+            pmids=["111"],
+            max_seed_papers=3,
+            expand_query_seeds=True,
+            include_citations=False,
+            include_related_candidates=False,
+            bias_toward=["guideline", "pediatric", "genotype_phenotype"],
+        )
+    )
+
+    assert search.calls == 1
+    assert response.seed_pmids == ["111", "40234174", "26802180"]
+
+
+@pytest.mark.asyncio
+async def test_topic_map_provider_status_reports_elapsed_and_budget_ms() -> None:
+    response = await _service().build_map(
+        TopicLiteratureMapRequest(
+            query="FMF",
+            max_seed_papers=1,
+            citation_graph_timeout_ms=1000,
+            related_evidence_timeout_ms=1000,
+            metadata_backfill_timeout_ms=1000,
+        )
+    )
+
+    statuses = {(status.provider, status.operation): status for status in response.provider_status}
+    assert statuses[("pubmed_metadata", "seed_metadata")].elapsed_ms is not None
+    assert statuses[("citation_graph", "neighbor_enrichment")].elapsed_ms is not None
+    assert statuses[("citation_graph", "neighbor_enrichment")].budget_ms == 1000
+    assert statuses[("related_evidence", "candidate_enrichment")].elapsed_ms is not None
+    assert statuses[("related_evidence", "candidate_enrichment")].budget_ms == 1000
+    assert statuses[("pubmed_metadata", "metadata_backfill")].elapsed_ms is not None
+    assert statuses[("pubmed_metadata", "metadata_backfill")].budget_ms == 1000
+
+
+def test_topic_map_defaults_are_llm_interactive_and_timeout_bounded() -> None:
+    request = TopicLiteratureMapRequest(query="FMF")
+
+    assert request.max_seed_papers == 10
+    assert request.max_neighbors_per_paper == 5
+    assert request.max_candidates == 8
+    assert request.citation_graph_timeout_ms == 15_000
+    assert request.related_evidence_timeout_ms == 20_000
+    assert request.metadata_backfill_timeout_ms == 10_000
+
+
+@pytest.mark.asyncio
+async def test_build_map_records_provider_status_for_completed_stages() -> None:
+    response = await _service().build_map(
+        TopicLiteratureMapRequest(
+            query="FMF",
+            max_seed_papers=1,
+            max_neighbors_per_paper=2,
+        )
+    )
+
+    statuses = {(status.provider, status.operation): status for status in response.provider_status}
+
+    assert statuses[("pubtator_search", "seed_search")].status == "success"
+    assert statuses[("pubmed_metadata", "seed_metadata")].status == "success"
+    assert statuses[("citation_graph", "neighbor_enrichment")].status == "success"
+    assert statuses[("related_evidence", "candidate_enrichment")].status == "success"
+    assert response.meta.provider_status == response.provider_status
+
+
+@pytest.mark.asyncio
+async def test_build_map_aggregates_citation_provider_status_across_seeds() -> None:
+    service = TopicLiteratureMapService(
+        search_client=FakeSearchClient(),
+        metadata_service=FakeMetadata(),
+        citation_graph_service=OneFailingCitationGraph(),
+        related_evidence_service=EmptyRelatedEvidence(),
+    )
+
+    response = await service.build_map(
+        TopicLiteratureMapRequest(
+            pmids=["111", "222"],
+            max_seed_papers=2,
+            max_neighbors_per_paper=1,
+            include_related_candidates=False,
+        )
+    )
+
+    citation_statuses = [
+        status
+        for status in response.provider_status
+        if status.provider == "citation_graph" and status.operation == "neighbor_enrichment"
+    ]
+    assert len(citation_statuses) == 1
+    assert citation_statuses[0].status == "partial"
+    assert citation_statuses[0].result_count == 1
+    assert citation_statuses[0].retryable is True
+    assert citation_statuses[0].message is not None
+    assert "failed_seed_pmids=1" in citation_statuses[0].message
+
+
+@pytest.mark.asyncio
+async def test_build_map_returns_partial_response_when_citation_stage_times_out() -> None:
+    service = TopicLiteratureMapService(
+        search_client=FakeSearchClient(),
+        metadata_service=FakeMetadata(),
+        citation_graph_service=SlowCitationGraph(),
+        related_evidence_service=EmptyRelatedEvidence(),
+    )
+
+    response = await service.build_map(
+        TopicLiteratureMapRequest(
+            pmids=["111"],
+            max_seed_papers=1,
+            max_neighbors_per_paper=1,
+            timeout_ms=50,
+        )
+    )
+
+    assert response.seed_pmids == ["111"]
+    assert any(node.paper is not None and node.paper.pmid == "111" for node in response.nodes)
+    assert not any(edge.edge_type in {"cites", "cited_by"} for edge in response.edges)
+    assert any(
+        warning.provider == "citation_graph"
+        and warning.retryable is True
+        and "timed out" in warning.message
+        for warning in response.meta.warnings
+    )
+    citation_status = next(
+        status
+        for status in response.provider_status
+        if status.provider == "citation_graph" and status.operation == "neighbor_enrichment"
+    )
+    assert citation_status.status == "failed"
+    assert citation_status.retryable is True
+    assert citation_status.message is not None
+    assert "timed out" in citation_status.message
+    assert any(
+        command["tool"] == "pubtator.build_topic_literature_map"
+        and command["arguments"]["include_citations"] is False
+        and command["arguments"]["timeout_ms"] == 50
+        for command in response.meta.next_commands
+    )
+    related_status = next(
+        status
+        for status in response.provider_status
+        if status.provider == "related_evidence" and status.operation == "candidate_enrichment"
+    )
+    assert related_status.status == "skipped"
+    assert related_status.retryable is False
+
+
+@pytest.mark.asyncio
+async def test_topic_map_stage_budgets_prevent_citation_timeout_from_starving_related() -> None:
+    service = TopicLiteratureMapService(
+        search_client=FakeSearchClient(),
+        metadata_service=FakeMetadata(),
+        citation_graph_service=SlowCitationGraph(),
+        related_evidence_service=FakeRelatedEvidence(),
+    )
+
+    response = await service.build_map(
+        TopicLiteratureMapRequest(
+            pmids=["111"],
+            max_seed_papers=1,
+            max_neighbors_per_paper=2,
+            timeout_ms=500,
+            citation_graph_timeout_ms=50,
+            related_evidence_timeout_ms=300,
+        )
+    )
+
+    citation_status = next(
+        status
+        for status in response.provider_status
+        if status.provider == "citation_graph" and status.operation == "neighbor_enrichment"
+    )
+    related_status = next(
+        status
+        for status in response.provider_status
+        if status.provider == "related_evidence" and status.operation == "candidate_enrichment"
+    )
+    assert citation_status.status == "failed"
+    assert related_status.status == "success"
+    assert response.top_candidates
+    assert response.top_candidates[0].pmid == "333"
+
+
+@pytest.mark.asyncio
+async def test_topic_map_parallelizes_seed_network_enrichment() -> None:
+    citation_graph = ConcurrentCitationGraph()
+    related_evidence = ConcurrentRelatedEvidence()
+    service = TopicLiteratureMapService(
+        search_client=FakeSearchClient(),
+        metadata_service=FakeMetadata(),
+        citation_graph_service=citation_graph,
+        related_evidence_service=related_evidence,
+    )
+
+    response = await service.build_map(
+        TopicLiteratureMapRequest(
+            pmids=["111", "222", "333"],
+            max_seed_papers=3,
+            max_neighbors_per_paper=2,
+        )
+    )
+
+    assert citation_graph.max_in_flight > 1
+    assert related_evidence.max_in_flight > 1
+    assert response.top_candidates
+
+
+@pytest.mark.asyncio
+async def test_topic_map_exposes_bias_scores_and_recent_definition() -> None:
+    response = await _service().build_map(
+        TopicLiteratureMapRequest(
+            query="FMF colchicine guideline child",
+            max_seed_papers=2,
+            max_neighbors_per_paper=2,
+            bias_toward=["guideline", "pediatric"],
+        )
+    )
+
+    assert response.bias_score_by_pmid
+    assert response.summary.recent_connected_definition
+    assert "months" in response.summary.recent_connected_definition
+
+
+@pytest.mark.asyncio
+async def test_topic_map_bias_scores_are_graded_by_requested_biases() -> None:
+    response = await _service().build_map(
+        TopicLiteratureMapRequest(
+            query="FMF colchicine guideline child",
+            max_seed_papers=2,
+            max_neighbors_per_paper=2,
+            bias_toward=["guideline", "pediatric", "treatment"],
+        )
+    )
+
+    assert response.bias_score_by_pmid
+    assert any(0 < score < 1 for score in response.bias_score_by_pmid.values())
+    assert max(response.bias_score_by_pmid.values()) <= 1
+
+
+@pytest.mark.asyncio
+async def test_topic_map_exposes_bridge_diagnostic_clusters_and_seed_set() -> None:
+    response = await _service().build_map(
+        TopicLiteratureMapRequest(
+            query="FMF colchicine guideline child",
+            max_seed_papers=2,
+            max_neighbors_per_paper=2,
+            response_mode="compact",
+        )
+    )
+
+    assert response.bridge_diagnostic is not None
+    assert response.cluster_summary
+    assert response.cluster_summary[0].label
+    assert response.cluster_summary[0].representative_pmids
+    assert response.recommended_seed_set
+    summary_pmids = {
+        paper.pmid
+        for lane in (
+            response.summary.central_papers,
+            response.summary.recent_connected_papers,
+            response.summary.bridge_papers,
+        )
+        for paper in lane
+        if paper.pmid
+    }
+    assert set(response.recommended_seed_set).issubset(
+        set(response.recommended_next_pmids) | set(response.seed_pmids) | summary_pmids
+    )
+
+
+@pytest.mark.asyncio
+async def test_build_map_records_metadata_failure_status_when_all_pmids_fail() -> None:
+    service = TopicLiteratureMapService(
+        search_client=FakeSearchClient(),
+        metadata_service=AllFailedTopicMetadata(),
+        citation_graph_service=EmptyCitationGraph(),
+        related_evidence_service=EmptyRelatedEvidence(),
+    )
+
+    response = await service.build_map(
+        TopicLiteratureMapRequest(
+            pmids=["111"],
+            include_citations=False,
+            include_related_candidates=False,
+        )
+    )
+
+    metadata_status = next(
+        status
+        for status in response.provider_status
+        if status.provider == "pubmed_metadata" and status.operation == "seed_metadata"
+    )
+    assert metadata_status.status == "failed"
+    assert metadata_status.retryable is True
 
 
 def test_topic_ranker_promotes_guideline_and_pediatric_colchicine_records() -> None:
@@ -542,9 +1101,12 @@ async def test_topic_map_compact_keeps_summary_papers_and_candidate_signals() ->
     assert len(response.summary.central_papers) <= 5
     assert len(response.summary.recent_connected_papers) <= 5
     assert len(response.summary.bridge_papers) <= 5
-    assert response.summary.central_papers[0].authors == []
-    assert response.summary.central_papers[0].author_summary == "Ada"
-    assert response.summary.central_papers[0].author_count == 1
+    compact_central_by_pmid = {
+        paper.pmid: paper for paper in response.summary.central_papers if paper.pmid
+    }
+    assert compact_central_by_pmid["111"].authors == []
+    assert compact_central_by_pmid["111"].author_summary == "Ada"
+    assert compact_central_by_pmid["111"].author_count == 1
     assert response.top_candidates
     assert response.top_candidates[0].signals
     assert len(response.top_candidates[0].signals) == len(set(response.top_candidates[0].signals))
@@ -683,13 +1245,157 @@ async def test_topic_map_full_mode_adds_bounded_candidates_and_preserves_topolog
 
 
 @pytest.mark.asyncio
-async def test_topic_map_demoted_candidate_pmids_exclude_seed_pmids() -> None:
+async def test_topic_map_filters_weak_query_seeds_before_neighbor_expansion() -> None:
+    service = TopicLiteratureMapService(
+        search_client=MixedQualitySeedSearchClient(),
+        metadata_service=FakeMetadata(),
+        citation_graph_service=EmptyCitationGraph(),
+        related_evidence_service=EmptyRelatedEvidence(),
+    )
+
+    response = await service.build_map(
+        TopicLiteratureMapRequest(
+            query="colchicine pediatric familial Mediterranean fever MEFV variants guideline",
+            max_seed_papers=2,
+            include_citations=False,
+            include_related_candidates=False,
+            bias_toward=["guideline", "pediatric", "genotype_phenotype"],
+        )
+    )
+
+    assert response.seed_pmids == ["40234174", "26802180"]
+    assert "33822308" not in response.seed_pmids
+    assert "40616106" not in response.seed_pmids
+
+
+@pytest.mark.asyncio
+async def test_topic_map_central_papers_prefer_query_relevance_over_neighbor_degree() -> None:
+    service = TopicLiteratureMapService(
+        search_client=NoopSearchClient(),
+        metadata_service=FakeMetadata(),
+        citation_graph_service=OffTopicHighDegreeCitationGraph(),
+        related_evidence_service=EmptyRelatedEvidence(),
+    )
+
+    response = await service.build_map(
+        TopicLiteratureMapRequest(
+            query="familial Mediterranean fever colchicine guideline",
+            pmids=["40616106", "40234174"],
+            max_neighbors_per_paper=6,
+            include_related_candidates=False,
+            bias_toward=["guideline"],
+        )
+    )
+
+    assert response.summary.central_papers[0].pmid == "40234174"
+
+
+@pytest.mark.asyncio
+async def test_topic_map_compact_exposes_recommendation_summaries_and_graph_hint() -> None:
     response = await _service().build_map(
         TopicLiteratureMapRequest(
             query="FMF colchicine guideline child",
             max_seed_papers=2,
             max_neighbors_per_paper=2,
             response_mode="compact",
+            max_candidates=3,
+            max_demoted=20,
+        )
+    )
+
+    assert response.summary.accessible_full_text_candidates
+    assert response.recommended_next_candidates
+    assert response.recommended_next_candidates[0].pmid in response.recommended_next_pmids
+    assert response.recommended_next_candidates[0].title
+    assert response.graph_inspection_hint
+    assert all(not candidate.demotion_reasons for candidate in response.top_candidates)
+
+
+@pytest.mark.asyncio
+async def test_topic_map_compact_summary_includes_citation_full_text_candidates() -> None:
+    response = await _service().build_map(
+        TopicLiteratureMapRequest(
+            pmids=["111"],
+            response_mode="compact",
+            max_neighbors_per_paper=1,
+            include_related_candidates=False,
+        )
+    )
+
+    assert "333" in response.accessible_full_text_pmids
+    assert any(paper.pmid == "333" for paper in response.summary.accessible_full_text_candidates)
+
+
+def test_topic_map_budget_keeps_minimum_candidate_preview_when_still_large() -> None:
+    candidates = [
+        LiteratureCandidateSummary(
+            pmid=str(900000 + index),
+            title=f"Candidate {index}",
+            access="metadata_only",
+        )
+        for index in range(8)
+    ]
+    response = TopicLiteratureMapResponse(
+        response_mode="compact",
+        summary=TopicLiteratureMapSummary(
+            central_papers=[
+                LiteraturePaper(
+                    pmid="111",
+                    title="x" * 20_000,
+                )
+            ]
+        ),
+        top_candidates=candidates,
+        recommended_next_pmids=[candidate.pmid or "" for candidate in candidates],
+    )
+
+    trimmed, dropped = _drop_topic_candidates_to_budget(response, budget=512)
+
+    assert dropped == 5
+    assert [candidate.pmid for candidate in trimmed.top_candidates] == [
+        "900000",
+        "900001",
+        "900002",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_topic_map_metadata_coverage_warnings_include_next_steps() -> None:
+    service = TopicLiteratureMapService(
+        search_client=FakeSearchClient(),
+        metadata_service=CoverageWarningTopicMetadata(),
+        citation_graph_service=FakeCitationGraph(),
+        related_evidence_service=EmptyRelatedEvidence(),
+    )
+
+    response = await service.build_map(
+        TopicLiteratureMapRequest(pmids=["111"], include_related_candidates=False)
+    )
+
+    warning = next(
+        warning
+        for warning in response.meta.warnings
+        if warning.provider == "pubmed_metadata"
+        and warning.message.startswith("PubMed metadata warning: coverage_lookup_failed")
+    )
+    assert warning.code == "coverage_lookup_failed"
+    assert warning.next_steps
+
+
+@pytest.mark.asyncio
+async def test_topic_map_demoted_candidate_pmids_exclude_seed_pmids() -> None:
+    service = TopicLiteratureMapService(
+        search_client=FakeSearchClient(),
+        metadata_service=FakeMetadata(),
+        citation_graph_service=WideCitationGraph(),
+        related_evidence_service=EmptyRelatedEvidence(),
+    )
+
+    response = await service.build_map(
+        TopicLiteratureMapRequest(
+            query="FMF colchicine guideline child",
+            max_seed_papers=2,
+            max_neighbors_per_paper=2,
             max_demoted=20,
         )
     )

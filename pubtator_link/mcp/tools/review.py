@@ -246,7 +246,13 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
             service = await get_source_preflight_service()
             return await preflight_review_sources_impl(service=service, pmids=pmids)
 
-        return await run_mcp_tool("pubtator.preflight_review_sources", call, pmids=pmids)
+        return await run_mcp_tool(
+            "pubtator.preflight_review_sources",
+            call,
+            pmids=pmids,
+            fallback_tool="pubtator.get_publication_passages",
+            fallback_args={"pmids": pmids, "mode": "full_abstract"},
+        )
 
     @mcp_tool_for(
         "full",

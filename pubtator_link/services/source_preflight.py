@@ -198,11 +198,13 @@ class SourcePreflightService:
 
         try:
             if await self._pubtator_abstract_available(pmid):
-                coverage_reason: CoverageReason = "abstract_fallback_used"
-                if not pmcid:
-                    coverage_reason = (
-                        "pre_resolution_best_guess" if id_resolution_failed else "no_pmcid"
-                    )
+                coverage_reason: CoverageReason = "abstract_fallback_used" if pmcid else "no_pmcid"
+                if (
+                    id_resolution_failed
+                    and not pmcid
+                    and metadata.get("id_resolution_reason") != "no_pmcid"
+                ):
+                    coverage_reason = "pre_resolution_best_guess"
                 return SourceCoverageHint(
                     pmid=pmid,
                     expected_coverage="abstract_only",

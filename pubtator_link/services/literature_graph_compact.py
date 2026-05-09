@@ -149,8 +149,15 @@ def mark_graph_payload_truncated(
 
 
 def coalesced_provider_warnings(warnings: Iterable[ProviderWarning]) -> list[ProviderWarning]:
-    grouped: dict[tuple[str, str, str, bool], int] = Counter(
-        (warning.provider, warning.status, warning.message, warning.retryable)
+    grouped: dict[tuple[str, str, str, bool, str | None, tuple[str, ...]], int] = Counter(
+        (
+            warning.provider,
+            warning.status,
+            warning.message,
+            warning.retryable,
+            warning.code,
+            tuple(warning.next_steps),
+        )
         for warning in warnings
     )
     return [
@@ -159,8 +166,10 @@ def coalesced_provider_warnings(warnings: Iterable[ProviderWarning]) -> list[Pro
             status=status,
             retryable=retryable,
             message=message if count == 1 else f"{message} (repeated {count} times)",
+            code=code,
+            next_steps=list(next_steps),
         )
-        for (provider, status, message, retryable), count in grouped.items()
+        for (provider, status, message, retryable, code, next_steps), count in grouped.items()
     ]
 
 

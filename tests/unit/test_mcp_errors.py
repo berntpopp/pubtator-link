@@ -44,6 +44,37 @@ def test_mcp_tool_error_serializes_recovery_envelope() -> None:
     assert "updated_at" not in payload["message"]
 
 
+def test_preflight_review_sources_error_points_to_publication_passages() -> None:
+    error = mcp_tool_error(
+        RuntimeError("temporary preflight failure"),
+        McpErrorContext(
+            tool_name="pubtator.preflight_review_sources",
+            pmids=["10490564", "10927144"],
+        ),
+    )
+
+    payload = json.loads(str(error))
+
+    assert payload["error_code"] == "internal_error"
+    assert payload["fallback_tool"] == "pubtator.get_publication_passages"
+    assert payload["fallback_args"] == {
+        "pmids": ["10490564", "10927144"],
+        "mode": "full_abstract",
+    }
+    assert payload["recovery"] == (
+        "Call pubtator.get_publication_passages with the same PMIDs. "
+        "Use mode='full_abstract' for article-local answering; run diagnostics only if "
+        "passage retrieval also fails."
+    )
+    assert payload["_meta"]["next_commands"][0] == {
+        "tool": "pubtator.get_publication_passages",
+        "arguments": {
+            "pmids": ["10490564", "10927144"],
+            "mode": "full_abstract",
+        },
+    }
+
+
 def test_error_code_for_typed_review_errors() -> None:
     assert error_code_for_exception(ReviewSchemaStaleError("schema stale")) == (
         "review_schema_not_current"

@@ -222,6 +222,8 @@ class ProviderWarning(BaseModel):
     status: str
     retryable: bool = False
     message: str
+    code: str | None = None
+    next_steps: list[str] = Field(default_factory=list)
 
 
 class LiteratureQueryRelevance(BaseModel):
@@ -256,6 +258,15 @@ class LiteratureCandidateSummary(BaseModel):
     next_actions: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class LiteratureClusterSummary(BaseModel):
+    """Compact thematic cluster for graph-heavy literature responses."""
+
+    label: str
+    representative_pmids: list[str] = Field(default_factory=list)
+    candidate_count: int = Field(default=0, ge=0)
+    reasons: list[str] = Field(default_factory=list)
+
+
 class LiteratureProviderStatus(BaseModel):
     """Structured provider status for a graph direction or enrichment operation."""
 
@@ -265,6 +276,8 @@ class LiteratureProviderStatus(BaseModel):
     result_count: int = 0
     retryable: bool = False
     message: str | None = None
+    elapsed_ms: int | None = None
+    budget_ms: int | None = None
 
 
 class LiteratureResponseMeta(BaseModel):
@@ -312,6 +325,7 @@ class PublicationCitationGraphRequest(BaseModel):
 
     pmid: str | None = None
     doi: str | None = None
+    query: str | None = Field(default=None, min_length=1, max_length=1000)
     direction: CitationGraphDirection = "both"
     response_mode: LiteratureGraphResponseMode = "full"
     resolve_metadata: bool = True
@@ -351,6 +365,12 @@ class PublicationCitationGraphResponse(BaseModel):
     response_mode: LiteratureGraphResponseMode = "full"
     reference_candidates: list[LiteratureCandidateSummary] = Field(default_factory=list)
     cited_by_candidates: list[LiteratureCandidateSummary] = Field(default_factory=list)
+    reference_top_pmids: list[str] = Field(default_factory=list)
+    cited_by_top_pmids: list[str] = Field(default_factory=list)
+    reference_pmid_count: int = 0
+    cited_by_pmid_count: int = 0
+    reference_sample_pmids: list[str] = Field(default_factory=list)
+    cited_by_sample_pmids: list[str] = Field(default_factory=list)
     candidate_pmids: list[str] = Field(default_factory=list)
     actionable_pmid_count: int = 0
     metadata_only_count: int = 0
@@ -361,6 +381,7 @@ class PublicationCitationGraphResponse(BaseModel):
     cited_by_status: list[LiteratureProviderStatus] = Field(default_factory=list)
     identifier_resolution_status: list[LiteratureProviderStatus] = Field(default_factory=list)
     open_access_status: list[LiteratureProviderStatus] = Field(default_factory=list)
+    provider_status: list[LiteratureProviderStatus] = Field(default_factory=list)
     meta: LiteratureGraphResponseMeta = Field(
         default_factory=LiteratureGraphResponseMeta,
         alias="_meta",
@@ -386,14 +407,16 @@ class RelatedEvidenceCandidatesRequest(BaseModel):
     """Request related candidate papers for passage-level evidence review."""
 
     pmid: str
-    max_results: int = Field(default=25, ge=1, le=100)
+    max_results: int = Field(default=12, ge=1, le=100)
     response_mode: LiteratureGraphResponseMode = "compact"
     prefer_full_text: bool = True
     include_pubtator_search: bool = True
-    include_citation_neighbors: bool = True
+    include_citation_neighbors: bool = False
     publication_types: list[str] | None = None
     year_min: int | None = None
     year_max: int | None = None
+    citation_graph_timeout_ms: int = Field(default=15_000, ge=1, le=120_000)
+    metadata_timeout_ms: int = Field(default=20_000, ge=1, le=120_000)
 
     @field_validator("pmid")
     @classmethod
@@ -420,6 +443,12 @@ class RelatedEvidenceCandidatesResponse(BaseModel):
     source: LiteraturePaper
     candidates: list[RelatedEvidenceCandidate] = Field(default_factory=list)
     candidate_pmids: list[str] = Field(default_factory=list)
+    omitted_candidate_preview: list[LiteratureCandidateSummary] = Field(default_factory=list)
+    provider_status: list[LiteratureProviderStatus] = Field(default_factory=list)
+    score_explanation: str = (
+        "normalized_neighbor_score is scaled within the returned candidate window; "
+        "0 does not mean irrelevant."
+    )
     caution: str = (
         "Related candidates are not substitutes and require passage-level review before use as "
         "evidence."
@@ -453,10 +482,10 @@ class TopicLiteratureMapRequest(BaseModel):
 
     query: str | None = Field(default=None, min_length=1, max_length=1000)
     pmids: list[str] | None = Field(default=None, min_length=1, max_length=100)
-    max_seed_papers: int = Field(default=25, ge=1, le=50)
-    max_neighbors_per_paper: int = Field(default=10, ge=1, le=20)
+    max_seed_papers: int = Field(default=10, ge=1, le=50)
+    max_neighbors_per_paper: int = Field(default=5, ge=1, le=20)
     response_mode: LiteratureGraphResponseMode = "full"
-    max_candidates: int = Field(default=12, ge=1, le=50)
+    max_candidates: int = Field(default=8, ge=1, le=50)
     include_demoted: bool = True
     max_demoted: int = Field(default=3, ge=0, le=20)
     bias_toward: (
@@ -481,6 +510,12 @@ class TopicLiteratureMapRequest(BaseModel):
     year_min: int | None = None
     year_max: int | None = None
     prefer_full_text: bool = True
+    timeout_ms: int = Field(default=45_000, ge=0, le=120_000)
+    partial_ok: bool = True
+    expand_query_seeds: bool = False
+    citation_graph_timeout_ms: int | None = Field(default=15_000, ge=1, le=120_000)
+    related_evidence_timeout_ms: int | None = Field(default=20_000, ge=1, le=120_000)
+    metadata_backfill_timeout_ms: int | None = Field(default=10_000, ge=1, le=120_000)
 
     @field_validator("pmids")
     @classmethod
@@ -513,6 +548,11 @@ class TopicLiteratureMapSummary(BaseModel):
     accessible_full_text_candidates: list[LiteraturePaper] = Field(default_factory=list)
     closed_central_sources: list[LiteraturePaper] = Field(default_factory=list)
     recommended_next_pmids: list[str] = Field(default_factory=list)
+    recent_connected_definition: str = (
+        "Papers from the most recent 24 months in the result set, or the latest connected papers "
+        "when no 24-month window contains connected records; each has at least one edge to the "
+        "topic graph."
+    )
 
 
 class TopicLiteratureMapResponse(BaseModel):
@@ -528,12 +568,21 @@ class TopicLiteratureMapResponse(BaseModel):
     response_mode: LiteratureGraphResponseMode = "full"
     top_candidates: list[LiteratureCandidateSummary] = Field(default_factory=list)
     recommended_next_pmids: list[str] = Field(default_factory=list)
+    recommended_next_candidates: list[LiteratureCandidateSummary] = Field(default_factory=list)
     accessible_full_text_pmids: list[str] = Field(default_factory=list)
     closed_central_pmids: list[str] = Field(default_factory=list)
     demoted_candidate_pmids: list[str] = Field(default_factory=list)
     demoted_reasons_by_pmid: dict[str, list[str]] = Field(default_factory=dict)
+    bias_score_by_pmid: dict[str, float] = Field(default_factory=dict)
+    bridge_diagnostic: str | None = None
+    cluster_summary: list[LiteratureClusterSummary] = Field(default_factory=list)
+    recommended_seed_set: list[str] = Field(default_factory=list)
+    degraded: bool = False
+    degraded_reasons: list[str] = Field(default_factory=list)
+    scope_auto_reduced: bool = False
     provider_status: list[LiteratureProviderStatus] = Field(default_factory=list)
     omitted_counts: dict[str, int] = Field(default_factory=dict)
+    graph_inspection_hint: str | None = None
     candidate_retrieval_hints: list[dict[str, Any]] = Field(default_factory=list)
     meta: LiteratureGraphResponseMeta = Field(
         default_factory=LiteratureGraphResponseMeta,

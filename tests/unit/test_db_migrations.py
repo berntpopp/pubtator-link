@@ -32,6 +32,7 @@ def test_migration_files_are_ordered_and_include_repair_migration() -> None:
         "0003_review_session_sources_repair.sql",
         "0004_review_llm_context.sql",
         "0005_review_passage_embeddings.sql",
+        "0006_benchmark_suite.sql",
     ]
     assert MIGRATIONS_PACKAGE == "pubtator_link.db.migrations"
 
