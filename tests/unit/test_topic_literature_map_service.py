@@ -950,6 +950,53 @@ async def test_topic_map_exposes_bias_scores_and_recent_definition() -> None:
 
 
 @pytest.mark.asyncio
+async def test_topic_map_bias_scores_are_graded_by_requested_biases() -> None:
+    response = await _service().build_map(
+        TopicLiteratureMapRequest(
+            query="FMF colchicine guideline child",
+            max_seed_papers=2,
+            max_neighbors_per_paper=2,
+            bias_toward=["guideline", "pediatric", "treatment"],
+        )
+    )
+
+    assert response.bias_score_by_pmid
+    assert any(0 < score < 1 for score in response.bias_score_by_pmid.values())
+    assert max(response.bias_score_by_pmid.values()) <= 1
+
+
+@pytest.mark.asyncio
+async def test_topic_map_exposes_bridge_diagnostic_clusters_and_seed_set() -> None:
+    response = await _service().build_map(
+        TopicLiteratureMapRequest(
+            query="FMF colchicine guideline child",
+            max_seed_papers=2,
+            max_neighbors_per_paper=2,
+            response_mode="compact",
+        )
+    )
+
+    assert response.bridge_diagnostic is not None
+    assert response.cluster_summary
+    assert response.cluster_summary[0].label
+    assert response.cluster_summary[0].representative_pmids
+    assert response.recommended_seed_set
+    summary_pmids = {
+        paper.pmid
+        for lane in (
+            response.summary.central_papers,
+            response.summary.recent_connected_papers,
+            response.summary.bridge_papers,
+        )
+        for paper in lane
+        if paper.pmid
+    }
+    assert set(response.recommended_seed_set).issubset(
+        set(response.recommended_next_pmids) | set(response.seed_pmids) | summary_pmids
+    )
+
+
+@pytest.mark.asyncio
 async def test_build_map_records_metadata_failure_status_when_all_pmids_fail() -> None:
     service = TopicLiteratureMapService(
         search_client=FakeSearchClient(),

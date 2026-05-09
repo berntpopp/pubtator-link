@@ -11,6 +11,7 @@ from typing import Any, Protocol
 
 from pubtator_link.models.literature_graph import (
     LiteratureCandidateSummary,
+    LiteratureClusterSummary,
     LiteratureEntity,
     LiteratureGraphEdge,
     LiteratureGraphNode,
@@ -215,7 +216,14 @@ class TopicLiteratureMapService:
         )
         accessible_full_text_pmids = _accessible_full_text_pmids(ranked_candidates)
         closed_central_pmids = _closed_central_pmids(ranked_candidates, summary)
-        bias_score_by_pmid = _bias_score_by_pmid(ranked_candidates)
+        bias_score_by_pmid = _bias_score_by_pmid(ranked_candidates, request.bias_toward)
+        bridge_diagnostic = _bridge_diagnostic(summary, deduped_edges, seed_pmids)
+        cluster_summary = _cluster_summary(ranked_candidates)
+        recommended_seed_set = _recommended_seed_set(
+            summary,
+            recommended_next_pmids,
+            seed_pmids,
+        )
         degraded_reasons = _degraded_reasons(provider_status)
         demoted_candidate_pmids, demoted_reasons_by_pmid = _demoted_candidates(
             ranked_candidates,
@@ -308,6 +316,9 @@ class TopicLiteratureMapService:
             demoted_candidate_pmids=demoted_candidate_pmids,
             demoted_reasons_by_pmid=demoted_reasons_by_pmid,
             bias_score_by_pmid=bias_score_by_pmid,
+            bridge_diagnostic=bridge_diagnostic,
+            cluster_summary=cluster_summary,
+            recommended_seed_set=recommended_seed_set,
             degraded=bool(degraded_reasons),
             degraded_reasons=degraded_reasons,
             provider_status=provider_status,
@@ -1102,15 +1113,174 @@ def _demoted_candidates(
     }
 
 
-def _bias_score_by_pmid(candidates: list[LiteratureCandidateSummary]) -> dict[str, float]:
+def _bias_score_by_pmid(
+    candidates: list[LiteratureCandidateSummary],
+    bias_toward: Sequence[str] | None,
+) -> dict[str, float]:
+    requested_biases = set(bias_toward or [])
     scores: dict[str, float] = {}
     for candidate in candidates:
         if not candidate.pmid or candidate.relevance_to_query is None:
             continue
-        matched_intents = candidate.relevance_to_query.matched_intents
+        if requested_biases:
+            matched_biases = _matched_candidate_biases(candidate, requested_biases)
+            if matched_biases:
+                scores[candidate.pmid] = round(len(matched_biases) / len(requested_biases), 3)
+            continue
+        matched_intents = set(candidate.relevance_to_query.matched_intents)
         if matched_intents:
             scores[candidate.pmid] = min(1.0, len(matched_intents) / 3)
     return scores
+
+
+def _matched_candidate_biases(
+    candidate: LiteratureCandidateSummary,
+    requested_biases: set[str],
+) -> set[str]:
+    signals = set(candidate.rank_reasons)
+    signals.update(candidate.signals)
+    if candidate.relevance_to_query is not None:
+        signals.update(candidate.relevance_to_query.reasons)
+    title = normalize_query_text(candidate.title)
+    publication_type_text = normalize_query_text(" ".join(candidate.publication_types))
+    matched: set[str] = set()
+    if "guideline" in requested_biases and (
+        {"guideline_intent", "guideline_bias"} & signals or "guideline" in publication_type_text
+    ):
+        matched.add("guideline")
+    if "pediatric" in requested_biases and ({"pediatric_intent", "pediatric_bias"} & signals):
+        matched.add("pediatric")
+    if "treatment" in requested_biases and ("treatment_intent" in signals):
+        matched.add("treatment")
+    if "genotype_phenotype" in requested_biases and ("variant_intent" in signals):
+        matched.add("genotype_phenotype")
+    if "population" in requested_biases and any(
+        term in title for term in ("turkish", "mediterranean", "cohort", "population")
+    ):
+        matched.add("population")
+    if "cohort" in requested_biases and ("cohort" in title or "cohort" in publication_type_text):
+        matched.add("cohort")
+    return matched
+
+
+def _bridge_diagnostic(
+    summary: TopicLiteratureMapSummary,
+    edges: list[LiteratureGraphEdge],
+    seed_pmids: list[str],
+) -> str:
+    if summary.bridge_papers:
+        return f"selected={len(summary.bridge_papers)} bridge_papers with neighbor_degree_above_1"
+    seed_keys = {LiteraturePaper(pmid=pmid).key for pmid in seed_pmids}
+    degree = Counter[str]()
+    for edge in edges:
+        if edge.edge_type not in {"cites", "cited_by", "related_by_elink"}:
+            continue
+        degree[edge.source] += 1
+        degree[edge.target] += 1
+    connected_nonseed = sum(
+        1 for key, count in degree.items() if key not in seed_keys and count > 0
+    )
+    return (
+        "no_paper_above_neighbor_degree_1; "
+        f"connected_nonseed_candidates={connected_nonseed}; seed_count={len(seed_pmids)}"
+    )
+
+
+def _cluster_summary(
+    candidates: list[LiteratureCandidateSummary],
+    *,
+    max_clusters: int = 5,
+    representatives_per_cluster: int = 3,
+) -> list[LiteratureClusterSummary]:
+    grouped: dict[str, list[LiteratureCandidateSummary]] = {}
+    for candidate in candidates:
+        label = _candidate_cluster_label(candidate)
+        grouped.setdefault(label, []).append(candidate)
+    clusters: list[LiteratureClusterSummary] = []
+    for label, grouped_candidates in sorted(
+        grouped.items(),
+        key=lambda item: (-len(item[1]), item[0]),
+    )[:max_clusters]:
+        representative_pmids = _dedupe(
+            [
+                candidate.pmid or ""
+                for candidate in grouped_candidates
+                if candidate.pmid and not candidate.demotion_reasons
+            ]
+        )[:representatives_per_cluster]
+        if not representative_pmids:
+            representative_pmids = _dedupe(
+                [candidate.pmid or "" for candidate in grouped_candidates if candidate.pmid]
+            )[:representatives_per_cluster]
+        if not representative_pmids:
+            continue
+        clusters.append(
+            LiteratureClusterSummary(
+                label=label,
+                representative_pmids=representative_pmids,
+                candidate_count=len(grouped_candidates),
+                reasons=_cluster_reasons(grouped_candidates),
+            )
+        )
+    return clusters
+
+
+def _candidate_cluster_label(candidate: LiteratureCandidateSummary) -> str:
+    signals = set(candidate.rank_reasons)
+    signals.update(candidate.signals)
+    if candidate.relevance_to_query is not None:
+        signals.update(candidate.relevance_to_query.matched_intents)
+        signals.update(candidate.relevance_to_query.reasons)
+    title = normalize_query_text(candidate.title)
+    publication_type_text = normalize_query_text(" ".join(candidate.publication_types))
+    if (
+        "guideline_intent" in signals
+        or "guideline_bias" in signals
+        or "guideline" in publication_type_text
+        or "recommendation" in title
+    ):
+        return "guidelines_and_consensus"
+    if "pediatric_intent" in signals or any(
+        term in title for term in ("child", "children", "pediatric", "paediatric")
+    ):
+        return "pediatric_evidence"
+    if "treatment_intent" in signals or any(
+        term in title for term in ("colchicine", "treatment", "management")
+    ):
+        return "treatment_and_management"
+    if "variant_intent" in signals or any(
+        term in title for term in ("variant", "genotype", "phenotype")
+    ):
+        return "genotype_phenotype"
+    if candidate.access == "full_text":
+        return "accessible_full_text"
+    return "other_topic_neighbors"
+
+
+def _cluster_reasons(candidates: list[LiteratureCandidateSummary]) -> list[str]:
+    counter: Counter[str] = Counter()
+    for candidate in candidates:
+        counter.update(candidate.rank_reasons)
+        if candidate.relevance_to_query is not None:
+            counter.update(candidate.relevance_to_query.reasons)
+    return [reason for reason, _count in counter.most_common(5)]
+
+
+def _recommended_seed_set(
+    summary: TopicLiteratureMapSummary,
+    recommended_next_pmids: list[str],
+    seed_pmids: list[str],
+    *,
+    limit: int = 10,
+) -> list[str]:
+    lanes = [
+        seed_pmids,
+        [paper.pmid or "" for paper in summary.bridge_papers],
+        [paper.pmid or "" for paper in summary.recent_connected_papers],
+        recommended_next_pmids,
+        [paper.pmid or "" for paper in summary.central_papers],
+    ]
+    return _dedupe([pmid for lane in lanes for pmid in lane])[:limit]
 
 
 def _compact_actionable_topic_candidates(

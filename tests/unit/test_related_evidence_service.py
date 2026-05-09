@@ -459,6 +459,24 @@ async def test_related_evidence_resolves_source_metadata() -> None:
 
 
 @pytest.mark.asyncio
+async def test_related_evidence_exposes_top_level_timed_provider_status() -> None:
+    service = RelatedEvidenceService(
+        discovery_service=FakeDiscovery(),
+        metadata_service=FakeMetadata(),
+        citation_graph_service=FakeCitationGraph(),
+    )
+
+    response = await service.find_candidates(RelatedEvidenceCandidatesRequest(pmid="123"))
+
+    assert response.provider_status == response.meta.provider_status
+    statuses = {(status.provider, status.operation): status for status in response.provider_status}
+    assert statuses[("ncbi_elink", "related_articles")].elapsed_ms is not None
+    assert statuses[("pubmed_metadata", "source_metadata")].elapsed_ms is not None
+    assert statuses[("citation_graph", "candidate_neighbors")].elapsed_ms is not None
+    assert statuses[("pubmed_metadata", "candidate_metadata")].elapsed_ms is not None
+
+
+@pytest.mark.asyncio
 async def test_reports_elink_failure_warning_while_returning_citation_graph_candidates() -> None:
     service = RelatedEvidenceService(
         discovery_service=FakeDiscovery(fail=True),

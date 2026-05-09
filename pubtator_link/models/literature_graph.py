@@ -258,6 +258,15 @@ class LiteratureCandidateSummary(BaseModel):
     next_actions: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class LiteratureClusterSummary(BaseModel):
+    """Compact thematic cluster for graph-heavy literature responses."""
+
+    label: str
+    representative_pmids: list[str] = Field(default_factory=list)
+    candidate_count: int = Field(default=0, ge=0)
+    reasons: list[str] = Field(default_factory=list)
+
+
 class LiteratureProviderStatus(BaseModel):
     """Structured provider status for a graph direction or enrichment operation."""
 
@@ -372,6 +381,7 @@ class PublicationCitationGraphResponse(BaseModel):
     cited_by_status: list[LiteratureProviderStatus] = Field(default_factory=list)
     identifier_resolution_status: list[LiteratureProviderStatus] = Field(default_factory=list)
     open_access_status: list[LiteratureProviderStatus] = Field(default_factory=list)
+    provider_status: list[LiteratureProviderStatus] = Field(default_factory=list)
     meta: LiteratureGraphResponseMeta = Field(
         default_factory=LiteratureGraphResponseMeta,
         alias="_meta",
@@ -432,6 +442,7 @@ class RelatedEvidenceCandidatesResponse(BaseModel):
     candidates: list[RelatedEvidenceCandidate] = Field(default_factory=list)
     candidate_pmids: list[str] = Field(default_factory=list)
     omitted_candidate_preview: list[LiteratureCandidateSummary] = Field(default_factory=list)
+    provider_status: list[LiteratureProviderStatus] = Field(default_factory=list)
     score_explanation: str = (
         "normalized_neighbor_score is scaled within the returned candidate window; "
         "0 does not mean irrelevant."
@@ -561,6 +572,9 @@ class TopicLiteratureMapResponse(BaseModel):
     demoted_candidate_pmids: list[str] = Field(default_factory=list)
     demoted_reasons_by_pmid: dict[str, list[str]] = Field(default_factory=dict)
     bias_score_by_pmid: dict[str, float] = Field(default_factory=dict)
+    bridge_diagnostic: str | None = None
+    cluster_summary: list[LiteratureClusterSummary] = Field(default_factory=list)
+    recommended_seed_set: list[str] = Field(default_factory=list)
     degraded: bool = False
     degraded_reasons: list[str] = Field(default_factory=list)
     scope_auto_reduced: bool = False

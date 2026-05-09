@@ -42,6 +42,23 @@ class FakeCrossref:
         ]
 
 
+class RawBibliographyCrossref:
+    async def get_work(self, doi: str) -> dict[str, str]:
+        return {"DOI": doi}
+
+    def references_from_work(self, work: dict[str, str]) -> list[LiteraturePaper]:
+        return [
+            LiteraturePaper(
+                doi="10.1000/raw-reference",
+                title=(
+                    "Author A, Author B. Clean PubMed title for resolved reference. "
+                    "Journal. 2020;1:1-2. https://doi.org/10.1000/raw-reference."
+                ),
+                provenance=[LiteratureGraphProvenance(provider="crossref", source_id=work["DOI"])],
+            )
+        ]
+
+
 class LargeCrossref:
     async def get_work(self, doi: str) -> dict[str, str]:
         return {"DOI": doi}
@@ -303,9 +320,63 @@ class ResolvingDiscovery:
         return None
 
 
+class ReferenceResolvingDiscovery:
+    async def convert_article_ids(self, ids: list[str], source: str = "auto"):
+        records = []
+        for doi in ids:
+            pmid = {
+                "10.1016/j.ard.2025.05.020": "40562663",
+                "10.1000/raw-reference": "999999",
+            }.get(doi)
+            if pmid is None:
+                continue
+            records.append(
+                ArticleIdConversionRecord(
+                    input_id=doi,
+                    input_kind="doi",
+                    status="resolved",
+                    pmid=pmid,
+                    doi=doi,
+                )
+            )
+        return type("ArticleIdConversionResponse", (), {"records": records})()
+
+    async def find_pmid_by_doi(self, doi: str) -> str | None:
+        return {
+            "10.1016/j.ard.2025.05.020": "40562663",
+            "10.1000/raw-reference": "999999",
+        }.get(doi)
+
+
 class FakeMetadata:
     async def get_metadata(self, request):
         return PublicationMetadataResponse(metadata=[], failed_pmids={})
+
+
+class MetadataForResolvedReferences:
+    async def get_metadata(self, request):
+        from pubtator_link.models.publication_metadata import PublicationMetadata
+
+        records = {
+            "40562663": PublicationMetadata(
+                pmid="40562663",
+                doi="10.1016/j.ard.2025.05.020",
+                title="Source article",
+                pub_year=2025,
+            ),
+            "999999": PublicationMetadata(
+                pmid="999999",
+                doi="10.1000/raw-reference",
+                title="Clean PubMed title for resolved reference",
+                journal="Journal",
+                pub_year=2020,
+                coverage="abstract_only",
+            ),
+        }
+        return PublicationMetadataResponse(
+            metadata=[records[pmid] for pmid in request.pmids if pmid in records],
+            failed_pmids={},
+        )
 
 
 class MetadataWithSourceDoi:
@@ -391,6 +462,47 @@ async def test_citation_graph_metadata_resolution_remains_single_pmid_public_req
     assert request.include_publication_types is True
     assert request.include_citations == "none"
     assert request.include_coverage is True
+
+
+@pytest.mark.asyncio
+async def test_citation_graph_resolved_references_prefer_pubmed_titles() -> None:
+    service = CitationGraphService(
+        crossref=RawBibliographyCrossref(),
+        discovery_service=ReferenceResolvingDiscovery(),
+        metadata_service=MetadataForResolvedReferences(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(
+            pmid="40562663",
+            direction="references",
+            max_results=5,
+        )
+    )
+
+    assert response.references[0].pmid == "999999"
+    assert response.references[0].title == "Clean PubMed title for resolved reference"
+    assert "Author A" not in (response.references[0].title or "")
+
+
+@pytest.mark.asyncio
+async def test_citation_graph_exposes_top_level_timed_provider_status() -> None:
+    service = CitationGraphService(
+        crossref=FakeCrossref(),
+        metadata_service=MetadataWithSourceDoi(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(pmid="40562663", direction="references")
+    )
+
+    assert response.provider_status == response.meta.provider_status
+    crossref_status = next(
+        status
+        for status in response.provider_status
+        if status.provider == "crossref" and status.operation == "references"
+    )
+    assert crossref_status.elapsed_ms is not None
 
 
 class BatchResolvingDiscovery:

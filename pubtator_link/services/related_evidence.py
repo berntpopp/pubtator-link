@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Iterable
 from typing import Any
 
 from pubtator_link.models.literature_graph import (
     LiteraturePaper,
+    LiteratureProviderStatus,
+    LiteratureProviderStatusValue,
     ProviderWarning,
     PublicationCitationGraphRequest,
     RelatedEvidenceCandidate,
@@ -49,15 +52,19 @@ class RelatedEvidenceService:
     ) -> RelatedEvidenceCandidatesResponse:
         """Return ranked, metadata-resolved related evidence candidates."""
         warnings: list[ProviderWarning] = []
+        provider_status: list[LiteratureProviderStatus] = []
         candidate_pmids: list[str] = []
         neighbor_scores: dict[str, int] = {}
         citation_pmids: set[str] = set()
         candidate_fetch_limit = _candidate_fetch_limit(request.max_results)
 
+        elink_started = time.monotonic()
         elink_task = asyncio.create_task(
             self._find_related_article_scores([request.pmid], candidate_fetch_limit)
         )
+        source_started = time.monotonic()
         source_task = asyncio.create_task(self._source_paper(request.pmid))
+        graph_started = time.monotonic()
         graph_task = (
             asyncio.create_task(
                 self.citation_graph_service.get_citation_graph(
@@ -76,6 +83,16 @@ class RelatedEvidenceService:
             related_scores = await elink_task
         except Exception as exc:
             warnings.append(_provider_failed_warning("ncbi_elink", exc))
+            provider_status.append(
+                _provider_status(
+                    "ncbi_elink",
+                    "related_articles",
+                    "failed",
+                    retryable=True,
+                    message=str(exc),
+                    elapsed_ms=_elapsed_ms(elink_started),
+                )
+            )
         else:
             for record in related_scores:
                 pmid = str(record.pmid)
@@ -86,31 +103,81 @@ class RelatedEvidenceService:
                     int(record.neighbor_score),
                 )
                 candidate_pmids.append(pmid)
+            provider_status.append(
+                _provider_status(
+                    "ncbi_elink",
+                    "related_articles",
+                    "success" if related_scores else "empty",
+                    len(related_scores),
+                    elapsed_ms=_elapsed_ms(elink_started),
+                )
+            )
         try:
             source, source_warnings = await source_task
         except Exception as exc:
             source = LiteraturePaper(pmid=request.pmid)
             warnings.append(_provider_failed_warning("pubmed_metadata", exc))
+            provider_status.append(
+                _provider_status(
+                    "pubmed_metadata",
+                    "source_metadata",
+                    "failed",
+                    retryable=True,
+                    message=str(exc),
+                    elapsed_ms=_elapsed_ms(source_started),
+                )
+            )
         else:
             warnings.extend(source_warnings)
+            provider_status.append(
+                _provider_status(
+                    "pubmed_metadata",
+                    "source_metadata",
+                    "success" if source.title else "empty",
+                    int(bool(source.title)),
+                    retryable=bool(source_warnings),
+                    elapsed_ms=_elapsed_ms(source_started),
+                )
+            )
         if graph_task is not None:
             try:
                 graph = await graph_task
             except Exception as exc:
                 warnings.append(_provider_failed_warning("citation_graph", exc))
+                provider_status.append(
+                    _provider_status(
+                        "citation_graph",
+                        "candidate_neighbors",
+                        "failed",
+                        retryable=True,
+                        message=str(exc),
+                        elapsed_ms=_elapsed_ms(graph_started),
+                    )
+                )
             else:
                 graph_candidate_pmids = [pmid for pmid in graph.candidate_pmids if pmid]
                 citation_pmids.update(graph_candidate_pmids)
                 candidate_pmids.extend(graph_candidate_pmids)
                 warnings.extend(graph.meta.warnings)
+                provider_status.append(
+                    _provider_status(
+                        "citation_graph",
+                        "candidate_neighbors",
+                        "success" if graph_candidate_pmids else "empty",
+                        len(graph_candidate_pmids),
+                        retryable=bool(graph.meta.warnings),
+                        elapsed_ms=_elapsed_ms(graph_started),
+                    )
+                )
         deduped_pmids = [pmid for pmid in _dedupe(candidate_pmids) if pmid != request.pmid]
-        candidates, metadata_warnings = await self._metadata_candidates(
+        candidates, metadata_warnings, metadata_status = await self._metadata_candidates(
             request=request,
             pmids=deduped_pmids,
             neighbor_scores=neighbor_scores,
             citation_pmids=citation_pmids,
         )
         warnings.extend(metadata_warnings)
+        provider_status.append(metadata_status)
         candidates.sort(key=lambda candidate: _ranking_key(candidate, request))
         candidate_count_before_limit = len(candidates)
         omitted_candidate_preview = [
@@ -151,6 +218,7 @@ class RelatedEvidenceService:
                 "omitted_counts": {
                     key: value for key, value in omitted_counts.items() if value > 0
                 },
+                "provider_status": provider_status,
             }
         )
 
@@ -159,6 +227,7 @@ class RelatedEvidenceService:
             candidates=candidates,
             candidate_pmids=ordered_pmids,
             omitted_candidate_preview=omitted_candidate_preview,
+            provider_status=provider_status,
             _meta=meta,
         )
         response.meta.response_size_class = json_size_class(response.model_dump(by_alias=True))
@@ -196,19 +265,48 @@ class RelatedEvidenceService:
         pmids: list[str],
         neighbor_scores: dict[str, int],
         citation_pmids: set[str],
-    ) -> tuple[list[RelatedEvidenceCandidate], list[ProviderWarning]]:
+    ) -> tuple[
+        list[RelatedEvidenceCandidate],
+        list[ProviderWarning],
+        LiteratureProviderStatus,
+    ]:
+        started = time.monotonic()
         if not pmids:
-            return [], []
+            return (
+                [],
+                [],
+                _provider_status(
+                    "pubmed_metadata",
+                    "candidate_metadata",
+                    "empty",
+                    elapsed_ms=_elapsed_ms(started),
+                ),
+            )
 
         warnings: list[ProviderWarning] = []
-        metadata_response = await lookup_metadata_batched(
-            self.metadata_service,
-            pmids,
-            include_mesh=False,
-            include_publication_types=True,
-            include_citations="none",
-            include_coverage=True,
-        )
+        try:
+            metadata_response = await lookup_metadata_batched(
+                self.metadata_service,
+                pmids,
+                include_mesh=False,
+                include_publication_types=True,
+                include_citations="none",
+                include_coverage=True,
+            )
+        except Exception as exc:
+            warnings.append(_provider_failed_warning("pubmed_metadata", exc))
+            return (
+                [],
+                warnings,
+                _provider_status(
+                    "pubmed_metadata",
+                    "candidate_metadata",
+                    "failed",
+                    retryable=True,
+                    message=str(exc),
+                    elapsed_ms=_elapsed_ms(started),
+                ),
+            )
         metadata_by_pmid = {metadata.pmid: metadata for metadata in metadata_response.metadata}
         failed_pmids = getattr(metadata_response, "failed_pmids", {})
         for warning in metadata_response.meta.get("warnings", []):
@@ -233,6 +331,14 @@ class RelatedEvidenceService:
                 )
             )
 
+        if metadata_response.metadata and failed_pmids:
+            metadata_status: LiteratureProviderStatusValue = "partial"
+        elif metadata_response.metadata:
+            metadata_status = "success"
+        elif failed_pmids:
+            metadata_status = "failed"
+        else:
+            metadata_status = "empty"
         candidates: list[RelatedEvidenceCandidate] = []
         for pmid in pmids:
             metadata = metadata_by_pmid.get(pmid)
@@ -260,7 +366,19 @@ class RelatedEvidenceService:
                     pubmed_neighbor_score=neighbor_score,
                 )
             )
-        return candidates, warnings
+        return (
+            candidates,
+            warnings,
+            _provider_status(
+                "pubmed_metadata",
+                "candidate_metadata",
+                metadata_status,
+                len(metadata_response.metadata),
+                retryable=bool(failed_pmids),
+                message=f"failed_pmids={len(failed_pmids)}" if failed_pmids else None,
+                elapsed_ms=_elapsed_ms(started),
+            ),
+        )
 
 
 def _paper_from_metadata(metadata: Any) -> LiteraturePaper:
@@ -378,6 +496,31 @@ def _provider_failed_warning(provider: str, exc: Exception) -> ProviderWarning:
         retryable=True,
         message=f"{provider} lookup failed: {exc}",
     )
+
+
+def _provider_status(
+    provider: str,
+    operation: str,
+    status: LiteratureProviderStatusValue,
+    result_count: int = 0,
+    *,
+    retryable: bool = False,
+    message: str | None = None,
+    elapsed_ms: int | None = None,
+) -> LiteratureProviderStatus:
+    return LiteratureProviderStatus(
+        provider=provider,
+        operation=operation,
+        status=status,
+        result_count=result_count,
+        retryable=retryable,
+        message=message,
+        elapsed_ms=elapsed_ms,
+    )
+
+
+def _elapsed_ms(started: float) -> int:
+    return max(0, round((time.monotonic() - started) * 1000))
 
 
 def _metadata_warning_code(warning: object) -> str | None:

@@ -28,6 +28,23 @@ for shaping the benchmark, not for acceptance gates. The combined accuracy
 across PubMedQA and BioASQ is an unweighted mixed-task diagnostic only and must
 not be used as a headline quality number.
 
+Additional CLI/model smoke tests on 2026-05-09 confirmed that PubTator-Link can
+be consumed by Claude Code, Codex CLI, and Gemini CLI through the same local
+Streamable HTTP MCP endpoint. A 10-case PubMedQA PQA-L paired smoke compared
+`mcp_oracle_pmid` against `no_tools` for each stack:
+
+| Answer stack | MCP correct | No-tools correct | Delta | MCP runtime | No-tools runtime |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Claude Code + `claude-sonnet-4-6` | 7/10 | 4/10 | +30 pp | 68s | 38s |
+| Codex CLI + `gpt-5.4` | 8/10 | 2/10 | +60 pp | 39s | 15s |
+| Gemini CLI + `gemini-3.1-pro-preview` | 8/10 | 4/10 | +40 pp | 39s | 21s |
+
+The smoke used fixed seed `20260509`, hid gold labels from prompts, hid PMIDs in
+the no-tools condition, and verified that no-tools runs made zero MCP calls.
+These numbers are directional only at `n=10`, but they prove that the benchmark
+must treat the answer stack as `CLI adapter + model + MCP configuration`, not as
+model identity alone.
+
 The main observed MCP failure modes were:
 
 - shared `max_chars` batch budgets dropping passages or degrading to title-only
@@ -54,7 +71,7 @@ fallback reasons.
 - Support LLM self-judgment for MCP consumer experience and improvement mining.
 - Store statistical uncertainty for reported scores and paired comparisons.
 - Parse structured MCP server events into queryable run diagnostics, using
-  Claude debug logs only as a secondary signal.
+  CLI debug or event logs only as a secondary signal.
 - Keep smoke runs cheap enough for local pre-release use.
 - Keep public hosted MCP benchmark tasks research-use scoped.
 
@@ -75,15 +92,16 @@ fallback reasons.
 
 Each case can run in one or more modes:
 
-- `no_tools`: Claude receives only the question and must not use tools. This
-  estimates model prior and prompt leakage.
-- `oracle_context`: Claude receives gold abstract snippets or benchmark-provided
-  context directly, without MCP. This estimates answer-model performance when
-  evidence context is already available.
-- `mcp_oracle_pmid`: Claude receives question plus target or gold evidence PMIDs
-  and must use PubTator-Link MCP to retrieve evidence.
-- `mcp_open_retrieval`: Claude receives only the question or topic and must use
-  PubTator-Link MCP to discover evidence.
+- `no_tools`: the answer stack receives only the question and must not use tools.
+  This estimates model prior and prompt leakage. For PubMedQA and similar
+  oracle-PMID datasets, PMIDs are hidden in this condition.
+- `oracle_context`: the answer stack receives gold abstract snippets or
+  benchmark-provided context directly, without MCP. This estimates answer-model
+  performance when evidence context is already available.
+- `mcp_oracle_pmid`: the answer stack receives question plus target or gold
+  evidence PMIDs and must use PubTator-Link MCP to retrieve evidence.
+- `mcp_open_retrieval`: the answer stack receives only the question or topic and
+  must use PubTator-Link MCP to discover evidence.
 - `mcp_self_judge`: a resumed run asks the same or another model to evaluate the
   MCP consumer experience from the run trace only.
 - `grounding_judge`: optional judged evaluation for synthesis answers where no
@@ -261,13 +279,17 @@ and documented. Old prompt files remain immutable.
 
 Model configuration is a first-class benchmark variable. Each run must store:
 
+- answer stack name,
+- CLI adapter name,
+- CLI version,
+- CLI invocation mode,
+- CLI config scope and config snapshot hash,
 - provider,
 - model alias,
 - exact model name/version where available,
 - dated model snapshot where the provider exposes one,
 - model role,
 - model settings,
-- Claude CLI version,
 - token counts,
 - cost,
 - duration.
@@ -279,14 +301,52 @@ Supported model roles:
 - `grounding_judge_model`,
 - `rerank_model`.
 
+Supported CLI adapters:
+
+- `claude_code`: Claude Code non-interactive `--print` runner.
+- `codex_cli`: Codex CLI `codex exec` runner.
+- `gemini_cli`: Gemini CLI headless `--prompt` runner.
+
+Each adapter must normalize its output to the same benchmark record:
+
+- final answer text,
+- parsed prediction JSON,
+- raw event or debug log path,
+- CLI exit status,
+- CLI version,
+- resolved model name when exposed by the CLI,
+- token and cost fields when exposed by the CLI,
+- MCP tool call events when exposed by the CLI,
+- tool policy or allowlist used for the run.
+
+Adapter-specific notes:
+
+- Claude Code should use `--allowedTools` for MCP runs, `--tools ""` for
+  no-tools runs, `--output-format json`, and `--debug-file`.
+- Codex CLI should run from a neutral benchmark working directory with
+  `--ephemeral`, `--ignore-rules`, `--json`, and `--output-last-message`.
+  For no-tools runs, use a config profile or `--ignore-user-config` that removes
+  MCP servers while preserving authentication.
+- Gemini CLI should use `--allowed-mcp-server-names pubtator-link` for MCP runs,
+  `--skip-trust` in headless automation when needed, and a policy file that
+  denies all MCP tools for no-tools runs. The benchmark must record the resolved
+  model because aliases such as `gemini-3-pro-preview` can resolve to a
+  different served model such as `gemini-3.1-pro-preview`.
+
+Reports must label comparisons as answer-stack comparisons unless the same CLI
+adapter and prompt wrapper are used. Comparing Claude Code, Codex CLI, and
+Gemini CLI mixes model behavior with agent harness behavior, tool discovery,
+policy defaults, schema enforcement, and logging differences.
+
 Example run:
 
 ```bash
 python -m pubtator_link.benchmarks run \
   --suite pubmedqa-smoke \
   --mode mcp_oracle_pmid \
-  --answer-model claude-sonnet-4-6 \
-  --self-judge-model claude-opus-4-7 \
+  --answer-stack codex_cli:gpt-5.4 \
+  --answer-model gpt-5.4 \
+  --self-judge-stack claude_code:claude-opus-4-7 \
   --sample-seed 20260509
 ```
 
@@ -294,6 +354,7 @@ Comparison rules:
 
 - Do not compare answer models if prompt versions differ.
 - Do not compare answer models if sample seeds differ.
+- Do not describe different CLI adapters as pure model comparisons.
 - Do not compare self-judge models unless they evaluate identical candidate
   outputs and traces.
 - Do not average scores across models unless the report explicitly says it is a
@@ -339,7 +400,8 @@ benchmarks/
     self_judge_mcp_consumer_v1.md
     grounding_judge_v1.md
   runners/
-    run_claude_benchmark.py
+    cli_adapters.py
+    run_benchmark.py
     score_pubmedqa.py
     score_bioasq.py
     summarize_run.py
@@ -377,8 +439,9 @@ benchmarks/results/2026-05-09T123000Z/
   scores.json
   summary.md
   self_judgment.json
-  claude_output.json
-  claude_debug.log
+  answer_output.json
+  answer_events.jsonl
+  answer_debug.log
   mcp_server_before.log
   mcp_server_after.log
   docker_ps.txt
@@ -396,6 +459,9 @@ benchmarks/results/2026-05-09T123000Z/
 - sample seed,
 - prompt versions and hashes,
 - model roles and exact model names,
+- answer stack, CLI adapter, CLI version, requested model, and resolved model
+  when available,
+- CLI config scope and config snapshot hash,
 - git commit,
 - dirty worktree flag,
 - MCP server Docker image ID and digest when available,
@@ -434,6 +500,12 @@ Fields:
 - `finished_at timestamptz`
 - `duration_ms integer`
 - `cost_usd numeric(12,6)`
+- `answer_stack text`
+- `cli_adapter text`
+- `cli_version text`
+- `cli_invocation jsonb not null default '{}'::jsonb`
+- `cli_config_hash text`
+- `cli_config_snapshot jsonb not null default '{}'::jsonb`
 - `claude_cli_version text`
 - `claude_session_id text`
 - `model_provider text`
@@ -450,6 +522,10 @@ Fields:
 - `run_metadata jsonb not null default '{}'::jsonb`
 
 Use UUIDv7 when available so run IDs remain time-sortable.
+
+`claude_cli_version` and `claude_session_id` are retained for backward
+compatibility with the first Claude-only experiments. New code should populate
+the generic `cli_*` fields for all adapters, including Claude Code.
 
 ### `benchmark_dataset_cases`
 
@@ -536,7 +612,7 @@ Fields:
 
 ### `benchmark_tool_calls`
 
-Normalized tool call records from Claude debug logs and MCP server logs.
+Normalized tool call records from MCP server logs and CLI debug or event logs.
 
 Fields:
 
@@ -688,6 +764,8 @@ select
     r.suite,
     r.mode,
     r.sample_seed,
+    r.answer_stack,
+    r.cli_adapter,
     r.answer_model,
     r.self_judge_model,
     s.accuracy,
@@ -733,13 +811,13 @@ plan should reuse it rather than duplicating generic runner functionality.
 3. Create `benchmark_runs` row with `status="running"`.
 4. Write `manifest.json`, prompt copies, cases, and gold files.
 5. Capture Docker and MCP server pre-run state.
-6. Run Claude with either no tools or explicit MCP tools.
-7. Store raw Claude output and debug logs.
+6. Run the selected CLI adapter with either no tools or explicit MCP tools.
+7. Store raw answer output, CLI event streams, and debug logs.
 8. Parse predictions and persist `benchmark_predictions`.
 9. Score against hidden gold and persist `benchmark_scores`.
 10. Parse structured MCP server events into `benchmark_tool_calls` and
-    `benchmark_log_events`. Parse Claude debug logs only as a secondary source
-    for model-side behavior that the server cannot observe.
+    `benchmark_log_events`. Parse CLI debug or event logs only as a secondary
+    source for model-side behavior that the server cannot observe.
 11. Optionally resume the run for MCP self-judgment and persist
     `benchmark_self_judgments` and `benchmark_recommendations`.
 12. Generate `summary.md`.
@@ -764,7 +842,11 @@ Important flags:
 - `--sample-seed`
 - `--case-count`
 - `--sampling-mode` (`balanced` or `natural`)
+- `--answer-stack` (`claude_code:claude-sonnet-4-6`, `codex_cli:gpt-5.4`,
+  `gemini_cli:gemini-3-pro-preview`)
+- `--cli-adapter`
 - `--answer-model`
+- `--self-judge-stack`
 - `--self-judge-model`
 - `--grounding-judge-model`
 - `--rerank-model`
@@ -805,8 +887,9 @@ benchmark-self-judge
 Examples:
 
 ```bash
-make benchmark-smoke ANSWER_MODEL=sonnet SELF_JUDGE_MODEL=sonnet
-make benchmark-smoke ANSWER_MODEL=opus SELF_JUDGE_MODEL=opus
+make benchmark-smoke ANSWER_STACK=claude_code:claude-sonnet-4-6
+make benchmark-smoke ANSWER_STACK=codex_cli:gpt-5.4
+make benchmark-smoke ANSWER_STACK=gemini_cli:gemini-3-pro-preview
 make benchmark-pubmedqa MODE=mcp_oracle_pmid CASE_COUNT=60
 make benchmark-compare LEFT=run_a RIGHT=run_b
 ```
@@ -844,8 +927,8 @@ the observed failure modes:
 - retryable budget-pressure drop,
 - terminal no-record failure.
 
-Claude debug logs are undocumented and may change; they are useful for audit but
-must not be the primary source for server-side metrics.
+CLI debug and event log formats are adapter-specific and may change; they are
+useful for audit but must not be the primary source for server-side metrics.
 
 ## Self-Judgment Prompt Contract
 
@@ -946,16 +1029,21 @@ Integration tests:
 - analyzer groups synthetic log events into recommendations,
 - compare command reports expected deltas.
 
-No test should require paid Claude calls. Live Claude runs are manual benchmark
-commands, not CI requirements.
+No test should require paid LLM calls. Live Claude, Codex, and Gemini runs are
+manual benchmark commands, not CI requirements.
 
 ## Smoke Suite
 
 Initial local smoke target:
 
-- PubMedQA PQA-L article-local, 30 cases, balanced labels.
+- PubMedQA PQA-L article-local, 30 cases, balanced labels for the default smoke.
+- PubMedQA PQA-L article-local, 10 cases, balanced-ish labels, as the
+  cross-stack quick smoke for Claude Code, Codex CLI, and Gemini CLI.
 - BioASQ yes/no oracle-PMID, 20 cases, balanced labels.
 - Modes: `no_tools` and `mcp_oracle_pmid`.
+- Answer stacks: at least one canonical Claude Code stack for CI/manual
+  continuity; optional local cross-stack smoke with Codex CLI and Gemini CLI
+  when credentials are available.
 - One self-judgment per MCP run.
 - Fixed seed: `20260509`.
 - Runtime is measured and reported, not used as a pass/fail gate in the first
@@ -978,6 +1066,11 @@ Smoke pass criteria:
 - score file is produced,
 - DB rows are written,
 - artifact hashes are recorded,
+- each no-tools run records zero MCP calls,
+- each MCP run records at least one PubTator-Link MCP call unless all cases fail
+  before tool discovery,
+- summaries report `answer_stack`, `cli_adapter`, requested model, and resolved
+  model where available,
 - self-judgment dimensions are parsed,
 - summary includes paired-mode deltas with confidence information where enough
   paired cases exist,
@@ -999,8 +1092,8 @@ Manual suite target:
 - BioASQ yes/no, factoid, and list cases.
 - SciFact-style claim verification after PMID mapping audit.
 - PubTator-Link review synthesis cases.
-- Shard Claude runs into 20-30 case batches.
-- Aggregate batch scores by dataset, mode, and model.
+- Shard live CLI runs into 20-30 case batches.
+- Aggregate batch scores by dataset, mode, answer stack, and model.
 
 ## Acceptance Criteria
 
@@ -1027,9 +1120,9 @@ Manual suite target:
   is unset, the run writes artifacts and `summary.md` only.
 - Local benchmark database writes should be enabled automatically when
   `PUBTATOR_LINK_DATABASE_URL` is set, unless the caller passes `--no-db`.
-- Raw Claude debug logs should be copied into the artifact bundle for local
-  runs. The database stores normalized events and artifact references, not the
-  full debug log text.
+- Raw CLI debug or event logs should be copied into the artifact bundle for
+  local runs. The database stores normalized events and artifact references, not
+  the full debug log text.
 - `oracle_context` should use pre-materialized benchmark case context stored in
   tracked case files or generated artifact files, not live network retrieval
   during the answer run. This keeps the baseline independent of PubTator-Link.

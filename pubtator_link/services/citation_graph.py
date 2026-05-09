@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Awaitable, Mapping, Sequence
 from typing import Any, Literal, Protocol
 
@@ -38,13 +39,17 @@ from pubtator_link.services.literature_identifier_resolution import (
     DoiPmidResolver,
     DoiResolutionResult,
 )
-from pubtator_link.services.literature_paper_resolution import paper_from_publication_metadata
+from pubtator_link.services.literature_paper_resolution import (
+    merge_literature_availability,
+    paper_from_publication_metadata,
+)
 from pubtator_link.services.literature_providers import (
     CROSSREF_PROVIDER,
     EUROPE_PMC_PROVIDER,
     OPENALEX_PROVIDER,
     UNPAYWALL_PROVIDER,
 )
+from pubtator_link.services.publication_metadata import lookup_metadata_batched
 
 OPEN_ACCESS_LOOKUP_CONCURRENCY = 3
 CitationNeighborLane = Literal["references", "cited_by"]
@@ -354,6 +359,12 @@ class CitationGraphService:
             cited_by_status = []
             identifier_resolution_status = []
             open_access_status = []
+        provider_status = [
+            *references_status,
+            *cited_by_status,
+            *identifier_resolution_status,
+            *open_access_status,
+        ]
         meta = graph_request_metadata(
             tool_name="pubtator.get_publication_citation_graph",
             request=request,
@@ -371,12 +382,7 @@ class CitationGraphService:
                         modes=("full", "nodes_edges"),
                     ),
                 ],
-                "provider_status": [
-                    *references_status,
-                    *cited_by_status,
-                    *identifier_resolution_status,
-                    *open_access_status,
-                ],
+                "provider_status": provider_status,
             }
         )
         response = PublicationCitationGraphResponse(
@@ -404,6 +410,7 @@ class CitationGraphService:
             cited_by_status=cited_by_status,
             identifier_resolution_status=identifier_resolution_status,
             open_access_status=open_access_status,
+            provider_status=provider_status,
             _meta=meta,
         )
         response = _enforce_citation_graph_budget(response)
@@ -412,6 +419,7 @@ class CitationGraphService:
 
     async def _crossref_reference_lane(self, doi: str) -> ProviderLaneResult:
         assert self.crossref is not None
+        started = time.monotonic()
         try:
             work = await self.crossref.get_work(doi)
             records = self.crossref.references_from_work(work)
@@ -423,6 +431,7 @@ class CitationGraphService:
                     "references",
                     "success" if records else "empty",
                     len(records),
+                    elapsed_ms=_elapsed_ms(started),
                 ),
                 None,
             )
@@ -436,12 +445,14 @@ class CitationGraphService:
                     "failed",
                     retryable=True,
                     message=str(exc),
+                    elapsed_ms=_elapsed_ms(started),
                 ),
                 _provider_failed_warning(CROSSREF_PROVIDER, exc),
             )
 
     async def _openalex_reference_lane(self, doi: str, *, limit: int) -> ProviderLaneResult:
         assert self.openalex is not None
+        started = time.monotonic()
         try:
             records = await self.openalex.get_references(doi, limit=limit)
             return (
@@ -452,6 +463,7 @@ class CitationGraphService:
                     "references",
                     "success" if records else "empty",
                     len(records),
+                    elapsed_ms=_elapsed_ms(started),
                 ),
                 None,
             )
@@ -465,12 +477,14 @@ class CitationGraphService:
                     "failed",
                     retryable=True,
                     message=str(exc),
+                    elapsed_ms=_elapsed_ms(started),
                 ),
                 _provider_failed_warning(OPENALEX_PROVIDER, exc),
             )
 
     async def _europe_pmc_cited_by_lane(self, pmid: str, *, limit: int) -> ProviderLaneResult:
         assert self.europe_pmc is not None
+        started = time.monotonic()
         try:
             records = await self.europe_pmc.get_citations(pmid, limit=limit)
             return (
@@ -481,6 +495,7 @@ class CitationGraphService:
                     "cited_by",
                     "success" if records else "empty",
                     len(records),
+                    elapsed_ms=_elapsed_ms(started),
                 ),
                 None,
             )
@@ -494,12 +509,14 @@ class CitationGraphService:
                     "failed",
                     retryable=True,
                     message=str(exc),
+                    elapsed_ms=_elapsed_ms(started),
                 ),
                 _provider_failed_warning(EUROPE_PMC_PROVIDER, exc),
             )
 
     async def _openalex_cited_by_lane(self, doi: str, *, limit: int) -> ProviderLaneResult:
         assert self.openalex is not None
+        started = time.monotonic()
         try:
             records = await self.openalex.get_cited_by(doi, limit=limit)
             return (
@@ -510,6 +527,7 @@ class CitationGraphService:
                     "cited_by",
                     "success" if records else "empty",
                     len(records),
+                    elapsed_ms=_elapsed_ms(started),
                 ),
                 None,
             )
@@ -523,6 +541,7 @@ class CitationGraphService:
                     "failed",
                     retryable=True,
                     message=str(exc),
+                    elapsed_ms=_elapsed_ms(started),
                 ),
                 _provider_failed_warning(OPENALEX_PROVIDER, exc),
             )
@@ -593,11 +612,47 @@ class CitationGraphService:
             [paper.doi for paper in doi_only_papers if paper.doi],
             max_ids=max_ids,
         )
-        return (
-            [_paper_with_resolved_pmid(paper, result) for paper in references],
-            [_paper_with_resolved_pmid(paper, result) for paper in cited_by],
-            _doi_resolution_statuses(result),
+        resolved_references = [_paper_with_resolved_pmid(paper, result) for paper in references]
+        resolved_cited_by = [_paper_with_resolved_pmid(paper, result) for paper in cited_by]
+        resolved_references, resolved_cited_by = await self._with_resolved_neighbor_metadata(
+            resolved_references,
+            resolved_cited_by,
         )
+        return (resolved_references, resolved_cited_by, _doi_resolution_statuses(result))
+
+    async def _with_resolved_neighbor_metadata(
+        self,
+        references: list[LiteraturePaper],
+        cited_by: list[LiteraturePaper],
+    ) -> tuple[list[LiteraturePaper], list[LiteraturePaper]]:
+        if self.metadata_service is None:
+            return references, cited_by
+        pmids = _candidate_pmids([*references, *cited_by])
+        if not pmids:
+            return references, cited_by
+        try:
+            response = await lookup_metadata_batched(
+                self.metadata_service,
+                pmids,
+                include_mesh=False,
+                include_publication_types=True,
+                include_citations="none",
+                include_coverage=True,
+            )
+        except Exception:
+            return references, cited_by
+        metadata_by_pmid = {
+            metadata.pmid: paper_from_publication_metadata(metadata)
+            for metadata in getattr(response, "metadata", [])
+            if getattr(metadata, "pmid", None)
+        }
+
+        def enrich(paper: LiteraturePaper) -> LiteraturePaper:
+            if not paper.pmid or paper.pmid not in metadata_by_pmid:
+                return paper
+            return merge_literature_availability(metadata_by_pmid[paper.pmid], paper)
+
+        return [enrich(paper) for paper in references], [enrich(paper) for paper in cited_by]
 
     async def _with_open_access_status(
         self,
@@ -616,6 +671,7 @@ class CitationGraphService:
             if not paper.doi:
                 return paper, None, None
             async with semaphore:
+                started = time.monotonic()
                 try:
                     availability = await unpaywall.get_oa_status(paper.doi)
                 except Exception as exc:
@@ -627,6 +683,7 @@ class CitationGraphService:
                             "failed",
                             retryable=True,
                             message=str(exc),
+                            elapsed_ms=_elapsed_ms(started),
                         ),
                         _provider_failed_warning(UNPAYWALL_PROVIDER, exc),
                     )
@@ -645,12 +702,19 @@ class CitationGraphService:
                         "open_access",
                         status,
                         message=availability.message,
+                        elapsed_ms=_elapsed_ms(started),
                     ),
                     warning,
                 )
             return (
                 _paper_with_availability(paper, availability),
-                _provider_status(UNPAYWALL_PROVIDER, "open_access", "success", 1),
+                _provider_status(
+                    UNPAYWALL_PROVIDER,
+                    "open_access",
+                    "success",
+                    1,
+                    elapsed_ms=_elapsed_ms(started),
+                ),
                 None,
             )
 
@@ -790,6 +854,8 @@ def _provider_status(
     *,
     retryable: bool = False,
     message: str | None = None,
+    elapsed_ms: int | None = None,
+    budget_ms: int | None = None,
 ) -> LiteratureProviderStatus:
     return LiteratureProviderStatus(
         provider=provider,
@@ -798,7 +864,13 @@ def _provider_status(
         result_count=result_count,
         retryable=retryable,
         message=message,
+        elapsed_ms=elapsed_ms,
+        budget_ms=budget_ms,
     )
+
+
+def _elapsed_ms(started: float) -> int:
+    return max(0, round((time.monotonic() - started) * 1000))
 
 
 def _append_unique_status(
