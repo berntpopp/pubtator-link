@@ -86,6 +86,22 @@ def test_schema_diagnostics_require_review_session_source_links() -> None:
     assert "review_session_sources" in required.tables
 
 
+def test_benchmark_migration_defines_required_tables() -> None:
+    sql = Path("pubtator_link/db/migrations/0006_benchmark_suite.sql").read_text()
+
+    assert "create table if not exists benchmark_runs" in sql.lower()
+    assert "create table if not exists benchmark_pairwise_comparisons" in sql.lower()
+    assert "create or replace view benchmark_model_comparisons" in sql.lower()
+
+
+def test_schema_diagnostics_require_benchmark_tables() -> None:
+    required = required_review_schema_items()
+
+    assert "benchmark_runs" in required.tables
+    assert "benchmark_predictions" in required.tables
+    assert ("benchmark_scores", "scores") in required.columns
+
+
 def test_schema_diagnostics_require_review_llm_context_columns() -> None:
     required = required_review_schema_items()
 

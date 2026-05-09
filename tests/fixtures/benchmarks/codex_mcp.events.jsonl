@@ -1,0 +1,1 @@
+{"event_type":"tool_call_completed","tool_name":"pubtator.get_publication_passages","coverage_summary":{"abstract_only":10},"status":"ok"}

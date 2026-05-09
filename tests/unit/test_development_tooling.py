@@ -153,6 +153,16 @@ def test_agents_md_contains_shared_agent_guidance() -> None:
     assert "CLAUDE.md" in agents
 
 
+def test_gitignore_allows_tracked_benchmark_inputs() -> None:
+    text = Path(".gitignore").read_text()
+
+    assert "benchmarks/results/" in text
+    assert "benchmarks/logs/" in text
+    assert "!benchmarks/cases/**" in text
+    assert "!benchmarks/prompts/**" in text
+    assert "!benchmarks/suites/**" in text
+
+
 def test_claude_md_is_lean_and_references_agents() -> None:
     claude = Path("CLAUDE.md").read_text()
 

@@ -452,6 +452,9 @@ def main() -> None:
     )
     export_parser.add_argument("--full", action="store_true", help="Include full text")
 
+    benchmark_parser = subparsers.add_parser("benchmark", help="Run benchmark commands")
+    benchmark_parser.add_argument("benchmark_args", nargs=argparse.REMAINDER)
+
     args = parser.parse_args()
 
     if not args.command:
@@ -479,6 +482,10 @@ def main() -> None:
         asyncio.run(search_publications(args.query, args.page))
     elif args.command == "export":
         asyncio.run(export_publications(args.pmids, args.format, args.full))
+    elif args.command == "benchmark":
+        from pubtator_link.benchmarks.cli import main as benchmark_main
+
+        sys.exit(benchmark_main(args.benchmark_args))
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-.PHONY: help install lock upgrade sync format format-check lint lint-ci lint-fix typecheck typecheck-fast typecheck-stop typecheck-fresh test test-fast test-unit test-integration test-cov test-all check ci-local precommit clean dev mcp-serve mcp-serve-http db-init docker-build docker-up docker-down docker-logs docker-prod-config docker-npm-config
+.PHONY: help install lock upgrade sync format format-check lint lint-ci lint-fix typecheck typecheck-fast typecheck-stop typecheck-fresh test test-fast test-unit test-integration test-cov test-all check ci-local precommit clean dev mcp-serve mcp-serve-http benchmark-smoke benchmark-pubmedqa benchmark-bioasq benchmark-compare db-init docker-build docker-up docker-down docker-logs docker-prod-config docker-npm-config
 
 DOCKER_COMPOSE := $(shell if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then echo "docker compose"; elif command -v docker-compose >/dev/null 2>&1; then echo "docker-compose"; else echo "docker compose"; fi)
 
@@ -99,6 +99,18 @@ mcp-serve: ## Start local stdio MCP server
 
 mcp-serve-http: ## Start hosted MCP endpoint with REST API
 	uv run python server.py --transport unified --host 127.0.0.1 --port 8000
+
+benchmark-smoke: ## Run PubMedQA benchmark smoke
+	uv run python -m pubtator_link.benchmarks run --suite benchmarks/suites/pubmedqa_smoke.yaml --answer-stack $${ANSWER_STACK:-dry_run:deterministic} $${BENCHMARK_ARGS:-}
+
+benchmark-pubmedqa: ## Run PubMedQA benchmark
+	uv run python -m pubtator_link.benchmarks run --suite benchmarks/suites/pubmedqa_smoke.yaml --mode $${MODE:-mcp_oracle_pmid} --case-count $${CASE_COUNT:-10} --answer-stack $${ANSWER_STACK:-dry_run:deterministic}
+
+benchmark-bioasq: ## Run BioASQ ideal-answer benchmark
+	uv run python -m pubtator_link.benchmarks run --suite benchmarks/suites/bioasq_ideal_smoke.yaml --answer-stack $${ANSWER_STACK:-dry_run:deterministic}
+
+benchmark-compare: ## Compare two benchmark runs
+	uv run python -m pubtator_link.benchmarks compare --left "$${LEFT}" --right "$${RIGHT}"
 
 db-init: ## Apply bootstrap review re-RAG schema to empty databases
 	test -n "$$PUBTATOR_LINK_DATABASE_URL"

@@ -1,0 +1,20 @@
+pubmedqa:
+  source: benchmarks/cases/pubmedqa/pqa_l_full_1000.jsonl
+  output: benchmarks/cases/pubmedqa/balanced_30.jsonl
+  labels:
+    - "yes"
+    - "no"
+    - "maybe"
+  per_label: 10
+  seed: 20260509
+  case_id_prefix: pubmedqa_balanced
+  dataset_version: pqa_l_balanced_30_v1
+bioasq:
+  source: benchmarks/cases/bioasq/summary_full_1283.jsonl
+  output: benchmarks/cases/bioasq/complex_12.jsonl
+  count: 12
+  seed: 20260509
+  min_gold_pmids: 4
+  min_reference_chars: 220
+  case_id_prefix: bioasq_complex
+  dataset_version: jmhb_bioasq_summary_complex_12_v1

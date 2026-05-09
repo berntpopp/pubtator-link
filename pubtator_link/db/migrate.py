@@ -50,6 +50,17 @@ def required_review_schema_items() -> RequiredSchemaItems:
                 "review_llm_context",
                 "review_llm_context_events",
                 "review_passage_embeddings",
+                "benchmark_runs",
+                "benchmark_dataset_cases",
+                "benchmark_run_cases",
+                "benchmark_predictions",
+                "benchmark_scores",
+                "benchmark_pairwise_comparisons",
+                "benchmark_tool_calls",
+                "benchmark_log_events",
+                "benchmark_self_judgments",
+                "benchmark_recommendations",
+                "benchmark_artifacts",
             }
         ),
         columns=frozenset(
@@ -104,6 +115,14 @@ def required_review_schema_items() -> RequiredSchemaItems:
                 ("review_llm_context_events", "payload"),
                 ("review_llm_context_events", "created_by"),
                 ("review_llm_context_events", "created_at"),
+                ("benchmark_runs", "manifest"),
+                ("benchmark_run_cases", "prompt_context"),
+                ("benchmark_predictions", "prediction"),
+                ("benchmark_scores", "scores"),
+                ("benchmark_pairwise_comparisons", "comparison"),
+                ("benchmark_tool_calls", "payload"),
+                ("benchmark_log_events", "payload"),
+                ("benchmark_self_judgments", "judgment"),
             }
         ),
     )

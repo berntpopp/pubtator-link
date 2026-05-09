@@ -1,0 +1,14 @@
+name: pubmedqa_balanced_30
+dataset: pubmedqa
+dataset_version: pqa_l_balanced_30_v1
+case_file: benchmarks/cases/pubmedqa/balanced_30.jsonl
+modes:
+  - no_tools
+sample_seed: 20260509
+case_count: 30
+sampling_mode: balanced
+prompt_versions:
+  answer: benchmarks/prompts/answer_pubmedqa_article_local_v1.md
+defaults:
+  timeout_s: 180
+  max_cases_per_run: 30

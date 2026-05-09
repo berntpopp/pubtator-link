@@ -188,5 +188,25 @@ CLAUDE.local.md
 PLAN.md
 TODO.md
 
-# benchmark folders
-benchmarks/
+# benchmark raw artifacts
+benchmarks/results/
+benchmarks/logs/
+benchmarks/**/results/
+benchmarks/**/logs/
+benchmarks/reports/*.raw.json
+
+# tracked benchmark definitions
+!benchmarks/
+!benchmarks/README.md
+!benchmarks/cases/
+!benchmarks/cases/**
+!benchmarks/prompts/
+!benchmarks/prompts/**
+!benchmarks/suites/
+!benchmarks/suites/**
+!benchmarks/pubtator_mcp_claude/
+!benchmarks/pubtator_mcp_claude/README.md
+!benchmarks/pubtator_mcp_claude/*.md
+!benchmarks/pubtator_mcp_claude/*.sh
+!benchmarks/pubtator_mcp_claude/docs/
+!benchmarks/pubtator_mcp_claude/docs/**

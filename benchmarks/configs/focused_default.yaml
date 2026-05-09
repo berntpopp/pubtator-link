@@ -1,0 +1,35 @@
+name: focused_default
+artifact_root: benchmarks/results/focused_default
+report_path: benchmarks/reports/focused-default-report.md
+analysis:
+  title: Focused Default Benchmark Report
+  slowest_case_count: 5
+runs:
+  - run_name: pubmedqa_balanced_30_claude
+    suite: benchmarks/suites/pubmedqa_balanced_30.yaml
+    mode: no_tools
+    provider: claude
+    model: sonnet
+    max_cases: 30
+    timeout_s: 180
+    prompt: benchmarks/prompts/provider_pubmedqa_single_v2.md
+  - run_name: bioasq_complex_12_claude
+    suite: benchmarks/suites/bioasq_complex_12.yaml
+    mode: no_tools
+    provider: claude
+    model: sonnet
+    max_cases: 12
+    timeout_s: 240
+    prompt: benchmarks/prompts/provider_bioasq_single_v1.md
+judge:
+  provider: claude
+  model: sonnet
+  timeout_s: 300
+  prompt: benchmarks/prompts/focused_benchmark_judge_v1.md
+  output: benchmarks/reports/focused-default-judge.md
+self_assessment:
+  provider: claude
+  model: sonnet
+  timeout_s: 300
+  prompt: benchmarks/prompts/focused_experience_self_assessment_v1.md
+  output: benchmarks/reports/focused-default-self-assessment.md
