@@ -1,0 +1,14 @@
+name: pubmedqa_balanced_51
+dataset: pubmedqa
+dataset_version: pqa_l_balanced_51_v1
+case_file: benchmarks/cases/pubmedqa/balanced_51.jsonl
+modes:
+  - no_tools
+sample_seed: 20260509
+case_count: 51
+sampling_mode: balanced
+prompt_versions:
+  answer: benchmarks/prompts/provider_pubmedqa_single_v4.md
+defaults:
+  timeout_s: 180
+  max_cases_per_run: 51

@@ -1,30 +1,25 @@
 ## Benchmark Diagnostic Review
 
----
-
 ### Validity Risks
 
-**Critical — BioASQ citation scores are identically zero**
-`citation_recall = 0.000` and `citation_precision = 0.000` across all 12 cases. Exact-zero on both metrics simultaneously is a strong signal of a scoring-pipeline bug, not model behavior. Likely causes: the citation extractor is not finding citations in the response text (wrong regex / format mismatch), or the gold citation IDs are in a different format than what the model produces (e.g., PMIDs vs DOIs vs plain author-year strings). These metrics are uninformative in their current state and should not be used to characterize model performance.
+**Citation metrics are meaningless in no_tools mode.**
+BioASQ reports citation recall 0.000 / precision 0.000 for a run where the model has no tool access and therefore cannot retrieve PMIDs. These are structurally guaranteed zeros, not a signal about model quality. Reporting them alongside token F1 / ROUGE-L creates false equivalence between two very different evaluation axes.
 
-**High — "maybe" class is near-random**
-Gold `maybe` cases: 3 predicted `yes`, 6 predicted `no`, 1 correct → F1 0.182. The model essentially never emits "maybe". This is a known LLM bias but also means the balanced-30 split may not be providing any discriminative signal for that class. With only 10 `maybe` gold cases, a single additional correct prediction shifts F1 by ~0.15.
+**v4 prompt regresses vs v3 on all headline metrics.**
+pubmedqa_balanced_51 (v4, context_policy) scores accuracy 0.667 / macro F1 0.656 vs pubmedqa_balanced_30 (v3, uncertainty) at 0.733 / 0.694. The case sets differ (30 vs 51), so exact comparison is noisy, but the direction is consistently negative across both accuracy and macro F1. A newer prompt performing worse is a validity risk unless the set-size difference fully explains it — it likely does not, because the v4 "maybe" F1 (0.467) is still lower than v3 (0.429... wait, v4 0.467 > v3 0.429 — "maybe" is slightly better in v4), but "yes" and "no" F1 both drop sharply (0.765 vs 0.870; 0.737 vs 0.783).
 
-**Medium — `no_tools` mode makes citation metrics vacuous for BioASQ**
-If BioASQ citation recall is defined as matching retrieved PMIDs, running in `no_tools` mode guarantees zero recall unless the model reproduces PMIDs from training memory. This conflates tool access with recall performance. The metric label is misleading for this mode.
+**"Maybe" class is a systematic failure mode across both prompts.**
+Confusion matrices show the model converts the majority of gold-"maybe" labels to "yes" or "no": 7/10 in v3, 10/17 in v4. This is not random noise; it suggests both prompts under-elicit hedged responses.
 
 ---
 
 ### Provider Experience Issues
 
-**Latency outliers without explanation**
-- `pubmedqa_balanced_001`: 86.2 s — roughly 4× the median (22 s). No timeout or error logged.
-- `bioasq_complex_011`: 57.3 s — 2× its suite median.
+**No tools invoked across all three runs.**
+All suites are in `no_tools` mode. For BioASQ, which is specifically designed to test citation-grounded answering, this means the MCP/RAG stack is entirely untested here. The run structure does not exercise the provider experience that end users encounter.
 
-These outliers inflate mean sec/case without any logged cause (no quota, no retry, no tool call). They likely represent long context or streaming stalls that are invisible to the current logging layer.
-
-**No tool calls logged in either suite**
-Expected in `no_tools` mode, but worth confirming the run config actually suppressed tool access rather than just not logging it. If MCP was silently available, citation behavior would be unexplained.
+**BioASQ latency variance is large and unexplained.**
+Slowest case (57.3 s) is 2× the median (28.2 s) with no tool calls to blame. This points to generation-length variance on complex multi-hop questions. Without per-case token counts or generation lengths in the logs, the root cause is opaque.
 
 ---
 
@@ -32,25 +27,29 @@ Expected in `no_tools` mode, but worth confirming the run config actually suppre
 
 | Issue | Severity |
 |---|---|
-| Citation extractor emits 0/0 with no debug trace | Critical |
-| No per-case prediction logged alongside gold label | High |
-| Outlier latency cases have no cause field in logs | Medium |
-| `maybe` confusion breakdown not surfaced in top-level metrics | Low |
-
-The absence of per-case output logs means it is impossible to distinguish "model never cited anything" from "model cited but extractor failed." This blocks root-cause diagnosis entirely.
+| Citation recall/precision emitted for `no_tools` runs — always 0, never informative | High |
+| No per-case correctness breakdown in report — impossible to identify systematic failure patterns from the report alone | Medium |
+| BioASQ lacks a question-type or class-level breakdown (factoid / list / yes/no) that would match PubMedQA reporting depth | Medium |
+| Slowest-case latency logged but no token-count or generation-length field — latency spike root cause untraceable | Low |
 
 ---
 
-### Concrete Improvements (ranked by impact)
+### Improvements Ranked by Impact
 
-1. **Fix or instrument citation extraction** — Add a debug log of the raw response snippet and the citation-extraction result for at least one BioASQ case. If the extractor returns empty lists, the regex or format assumption is wrong. *Impact: makes the primary BioASQ metric meaningful.*
+**1. Add a tools-enabled BioASQ run (highest impact)**
+The citation evaluation framework is completely dark. A single 12-case run with MCP tools enabled would produce non-trivial citation recall/precision and validate the entire retrieval pipeline end-to-end. This is the biggest gap in the current benchmark.
 
-2. **Separate citation recall from tool-recall** — For `no_tools` mode, report a "parametric citation recall" (PMIDs the model emits from memory) separately from "retrieved citation recall." Mixing the two hides what is actually being measured.
+**2. Suppress citation metrics for `no_tools` runs (high impact, low effort)**
+Emit `null` or omit citation recall/precision when `tool_workflow: none`. Prevents misleading 0.000 values from being interpreted as model failures rather than evaluation non-applicability.
 
-3. **Add a `with_tools` BioASQ run** — Running the same 12 cases with MCP tools enabled gives a direct delta for tool contribution and validates whether citations become non-zero. Without this, the BioASQ suite produces no actionable signal.
+**3. Head-to-head prompt comparison on the same case set**
+Run v3 and v4 on `balanced_51` (or both on `balanced_30`) to isolate the prompt effect from the set-size effect. Currently the regression signal is real but confounded.
 
-4. **Increase `maybe` sample size or report per-class support** — With only 10 gold `maybe` cases, macro F1 is noisy. Either upsample to ≥30 per class or report support-weighted F1 alongside macro F1 so the instability is visible.
+**4. Improve "maybe" class coverage in prompts**
+Both prompts systematically over-predict binary answers. Add 1–2 few-shot examples where the correct answer is "maybe" and the evidence is genuinely ambiguous. Target: bring "maybe" F1 above 0.55.
 
-5. **Log per-case prediction and gold label** — Emit a structured record `{case_id, gold, prediction, latency_s, response_chars}` per case. This enables post-hoc slicing (latency vs. difficulty, response length vs. F1) and is a prerequisite for any future regression detection.
+**5. Add per-case correctness output to the run artifact**
+A case-level CSV with `[case_id, gold_label, predicted_label, correct, latency_s]` would let reviewers directly inspect the confusion matrix entries and identify whether failures cluster by question type, year, or topic.
 
-6. **Tag slow cases with a cause field** — If a case exceeds 2× suite median latency, log the first detectable cause (context length, retry count, stream stall). This turns outlier inspection from manual grep work into a filterable field.
+**6. Log generation token counts per case**
+Pairing latency with output token count would immediately explain the BioASQ outlier cases (57 s vs 28 s median) and separate model reasoning depth from infrastructure noise.

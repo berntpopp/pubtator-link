@@ -30,19 +30,27 @@ def build_pubmedqa_balanced(config: dict[str, Any]) -> int:
     seed = int(config["seed"])
     labels = [str(label) for label in config["labels"]]
     per_label = int(config["per_label"])
+    require_abstract_context = bool(config.get("require_abstract_context", False))
     case_id_prefix = str(config["case_id_prefix"])
     dataset_version = str(config["dataset_version"])
     rows = _read_jsonl(source)
     by_label: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
+        if require_abstract_context and not row.get("case_metadata", {}).get("abstract_context"):
+            continue
         by_label[str(row["gold_label"])].append(row)
     rng = random.Random(seed)  # noqa: S311 - deterministic benchmark selection, not crypto.
-    selected: list[dict[str, Any]] = []
+    selected_by_label: dict[str, list[dict[str, Any]]] = {}
     for label in labels:
         bucket = list(by_label[label])
         rng.shuffle(bucket)
-        selected.extend(bucket[:per_label])
-    selected.sort(key=lambda row: (str(row["gold_label"]), str(row["case_id"])))
+        selected_by_label[label] = sorted(bucket[:per_label], key=lambda row: str(row["case_id"]))
+    selected = [
+        selected_by_label[label][offset]
+        for offset in range(per_label)
+        for label in labels
+        if offset < len(selected_by_label[label])
+    ]
     for index, row in enumerate(selected, start=1):
         row["case_id"] = f"{case_id_prefix}_{index:03d}"
         row["dataset_version"] = dataset_version

@@ -34,7 +34,9 @@ def _provider_text(raw: dict[str, Any]) -> str:
         text = stdout
     noise_prefixes = (
         "No matching skill found.",
+        "No skill applies here.",
         "Proceeding with direct analysis",
+        "Proceeding directly with the assessment.",
     )
     lines = [
         line

@@ -57,6 +57,9 @@ def _prompt_payload(case: BenchmarkCase, mode: BenchmarkMode) -> dict[str, Any]:
         "case_id": case.case_id,
         "question": case.question,
     }
+    abstract_context = case.case_metadata.get("abstract_context")
+    if isinstance(abstract_context, str) and abstract_context:
+        payload["abstract_context"] = abstract_context
     if mode != BenchmarkMode.NO_TOOLS:
         payload["target_pmids"] = case.target_pmids
         payload["evidence_pmids"] = case.gold_evidence_pmids
@@ -86,12 +89,13 @@ def _case_prompt(case: BenchmarkCase, mode: BenchmarkMode, prompt_template: str 
 
 def _run_provider(provider: str, model: str, prompt: str, timeout_s: int) -> dict[str, Any]:
     if provider == "claude":
+        tools: list[str] = []
+        if "pubtator." in prompt:
+            tools = ["mcp__pubtator-link"]
         command = [
             "claude",
             "--print",
             "--disable-slash-commands",
-            "--tools",
-            "",
             "--output-format",
             "json",
             "--permission-mode",
@@ -100,6 +104,10 @@ def _run_provider(provider: str, model: str, prompt: str, timeout_s: int) -> dic
             model,
             prompt,
         ]
+        if tools:
+            command[2:2] = ["--allowedTools", ",".join(tools)]
+        else:
+            command[2:2] = ["--tools", ""]
     elif provider == "codex":
         command = [
             "codex",
@@ -158,13 +166,27 @@ def _prediction_from_raw(case: BenchmarkCase, raw: dict[str, Any]) -> Prediction
         outer = _json_object_from_text(text)
         text = str(outer.get("result") or outer.get("response") or outer.get("content") or text)
     parsed = _json_object_from_text(text)
+    score_details = {
+        key: parsed[key]
+        for key in (
+            "evidence_status",
+            "confidence",
+            "abstention_reason",
+            "tool_workflow",
+            "mcp_experience",
+        )
+        if key in parsed
+    }
     return PredictionRecord(
         case_id=str(parsed.get("case_id") or case.case_id),
         predicted_label=parsed.get("predicted_label"),
         predicted_answer=parsed.get("predicted_answer") or parsed.get("answer"),
         cited_pmids=[str(value) for value in parsed.get("cited_pmids", [])],
+        retrieved_pmids=[str(value) for value in parsed.get("retrieved_pmids", [])],
+        source_access=parsed.get("source_access", {}),
         claims=list(parsed.get("claims", [])) if isinstance(parsed.get("claims", []), list) else [],
         reason_short=parsed.get("reason_short"),
+        score_details=score_details,
     )
 
 
@@ -182,9 +204,14 @@ def main() -> int:
     parser.add_argument("--artifact-dir", default="benchmarks/results/single-case-provider")
     parser.add_argument("--max-cases", type=int)
     parser.add_argument("--timeout-s", type=int, default=180)
+    parser.add_argument("--prompt")
+    parser.add_argument("--prompt-version")
+    parser.add_argument("--tool-workflow", default="none")
     args = parser.parse_args()
 
     if args.config:
+        cli_max_cases = args.max_cases
+        cli_timeout_s = args.timeout_s
         config = yaml.safe_load(Path(args.config).read_text())
         matching_runs = [
             run
@@ -201,9 +228,20 @@ def main() -> int:
         args.artifact_dir = config["artifact_root"]
         args.max_cases = run_config.get("max_cases")
         args.timeout_s = run_config.get("timeout_s", args.timeout_s)
-        args.prompt_template = Path(run_config["prompt"]).read_text()
+        args.prompt_path = run_config["prompt"]
+        args.prompt_version = run_config.get("prompt_version", Path(args.prompt_path).stem)
+        args.tool_workflow = run_config.get("tool_workflow", "none")
+        if cli_max_cases is not None:
+            args.max_cases = cli_max_cases
+        if cli_timeout_s != parser.get_default("timeout_s"):
+            args.timeout_s = cli_timeout_s
+        args.prompt_template = Path(args.prompt_path).read_text()
     else:
-        args.prompt_template = None
+        args.prompt_path = args.prompt
+        args.prompt_version = args.prompt_version or (
+            Path(args.prompt_path).stem if args.prompt_path else None
+        )
+        args.prompt_template = Path(args.prompt_path).read_text() if args.prompt_path else None
     if not args.suite or not args.provider or not args.model:
         parser.error("--suite, --provider, and --model are required without --config")
 
@@ -226,6 +264,9 @@ def main() -> int:
                 "provider": args.provider,
                 "model": args.model,
                 "case_count": len(cases),
+                "prompt_path": args.prompt_path,
+                "prompt_version": args.prompt_version,
+                "tool_workflow": args.tool_workflow,
             },
             indent=2,
             sort_keys=True,

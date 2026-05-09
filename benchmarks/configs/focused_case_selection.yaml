@@ -1,14 +1,15 @@
 pubmedqa:
   source: benchmarks/cases/pubmedqa/pqa_l_full_1000.jsonl
-  output: benchmarks/cases/pubmedqa/balanced_30.jsonl
+  output: benchmarks/cases/pubmedqa/balanced_51.jsonl
   labels:
     - "yes"
     - "no"
     - "maybe"
-  per_label: 10
+  per_label: 17
   seed: 20260509
+  require_abstract_context: true
   case_id_prefix: pubmedqa_balanced
-  dataset_version: pqa_l_balanced_30_v1
+  dataset_version: pqa_l_balanced_51_v1
 bioasq:
   source: benchmarks/cases/bioasq/summary_full_1283.jsonl
   output: benchmarks/cases/bioasq/complex_12.jsonl

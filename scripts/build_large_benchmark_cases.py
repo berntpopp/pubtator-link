@@ -54,6 +54,12 @@ def _parse_ideal_answer(value: Any) -> str:
     return text
 
 
+def _parse_pubmedqa_context(value: Any) -> str:
+    if isinstance(value, list):
+        return "\n".join(str(part) for part in value)
+    return str(value or "")
+
+
 def build_pubmedqa(output: Path) -> int:
     raw = _load_https_json(PUBMEDQA_URL, timeout=60)
 
@@ -75,6 +81,7 @@ def build_pubmedqa(output: Path) -> int:
                 "case_metadata": {
                     "source_url": PUBMEDQA_URL,
                     "source_pmid": pmid,
+                    "abstract_context": _parse_pubmedqa_context(item.get("CONTEXTS", [])),
                     "year": item.get("YEAR"),
                     "meshes": item.get("MESHES", []),
                     "reasoning_required_pred": item.get("reasoning_required_pred"),
