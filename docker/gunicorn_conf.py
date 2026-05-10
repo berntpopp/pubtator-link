@@ -47,6 +47,12 @@ secure_scheme_headers = {
 preload_app = True
 reuse_port = True
 
+# Worker heartbeat tempfile location.
+# /dev/shm is a tmpfs that always exists on Linux containers (mode 1777, world-writable),
+# so this works under read_only: true root filesystems where /tmp may be unwritable or absent
+# for the non-root app user. See issue #23.
+worker_tmp_dir = "/dev/shm"
+
 
 # Graceful handling
 def on_starting(server: Any) -> None:
