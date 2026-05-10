@@ -56,7 +56,7 @@ embeddings = [
 
 [dependency-groups]
 dev = [
-    "pytest>=8.3.0,<9.0.0",
+    "pytest>=9.0.3,<10.0.0",
     "pytest-asyncio>=1.3.0,<2.0.0",
     "pytest-cov>=6.0.0,<8.0.0",
     "pytest-mock>=3.14.0,<4.0.0",
