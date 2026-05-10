@@ -41,5 +41,5 @@ def test_unified_app_mounts_streamable_http_mcp() -> None:
 
     assert tools.status_code == 200
     names = {tool["name"] for tool in tools.json()["result"]["tools"]}
-    assert "pubtator.search_literature" in names
+    assert "pubtator_search_literature" in names
     assert "pubtator.clear_api_cache" not in names

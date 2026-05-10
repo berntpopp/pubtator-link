@@ -104,10 +104,10 @@ async def test_convert_article_ids_adds_candidates_and_next_commands() -> None:
 
     assert response.candidate_pmids == ["123"]
     assert response.unresolved == ["bad"]
-    assert response.meta.next_commands[0]["tool"] == "pubtator.stage_research_session"
+    assert response.meta.next_commands[0]["tool"] == "pubtator_stage_research_session"
     assert response.meta.next_commands[0]["arguments"] == {"pmids": ["123"]}
     assert response.meta.next_commands[1] == {
-        "tool": "pubtator.index_review_evidence",
+        "tool": "pubtator_index_review_evidence",
         "arguments": {"pmids": ["123"]},
     }
     assert_no_prepare_mode(response.meta.next_commands)
@@ -229,7 +229,7 @@ async def test_lookup_mesh_returns_search_next_command() -> None:
     response = await service.lookup_mesh("familial mediterranean fever")
 
     assert response.descriptors[0].ui == "D010505"
-    assert response.meta.next_commands[0]["tool"] == "pubtator.search_literature"
+    assert response.meta.next_commands[0]["tool"] == "pubtator_search_literature"
 
 
 @pytest.mark.asyncio

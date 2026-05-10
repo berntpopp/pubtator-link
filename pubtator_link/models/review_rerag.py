@@ -114,8 +114,8 @@ ReviewLlmContextEventType = Literal[
 class McpToolKind(StrEnum):
     """MCP-facing tool names for the POC."""
 
-    index_review_evidence = "pubtator.index_review_evidence"
-    retrieve_review_context = "pubtator.retrieve_review_context"
+    index_review_evidence = "pubtator_index_review_evidence"
+    retrieve_review_context = "pubtator_retrieve_review_context"
 
 
 class EvidenceTier(StrEnum):

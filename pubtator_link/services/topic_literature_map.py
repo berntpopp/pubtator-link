@@ -275,7 +275,7 @@ class TopicLiteratureMapService:
             }
 
         meta = graph_request_metadata(
-            tool_name="pubtator.build_topic_literature_map",
+            tool_name="pubtator_build_topic_literature_map",
             request=request,
             source_versions={
                 "pubtator_search": "live",
@@ -291,7 +291,7 @@ class TopicLiteratureMapService:
                 "warnings": coalesced_provider_warnings(warnings),
                 "next_commands": [
                     *graph_detail_next_commands(
-                        tool_name="pubtator.build_topic_literature_map",
+                        tool_name="pubtator_build_topic_literature_map",
                         request=request,
                         modes=("full", "nodes_edges"),
                     ),
@@ -992,11 +992,11 @@ def _retrieval_hints(pmids: list[str]) -> list[dict[str, Any]]:
         return []
     return [
         {
-            "tool": "pubtator.get_publication_passages",
+            "tool": "pubtator_get_publication_passages",
             "arguments": {"pmids": pmids},
         },
         {
-            "tool": "pubtator.index_review_evidence",
+            "tool": "pubtator_index_review_evidence",
             "arguments": {"pmids": pmids},
         },
     ]
@@ -1598,7 +1598,7 @@ def _topic_map_recovery_commands(
     ):
         commands.append(
             {
-                "tool": "pubtator.build_topic_literature_map",
+                "tool": "pubtator_build_topic_literature_map",
                 "arguments": {**request_args, "include_citations": False},
             }
         )
@@ -1610,7 +1610,7 @@ def _topic_map_recovery_commands(
     ):
         commands.append(
             {
-                "tool": "pubtator.build_topic_literature_map",
+                "tool": "pubtator_build_topic_literature_map",
                 "arguments": {**request_args, "include_related_candidates": False},
             }
         )

@@ -100,10 +100,10 @@ The lean MCP profile already supports the benchmark workflows we need:
 
 | Benchmark need | MCP capability | Prompt adaptation |
 | --- | --- | --- |
-| Known PubMedQA PMID evidence | `pubtator.get_publication_passages` | Use `target_pmids`, retrieve compact passages, decide from retrieved passages only. |
-| Review-style BioASQ retrieval | `pubtator.index_review_evidence`, `pubtator.inspect_review_index`, `pubtator.retrieve_review_context_batch` | Index target PMIDs, confirm source coverage, retrieve quote-mode context, cite only returned PMIDs/passages. |
-| One-call open grounding | `pubtator.ground_question` | Reserve for open-retrieval experiments, not the default focused oracle-PMID benchmark. |
-| Auditability | `pubtator.record_review_context`, `pubtator.get_review_audit_trail` | Later tool-enabled runs should record selected passages and citation keys. |
+| Known PubMedQA PMID evidence | `pubtator_get_publication_passages` | Use `target_pmids`, retrieve compact passages, decide from retrieved passages only. |
+| Review-style BioASQ retrieval | `pubtator_index_review_evidence`, `pubtator_inspect_review_index`, `pubtator_retrieve_review_context_batch` | Index target PMIDs, confirm source coverage, retrieve quote-mode context, cite only returned PMIDs/passages. |
+| One-call open grounding | `pubtator_ground_question` | Reserve for open-retrieval experiments, not the default focused oracle-PMID benchmark. |
+| Auditability | `pubtator_record_review_context`, `pubtator_get_review_audit_trail` | Later tool-enabled runs should record selected passages and citation keys. |
 
 ## Action Plan
 

@@ -109,7 +109,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
     @mcp_tool_for(
         "full",
         "readonly",
-        name="pubtator.list_review_indexes",
+        name="pubtator_list_review_indexes",
         title="List Review Indexes",
         output_schema=ListReviewIndexesResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -124,12 +124,12 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
             service = await get_review_index_lifecycle_service()
             return await list_review_indexes_impl(service=service, limit=limit, offset=offset)
 
-        return await run_mcp_tool("pubtator.list_review_indexes", call)
+        return await run_mcp_tool("pubtator_list_review_indexes", call)
 
     @mcp_tool_for(
         "full",
         "readonly",
-        name="pubtator.get_review_index_summary",
+        name="pubtator_get_review_index_summary",
         title="Get Review Index Summary",
         output_schema=ReviewIndexSummaryResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -141,11 +141,11 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
             service = await get_review_index_lifecycle_service()
             return await get_review_index_summary_impl(service=service, review_id=review_id)
 
-        return await run_mcp_tool("pubtator.get_review_index_summary", call)
+        return await run_mcp_tool("pubtator_get_review_index_summary", call)
 
     @mcp_tool_for(
         "full",
-        name="pubtator.add_evidence_certainty",
+        name="pubtator_add_evidence_certainty",
         title="Add Evidence Certainty",
         output_schema=EvidenceCertaintyResponse.model_json_schema(),
         annotations=REVIEW_WRITE_ANNOTATIONS,
@@ -188,12 +188,12 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
                 validate_passages=validate_passages,
             )
 
-        return await run_mcp_tool("pubtator.add_evidence_certainty", call)
+        return await run_mcp_tool("pubtator_add_evidence_certainty", call)
 
     @mcp_tool_for(
         "full",
         "readonly",
-        name="pubtator.list_evidence_certainty",
+        name="pubtator_list_evidence_certainty",
         title="List Evidence Certainty",
         output_schema=ListEvidenceCertaintyResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -205,12 +205,12 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
             service = await get_review_evidence_certainty_service()
             return await list_evidence_certainty_impl(service=service, review_id=review_id)
 
-        return await run_mcp_tool("pubtator.list_evidence_certainty", call)
+        return await run_mcp_tool("pubtator_list_evidence_certainty", call)
 
     @mcp_tool_for(
         "full",
         "readonly",
-        name="pubtator.get_evidence_certainty",
+        name="pubtator_get_evidence_certainty",
         title="Get Evidence Certainty",
         output_schema=EvidenceCertaintyResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -226,13 +226,13 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
                 certainty_id=certainty_id,
             )
 
-        return await run_mcp_tool("pubtator.get_evidence_certainty", call)
+        return await run_mcp_tool("pubtator_get_evidence_certainty", call)
 
     @mcp_tool_for(
         "lean",
         "full",
         "readonly",
-        name="pubtator.preflight_review_sources",
+        name="pubtator_preflight_review_sources",
         title="Preflight Review Sources",
         output_schema=PreflightReviewSourcesResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -247,16 +247,16 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
             return await preflight_review_sources_impl(service=service, pmids=pmids)
 
         return await run_mcp_tool(
-            "pubtator.preflight_review_sources",
+            "pubtator_preflight_review_sources",
             call,
             pmids=pmids,
-            fallback_tool="pubtator.get_publication_passages",
+            fallback_tool="pubtator_get_publication_passages",
             fallback_args={"pmids": pmids, "mode": "full_abstract"},
         )
 
     @mcp_tool_for(
         "full",
-        name="pubtator.stage_research_session",
+        name="pubtator_stage_research_session",
         title="Stage Research Session",
         output_schema=StageResearchSessionResponse.model_json_schema(),
         annotations=REVIEW_WRITE_ANNOTATIONS,
@@ -298,7 +298,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
             )
 
         return await run_mcp_tool(
-            "pubtator.stage_research_session",
+            "pubtator_stage_research_session",
             call,
             pmids=pmids or [],
         )
@@ -306,7 +306,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
     @mcp_tool_for(
         "lean",
         "full",
-        name="pubtator.ground_question",
+        name="pubtator_ground_question",
         title="Ground Question",
         output_schema=GroundQuestionResponse.model_json_schema(),
         annotations=REVIEW_WRITE_ANNOTATIONS,
@@ -343,11 +343,11 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
                 max_response_chars=max_response_chars,
             )
 
-        return await run_mcp_tool("pubtator.ground_question", call)
+        return await run_mcp_tool("pubtator_ground_question", call)
 
     @mcp_tool_for(
         "full",
-        name="pubtator.review_quickstart",
+        name="pubtator_review_quickstart",
         title="Review Quickstart",
         output_schema=ReviewQuickstartResponse.model_json_schema(),
         annotations=REVIEW_WRITE_ANNOTATIONS,
@@ -376,12 +376,12 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
                 timeout_ms=timeout_ms,
             )
 
-        return await run_mcp_tool("pubtator.review_quickstart", call)
+        return await run_mcp_tool("pubtator_review_quickstart", call)
 
     @mcp_tool_for(
         "full",
         "readonly",
-        name="pubtator.get_research_session_status",
+        name="pubtator_get_research_session_status",
         title="Get Research Session Status",
         output_schema=ResearchSessionStatusResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -397,12 +397,12 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
                 session_id=session_id,
             )
 
-        return await run_mcp_tool("pubtator.get_research_session_status", call)
+        return await run_mcp_tool("pubtator_get_research_session_status", call)
 
     @mcp_tool_for(
         "full",
         "readonly",
-        name="pubtator.list_research_sessions",
+        name="pubtator_list_research_sessions",
         title="List Research Sessions",
         output_schema=ListResearchSessionsResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -414,12 +414,12 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
             service = await get_research_session_service()
             return await list_research_sessions_impl(service=service, review_id=review_id)
 
-        return await run_mcp_tool("pubtator.list_research_sessions", call)
+        return await run_mcp_tool("pubtator_list_research_sessions", call)
 
     @mcp_tool_for(
         "lean",
         "full",
-        name="pubtator.index_review_evidence",
+        name="pubtator_index_review_evidence",
         title="Index Review Evidence",
         output_schema=IndexReviewEvidenceResponse.model_json_schema(),
         annotations=REVIEW_WRITE_ANNOTATIONS,
@@ -473,7 +473,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
             return result
 
         return await run_mcp_tool(
-            "pubtator.index_review_evidence",
+            "pubtator_index_review_evidence",
             call,
             pmids=pmids or [],
         )
@@ -482,7 +482,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         "lean",
         "full",
         "readonly",
-        name="pubtator.inspect_review_index",
+        name="pubtator_inspect_review_index",
         title="Inspect Review Index",
         output_schema=InspectReviewIndexResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -521,12 +521,12 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
                 cursor=cursor,
             )
 
-        return await run_mcp_tool("pubtator.inspect_review_index", call, pmids=pmids)
+        return await run_mcp_tool("pubtator_inspect_review_index", call, pmids=pmids)
 
     @mcp_tool_for(
         "full",
         "readonly",
-        name="pubtator.get_review_passages_by_id",
+        name="pubtator_get_review_passages_by_id",
         title="Get Review Passages By ID",
         output_schema=ReviewPassageLookupResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -549,13 +549,13 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
                 max_chars_per_passage=max_chars_per_passage,
             )
 
-        return await run_mcp_tool("pubtator.get_review_passages_by_id", call)
+        return await run_mcp_tool("pubtator_get_review_passages_by_id", call)
 
     @mcp_tool_for(
         "lean",
         "full",
         "readonly",
-        name="pubtator.get_review_audit_trail",
+        name="pubtator_get_review_audit_trail",
         title="Get Review Audit Trail",
         output_schema=ReviewAuditTrailResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -578,12 +578,12 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
                 max_chars_per_passage=max_chars_per_passage,
             )
 
-        return await run_mcp_tool("pubtator.get_review_audit_trail", call)
+        return await run_mcp_tool("pubtator_get_review_audit_trail", call)
 
     @mcp_tool_for(
         "full",
         "readonly",
-        name="pubtator.get_neighboring_review_passages",
+        name="pubtator_get_neighboring_review_passages",
         title="Get Neighboring Review Passages",
         output_schema=ReviewPassageLookupResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -612,11 +612,11 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
                 max_chars_per_passage=max_chars_per_passage,
             )
 
-        return await run_mcp_tool("pubtator.get_neighboring_review_passages", call)
+        return await run_mcp_tool("pubtator_get_neighboring_review_passages", call)
 
     @mcp_tool_for(
         "full",
-        name="pubtator.export_review_audit_bundle",
+        name="pubtator_export_review_audit_bundle",
         title="Export Review Audit Bundle",
         output_schema=McpReviewAuditBundleResponse.model_json_schema(),
         annotations=FILE_EXPORT_ANNOTATIONS,
@@ -639,12 +639,12 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
                 fallback_inline=fallback_inline,
             )
 
-        return await run_mcp_tool("pubtator.export_review_audit_bundle", call)
+        return await run_mcp_tool("pubtator_export_review_audit_bundle", call)
 
     @mcp_tool_for(
         "full",
         "readonly",
-        name="pubtator.retrieve_review_context",
+        name="pubtator_retrieve_review_context",
         title="Retrieve Review Context",
         output_schema=RetrieveReviewContextResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -694,13 +694,13 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
             await _warn_if_degraded(ctx, result)
             return result
 
-        return await run_mcp_tool("pubtator.retrieve_review_context", call, pmids=pmids)
+        return await run_mcp_tool("pubtator_retrieve_review_context", call, pmids=pmids)
 
     @mcp_tool_for(
         "lean",
         "full",
         "readonly",
-        name="pubtator.retrieve_review_context_batch",
+        name="pubtator_retrieve_review_context_batch",
         title="Retrieve Review Context Batch",
         output_schema=RetrieveReviewContextBatchResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -771,7 +771,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
             return result
 
         return await run_mcp_tool(
-            "pubtator.retrieve_review_context_batch",
+            "pubtator_retrieve_review_context_batch",
             call,
             pmids=pmids,
         )
@@ -779,7 +779,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
     @mcp_tool_for(
         "lean",
         "full",
-        name="pubtator.record_review_context",
+        name="pubtator_record_review_context",
         title="Record Review Context",
         output_schema=RecordReviewContextResponse.model_json_schema(),
         annotations=REVIEW_WRITE_ANNOTATIONS,
@@ -852,4 +852,4 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
                 created_by=created_by,
             )
 
-        return await run_mcp_tool("pubtator.record_review_context", call)
+        return await run_mcp_tool("pubtator_record_review_context", call)

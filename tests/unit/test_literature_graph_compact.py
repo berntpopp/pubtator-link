@@ -83,12 +83,12 @@ def test_graph_request_signature_metadata_is_deterministic_for_request() -> None
     request = PublicationCitationGraphRequest(pmid="123", response_mode="compact")
 
     first = graph_request_metadata(
-        tool_name="pubtator.get_publication_citation_graph",
+        tool_name="pubtator_get_publication_citation_graph",
         request=request,
         source_versions={"pubmed": "live"},
     )
     second = graph_request_metadata(
-        tool_name="pubtator.get_publication_citation_graph",
+        tool_name="pubtator_get_publication_citation_graph",
         request=request,
         source_versions={"pubmed": "live"},
     )
@@ -112,12 +112,12 @@ def test_graph_detail_next_commands_preserve_request_args() -> None:
     request = PublicationCitationGraphRequest(pmid="123", response_mode="compact")
 
     commands = graph_detail_next_commands(
-        tool_name="pubtator.get_publication_citation_graph",
+        tool_name="pubtator_get_publication_citation_graph",
         request=request,
         modes=("full", "nodes_edges"),
     )
 
-    assert commands[0]["tool"] == "pubtator.get_publication_citation_graph"
+    assert commands[0]["tool"] == "pubtator_get_publication_citation_graph"
     assert commands[0]["arguments"]["pmid"] == "123"
     assert commands[0]["arguments"]["response_mode"] == "full"
     assert commands[1]["arguments"]["response_mode"] == "nodes_edges"

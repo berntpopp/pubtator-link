@@ -98,7 +98,7 @@ def _provider_command(provider: str, model: str, prompt: str) -> list[str]:
             model,
             prompt,
         ]
-        if "pubtator." in prompt:
+        if "pubtator_" in prompt:
             command[2:2] = ["--allowedTools", "mcp__pubtator-link"]
         else:
             command[2:2] = ["--tools", "WebSearch,WebFetch"]

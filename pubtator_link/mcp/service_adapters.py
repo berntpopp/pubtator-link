@@ -517,11 +517,11 @@ async def search_literature_impl(
     response_meta = {
         "coverage_note": (
             "Search is read-only metadata discovery. Use coverage='preflight' or "
-            "pubtator.preflight_review_sources before indexing if source coverage matters."
+            "pubtator_preflight_review_sources before indexing if source coverage matters."
         ),
         "next_tools": [
-            "pubtator.preflight_review_sources",
-            "pubtator.index_review_evidence",
+            "pubtator_preflight_review_sources",
+            "pubtator_index_review_evidence",
         ],
         "workflow": "search -> preflight -> index -> inspect -> retrieve",
         "details_resource": "pubtator://workflow-help",
@@ -865,10 +865,10 @@ async def review_quickstart_impl(
         indexed_totals=inspect_response.totals,
         ready_to_retrieve=ready_to_retrieve,
         next_commands=[
-            "pubtator.retrieve_review_context_batch"
+            "pubtator_retrieve_review_context_batch"
             if ready_to_retrieve
-            else "pubtator.inspect_review_index",
-            "pubtator.retrieve_review_context_batch",
+            else "pubtator_inspect_review_index",
+            "pubtator_retrieve_review_context_batch",
         ],
         warnings=warnings,
     )
@@ -922,7 +922,7 @@ async def ground_question_impl(
             search_total_results=search_total_results,
             ready_to_retrieve=False,
             context=None,
-            next_tools=["pubtator.search_literature"],
+            next_tools=["pubtator_search_literature"],
             recovery=["Refine the search query or provide candidate PMIDs explicitly."],
         ).model_dump(mode="json")
 
@@ -966,16 +966,16 @@ async def ground_question_impl(
                 ),
             )
             next_tools = [
-                "pubtator.record_review_context",
-                "pubtator.get_review_audit_trail",
+                "pubtator_record_review_context",
+                "pubtator_get_review_audit_trail",
             ]
         else:
             recovery.append(
                 "Indexing has not produced passages yet; inspect the review index and retry retrieval."
             )
             next_tools = [
-                "pubtator.inspect_review_index",
-                "pubtator.retrieve_review_context_batch",
+                "pubtator_inspect_review_index",
+                "pubtator_retrieve_review_context_batch",
             ]
     except Exception as exc:
         exc.pmids = selected_pmids  # type: ignore[attr-defined]
@@ -1409,7 +1409,7 @@ async def inspect_review_index_impl(
     if response.next_cursor:
         result.setdefault("_meta", {})["next_commands"] = [
             {
-                "tool": "pubtator.inspect_review_index",
+                "tool": "pubtator_inspect_review_index",
                 "arguments": {
                     "review_id": review_id,
                     "session_id": session_id,

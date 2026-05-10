@@ -20,13 +20,13 @@ def test_default_capabilities_are_small_and_skeletal() -> None:
 def test_capabilities_details_are_opt_in() -> None:
     payload = get_capabilities_resource(details=["sample_calls", "schema_policy"])
 
-    assert payload["details"]["sample_calls"]["pubtator.search_literature"]["text"]
+    assert payload["details"]["sample_calls"]["pubtator_search_literature"]["text"]
     assert "singleton string" in payload["details"]["schema_policy"]["list_inputs"].lower()
 
 
 def test_batch_retrieval_sample_omits_auto_fit_budget_arguments() -> None:
     payload = get_capabilities_resource(details=["sample_calls"])
-    sample = payload["details"]["sample_calls"]["pubtator.retrieve_review_context_batch"]
+    sample = payload["details"]["sample_calls"]["pubtator_retrieve_review_context_batch"]
 
     assert "max_chars" not in sample
     assert "max_response_chars" not in sample
@@ -34,7 +34,7 @@ def test_batch_retrieval_sample_omits_auto_fit_budget_arguments() -> None:
 
 def test_capabilities_document_guideline_search_as_filtered_literature_search() -> None:
     payload = get_capabilities_resource(details=["sample_calls", "schema_policy"])
-    sample_call = payload["details"]["sample_calls"]["pubtator.search_guidelines"]
+    sample_call = payload["details"]["sample_calls"]["pubtator_search_guidelines"]
     guideline_search = payload["details"]["schema_policy"]["guideline_search"]
     guideline_search_text = json.dumps(guideline_search).lower()
 
@@ -49,5 +49,5 @@ def test_preferred_tool_names_are_documented_without_breaking_existing_names() -
     payload = get_capabilities_resource(details=["schema_policy"])
     preferred = payload["details"]["schema_policy"]["preferred_tool_names"]
 
-    assert preferred["retrieve_review_context_batch"] == "pubtator.retrieve_review_context_batch"
-    assert "pubtator.retrieve_review_context_batch" in payload["core_workflow_tools"]
+    assert preferred["retrieve_review_context_batch"] == "pubtator_retrieve_review_context_batch"
+    assert "pubtator_retrieve_review_context_batch" in payload["core_workflow_tools"]

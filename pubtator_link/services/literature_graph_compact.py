@@ -221,7 +221,7 @@ def candidate_summary(
         signals=signals,
         source_tools=source_tools or [],
         next_actions=(
-            [{"tool": "pubtator.get_publication_passages", "arguments": {"pmids": [paper.pmid]}}]
+            [{"tool": "pubtator_get_publication_passages", "arguments": {"pmids": [paper.pmid]}}]
             if paper.pmid
             else []
         ),

@@ -203,38 +203,38 @@ hosted research deployments that should not expose write/export operations.
 
 | Tool | Use When |
 |------|----------|
-| `pubtator.workflow_help` | Get canonical workflow steps, fallbacks, and tool sequences |
-| `pubtator.search_literature` | Search PubMed literature through PubTator3; use `metadata="basic"` or `"full"` when citation fields are needed |
-| `pubtator.search_guidelines` | Search guideline, recommendation, consensus, and systematic review papers |
-| `pubtator.diagnostics` | Check MCP subsystem readiness and recovery hints |
-| `pubtator.convert_article_ids` | Read-only research-use article ID conversion; returns candidate PMIDs for staging/indexing |
-| `pubtator.lookup_mesh` | Read-only research-use MeSH vocabulary lookup before search |
-| `pubtator.lookup_citation` | Read-only research-use citation-to-PMID lookup; returns candidate PMIDs |
-| `pubtator.find_related_articles` | Read-only research-use related/cited/reference article expansion; returns candidate PMIDs |
-| `pubtator.suggest_corpus` | Suggest a compact, role-labeled candidate PMID corpus from a research question |
-| `pubtator.get_publication_metadata` | Fetch citation-grade PMID metadata, publication types, MeSH terms, and coverage hints |
-| `pubtator.get_publication_passages` | Fetch compact citable passages for PubMed IDs |
-| `pubtator.get_publication_citation_graph` | Explore references and cited-by neighbors for one PMID or DOI |
-| `pubtator.find_related_evidence_candidates` | Find transparent related evidence candidates for one seed PMID |
-| `pubtator.build_topic_literature_map` | Build a bounded topic graph across papers, authors, citations, and entities |
-| `pubtator.estimate_publication_context` | Estimate compact publication context before fetching |
-| `pubtator.inspect_review_index` | Inspect indexed PMIDs, sections, counts, failures, and useful samples with `min_sample_chars=80` |
-| `pubtator.retrieve_review_context_batch` | Preferred review retrieval path; try multiple queries and merge compact citable context |
-| `pubtator.record_review_context` | Persist durable review decisions, selected evidence IDs, and next-step state without article text |
-| `pubtator.stage_research_session` | Stage query or PMID candidates with coverage hints and queued review preparation |
-| `pubtator.get_research_session_status` | Poll staged candidate and preparation status |
-| `pubtator.list_research_sessions` | List staged sessions for a review ID |
-| `pubtator.fetch_publication_annotations` | Fetch annotations for PubMed IDs |
-| `pubtator.fetch_pmc_annotations` | Fetch annotations for PMC full-text articles |
-| `pubtator.search_biomedical_entities` | Find canonical PubTator biomedical entity IDs |
-| `pubtator.find_entity_relations` | Explore literature-derived relations for a PubTator entity |
-| `pubtator.submit_text_annotation` | Submit research text for PubTator biomedical NER |
-| `pubtator.get_text_annotation_results` | Retrieve asynchronous text annotation results |
-| `pubtator.get_server_capabilities` | Discover formats, bioconcepts, relation types, and limitations |
+| `pubtator_workflow_help` | Get canonical workflow steps, fallbacks, and tool sequences |
+| `pubtator_search_literature` | Search PubMed literature through PubTator3; use `metadata="basic"` or `"full"` when citation fields are needed |
+| `pubtator_search_guidelines` | Search guideline, recommendation, consensus, and systematic review papers |
+| `pubtator_diagnostics` | Check MCP subsystem readiness and recovery hints |
+| `pubtator_convert_article_ids` | Read-only research-use article ID conversion; returns candidate PMIDs for staging/indexing |
+| `pubtator_lookup_mesh` | Read-only research-use MeSH vocabulary lookup before search |
+| `pubtator_lookup_citation` | Read-only research-use citation-to-PMID lookup; returns candidate PMIDs |
+| `pubtator_find_related_articles` | Read-only research-use related/cited/reference article expansion; returns candidate PMIDs |
+| `pubtator_suggest_corpus` | Suggest a compact, role-labeled candidate PMID corpus from a research question |
+| `pubtator_get_publication_metadata` | Fetch citation-grade PMID metadata, publication types, MeSH terms, and coverage hints |
+| `pubtator_get_publication_passages` | Fetch compact citable passages for PubMed IDs |
+| `pubtator_get_publication_citation_graph` | Explore references and cited-by neighbors for one PMID or DOI |
+| `pubtator_find_related_evidence_candidates` | Find transparent related evidence candidates for one seed PMID |
+| `pubtator_build_topic_literature_map` | Build a bounded topic graph across papers, authors, citations, and entities |
+| `pubtator_estimate_publication_context` | Estimate compact publication context before fetching |
+| `pubtator_inspect_review_index` | Inspect indexed PMIDs, sections, counts, failures, and useful samples with `min_sample_chars=80` |
+| `pubtator_retrieve_review_context_batch` | Preferred review retrieval path; try multiple queries and merge compact citable context |
+| `pubtator_record_review_context` | Persist durable review decisions, selected evidence IDs, and next-step state without article text |
+| `pubtator_stage_research_session` | Stage query or PMID candidates with coverage hints and queued review preparation |
+| `pubtator_get_research_session_status` | Poll staged candidate and preparation status |
+| `pubtator_list_research_sessions` | List staged sessions for a review ID |
+| `pubtator_fetch_publication_annotations` | Fetch annotations for PubMed IDs |
+| `pubtator_fetch_pmc_annotations` | Fetch annotations for PMC full-text articles |
+| `pubtator_search_biomedical_entities` | Find canonical PubTator biomedical entity IDs |
+| `pubtator_find_entity_relations` | Explore literature-derived relations for a PubTator entity |
+| `pubtator_submit_text_annotation` | Submit research text for PubTator biomedical NER |
+| `pubtator_get_text_annotation_results` | Retrieve asynchronous text annotation results |
+| `pubtator_get_server_capabilities` | Discover formats, bioconcepts, relation types, and limitations |
 
 ### Context-Safe Review Retrieval
 
-Prefer `pubtator.retrieve_review_context_batch` for LLM clients. It uses
+Prefer `pubtator_retrieve_review_context_batch` for LLM clients. It uses
 flat arguments and defaults to `response_mode="compact"`, returning merged
 citable passages plus per-query summaries. Use `response_mode="diagnostics"` to
 refine queries without passage text, `response_mode="merged_only"` for the
@@ -247,32 +247,32 @@ tools: `pubtator://reviews/{review_id}`,
 `pubtator://reviews/{review_id}/passages/{passage_id}`,
 `pubtator://reviews/{review_id}/audit/{passage_id}`, and
 `pubtator://reviews/{review_id}/llm-context/latest`. Use
-`pubtator.record_review_context` to persist selected PMIDs/passages, open
+`pubtator_record_review_context` to persist selected PMIDs/passages, open
 questions, user decisions, and next commands for later resume.
 
 Search defaults are compact for LLM use: `response_mode="compact"`,
 `include_citations="none"`, `text_hl_format="plain"`, and MCP coverage
-preflight enabled. Use `metadata="basic"` on `pubtator.search_literature` when
+preflight enabled. Use `metadata="basic"` on `pubtator_search_literature` when
 the result list needs authors, DOI, publication types, or journal fields, and
 reserve `metadata="full"` for citation-finalization passes. Ask for
 `include_citations="nlm"` or `"bibtex"` only for the final source list, and use
-`pubtator.search_guidelines` when a guideline or consensus source should be
+`pubtator_search_guidelines` when a guideline or consensus source should be
 boosted.
 
-For reproducible review setup, call `pubtator.workflow_help`, use
-`pubtator.suggest_corpus(question, max_pmids)` or
-`pubtator.search_literature(metadata="basic")` to build candidates, then index
-and inspect with `pubtator.inspect_review_index(min_sample_chars=80)` before
+For reproducible review setup, call `pubtator_workflow_help`, use
+`pubtator_suggest_corpus(question, max_pmids)` or
+`pubtator_search_literature(metadata="basic")` to build candidates, then index
+and inspect with `pubtator_inspect_review_index(min_sample_chars=80)` before
 retrieval.
 
 `review_id` is a durable caller-provided namespace for one review corpus.
 Reusing it appends new PMIDs and treats already prepared PMIDs as no-ops. Use a
 stable project slug and never include PHI.
 
-If `pubtator.index_review_evidence` is unavailable, call
-`pubtator.diagnostics` first. For self-hosted databases, run `make db-migrate`
+If `pubtator_index_review_evidence` is unavailable, call
+`pubtator_diagnostics` first. For self-hosted databases, run `make db-migrate`
 to repair stale review schema, then retry. While indexing is unavailable, fall
-back to `pubtator.get_publication_passages` with the same PMIDs so the LLM can
+back to `pubtator_get_publication_passages` with the same PMIDs so the LLM can
 continue with abstract/compact passage grounding.
 
 Review retrieval excludes tables and references by default and returns budget

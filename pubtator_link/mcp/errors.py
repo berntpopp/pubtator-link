@@ -146,35 +146,35 @@ def error_code_for_exception(exc: Exception) -> str:
 def _fallback_for_context(context: McpErrorContext) -> tuple[str | None, dict[str, Any] | None]:
     if context.fallback_tool is not None:
         return context.fallback_tool, context.fallback_args or {}
-    if context.tool_name == "pubtator.preflight_review_sources" and context.pmids:
+    if context.tool_name == "pubtator_preflight_review_sources" and context.pmids:
         return (
-            "pubtator.get_publication_passages",
+            "pubtator_get_publication_passages",
             {"pmids": context.pmids, "mode": "full_abstract"},
         )
     if (
         context.tool_name
         in {
-            "pubtator.index_review_evidence",
-            "pubtator.stage_research_session",
+            "pubtator_index_review_evidence",
+            "pubtator_stage_research_session",
         }
         and context.pmids
     ):
         return (
-            "pubtator.get_publication_passages",
+            "pubtator_get_publication_passages",
             {"pmids": context.pmids, "mode": "compact_passages"},
         )
     return None, None
 
 
 def _recovery_text_for_context(context: McpErrorContext, fallback_tool: str | None) -> str:
-    if context.tool_name == "pubtator.preflight_review_sources" and fallback_tool:
+    if context.tool_name == "pubtator_preflight_review_sources" and fallback_tool:
         return (
-            "Call pubtator.get_publication_passages with the same PMIDs. "
+            "Call pubtator_get_publication_passages with the same PMIDs. "
             "Use mode='full_abstract' for article-local answering; run diagnostics only if "
             "passage retrieval also fails."
         )
     return (
-        "Run pubtator.diagnostics. If the review schema is stale, apply database migrations "
+        "Run pubtator_diagnostics. If the review schema is stale, apply database migrations "
         "and retry."
     )
 
@@ -213,15 +213,15 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> ToolError:
     exception_pmids = _pmids_for_exception(exc)
     if (
         fallback_tool is None
-        and context.tool_name == "pubtator.ground_question"
+        and context.tool_name == "pubtator_ground_question"
         and exception_pmids
     ):
-        fallback_tool = "pubtator.get_publication_passages"
+        fallback_tool = "pubtator_get_publication_passages"
         fallback_args = {"pmids": exception_pmids, "mode": "compact_passages"}
     next_commands: list[dict[str, Any]] = []
     if fallback_tool and fallback_args is not None:
         next_commands.append({"tool": fallback_tool, "arguments": fallback_args})
-    next_commands.append({"tool": "pubtator.diagnostics", "arguments": {}})
+    next_commands.append({"tool": "pubtator_diagnostics", "arguments": {}})
     payload = {
         "success": False,
         "error_code": error_code_for_exception(exc),

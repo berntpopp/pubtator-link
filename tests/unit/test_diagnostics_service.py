@@ -35,7 +35,7 @@ async def test_diagnostics_reports_recent_review_database_tool_error() -> None:
 
     clear_recent_mcp_errors()
     record_mcp_error(
-        tool_name="pubtator.index_review_evidence",
+        tool_name="pubtator_index_review_evidence",
         error_code="review_index_unavailable",
         message="Review database operation failed.",
         raw_message="relation review_sources does not exist",
@@ -64,4 +64,4 @@ async def test_diagnostics_reports_recent_review_database_tool_error() -> None:
         response.subsystems["recent_mcp_errors"]["latest"][0]["error_code"]
         == "review_index_unavailable"
     )
-    assert any("pubtator.index_review_evidence" in item for item in response.recovery)
+    assert any("pubtator_index_review_evidence" in item for item in response.recovery)

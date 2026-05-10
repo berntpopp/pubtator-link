@@ -29,7 +29,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
         return
 
     @mcp.tool(
-        name="pubtator.suggest_corpus",
+        name="pubtator_suggest_corpus",
         title="Suggest Corpus",
         output_schema=CorpusSuggestionResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -56,10 +56,10 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
                 include_metadata=include_metadata,
             )
 
-        return await run_mcp_tool("pubtator.suggest_corpus", call)
+        return await run_mcp_tool("pubtator_suggest_corpus", call)
 
     @mcp.tool(
-        name="pubtator.convert_article_ids",
+        name="pubtator_convert_article_ids",
         title="Convert Article IDs",
         output_schema=ArticleIdConversionResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -75,10 +75,10 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
             response = await service.convert_article_ids(ids=ids, source=source)
             return response.model_dump(by_alias=True)
 
-        return await run_mcp_tool("pubtator.convert_article_ids", call)
+        return await run_mcp_tool("pubtator_convert_article_ids", call)
 
     @mcp.tool(
-        name="pubtator.lookup_mesh",
+        name="pubtator_lookup_mesh",
         title="Lookup MeSH",
         output_schema=MeshLookupResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -95,10 +95,10 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
             response = await service.lookup_mesh(query=query, limit=limit, exact=exact)
             return response.model_dump(by_alias=True)
 
-        return await run_mcp_tool("pubtator.lookup_mesh", call)
+        return await run_mcp_tool("pubtator_lookup_mesh", call)
 
     @mcp.tool(
-        name="pubtator.lookup_citation",
+        name="pubtator_lookup_citation",
         title="Lookup Citation",
         output_schema=CitationLookupResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -113,10 +113,10 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
             response = await service.lookup_citation(citations=citations)
             return response.model_dump(by_alias=True)
 
-        return await run_mcp_tool("pubtator.lookup_citation", call)
+        return await run_mcp_tool("pubtator_lookup_citation", call)
 
     @mcp.tool(
-        name="pubtator.find_related_articles",
+        name="pubtator_find_related_articles",
         title="Find Related Articles",
         output_schema=RelatedArticlesResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -133,4 +133,4 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
             response = await service.find_related_articles(pmids=pmids, mode=mode, limit=limit)
             return response.model_dump(by_alias=True)
 
-        return await run_mcp_tool("pubtator.find_related_articles", call, pmids=pmids)
+        return await run_mcp_tool("pubtator_find_related_articles", call, pmids=pmids)
