@@ -136,6 +136,27 @@ def test_capability_filter_does_not_treat_package_name_as_tool() -> None:
     assert _string_references_unavailable_tool(sentence, allowed) is False
 
 
+def test_capability_filter_handles_trailing_punctuation_around_tool_names() -> None:
+    # The matcher must not slurp adjacent punctuation into the captured name,
+    # otherwise a sentence like "...call pubtator_search_literature." would be
+    # treated as referencing an unknown tool because "pubtator_search_literature."
+    # is not in the allowed set.
+    from pubtator_link.mcp.resources import _string_references_unavailable_tool
+
+    allowed = {"pubtator_search_literature"}
+    assert (
+        _string_references_unavailable_tool("First call pubtator_search_literature.", allowed)
+        is False
+    )
+    assert (
+        _string_references_unavailable_tool(
+            "Use pubtator_search_literature, then pubtator_get_publication_passages.",
+            allowed | {"pubtator_get_publication_passages"},
+        )
+        is False
+    )
+
+
 def test_server_instructions_are_tool_search_friendly() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 

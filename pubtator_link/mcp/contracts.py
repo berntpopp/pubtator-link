@@ -75,9 +75,9 @@ SCHEMA_POLICY = {
     "list_inputs": "Use arrays for list inputs; do not pass a singleton string.",
     "preferred_tool_names": PREFERRED_TOOL_NAMES,
     "tool_name_policy": (
-        "Registered tools retain the pubtator. prefix for backward compatibility and to "
-        "disambiguate clients that do not include the MCP server name in display text. "
-        "Future aliases must be additive only."
+        "Registered tools use the pubtator_ prefix (snake_case) so every name conforms "
+        "to the Anthropic remote-MCP regex ^[a-zA-Z0-9_-]{1,64}$ required by hosted "
+        "Claude clients. Future aliases must be additive only."
     ),
     "guideline_search": {
         "tool": "pubtator_search_guidelines",
