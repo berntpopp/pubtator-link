@@ -366,7 +366,7 @@ class CitationGraphService:
             *open_access_status,
         ]
         meta = graph_request_metadata(
-            tool_name="pubtator.get_publication_citation_graph",
+            tool_name="pubtator_get_publication_citation_graph",
             request=request,
             source_versions=_citation_source_versions(request, self),
         ).model_copy(
@@ -377,7 +377,7 @@ class CitationGraphService:
                 "next_commands": [
                     *_next_commands(candidate_pmids),
                     *graph_detail_next_commands(
-                        tool_name="pubtator.get_publication_citation_graph",
+                        tool_name="pubtator_get_publication_citation_graph",
                         request=request,
                         modes=("full", "nodes_edges"),
                     ),
@@ -1065,11 +1065,11 @@ def _next_commands(candidate_pmids: list[str]) -> list[dict[str, Any]]:
         return []
     return [
         {
-            "tool": "pubtator.get_publication_passages",
+            "tool": "pubtator_get_publication_passages",
             "arguments": {"pmids": candidate_pmids},
         },
         {
-            "tool": "pubtator.index_review_evidence",
+            "tool": "pubtator_index_review_evidence",
             "arguments": {"pmids": candidate_pmids},
         },
     ]

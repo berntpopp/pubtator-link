@@ -12,7 +12,7 @@ from pubtator_link.benchmarks.summaries import render_combined_summary, render_s
 def test_codex_event_parser_extracts_mcp_tool_calls() -> None:
     events = parse_cli_events(Path("tests/fixtures/benchmarks/codex_mcp.events.jsonl"))
 
-    assert events.tool_calls[0].tool_name == "pubtator.get_publication_passages"
+    assert events.tool_calls[0].tool_name == "pubtator_get_publication_passages"
     assert events.tool_calls[0].coverage_summary["abstract_only"] == 10
 
 

@@ -7,7 +7,7 @@ Revision: 2 (deep review against actual codebase and MCP 2025-06-18 spec)
 > readonly profiles, generated tool catalog, review resource templates, durable
 > LLM context, compact search author summaries, minimum diagnostics workflow,
 > hosted HTTP safety controls, typed MCP error mapping, and
-> `pubtator.ground_question`. Remaining larger work is OAuth/public auth,
+> `pubtator_ground_question`. Remaining larger work is OAuth/public auth,
 > OpenTelemetry, cursor pagination, optional elicitation, and hybrid retrieval
 > quality upgrades.
 
@@ -345,20 +345,20 @@ common biomedical literature and review workflows.
 
 Recommended default tools:
 
-1. `pubtator.workflow_help`
-2. `pubtator.diagnostics`
-3. `pubtator.search_literature`
-4. `pubtator.search_guidelines`
-5. `pubtator.search_biomedical_entities`
-6. `pubtator.lookup_variant_evidence`
-7. `pubtator.get_publication_metadata`
-8. `pubtator.get_publication_passages`
-9. `pubtator.preflight_review_sources`
-10. `pubtator.index_review_evidence`
-11. `pubtator.inspect_review_index`
-12. `pubtator.retrieve_review_context_batch`
-13. `pubtator.get_review_audit_trail`
-14. `pubtator.get_server_capabilities`
+1. `pubtator_workflow_help`
+2. `pubtator_diagnostics`
+3. `pubtator_search_literature`
+4. `pubtator_search_guidelines`
+5. `pubtator_search_biomedical_entities`
+6. `pubtator_lookup_variant_evidence`
+7. `pubtator_get_publication_metadata`
+8. `pubtator_get_publication_passages`
+9. `pubtator_preflight_review_sources`
+10. `pubtator_index_review_evidence`
+11. `pubtator_inspect_review_index`
+12. `pubtator_retrieve_review_context_batch`
+13. `pubtator_get_review_audit_trail`
+14. `pubtator_get_server_capabilities`
 
 This is still more than a tiny API, but it is small enough for an LLM to choose
 correctly and covers the full grounded workflow.
@@ -367,29 +367,29 @@ correctly and covers the full grounded workflow.
 
 These are useful but should move to an advanced profile or resource-first usage:
 
-- `pubtator.review_quickstart`
-- `pubtator.stage_research_session`
-- `pubtator.get_research_session_status`
-- `pubtator.list_research_sessions`
-- `pubtator.list_review_indexes`
-- `pubtator.get_review_index_summary`
-- `pubtator.retrieve_review_context`
-- `pubtator.get_review_passages_by_id`
-- `pubtator.get_neighboring_review_passages`
-- `pubtator.export_review_audit_bundle`
-- `pubtator.fetch_publication_annotations`
-- `pubtator.fetch_pmc_annotations`
-- `pubtator.submit_text_annotation`
-- `pubtator.get_text_annotation_results`
-- `pubtator.find_entity_relations`
-- `pubtator.convert_article_ids`
-- `pubtator.lookup_mesh`
-- `pubtator.lookup_citation`
-- `pubtator.find_related_articles`
-- `pubtator.suggest_corpus`
-- `pubtator.add_evidence_certainty`
-- `pubtator.list_evidence_certainty`
-- `pubtator.get_evidence_certainty`
+- `pubtator_review_quickstart`
+- `pubtator_stage_research_session`
+- `pubtator_get_research_session_status`
+- `pubtator_list_research_sessions`
+- `pubtator_list_review_indexes`
+- `pubtator_get_review_index_summary`
+- `pubtator_retrieve_review_context`
+- `pubtator_get_review_passages_by_id`
+- `pubtator_get_neighboring_review_passages`
+- `pubtator_export_review_audit_bundle`
+- `pubtator_fetch_publication_annotations`
+- `pubtator_fetch_pmc_annotations`
+- `pubtator_submit_text_annotation`
+- `pubtator_get_text_annotation_results`
+- `pubtator_find_entity_relations`
+- `pubtator_convert_article_ids`
+- `pubtator_lookup_mesh`
+- `pubtator_lookup_citation`
+- `pubtator_find_related_articles`
+- `pubtator_suggest_corpus`
+- `pubtator_add_evidence_certainty`
+- `pubtator_list_evidence_certainty`
+- `pubtator_get_evidence_certainty`
 
 Advanced does not mean bad. It means "do not spend default prompt budget on
 this unless the workflow needs it."
@@ -474,7 +474,7 @@ Add resource templates first:
 
 Add one write-like tool only if needed:
 
-- `pubtator.record_review_context`
+- `pubtator_record_review_context`
 
 Arguments:
 
@@ -957,7 +957,7 @@ Deliverables:
 - `review_llm_context`
 - `review_llm_context_events`
 - `pubtator://reviews/{review_id}/llm-context`
-- optional `pubtator.record_review_context`
+- optional `pubtator_record_review_context`
 
 Expected impact:
 

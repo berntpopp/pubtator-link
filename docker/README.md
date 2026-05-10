@@ -186,7 +186,7 @@ Review re-RAG data lives in the PostgreSQL volume. Rebuilding the image does not
 reset or migrate an existing volume. From the repository root, run
 `make db-migrate` after pulling review-index schema changes, then restart the
 server. If the MCP reports `index_review_evidence` unavailable, call
-`pubtator.diagnostics` and use `pubtator.get_publication_passages` with the same
+`pubtator_diagnostics` and use `pubtator_get_publication_passages` with the same
 PMIDs until `/ready` reports a current schema.
 
 ## 🚨 Troubleshooting

@@ -49,7 +49,7 @@
   - `error_recovery`
   - `workflow_ergonomics`
 - Full-text benchmark coverage is visible separately from abstract-only coverage.
-- `preflight_review_sources` errors include an actionable fallback command to `pubtator.get_publication_passages`.
+- `preflight_review_sources` errors include an actionable fallback command to `pubtator_get_publication_passages`.
 - Article-local PubMedQA retrieval can request all title and abstract passages without guessing passage limits.
 - Reports show source coverage counts and decisive-overcall rate on gold `maybe` cases.
 - Raw benchmark outputs remain ignored under `benchmarks/results/` and `benchmarks/logs/`.
@@ -59,7 +59,7 @@
 - Modify: `pubtator_link/mcp/errors.py`
   - Add review-preflight-specific fallback behavior and recovery text.
 - Modify: `pubtator_link/mcp/tools/review.py`
-  - Pass explicit fallback metadata into `run_mcp_tool` for `pubtator.preflight_review_sources`.
+  - Pass explicit fallback metadata into `run_mcp_tool` for `pubtator_preflight_review_sources`.
 - Modify: `pubtator_link/mcp/tools/publications.py`
   - Improve `get_publication_passages` description and expose `full_abstract` mode.
 - Modify: `pubtator_link/models/publication_passages.py`
@@ -106,7 +106,7 @@ def test_preflight_review_sources_error_points_to_publication_passages() -> None
     error = mcp_tool_error(
         RuntimeError("temporary preflight failure"),
         McpErrorContext(
-            tool_name="pubtator.preflight_review_sources",
+            tool_name="pubtator_preflight_review_sources",
             pmids=["10490564", "10927144"],
         ),
     )
@@ -114,18 +114,18 @@ def test_preflight_review_sources_error_points_to_publication_passages() -> None
     payload = json.loads(str(error))
 
     assert payload["error_code"] == "internal_error"
-    assert payload["fallback_tool"] == "pubtator.get_publication_passages"
+    assert payload["fallback_tool"] == "pubtator_get_publication_passages"
     assert payload["fallback_args"] == {
         "pmids": ["10490564", "10927144"],
         "mode": "full_abstract",
     }
     assert payload["recovery"] == (
-        "Call pubtator.get_publication_passages with the same PMIDs. "
+        "Call pubtator_get_publication_passages with the same PMIDs. "
         "Use mode='full_abstract' for article-local answering; run diagnostics only if "
         "passage retrieval also fails."
     )
     assert payload["_meta"]["next_commands"][0] == {
-        "tool": "pubtator.get_publication_passages",
+        "tool": "pubtator_get_publication_passages",
         "arguments": {
             "pmids": ["10490564", "10927144"],
             "mode": "full_abstract",
@@ -148,9 +148,9 @@ Expected: FAIL because preflight errors currently do not get publication-passage
 In `pubtator_link/mcp/errors.py`, update `_fallback_for_context` to include preflight:
 
 ```python
-    if context.tool_name == "pubtator.preflight_review_sources" and context.pmids:
+    if context.tool_name == "pubtator_preflight_review_sources" and context.pmids:
         return (
-            "pubtator.get_publication_passages",
+            "pubtator_get_publication_passages",
             {"pmids": context.pmids, "mode": "full_abstract"},
         )
 ```
@@ -159,14 +159,14 @@ Add this helper:
 
 ```python
 def _recovery_text_for_context(context: McpErrorContext, fallback_tool: str | None) -> str:
-    if context.tool_name == "pubtator.preflight_review_sources" and fallback_tool:
+    if context.tool_name == "pubtator_preflight_review_sources" and fallback_tool:
         return (
-            "Call pubtator.get_publication_passages with the same PMIDs. "
+            "Call pubtator_get_publication_passages with the same PMIDs. "
             "Use mode='full_abstract' for article-local answering; run diagnostics only if "
             "passage retrieval also fails."
         )
     return (
-        "Run pubtator.diagnostics. If the review schema is stale, apply database migrations "
+        "Run pubtator_diagnostics. If the review schema is stale, apply database migrations "
         "and retry."
     )
 ```
@@ -183,10 +183,10 @@ In `pubtator_link/mcp/tools/review.py`, update `preflight_review_sources`:
 
 ```python
         return await run_mcp_tool(
-            "pubtator.preflight_review_sources",
+            "pubtator_preflight_review_sources",
             call,
             pmids=pmids,
-            fallback_tool="pubtator.get_publication_passages",
+            fallback_tool="pubtator_get_publication_passages",
             fallback_args={"pmids": pmids, "mode": "full_abstract"},
         )
 ```
@@ -330,7 +330,7 @@ Apply the same `_effective_max_passages_per_pmid(request)` call in `estimate_con
 In `pubtator_link/mcp/tools/publications.py`, update the docstring for `get_publication_passages`:
 
 ```python
-        """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. For article-local question answering, use mode='full_abstract' first; it returns all title/abstract passages without truncating structured abstracts. If full=True returns only abstracts, inspect coverage_by_pmid and answer from available evidence. Do not use this for prepared review RAG; use pubtator.retrieve_review_context_batch."""
+        """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. For article-local question answering, use mode='full_abstract' first; it returns all title/abstract passages without truncating structured abstracts. If full=True returns only abstracts, inspect coverage_by_pmid and answer from available evidence. Do not use this for prepared review RAG; use pubtator_retrieve_review_context_batch."""
 ```
 
 - [ ] **Step 6: Verify**
@@ -823,7 +823,7 @@ def test_pubmedqa_mcp_prompt_mentions_full_abstract_and_maybe_calibration() -> N
     prompt = Path("benchmarks/prompts/provider_pubmedqa_mcp_article_local_v1.md").read_text()
 
     assert "mode='full_abstract'" in prompt
-    assert "If preflight fails, call pubtator.get_publication_passages" in prompt
+    assert "If preflight fails, call pubtator_get_publication_passages" in prompt
     assert "Do not convert conditional, underpowered, mixed, or method-limited evidence into yes/no" in prompt
 ```
 
@@ -844,9 +844,9 @@ In `benchmarks/prompts/provider_pubmedqa_mcp_article_local_v1.md`, update the wo
 ```markdown
 Recommended workflow:
 1. Use target_pmids from the case as the article-local evidence set.
-2. Call pubtator.preflight_review_sources for those PMIDs when available.
-3. If preflight fails, call pubtator.get_publication_passages with the same PMIDs.
-4. For article-local answering, call pubtator.get_publication_passages with mode='full_abstract'. Prefer full text when available; otherwise use the complete title/abstract evidence.
+2. Call pubtator_preflight_review_sources for those PMIDs when available.
+3. If preflight fails, call pubtator_get_publication_passages with the same PMIDs.
+4. For article-local answering, call pubtator_get_publication_passages with mode='full_abstract'. Prefer full text when available; otherwise use the complete title/abstract evidence.
 5. Decide only from MCP-returned evidence. Do not use outside biomedical knowledge.
 6. Do not convert conditional, underpowered, mixed, or method-limited evidence into yes/no. Use "maybe" when evidence supports a nuanced or context-dependent answer.
 ```

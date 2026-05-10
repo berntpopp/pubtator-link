@@ -78,7 +78,7 @@ async def test_corpus_suggestion_service_deduplicates_and_assigns_roles() -> Non
     assert any("@GENE_MEFV" in query for query in search.queries)
     assert response.candidates[0].role == "guideline"
     assert response.candidates[1].role == "cohort"
-    assert "pubtator.index_review_evidence" in response.meta["next_commands"][1]
+    assert "pubtator_index_review_evidence" in response.meta["next_commands"][1]
     assert "FMF MEFV VUS colchicine" in response.meta["next_commands"][3]
 
 

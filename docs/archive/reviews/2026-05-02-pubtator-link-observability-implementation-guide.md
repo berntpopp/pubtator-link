@@ -23,7 +23,7 @@ The foundation pieces from PR-1 through PR-3 and the review RAG reliability/LLM 
 | Batch response schema | Shipped | Compact/diagnostics batch retrieval can omit empty `results`, and the advertised output schema permits that lean response. |
 | Prepare-mode compatibility | Shipped | `index_review_evidence` no longer advertises `prepare_mode`, but accepts cached legacy `prepare_mode="selected"` calls. |
 | Coverage preflight retry hints | Shipped | Search responses include structured `preflight_error` with `retryable`; `coverage_preflight_internal_error` is non-retryable. |
-| Review quickstart handoff | Shipped | `pubtator.review_quickstart(topic, n_pmids=8)` searches, stages/indexes, inspects, and returns a retrieval handoff. |
+| Review quickstart handoff | Shipped | `pubtator_review_quickstart(topic, n_pmids=8)` searches, stages/indexes, inspects, and returns a retrieval handoff. |
 | OpenTelemetry traces | Not shipped | Still a follow-up; this guide keeps the trace plan as future work. |
 | Broader MCP-native UX notices | Partial | Degraded-mode notices are shipped; zero-result "call X first" notices and richer fallback notices remain follow-up work. |
 
@@ -94,25 +94,25 @@ The MCP spec defines two relevant primitives:
 - **`notifications/message`** — server pushes a structured log to the host: `{ level, logger, data }` where `data` is arbitrary JSON.
 - **`logging/setLevel`** — host can request a minimum severity at runtime (default is `warning`).
 
-**Why this matters:** when a Claude/Cursor user runs `pubtator.retrieve_review_context_batch` against degraded evidence, the host can surface a server-emitted notice in the same chat thread. This is now implemented for review evidence degraded modes.
+**Why this matters:** when a Claude/Cursor user runs `pubtator_retrieve_review_context_batch` against degraded evidence, the host can surface a server-emitted notice in the same chat thread. This is now implemented for review evidence degraded modes.
 
 In FastMCP this is exposed via the `Context` object passed to a tool:
 
 ```python
 from fastmcp import Context
 
-@mcp.tool(name="pubtator.retrieve_review_context_batch", ...)
+@mcp.tool(name="pubtator_retrieve_review_context_batch", ...)
 async def retrieve_review_context_batch(review_id: str, queries: list[str], ..., ctx: Context | None = None):
     if not await service.review_index_has_passages(review_id):
         await ctx.warning(
-            "Review index has no prepared passages - run pubtator.index_review_evidence first.",
+            "Review index has no prepared passages - run pubtator_index_review_evidence first.",
         )
     ...
 ```
 
 `ctx.debug() / ctx.info() / ctx.notice() / ctx.warning() / ctx.error() / ctx.critical()` all map to `notifications/message`. The host respects the level set by the user's `logging/setLevel`, so you can emit liberally without being noisy.
 
-**Shipped:** `pubtator.index_review_evidence`, `pubtator.retrieve_review_context`, and `pubtator.retrieve_review_context_batch` now accept FastMCP-injected `ctx` without exposing it in public JSON schema, and emit warnings for degraded review evidence.
+**Shipped:** `pubtator_index_review_evidence`, `pubtator_retrieve_review_context`, and `pubtator_retrieve_review_context_batch` now accept FastMCP-injected `ctx` without exposing it in public JSON schema, and emit warnings for degraded review evidence.
 
 **Still left:** wrap zero-result "call X first" branches and non-error fallback decisions in `ctx.warning()` or `ctx.notice()`.
 
@@ -248,8 +248,8 @@ def instrument_tool(name: str) -> Callable:
 **Apply at registration** in `mcp/tools/literature.py` (and the other five tool files):
 
 ```python
-@mcp.tool(name="pubtator.search_literature", ...)
-@instrument_tool("pubtator.search_literature")
+@mcp.tool(name="pubtator_search_literature", ...)
+@instrument_tool("pubtator_search_literature")
 async def search_literature(...): ...
 ```
 
@@ -493,7 +493,7 @@ If you're on a single VM and want zero-vendor: a [Grafana + Prometheus + Loki + 
 | 7 | Progress notifications | Implemented for wait-mode indexing |
 | 8 | Improve preflight coverage expectation | Implemented with `expected_coverage_after_index` |
 | 9 | Smarter dropped summaries | Implemented with structured `dropped_summary` |
-| 10 | Add audit trail helper | Implemented as `pubtator.get_review_audit_trail` |
+| 10 | Add audit trail helper | Implemented as `pubtator_get_review_audit_trail` |
 
 ---
 

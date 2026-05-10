@@ -5,24 +5,24 @@ import pytest
 from pubtator_link.mcp.profiles import LEAN_TOOLS, normalize_mcp_profile
 
 EXPECTED_LEAN_TOOLS = {
-    "pubtator.workflow_help",
-    "pubtator.get_server_capabilities",
-    "pubtator.diagnostics",
-    "pubtator.search_literature",
-    "pubtator.search_guidelines",
-    "pubtator.search_biomedical_entities",
-    "pubtator.lookup_variant_evidence",
-    "pubtator.get_publication_metadata",
-    "pubtator.get_publication_passages",
-    "pubtator.get_publication_citation_graph",
-    "pubtator.find_related_evidence_candidates",
-    "pubtator.preflight_review_sources",
-    "pubtator.index_review_evidence",
-    "pubtator.inspect_review_index",
-    "pubtator.ground_question",
-    "pubtator.retrieve_review_context_batch",
-    "pubtator.get_review_audit_trail",
-    "pubtator.record_review_context",
+    "pubtator_workflow_help",
+    "pubtator_get_server_capabilities",
+    "pubtator_diagnostics",
+    "pubtator_search_literature",
+    "pubtator_search_guidelines",
+    "pubtator_search_biomedical_entities",
+    "pubtator_lookup_variant_evidence",
+    "pubtator_get_publication_metadata",
+    "pubtator_get_publication_passages",
+    "pubtator_get_publication_citation_graph",
+    "pubtator_find_related_evidence_candidates",
+    "pubtator_preflight_review_sources",
+    "pubtator_index_review_evidence",
+    "pubtator_inspect_review_index",
+    "pubtator_ground_question",
+    "pubtator_retrieve_review_context_batch",
+    "pubtator_get_review_audit_trail",
+    "pubtator_record_review_context",
 }
 
 
@@ -57,33 +57,33 @@ def test_create_pubtator_mcp_full_profile_keeps_compatibility_tools() -> None:
     tool_names = _tool_names("full")
 
     assert set(LEAN_TOOLS) <= tool_names
-    assert "pubtator.retrieve_review_context" in tool_names
-    assert "pubtator.get_review_passages_by_id" in tool_names
-    assert "pubtator.get_neighboring_review_passages" in tool_names
-    assert "pubtator.export_review_audit_bundle" in tool_names
+    assert "pubtator_retrieve_review_context" in tool_names
+    assert "pubtator_get_review_passages_by_id" in tool_names
+    assert "pubtator_get_neighboring_review_passages" in tool_names
+    assert "pubtator_export_review_audit_bundle" in tool_names
 
 
 def test_create_pubtator_mcp_readonly_profile_excludes_write_and_export_tools() -> None:
     tool_names = _tool_names("readonly")
 
-    assert "pubtator.index_review_evidence" not in tool_names
-    assert "pubtator.ground_question" not in tool_names
-    assert "pubtator.record_review_context" not in tool_names
-    assert "pubtator.export_review_audit_bundle" not in tool_names
-    assert "pubtator.fetch_publication_annotations" not in tool_names
-    assert "pubtator.fetch_pmc_annotations" not in tool_names
-    assert "pubtator.retrieve_review_context_batch" in tool_names
-    assert "pubtator.get_review_audit_trail" in tool_names
+    assert "pubtator_index_review_evidence" not in tool_names
+    assert "pubtator_ground_question" not in tool_names
+    assert "pubtator_record_review_context" not in tool_names
+    assert "pubtator_export_review_audit_bundle" not in tool_names
+    assert "pubtator_fetch_publication_annotations" not in tool_names
+    assert "pubtator_fetch_pmc_annotations" not in tool_names
+    assert "pubtator_retrieve_review_context_batch" in tool_names
+    assert "pubtator_get_review_audit_trail" in tool_names
 
 
 def test_ground_question_is_lean_and_full_but_not_readonly() -> None:
-    assert "pubtator.ground_question" in _tool_names("lean")
-    assert "pubtator.ground_question" in _tool_names("full")
-    assert "pubtator.ground_question" not in _tool_names("readonly")
+    assert "pubtator_ground_question" in _tool_names("lean")
+    assert "pubtator_ground_question" in _tool_names("full")
+    assert "pubtator_ground_question" not in _tool_names("readonly")
 
 
 def test_citation_graph_is_lean_full_and_readonly() -> None:
-    tool_name = "pubtator.get_publication_citation_graph"
+    tool_name = "pubtator_get_publication_citation_graph"
 
     assert tool_name in _tool_names("lean")
     assert tool_name in _tool_names("full")
@@ -91,7 +91,7 @@ def test_citation_graph_is_lean_full_and_readonly() -> None:
 
 
 def test_related_evidence_is_lean_full_and_readonly() -> None:
-    tool_name = "pubtator.find_related_evidence_candidates"
+    tool_name = "pubtator_find_related_evidence_candidates"
 
     assert tool_name in _tool_names("lean")
     assert tool_name in _tool_names("full")
@@ -99,7 +99,7 @@ def test_related_evidence_is_lean_full_and_readonly() -> None:
 
 
 def test_topic_literature_map_is_full_only() -> None:
-    tool_name = "pubtator.build_topic_literature_map"
+    tool_name = "pubtator_build_topic_literature_map"
 
     assert tool_name not in _tool_names("lean")
     assert tool_name in _tool_names("full")
@@ -109,4 +109,4 @@ def test_topic_literature_map_is_full_only() -> None:
 def test_topic_literature_map_is_not_advertised_in_readonly_profile_metadata() -> None:
     from pubtator_link.mcp.profiles import tool_names_for_profile
 
-    assert "pubtator.build_topic_literature_map" not in tool_names_for_profile("readonly")
+    assert "pubtator_build_topic_literature_map" not in tool_names_for_profile("readonly")

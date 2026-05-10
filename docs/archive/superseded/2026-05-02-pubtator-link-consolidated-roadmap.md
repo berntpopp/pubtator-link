@@ -10,7 +10,7 @@ reviews are archived under `docs/archive/reviews/`.
 > readonly profiles, generated tool catalog, review resource templates, durable
 > LLM context, compact search author summaries, minimum diagnostics workflow,
 > hosted HTTP safety controls, typed MCP error mapping, and
-> `pubtator.ground_question`. Remaining larger work is OAuth/public auth,
+> `pubtator_ground_question`. Remaining larger work is OAuth/public auth,
 > OpenTelemetry, cursor pagination, optional elicitation, and hybrid retrieval
 > quality upgrades.
 

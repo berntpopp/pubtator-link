@@ -95,7 +95,7 @@ The server registers tools/resources/prompts correctly but uses none of the newe
 Strongly above average. Concrete strengths and the few rough edges:
 
 **What's right:**
-- Names are concise and namespaced: `pubtator.search_literature`, `pubtator.retrieve_review_context_batch`. Verb-first, scope-clear. (`tools/literature.py:28`, `tools/review.py:443`)
+- Names are concise and namespaced: `pubtator_search_literature`, `pubtator_retrieve_review_context_batch`. Verb-first, scope-clear. (`tools/literature.py:28`, `tools/review.py:443`)
 - Docstrings open with "Use this when …" — the empirically best framing for tool-selection LLMs.
 - `Annotated[int | None, Field(ge=1, le=20)]` parameter validation throughout (`tools/literature.py:45`, `tools/review.py:198, 202, 206-209`). Catches bad calls server-side; cheaper than a tool error.
 - `Literal["Gene", "Disease", …]` enums on `concept` (`tools/literature.py:136-137`). Reduces hallucination, shrinks tool-list tokens vs. free-form strings.
@@ -139,7 +139,7 @@ Best-in-class for this dimension. Two real concerns:
 - **`httpx` leaks into the MCP error layer.** `errors.py:10, 45` — the MCP module imports a transport library. If you ever swap transport (httpcore-only, aiohttp, gRPC), this breaks. Wrap upstream timeouts in `UpstreamUnavailable(Exception)` at the HTTP-client boundary and isinstance-match that.
 
 **Smaller wins:**
-- Fallback chains only cover two tools (`errors.py:55-66`). Extend to: `retrieve_review_context_batch` → `retrieve_review_context` (single-query reduction); `fetch_publication_annotations` → `get_publication_passages`; any review write that hits `review_schema_not_current` → `pubtator.diagnostics` (already there).
+- Fallback chains only cover two tools (`errors.py:55-66`). Extend to: `retrieve_review_context_batch` → `retrieve_review_context` (single-query reduction); `fetch_publication_annotations` → `get_publication_passages`; any review write that hits `review_schema_not_current` → `pubtator_diagnostics` (already there).
 - **Compact stdio error format.** Current payload is ~250 bytes minimum. For stdio tight-loops, drop `fallback_args` keys when `fallback_tool` is null. ~30% smaller.
 
 ---

@@ -51,8 +51,8 @@ PUBTATOR_LINK_DATABASE_URL=postgresql://pubtator_link:pubtator_link@localhost:${
 
 Docker rebuilds do not reset an existing PostgreSQL volume. If `/ready` reports
 `schema_current: false`, run the migration command, restart the server, then
-call `pubtator.diagnostics`. Until the schema is current, LLM clients should
-fall back to `pubtator.get_publication_passages` with the same PMIDs.
+call `pubtator_diagnostics`. Until the schema is current, LLM clients should
+fall back to `pubtator_get_publication_passages` with the same PMIDs.
 
 ## Request IDs
 

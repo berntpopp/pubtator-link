@@ -842,7 +842,7 @@ Expected: PASS.
 ```python
 def test_codex_event_parser_extracts_mcp_tool_calls() -> None:
     events = parse_cli_events(Path("tests/fixtures/benchmarks/codex_mcp.events.jsonl"))
-    assert events.tool_calls[0].tool_name == "pubtator.get_publication_passages"
+    assert events.tool_calls[0].tool_name == "pubtator_get_publication_passages"
     assert events.tool_calls[0].coverage_summary["abstract_only"] == 10
 
 def test_no_tools_summary_records_zero_mcp_calls() -> None:

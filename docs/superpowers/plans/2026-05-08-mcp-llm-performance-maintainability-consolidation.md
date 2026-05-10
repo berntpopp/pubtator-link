@@ -28,7 +28,7 @@ This plan replaces these active docs. They should stay archived as superseded co
 ## Verified Current State
 
 - Shipped: review-scoped indexing and retrieval via `pubtator_link/models/review_rerag.py`, `pubtator_link/services/review_context_service.py`, `pubtator_link/repositories/review_rerag.py`, and `pubtator_link/mcp/tools/review.py`.
-- Shipped: `pubtator.ground_question`, stable citation keys, quote mode, compact search author summaries, `retrieve_review_context_batch(dry_run=True)`, review resources, graph candidate tools, and hosted research-use scoping.
+- Shipped: `pubtator_ground_question`, stable citation keys, quote mode, compact search author summaries, `retrieve_review_context_batch(dry_run=True)`, review resources, graph candidate tools, and hosted research-use scoping.
 - Partial: `inspect_review_index` has compact serialization but no pagination.
 - Partial: `ground_question` exists but has no `verbosity` or `"auto"` budget arguments and hard-codes `max_response_chars=12000`.
 - Partial: graph compact modes exist, but MCP adapters still default omitted `response_mode` to `"full"`, graph budgets are classified after serialization rather than enforced, and graph `cache_key` is modeled but usually `null`.
@@ -304,14 +304,14 @@ Add `verbosity` and `max_response_chars: int | Literal["auto"] = "auto"` to:
 
 - `RetrieveReviewContextBatchRequest`
 - `retrieve_review_context_batch_impl`
-- `pubtator.retrieve_review_context_batch`
+- `pubtator_retrieve_review_context_batch`
 - normalization allow-list and enum casing tests
 
 Resolve `"auto"` before constructing the Pydantic request model.
 
 - [ ] **Step 5: Expose on `ground_question`**
 
-Add `verbosity` and `max_response_chars` to `ground_question_impl` and `pubtator.ground_question`. Replace the hard-coded `max_response_chars=12000` with the shared helper.
+Add `verbosity` and `max_response_chars` to `ground_question_impl` and `pubtator_ground_question`. Replace the hard-coded `max_response_chars=12000` with the shared helper.
 
 - [ ] **Step 6: Run focused tests**
 
@@ -476,7 +476,7 @@ Add `pubtator_link/services/mcp_error_telemetry.py` with:
 
 Split `REVIEW_WRITE_ANNOTATIONS` into:
 
-- idempotent for `pubtator.index_review_evidence`
+- idempotent for `pubtator_index_review_evidence`
 - non-idempotent for append-style calls such as `record_review_context`
 - conditionally idempotent guidance for upserts that require caller-supplied IDs
 

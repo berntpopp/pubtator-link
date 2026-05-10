@@ -115,9 +115,9 @@ async def test_registered_audit_resource_reads_session_query_parameter(
 
 
 def test_tool_detail_resource_uses_runtime_tool_metadata() -> None:
-    payload = get_tool_detail_resource("pubtator.retrieve_review_context_batch")
+    payload = get_tool_detail_resource("pubtator_retrieve_review_context_batch")
 
-    assert payload["name"] == "pubtator.retrieve_review_context_batch"
+    assert payload["name"] == "pubtator_retrieve_review_context_batch"
     assert payload["profile_visibility"] == ["lean", "full", "readonly"]
     assert payload["description"].startswith("Use this when ")
 

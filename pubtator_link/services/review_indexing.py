@@ -68,11 +68,11 @@ class ReviewIndexingService:
                 raise ValueError(
                     "bookshelf_url_not_indexable: "
                     f"{', '.join(nbk_ids)}; "
-                    "call pubtator.lookup_citation with the NBK ID and index the returned PMID"
+                    "call pubtator_lookup_citation with the NBK ID and index the returned PMID"
                 )
             raise ValueError(
                 "bookshelf_url_not_indexable: "
-                "call pubtator.lookup_citation with the Bookshelf citation or NBK ID and "
+                "call pubtator_lookup_citation with the Bookshelf citation or NBK ID and "
                 "index the returned PMID"
             )
 

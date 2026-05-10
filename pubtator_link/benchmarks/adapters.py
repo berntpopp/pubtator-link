@@ -122,7 +122,7 @@ class ClaudeCodeAdapter:
             command.extend(
                 [
                     "--allowedTools",
-                    "pubtator.search_publications,pubtator.get_publication_passages",
+                    "pubtator_search_publications,pubtator_get_publication_passages",
                 ]
             )
         completed = subprocess.run(  # noqa: S603

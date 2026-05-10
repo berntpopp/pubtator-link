@@ -4,10 +4,10 @@ Use the PubTator-Link MCP to answer as well as possible from biomedical evidence
 
 Recommended workflow:
 1. Use target_pmids from the case when present.
-2. Call pubtator.preflight_review_sources when available to learn whether full text or abstracts are available.
-3. Call pubtator.index_review_evidence for those PMIDs with wait_until_ready for this small benchmark case.
-4. Call pubtator.inspect_review_index to confirm indexed source coverage.
-5. Call pubtator.retrieve_review_context_batch with short query variants and response_mode "quotes".
+2. Call pubtator_preflight_review_sources when available to learn whether full text or abstracts are available.
+3. Call pubtator_index_review_evidence for those PMIDs with wait_until_ready for this small benchmark case.
+4. Call pubtator_inspect_review_index to confirm indexed source coverage.
+5. Call pubtator_retrieve_review_context_batch with short query variants and response_mode "quotes".
 6. Prefer full-text passages when available; otherwise use abstract passages.
 7. Write the answer only from returned passages.
 

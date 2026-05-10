@@ -90,7 +90,7 @@ Across the 4 runs of the same prompt:
 | R1 | **Wrap all backend exceptions** at the MCP boundary. Never leak SQL strings. Return `{success: false, error_code, recovery, fallback_tool, fallback_args}`. The pattern already exists (`zero_result_reason`, `next_steps`) — apply uniformly. | **[all 4]** | S |
 | R2 | **Auto-promote on index failure.** When `index_review_evidence` errors, return a structured fallback that includes `recovery: "call get_publication_passages with pmids=[...]"` so the LLM switches tracks deterministically without losing the workflow. | 3/4 | S |
 | R3 | **Honor `mode="section_text"` or fail loudly.** Currently returns `pubtator_abstract` silently when full text is unavailable. Add `warning: "no full text available; abstract returned"` so the LLM knows it degraded. | 2/4 | S |
-| R4 | **Add `pubtator.health` / `pubtator.diagnostics`** exposing per-subsystem status (BioC fetcher, indexer DB, RAG store) so LLMs can route around outages instead of guessing. | 1/4 | M |
+| R4 | **Add `pubtator.health` / `pubtator_diagnostics`** exposing per-subsystem status (BioC fetcher, indexer DB, RAG store) so LLMs can route around outages instead of guessing. | 1/4 | M |
 | R5 | **Return `failed_pmids` with reasons** in batch retrieval instead of silently dropping. | 2/4 | S |
 
 ---
@@ -103,7 +103,7 @@ This bucket fixes the corpus-drift problem at the protocol level.
 |---|---|---|---|
 | D1 | **Surface `coverage` per PMID in `search_literature`** (`full_text` / `abstract_only` / `title_only`). Lets the LLM pick a corpus that *can* support full-text RAG before indexing 8 PMIDs and discovering they're all abstracts. Today, runs only learn this after retrieval — so each run picks a different corpus. | **[all 4]** | M |
 | D2 | **Add `entity_ids` parameter to `search_literature`** (it exists on retrieve). Currently every run lets the LLM compose free-text queries → different keywords → different top hits → corpus drift. Searching by canonical `@GENE_MEFV` + `@DISEASE_FMF` would dramatically tighten run-to-run consistency. | 1/4 (but **highest leverage for the drift problem**) | M |
-| D3 | **Add `publication_types` filter / guideline boost.** All 4 runs failed to surface the 2016 EULAR FMF recommendations even when explicitly named, and 3/4 picked a different EULAR-anchor paper as a result. Either honor `publication_types=Practice Guideline,Consensus` properly on legacy MEDLINE entries, or expose a `pubtator.search_guidelines` shortcut. | 3/4 | M |
+| D3 | **Add `publication_types` filter / guideline boost.** All 4 runs failed to surface the 2016 EULAR FMF recommendations even when explicitly named, and 3/4 picked a different EULAR-anchor paper as a result. Either honor `publication_types=Practice Guideline,Consensus` properly on legacy MEDLINE entries, or expose a `pubtator_search_guidelines` shortcut. | 3/4 | M |
 | D4 | **Emit `cache_key` / `corpus_snapshot_date`** on every retrieval. Lets reports cite "evidence retrieved at snapshot X" — essential for reproducible clinical-genetics use. | 2/4 | S |
 | D5 | **Document `review_id` semantics** (per-session? per-user? global?) and behavior on collision. Currently undocumented. | 1/4 | S |
 | D6 | **`zero_result_reason` as enum** instead of free text — `no_pmids_indexed`, `query_too_specific`, `pmid_filter_excluded_all`, `coverage_abstract_only` — so LLMs can branch deterministically. | 1/4 | S |
@@ -179,14 +179,14 @@ Projected impact: **4-run PMID overlap should move from ~2/13 → ~10/13**, with
 
 The LLM citation and state surface stabilization work adds:
 
-- `pubtator.get_publication_metadata` for citation-grade PMID metadata.
+- `pubtator_get_publication_metadata` for citation-grade PMID metadata.
 - Optional `search_literature(metadata="basic" | "full")` enrichment.
 - Honest pre-resolution coverage labeling when PMCID conversion is unavailable.
 - State-aware `retry_after_ms` values that are omitted for terminal review preparation.
 - `index_snapshot_date` alongside `corpus_snapshot_date` on review-index responses.
 - Sample passage filtering for `inspect_review_index`.
-- `pubtator.workflow_help` for canonical workflow guidance.
-- `pubtator.suggest_corpus` for compact review-feeding PMID selection.
+- `pubtator_workflow_help` for canonical workflow guidance.
+- `pubtator_suggest_corpus` for compact review-feeding PMID selection.
 
 Remaining out of scope for this change:
 
