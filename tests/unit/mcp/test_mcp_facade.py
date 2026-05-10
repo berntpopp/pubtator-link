@@ -125,6 +125,17 @@ def test_all_tool_names_match_anthropic_remote_mcp_regex(
     assert not offenders, f"tool names violate Anthropic remote-MCP regex: {offenders}"
 
 
+def test_capability_filter_does_not_treat_package_name_as_tool() -> None:
+    # The pubtator_X tool-name shape is a substring of the package name
+    # `pubtator_link`. A naive shape-only match would filter out any sentence
+    # that mentions the package, even though it does not reference a real tool.
+    from pubtator_link.mcp.resources import _string_references_unavailable_tool
+
+    sentence = "Run pubtator_link locally to see capabilities."
+    allowed: set[str] = set()
+    assert _string_references_unavailable_tool(sentence, allowed) is False
+
+
 def test_server_instructions_are_tool_search_friendly() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 

@@ -99,8 +99,14 @@ def _filter_tool_mapping(values: dict[str, Any], allowed_tools: set[str]) -> dic
 
 
 def _string_references_unavailable_tool(value: str, allowed_tools: set[str]) -> bool:
-    for match in re.finditer(r"pubtator_[A-Za-z0-9_:.]+", value):
-        if _tool_key_name(match.group(0)) not in allowed_tools:
+    # Match a name-shaped substring, then confirm it's actually a known tool
+    # before deciding it's unavailable. Substrings like the package name
+    # `pubtator_link` match the shape but are not tools, so they must not
+    # cause the surrounding sentence to be filtered out.
+    known_tools = tool_names_for_profile("full")
+    for match in re.finditer(r"pubtator_[a-z][a-z0-9_]*", value):
+        name = _tool_key_name(match.group(0))
+        if name in known_tools and name not in allowed_tools:
             return True
     return False
 
