@@ -611,9 +611,23 @@ async def test_cleanup_dependencies_clears_fallback_globals(
 async def test_cleanup_dependencies_closes_lazy_citation_graph_clients(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(dependencies, "_citation_graph_service", None)
-    monkeypatch.setattr(dependencies, "_crossref_client", None)
-    monkeypatch.setattr(dependencies, "_europe_pmc_literature_client", None)
+    # Null out every global that cleanup_dependencies() will try to close, so this
+    # test only operates on what it sets up. Otherwise an httpx-backed client left
+    # by an earlier xdist-parallel test (e.g. _api_client) gets torn down here
+    # against its original now-closed event loop and raises "Event loop is closed".
+    for attr in (
+        "_api_client",
+        "_ncbi_discovery_client",
+        "_ncbi_publication_metadata_client",
+        "_openalex_client",
+        "_unpaywall_client",
+        "_review_queue",
+        "_review_pool",
+        "_citation_graph_service",
+        "_crossref_client",
+        "_europe_pmc_literature_client",
+    ):
+        monkeypatch.setattr(dependencies, attr, None)
     monkeypatch.setattr(dependencies, "_discovery_service", object())
     monkeypatch.setattr(dependencies, "_publication_metadata_service", object())
 
