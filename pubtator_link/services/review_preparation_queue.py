@@ -30,6 +30,7 @@ class ReviewPreparationQueue:
         self._queued: set[tuple[str, str]] = set()
         self._queued_lock = asyncio.Lock()
         self._workers: list[asyncio.Task[None]] = []
+        self._claim_retry_delay_seconds = 1.0
 
     async def start(self) -> None:
         """Repair abandoned jobs and start background workers."""
@@ -108,6 +109,7 @@ class ReviewPreparationQueue:
         while True:
             review_id, source_id, source_kind, source_value = await self._queue.get()
             claimed = False
+            requeued = False
             try:
                 self.logger.info(
                     "Review preparation job started",
@@ -211,10 +213,40 @@ class ReviewPreparationQueue:
                         status="failed",
                         error=_error_message(exc),
                     )
+                else:
+                    await self._requeue_after_claim_error(
+                        review_id=review_id,
+                        source_id=source_id,
+                        source_kind=source_kind,
+                        source_value=source_value,
+                    )
+                    requeued = True
             finally:
-                async with self._queued_lock:
-                    self._queued.discard((review_id, source_id))
+                if not requeued:
+                    async with self._queued_lock:
+                        self._queued.discard((review_id, source_id))
                 self._queue.task_done()
+
+    async def _requeue_after_claim_error(
+        self,
+        *,
+        review_id: str,
+        source_id: str,
+        source_kind: str,
+        source_value: str,
+    ) -> None:
+        self.logger.warning(
+            "Review preparation job claim failed before work started; requeueing",
+            extra={
+                "review_id": review_id,
+                "source_id": source_id,
+                "source_kind": source_kind,
+                "retry_delay_seconds": self._claim_retry_delay_seconds,
+            },
+        )
+        if self._claim_retry_delay_seconds > 0:
+            await asyncio.sleep(self._claim_retry_delay_seconds)
+        await self._queue.put((review_id, source_id, source_kind, source_value))
 
 
 def _error_message(exc: Exception) -> str:

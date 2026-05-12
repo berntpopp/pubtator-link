@@ -127,6 +127,18 @@ class WorkerRepository(RecordingRepository):
         self.attempts.append((review_id, source_id, source_kind, status, reason))
 
 
+class ClaimFailingOnceRepository(WorkerRepository):
+    def __init__(self) -> None:
+        super().__init__()
+        self.claim_calls = 0
+
+    async def claim_preparation_job(self, *, review_id: str, source_id: str) -> bool:
+        self.claim_calls += 1
+        if self.claim_calls == 1:
+            raise RuntimeError("temporary claim failure")
+        return await super().claim_preparation_job(review_id=review_id, source_id=source_id)
+
+
 class SlowPreparation:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, str]] = []
@@ -323,6 +335,31 @@ async def test_worker_skips_preparation_when_claim_returns_false() -> None:
     assert repository.claims == [("review-1", "PMID:40234174")]
     assert preparation.calls == []
     assert repository.finished == []
+    assert repository.attempts == []
+
+
+@pytest.mark.asyncio
+async def test_worker_requeues_job_when_claim_raises_before_running_preparation() -> None:
+    repository = ClaimFailingOnceRepository()
+    preparation = RecordingPreparation()
+    queue = ReviewPreparationQueue(
+        config=_config(),
+        repository=repository,
+        preparation=preparation,
+    )
+    queue._claim_retry_delay_seconds = 0
+
+    await queue.start()
+    try:
+        assert await queue.enqueue_pmid("review-1", "40234174") == "newly_queued"
+        await asyncio.wait_for(queue._queue.join(), timeout=2)
+    finally:
+        await queue.stop()
+
+    assert repository.claim_calls == 2
+    assert repository.claims == [("review-1", "PMID:40234174")]
+    assert preparation.calls == [("pmid", "review-1", "40234174")]
+    assert repository.finished == [("review-1", "PMID:40234174", "complete", None)]
     assert repository.attempts == []
 
 
