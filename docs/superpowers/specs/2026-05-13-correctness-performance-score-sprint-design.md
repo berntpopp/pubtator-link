@@ -22,7 +22,7 @@ known high-impact issues rather than broad cosmetic refactoring.
   writes.
 - Review audit rows capture real retry metadata where the PubTator client has
   retry information.
-- Batch publication export correctly counts and returns exported documents.
+- No incorrect dead batch publication export helper remains in the codebase.
 - Focused tests lock in each corrected behavior.
 
 ## Non-Goals
@@ -35,6 +35,9 @@ known high-impact issues rather than broad cosmetic refactoring.
   fixes.
 - No performance benchmark harness beyond lightweight regression tests for the
   changed paths.
+- No broad split of MCP tool modules. MCP annotation changes are localized to
+  `pubtator_link/mcp/annotations.py`, `pubtator_link/mcp/tools/review.py`, and
+  targeted tests.
 
 ## Approach
 
@@ -66,13 +69,19 @@ items cleared.
   `settings.enable_cache_endpoints` is true.
 - Keep the existing setting name.
 - Set `enable_cache_endpoints` to false by default. Tests and development docs
-  should opt in explicitly when cache endpoints are needed.
+  should opt in explicitly when cache endpoints are needed. This is an accepted
+  breaking behavior change because the existing default exposes a destructive
+  operational route and the flag currently gives operators a false sense of
+  control.
 - Change `PublicationService.clear_cache(pattern=None)` to count current cache
   entries before clearing and return the actual count cleared.
 - Reject non-empty `pattern` in the route with HTTP 400 until real scoped
-  invalidation exists. This is more correct than pretending to clear a subset.
+  invalidation exists. This applies to every non-empty pattern, including known
+  prefixes such as `pub_export:*` and unknown prefixes.
 - Update route documentation and tests so clients know the endpoint clears all
   enabled caches only.
+- When the flag is off, both `/api/cache/stats` and `/api/cache/clear` are absent
+  and return FastAPI's normal 404 response.
 
 ### Acceptance Tests
 
@@ -81,8 +90,12 @@ items cleared.
 - A server created with the flag true exposes existing cache stats.
 - `DELETE /api/cache/clear?pattern=pub_export:*` returns 400 with a message that
   pattern clearing is unsupported.
+- `DELETE /api/cache/clear?pattern=unknown:*` also returns 400 with the same
+  unsupported-pattern behavior.
 - Full clear returns the actual number of cached entries present before the
   clear.
+- Existing cache route tests are updated to opt in to cache endpoint exposure
+  through settings override or a dedicated app fixture.
 
 ## Workstream 2: Review Preparation Lock and Pool Pressure
 
@@ -103,16 +116,44 @@ Replace callback-under-lock with short repository operations:
   - acquire a connection;
   - start a short transaction;
   - take the same advisory lock;
-  - atomically move the job to `running` only if it is still claimable;
+  - atomically move the job to `running` only if it is still queued;
   - commit and release the connection before any upstream work starts.
+- The claim operation must use an atomic update contract equivalent to:
+
+  ```sql
+  update review_preparation_jobs
+  set status = 'running',
+      started_at = now(),
+      error = null,
+      updated_at = now()
+  where review_id = $1
+    and source_id = $2
+    and status = 'queued'
+  returning job_id
+  ```
+
+  A returned row means this worker owns the job. No row means another worker,
+  process, or previous state transition owns it.
 - The worker should:
   - claim the job;
   - skip work if another worker or process already claimed it;
   - run `prepare_pmid()` or `prepare_curated_url()` outside the DB transaction;
   - call `mark_job_finished()` after the work returns or fails.
+- Remove the separate `mark_job_running()` call from
+  `ReviewPreparationQueue._worker()`; claiming is the single state transition
+  from queued to running.
 - Keep `mark_running_jobs_failed_on_startup()` as the crash repair mechanism.
 - Remove `with_preparation_lock()` from the repository protocol and concrete
   repository after queue tests move to the claim model.
+- Keep the short advisory lock inside the claim transaction even though the
+  status update is atomic. The lock is a conservative multi-process guard around
+  the same `(review_id, source_id)` key while the codebase is transitioning away
+  from callback-scoped locking.
+- Do not add a periodic stale-job sweeper in this sprint. Running-job orphan
+  repair remains startup-based, which matches the current queue's practical
+  behavior after `mark_job_running()` succeeds. A periodic `started_at` cutoff is
+  a follow-up operations improvement if long-lived processes need automatic
+  recovery without restart.
 
 ### Data Flow
 
@@ -133,6 +174,8 @@ Replace callback-under-lock with short repository operations:
 - Two queued jobs with a slow fake preparation service can run concurrently when
   `prep_concurrency=2`.
 - Existing timeout and failure paths still mark jobs failed.
+- A repository-level test verifies that a queued job is claimed once and a second
+  claim returns false without starting preparation.
 
 ## Workstream 3: MCP Write Idempotency Semantics
 
@@ -141,17 +184,33 @@ Replace callback-under-lock with short repository operations:
 `REVIEW_WRITE_ANNOTATIONS` declares `idempotentHint=True` for all review writes.
 Some tools are not idempotent. `pubtator_add_evidence_certainty` creates a new
 UUID when no certainty ID is supplied. `pubtator_record_review_context` appends
-new context and event records.
+new context and event records. Six tools currently use this annotation and must
+be classified.
 
 ### Design
 
 - Add separate annotation constants:
   - `IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS`
   - `NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS`
-- Keep idempotent annotations for operations that dedupe naturally, such as
-  review evidence indexing.
+- Keep idempotent annotations for operations with explicit deduplication,
+  specifically review evidence indexing and ground-question indexing.
 - Use non-idempotent annotations for append/create operations where retrying can
   create additional records.
+- Classify the current tools as:
+  - `pubtator_add_evidence_certainty`: non-idempotent because it creates a new
+    certainty UUID when the caller does not supply one.
+  - `pubtator_stage_research_session`: non-idempotent because it generates a new
+    session ID when omitted and writes session/candidate rows.
+  - `pubtator_review_quickstart`: non-idempotent because it stages a research
+    session and may generate a session ID through the stage service.
+  - `pubtator_record_review_context`: non-idempotent because it appends context
+    and event records.
+  - `pubtator_index_review_evidence`: idempotent because review/source queueing
+    and repository state deduplicate by `review_id` and source ID.
+  - `pubtator_ground_question`: idempotent for MCP retry purposes because the
+    default review ID is deterministic from the question, indexing deduplicates
+    selected sources, and the tool does not append research sessions or LLM
+    context records.
 - Do not introduce dynamic per-argument annotations. MCP annotations are static,
   so ambiguous write tools should be marked non-idempotent.
 
@@ -159,10 +218,16 @@ new context and event records.
 
 - `pubtator_add_evidence_certainty` has `readOnlyHint=False` and
   `idempotentHint=False`.
+- `pubtator_stage_research_session` has `readOnlyHint=False` and
+  `idempotentHint=False`.
+- `pubtator_review_quickstart` has `readOnlyHint=False` and
+  `idempotentHint=False`.
 - `pubtator_record_review_context` has `readOnlyHint=False` and
   `idempotentHint=False`.
 - `pubtator_index_review_evidence` keeps its existing write annotation semantics
   because queue and repository behavior deduplicate by review/source IDs.
+- `pubtator_ground_question` keeps idempotent write annotation semantics and has
+  a unit test documenting the rationale.
 
 ## Workstream 4: Retry Metadata Integrity
 
@@ -170,13 +235,19 @@ new context and event records.
 
 The PubTator client receives retry metadata from `call_with_retries()` but
 discards it. Review preparation later attempts to read
-`pubtator_client.last_retry_metadata`, so audit rows usually record default
-attempt metadata rather than actual retry behavior.
+`pubtator_client.last_retry_metadata`, which is not set by the real client, so
+audit rows currently receive empty metadata.
 
 ### Design
 
-- Add `last_retry_metadata` to `PubTator3Client`.
-- Set it for every `_make_request()` call:
+- Add a private sidecar-returning request path named
+  `_make_request_with_metadata(...) -> tuple[dict[str, Any], RetryAttemptMetadata]`.
+- Keep the public `_make_request()` behavior returning only `dict[str, Any]` by
+  delegating to the sidecar path and discarding the metadata.
+- Add `export_publications_with_metadata(...)` for audit-sensitive review
+  preparation calls. Existing `export_publications(...)` delegates to it and
+  returns only the payload.
+- Build retry metadata for every sidecar request:
   - retrying GET calls use the metadata returned by `call_with_retries()`;
   - non-retried calls record one attempt;
   - exhausted retry responses preserve `terminal_reason="retry_exhausted"`;
@@ -184,45 +255,52 @@ attempt metadata rather than actual retry behavior.
     and `terminal_reason="request_error"`;
   - non-retried request errors record one attempt and
     `terminal_reason="request_error"`.
-- Keep the field internal to the client; do not expose it in public REST
-  response models.
-- Keep `FullTextPreparationService._last_retry_metadata()` as the adapter point,
-  but make it reliably receive real metadata from the client.
+- Update `FullTextPreparationService.prepare_pmid()` to call
+  `export_publications_with_metadata()` when the client provides it. This avoids
+  shared mutable state races between concurrent preparation jobs.
+- Keep `FullTextPreparationService._last_retry_metadata()` only as compatibility
+  fallback for test fakes or older clients.
+- Do not expose retry metadata in public REST response models.
 
 ### Acceptance Tests
 
-- A GET that succeeds after retry sets `last_retry_metadata.attempt_count` to the
-  actual number of attempts.
+- A GET that succeeds after retry returns sidecar metadata with the actual
+  attempt count.
 - A retry-exhausted response records `terminal_reason="retry_exhausted"`.
 - `FullTextPreparationService.prepare_pmid()` records the retry metadata in
   `record_retrieval_attempt()`.
-- Non-retried POST text-annotation calls still record one attempt internally.
+- Two concurrent fake preparation jobs cannot overwrite each other's retry
+  metadata because each export call receives metadata as a sidecar.
+- Non-retried POST text-annotation calls through the sidecar request path record
+  one attempt internally.
 
-## Workstream 5: Batch Export Correctness
+## Workstream 5: Dead Batch Export Removal
 
 ### Problem
 
 `batch_export_publications()` treats `PublicationExportResponse` as if it had a
 top-level `documents` attribute. The response actually stores documents in
 `export_data["documents"]`. The current path can silently produce empty
-successful batches.
+successful batches. A repository grep confirms this method has no in-repo
+callers outside its own definition and is not exposed through REST or MCP.
 
 ### Design
 
-- Read documents from `result.export_data["documents"]` when the result is a
-  `PublicationExportResponse`.
-- Keep partial failure accounting through `asyncio.gather(..., return_exceptions=True)`.
-- Count successfully exported documents, not batches.
-- Keep the method in this sprint. Later cleanup can remove it only through a
-  separate deprecation or API-removal decision.
+- Remove `PublicationService.batch_export_publications()` rather than fixing
+  uncalled code.
+- Remove any tests or docs that present the helper as supported if they appear
+  during implementation.
+- Keep `export_publications_list()` and route/MCP publication export behavior
+  unchanged.
+- Do not add new batch export tests; removal is verified by grep, type checking,
+  and existing publication service tests.
 
 ### Acceptance Tests
 
-- Two successful internal batches return publications for all exported
-  documents.
-- One failed batch and one successful batch returns successful publications and
-  increments `error_count`.
-- Empty input returns a completed batch with zero successes and zero errors.
+- `rg "batch_export_publications\\(" pubtator_link tests` returns no production
+  or test call sites after removal.
+- `make typecheck-fast` passes without the removed method.
+- Existing publication route and service tests pass.
 
 ## Workstream 6: Focused Performance Verification
 
@@ -283,21 +361,27 @@ Database-backed integration tests remain opt-in unless
 ## Risks and Mitigations
 
 - Cache endpoint gating may break clients that relied on default exposure.
-  Mitigation: document the flag and update tests to opt in explicitly.
+  This break is accepted because the existing behavior exposes a destructive
+  route despite a feature flag. Mitigation: document the opt-in flag, update
+  tests to opt in explicitly, and mention the default change in the changelog or
+  development docs.
 - Changing review queue locking may affect multi-process behavior. Mitigation:
   keep the advisory lock inside the short claim transaction and preserve startup
   repair of orphaned running jobs.
-- `last_retry_metadata` on a shared client is internal mutable state. Mitigation:
-  read it immediately after awaited client calls and cover the intended audit
-  path. A future stronger design can return structured transport metadata
-  alongside raw API payloads.
+- Running jobs can still be orphaned until restart if a worker dies after claim
+  and before terminal status. Mitigation: document this residual risk and keep
+  startup repair. Periodic stale-job repair is a follow-up, not part of this
+  sprint.
+- Retry metadata must not rely on shared mutable client state. Mitigation:
+  sidecar-returning client methods provide metadata to the caller that performed
+  the request.
 - FastMCP annotation changes may affect client planning. Mitigation: tests assert
   exact annotation semantics for the changed tools.
 
 ## Implementation Ordering
 
 1. Cache endpoint gating and honest clear semantics.
-2. Batch export correctness.
+2. Dead batch export removal.
 3. Retry metadata integrity.
 4. MCP write idempotency annotations.
 5. Review preparation claim model and concurrency tests.
