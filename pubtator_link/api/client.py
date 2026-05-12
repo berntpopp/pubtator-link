@@ -9,7 +9,17 @@ from structlog.typing import FilteringBoundLogger
 
 from ..config import APIConfig, TextProcessingConfig, api_config, text_processing_config
 from ..logging_config import log_api_request, log_rate_limit_event
-from .retry import RetryPolicy, call_with_retries
+from .retry import RetryAttemptMetadata, RetryPolicy, call_with_retries
+
+
+def _retry_metadata_payload(metadata: RetryAttemptMetadata) -> dict[str, Any]:
+    return {
+        "attempt_count": metadata.attempt_count,
+        "last_status_code": metadata.last_status_code,
+        "retry_after_ms": metadata.retry_after_ms,
+        "backoff_ms": metadata.backoff_ms,
+        "terminal_reason": metadata.terminal_reason,
+    }
 
 
 class RateLimiter:
@@ -59,6 +69,7 @@ class PubTatorAPIError(Exception):
         message: str,
         status_code: int | None = None,
         response_data: dict[str, Any] | None = None,
+        retry_metadata: dict[str, Any] | None = None,
     ):
         """Initialize PubTator API error.
 
@@ -70,6 +81,7 @@ class PubTatorAPIError(Exception):
         super().__init__(message)
         self.status_code = status_code
         self.response_data = response_data
+        self.retry_metadata = retry_metadata or {}
 
 
 class PubTator3Client:
@@ -154,6 +166,26 @@ class PubTator3Client:
         Raises:
             PubTatorAPIError: On API errors
         """
+        response_data, _retry_metadata = await self._make_request_with_metadata(
+            method,
+            url,
+            params=params,
+            data=data,
+            use_text_client=use_text_client,
+            retry=retry,
+        )
+        return response_data
+
+    async def _make_request_with_metadata(
+        self,
+        method: str,
+        url: str,
+        params: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
+        use_text_client: bool = False,
+        retry: bool = True,
+    ) -> tuple[dict[str, Any], RetryAttemptMetadata]:
+        """Make rate-limited HTTP request and return retry metadata sidecar."""
         # Apply rate limiting (blocks until a token is available)
         wait_time = await self.rate_limiter.acquire()
         if wait_time > 0 and self.logger:
@@ -161,6 +193,7 @@ class PubTator3Client:
 
         client = self.text_client if use_text_client else self.client
         start_time = time.time()
+        retry_metadata = RetryAttemptMetadata(attempt_count=1)
 
         try:
             method_upper = method.upper()
@@ -173,12 +206,39 @@ class PubTator3Client:
                 return await client.post(url, params=params, data=data)
 
             if retry and method_upper == "GET":
-                response, _retry_metadata = await call_with_retries(
-                    send,
-                    policy=RetryPolicy(),
-                )
+                policy = RetryPolicy()
+                try:
+                    response, retry_metadata = await call_with_retries(
+                        send,
+                        policy=policy,
+                    )
+                except httpx.RequestError as exc:
+                    retry_metadata = RetryAttemptMetadata(
+                        attempt_count=policy.max_attempts,
+                        terminal_reason="request_error",
+                    )
+                    raise PubTatorAPIError(
+                        f"Request failed: {exc!s}",
+                        response_data={"retry_metadata": _retry_metadata_payload(retry_metadata)},
+                        retry_metadata=_retry_metadata_payload(retry_metadata),
+                    ) from exc
             else:
-                response = await send()
+                try:
+                    response = await send()
+                except httpx.RequestError as exc:
+                    retry_metadata = RetryAttemptMetadata(
+                        attempt_count=1,
+                        terminal_reason="request_error",
+                    )
+                    raise PubTatorAPIError(
+                        f"Request failed: {exc!s}",
+                        response_data={"retry_metadata": _retry_metadata_payload(retry_metadata)},
+                        retry_metadata=_retry_metadata_payload(retry_metadata),
+                    ) from exc
+                retry_metadata = RetryAttemptMetadata(
+                    attempt_count=1,
+                    last_status_code=response.status_code,
+                )
 
             response_time = time.time() - start_time
 
@@ -196,31 +256,39 @@ class PubTator3Client:
             # Handle different response types
             content_type = response.headers.get("content-type", "").lower()
             if "application/json" in content_type:
-                return response.json()  # type: ignore[no-any-return]
+                return response.json(), retry_metadata
             elif (
                 "text/plain" in content_type
                 or "text/html" in content_type
                 or "application/xml" in content_type
             ):
-                return {"content": response.text, "content_type": content_type}
+                return (
+                    {"content": response.text, "content_type": content_type},
+                    retry_metadata,
+                )
             else:
-                return {"content": response.content, "content_type": content_type}
+                return (
+                    {"content": response.content, "content_type": content_type},
+                    retry_metadata,
+                )
 
         except httpx.HTTPStatusError as e:
-            error_data = None
+            error_data: dict[str, Any] = {}
             try:
-                error_data = e.response.json()
+                parsed_error = e.response.json()
+                if isinstance(parsed_error, dict):
+                    error_data.update(parsed_error)
             except Exception:
                 if self.logger:
                     self.logger.warning("Failed to parse error response as JSON")
+            error_data["retry_metadata"] = _retry_metadata_payload(retry_metadata)
 
             raise PubTatorAPIError(
                 f"HTTP {e.response.status_code}: {e.response.text}",
                 status_code=e.response.status_code,
                 response_data=error_data,
+                retry_metadata=_retry_metadata_payload(retry_metadata),
             ) from e
-        except httpx.RequestError as e:
-            raise PubTatorAPIError(f"Request failed: {e!s}") from e
 
     async def export_publications(
         self, pmids: list[str], format: str = "biocjson", full: bool = False
@@ -235,6 +303,17 @@ class PubTator3Client:
         Returns:
             Export data
         """
+        response_data, _retry_metadata = await self.export_publications_with_metadata(
+            pmids,
+            format=format,
+            full=full,
+        )
+        return response_data
+
+    async def export_publications_with_metadata(
+        self, pmids: list[str], format: str = "biocjson", full: bool = False
+    ) -> tuple[dict[str, Any], RetryAttemptMetadata]:
+        """Export publication annotations with retry metadata sidecar."""
         if format not in self.config.export_formats:
             raise ValueError(f"Unsupported format: {format}")
 
@@ -247,7 +326,7 @@ class PubTator3Client:
         if full:
             params["full"] = "true"
 
-        return await self._make_request("GET", url, params=params)
+        return await self._make_request_with_metadata("GET", url, params=params)
 
     async def export_pmc_publications(
         self, pmcids: list[str], format: str = "biocjson"

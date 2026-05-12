@@ -19,8 +19,9 @@ from pubtator_link.api.routes.dependencies import (
 )
 from pubtator_link.mcp.annotations import (
     FILE_EXPORT_ANNOTATIONS,
+    IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
+    NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
     READ_ONLY_OPEN_WORLD,
-    REVIEW_WRITE_ANNOTATIONS,
 )
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.profiles import MCPToolProfile
@@ -148,7 +149,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         name="pubtator_add_evidence_certainty",
         title="Add Evidence Certainty",
         output_schema=EvidenceCertaintyResponse.model_json_schema(),
-        annotations=REVIEW_WRITE_ANNOTATIONS,
+        annotations=NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
     )
     async def add_evidence_certainty(
         review_id: str,
@@ -259,7 +260,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         name="pubtator_stage_research_session",
         title="Stage Research Session",
         output_schema=StageResearchSessionResponse.model_json_schema(),
-        annotations=REVIEW_WRITE_ANNOTATIONS,
+        annotations=NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
     )
     async def stage_research_session(
         review_id: Annotated[str, Field(min_length=1)],
@@ -309,7 +310,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         name="pubtator_ground_question",
         title="Ground Question",
         output_schema=GroundQuestionResponse.model_json_schema(),
-        annotations=REVIEW_WRITE_ANNOTATIONS,
+        annotations=IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
     )
     async def ground_question(
         question: Annotated[str, Field(min_length=1)],
@@ -350,7 +351,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         name="pubtator_review_quickstart",
         title="Review Quickstart",
         output_schema=ReviewQuickstartResponse.model_json_schema(),
-        annotations=REVIEW_WRITE_ANNOTATIONS,
+        annotations=NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
     )
     async def review_quickstart(
         topic: Annotated[str, Field(min_length=1)],
@@ -422,7 +423,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         name="pubtator_index_review_evidence",
         title="Index Review Evidence",
         output_schema=IndexReviewEvidenceResponse.model_json_schema(),
-        annotations=REVIEW_WRITE_ANNOTATIONS,
+        annotations=IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
         exclude_args=["prepare_mode"],
     )
     async def index_review_evidence(
@@ -782,7 +783,7 @@ def register_review_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> Non
         name="pubtator_record_review_context",
         title="Record Review Context",
         output_schema=RecordReviewContextResponse.model_json_schema(),
-        annotations=REVIEW_WRITE_ANNOTATIONS,
+        annotations=NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
     )
     async def record_review_context(
         review_id: Annotated[str, Field(min_length=1)],

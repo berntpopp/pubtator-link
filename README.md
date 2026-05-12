@@ -74,8 +74,8 @@ make mcp-serve
 
 - `GET /` - Root endpoint with service information
 - `GET /health` - Health check and status
-- `GET /api/cache/stats` - Cache statistics
-- `DELETE /api/cache/clear` - Clear cache
+- `GET /api/cache/stats` - Cache statistics when `PUBTATOR_LINK_ENABLE_CACHE_ENDPOINTS=true`
+- `DELETE /api/cache/clear` - Clear all publication-service caches when cache endpoints are explicitly enabled
 
 ### Publication Export
 
@@ -404,6 +404,7 @@ The project uses modern Python tooling:
 | `RATE_LIMIT_PER_SECOND` | `2.5` | Rate limit (requests/second) |
 | `CACHE_SIZE` | `1000` | LRU cache size |
 | `CACHE_TTL` | `3600` | Cache TTL (seconds) |
+| `PUBTATOR_LINK_ENABLE_CACHE_ENDPOINTS` | `false` | Enable opt-in cache management REST endpoints |
 | `LOG_LEVEL` | `INFO` | Logging level |
 | `LOG_FORMAT` | `console` | Log format (console/json) |
 | `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | CORS allowed origins |
@@ -416,6 +417,11 @@ The caching system uses async LRU caching with configurable size and TTL:
 - **Entity Autocomplete**: Cached by query, concept, and limit
 - **Publication Search**: Cached by query text and page number
 - **Entity Relations**: Cached by entity, relation type, and target type
+
+Cache management endpoints are disabled by default. Set
+`PUBTATOR_LINK_ENABLE_CACHE_ENDPOINTS=true` to expose `/api/cache/stats` and
+`/api/cache/clear`. The clear endpoint clears all publication-service async-lru
+caches; pattern-based clearing is rejected until scoped invalidation exists.
 
 ## 🚀 Production Deployment
 
@@ -435,7 +441,8 @@ The server provides comprehensive health checks:
 # Check server health
 curl http://localhost:8000/health
 
-# Monitor cache performance
+# Monitor cache performance only when cache endpoints are enabled
+PUBTATOR_LINK_ENABLE_CACHE_ENDPOINTS=true make dev
 curl http://localhost:8000/api/cache/stats
 ```
 

@@ -359,7 +359,8 @@ class UnifiedServerManager:
         app.include_router(relations_router)
         app.include_router(discovery_router)
         app.include_router(annotations_router)
-        app.include_router(cache_router)
+        if settings.enable_cache_endpoints:
+            app.include_router(cache_router)
         app.include_router(reviews_router)
         app.include_router(variants_router)
 

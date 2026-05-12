@@ -1004,7 +1004,7 @@ def test_public_hosted_tools_have_expected_annotations() -> None:
         assert tool.annotations.destructiveHint is False
 
 
-def test_write_capable_mcp_tools_include_audit_export_annotations() -> None:
+def test_write_capable_mcp_tools_have_precise_annotations() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
     mcp = create_pubtator_mcp(profile="full")
@@ -1016,11 +1016,20 @@ def test_write_capable_mcp_tools_include_audit_export_annotations() -> None:
     assert annotation_submit.idempotentHint is False
     assert annotation_submit.openWorldHint is True
 
-    review_index = tools["pubtator_index_review_evidence"].annotations
-    assert review_index.readOnlyHint is False
-    assert review_index.destructiveHint is False
-    assert review_index.idempotentHint is True
-    assert review_index.openWorldHint is True
+    expected_review_writes = {
+        "pubtator_add_evidence_certainty": False,
+        "pubtator_stage_research_session": False,
+        "pubtator_review_quickstart": False,
+        "pubtator_record_review_context": False,
+        "pubtator_index_review_evidence": True,
+        "pubtator_ground_question": True,
+    }
+    for name, expected_idempotent in expected_review_writes.items():
+        annotations = tools[name].annotations
+        assert annotations.readOnlyHint is False, name
+        assert annotations.destructiveHint is False, name
+        assert annotations.idempotentHint is expected_idempotent, name
+        assert annotations.openWorldHint is True, name
 
     audit_export = tools["pubtator_export_review_audit_bundle"].annotations
     assert audit_export.readOnlyHint is False

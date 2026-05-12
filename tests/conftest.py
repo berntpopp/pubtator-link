@@ -76,7 +76,6 @@ def mock_publication_service(mock_pubtator_client, mock_logger):
     service.export_publications_list = AsyncMock()
     service.export_pmc_publications_list = AsyncMock()
     service.search_publications = AsyncMock()
-    service.batch_export_publications = AsyncMock()
     service.clear_cache = AsyncMock()
     service.get_cache_stats = Mock()
     service.get_supported_formats = Mock()

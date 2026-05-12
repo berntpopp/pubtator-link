@@ -1,6 +1,5 @@
 """Publication service with caching for PubTator-Link."""
 
-import asyncio
 from typing import Any
 
 from async_lru import alru_cache
@@ -13,7 +12,6 @@ from ..models.publications import (
     EXPORT_FORMATS,
     AnnotatedPublication,
     ExportFormat,
-    PublicationBatch,
     PublicationMetadata,
 )
 from ..models.responses import (
@@ -178,67 +176,6 @@ class PublicationService:
         except PubTatorAPIError as e:
             if self.logger:
                 self.logger.error("Publication search failed", query=text, page=page, error=str(e))
-            raise
-
-    async def batch_export_publications(
-        self,
-        pmids: list[str],
-        format: str = "biocjson",
-        full: bool = False,
-        batch_size: int = 50,
-    ) -> PublicationBatch:
-        """Export publications in batches for large requests.
-
-        Args:
-            pmids: List of PubMed IDs
-            format: Export format
-            full: Include full text
-            batch_size: Number of PMIDs per batch
-
-        Returns:
-            Publication batch with all results
-        """
-        batch_id = f"batch_{int(asyncio.get_event_loop().time())}"
-        batch = PublicationBatch(batch_id=batch_id, processing_status="processing")
-
-        # Split PMIDs into batches
-        pmid_batches = [pmids[i : i + batch_size] for i in range(0, len(pmids), batch_size)]
-
-        # Process batches concurrently
-        tasks = [
-            self.export_publications_list(batch_pmids, format, full) for batch_pmids in pmid_batches
-        ]
-
-        try:
-            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
-
-            all_documents = []
-            for result in batch_results:
-                if isinstance(result, Exception):
-                    batch.error_count += 1
-                    if self.logger:
-                        self.logger.error(
-                            "Batch export error", batch_id=batch_id, error=str(result)
-                        )
-                else:
-                    # Type guard - ensure result is PublicationExportResponse
-                    if hasattr(result, "documents") and result.documents is not None:
-                        batch.success_count += len(result.documents)
-                        all_documents.extend(result.documents)
-
-            # Create publications from documents
-            publications = [self._document_to_publication(doc) for doc in all_documents]
-
-            batch.publications = publications
-            batch.processing_status = "completed"
-
-            return batch
-
-        except Exception as e:
-            batch.processing_status = "failed"
-            batch.error_count = len(pmid_batches)
-            if self.logger:
-                self.logger.error("Batch export failed completely", batch_id=batch_id, error=str(e))
             raise
 
     def _parse_export_data(self, raw_data: dict[str, Any], format: str) -> list[dict[str, Any]]:
@@ -423,27 +360,25 @@ class PublicationService:
         return EXPORT_FORMATS
 
     async def clear_cache(self, pattern: str | None = None) -> int:
-        """Clear cache entries.
+        """Clear all async-lru cache entries and return the actual number cleared."""
+        if pattern is not None:
+            raise ValueError("Pattern-based cache clearing is not supported.")
 
-        Args:
-            pattern: Cache key pattern (not implemented in async-lru)
+        cache_infos = [
+            self.export_publications.cache_info(),
+            self.export_pmc_publications.cache_info(),
+            self.search_publications.cache_info(),
+        ]
+        cleared_items = sum(info.currsize for info in cache_infos)
 
-        Returns:
-            Number of cleared entries (always returns cache size for full clear)
-        """
-        # async-lru doesn't support pattern-based clearing
-        # This is a full cache clear
-        cache_size = cache_config.size
-
-        # Clear all cached methods
         self.export_publications.cache_clear()
         self.export_pmc_publications.cache_clear()
         self.search_publications.cache_clear()
 
         if self.logger:
-            self.logger.info("Cache cleared", cleared_items=cache_size)
+            self.logger.info("Cache cleared", cleared_items=cleared_items)
 
-        return cache_size
+        return cleared_items
 
     def get_cache_stats(self) -> dict[str, Any]:
         """Get cache statistics.

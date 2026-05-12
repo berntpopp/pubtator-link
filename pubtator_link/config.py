@@ -91,7 +91,7 @@ class ServerSettings(BaseSettings):
     # Feature flags
     enable_docs: bool = Field(default=True, description="Enable API documentation")
     enable_cache_endpoints: bool = Field(
-        default=True, description="Enable cache management endpoints"
+        default=False, description="Enable opt-in cache management endpoints"
     )
     mcp_profile: Literal["lean", "full", "readonly"] = Field(
         default="lean", description="MCP tool registration profile"
