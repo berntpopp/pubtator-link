@@ -20,6 +20,7 @@ def test_prod_compose_has_security_controls() -> None:
     assert "cap_drop:" in PROD
     assert "- ALL" in PROD
     assert "/tmp/pubtator-link" in PROD  # noqa: S108
+    assert "mode=1777" in PROD
 
 
 def test_prod_compose_does_not_publish_extra_ports() -> None:

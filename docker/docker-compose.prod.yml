@@ -24,7 +24,7 @@ services:
 
     read_only: true
     tmpfs:
-      - /tmp/pubtator-link:rw,noexec,nosuid,size=64m
+      - /tmp/pubtator-link:rw,noexec,nosuid,size=64m,mode=1777
 
     security_opt:
       - no-new-privileges:true

@@ -53,6 +53,10 @@ reuse_port = True
 # for the non-root app user. See issue #23.
 worker_tmp_dir = "/dev/shm"
 
+# Gunicorn 25 creates a control socket by default. When XDG_RUNTIME_DIR is unset,
+# it falls back to $HOME/.gunicorn, which is unwritable under read_only: true.
+control_socket_disable = True
+
 
 # Graceful handling
 def on_starting(server: Any) -> None:

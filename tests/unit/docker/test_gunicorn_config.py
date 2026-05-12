@@ -1,8 +1,19 @@
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
+from types import ModuleType
 
 CONFIG = Path("docker/gunicorn_conf.py").read_text()
+
+
+def _load_gunicorn_config() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("test_gunicorn_conf", "docker/gunicorn_conf.py")
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_gunicorn_respects_pubtator_port_and_proxy_headers() -> None:
@@ -20,3 +31,12 @@ def test_gunicorn_worker_tmp_dir_uses_dev_shm() -> None:
     # Regression test for issue #23: worker heartbeat tempfile must live on a
     # writable tmpfs that survives `read_only: true` containers.
     assert 'worker_tmp_dir = "/dev/shm"' in CONFIG
+
+
+def test_gunicorn_control_socket_is_disabled_for_read_only_containers() -> None:
+    # Regression test for issue #36: Gunicorn 25 defaults its control socket to
+    # $HOME/.gunicorn when XDG_RUNTIME_DIR is unset, which fails under the
+    # production read_only filesystem.
+    module = _load_gunicorn_config()
+
+    assert module.control_socket_disable is True
