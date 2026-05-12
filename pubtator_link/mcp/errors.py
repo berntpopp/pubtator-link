@@ -12,6 +12,7 @@ import asyncpg
 import httpx
 from fastmcp.exceptions import ToolError
 
+from pubtator_link.api.client import PubTatorAPIError
 from pubtator_link.mcp.input_normalization import InputNormalizationError
 from pubtator_link.observability.metrics import record_mcp_tool_call
 from pubtator_link.services.degradation import DegradedMode
@@ -62,7 +63,7 @@ def sanitize_error_message(message: str) -> str:
         "The tool response did not match its declared MCP output schema.",
         "Review database schema is not current.",
         "Review database operation failed.",
-        "The upstream service timed out.",
+        "The upstream service is temporarily unavailable.",
         "The tool could not complete the requested operation.",
     }
     if message in safe_messages:
@@ -82,6 +83,17 @@ def sanitize_error_message(message: str) -> str:
     return "The tool could not complete the requested operation."
 
 
+def _is_pubtator_upstream_unavailable(exc: Exception) -> bool:
+    if not isinstance(exc, PubTatorAPIError):
+        return False
+    message = str(exc).lower()
+    return (
+        exc.status_code in {502, 503, 504}
+        or "currently updating the database" in message
+        or "please try again later" in message
+    )
+
+
 def safe_message_for_exception(exc: Exception) -> str:
     """Return a stable safe message for known typed exceptions."""
     if isinstance(exc, ReviewSchemaStaleError):
@@ -89,7 +101,9 @@ def safe_message_for_exception(exc: Exception) -> str:
     if isinstance(exc, ReviewIndexUnavailableError):
         return "Review database operation failed."
     if isinstance(exc, UpstreamUnavailableError):
-        return "The upstream service timed out."
+        return "The upstream service is temporarily unavailable."
+    if _is_pubtator_upstream_unavailable(exc):
+        return "The upstream service is temporarily unavailable."
     if isinstance(exc, ValidationFailureError):
         return "Invalid MCP arguments."
     return sanitize_error_message(str(exc))
@@ -129,6 +143,8 @@ def error_code_for_exception(exc: Exception) -> str:
         return "review_index_unavailable"
     if isinstance(exc, UpstreamUnavailableError):
         return "upstream_unavailable"
+    if _is_pubtator_upstream_unavailable(exc):
+        return "upstream_unavailable"
     if isinstance(exc, ValidationFailureError):
         return "validation_failed"
     message = str(exc).lower()
@@ -166,13 +182,24 @@ def _fallback_for_context(context: McpErrorContext) -> tuple[str | None, dict[st
     return None, None
 
 
-def _recovery_text_for_context(context: McpErrorContext, fallback_tool: str | None) -> str:
+def _recovery_text_for_context(
+    context: McpErrorContext,
+    fallback_tool: str | None,
+    error_code: str = "internal_error",
+) -> str:
     if context.tool_name == "pubtator_preflight_review_sources" and fallback_tool:
         return (
             "Call pubtator_get_publication_passages with the same PMIDs. "
             "Use mode='full_abstract' for article-local answering; run diagnostics only if "
             "passage retrieval also fails."
         )
+    if error_code == "upstream_unavailable":
+        if context.tool_name == "pubtator_search_literature":
+            return (
+                "Retry later. If optional filters caused the upstream failure, retry without "
+                "filters and post-filter the returned results client-side."
+            )
+        return "Retry later or run pubtator_diagnostics if the upstream failure persists."
     return (
         "Run pubtator_diagnostics. If the review schema is stale, apply database migrations "
         "and retry."
@@ -222,16 +249,17 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> ToolError:
     if fallback_tool and fallback_args is not None:
         next_commands.append({"tool": fallback_tool, "arguments": fallback_args})
     next_commands.append({"tool": "pubtator_diagnostics", "arguments": {}})
+    error_code = error_code_for_exception(exc)
     payload = {
         "success": False,
-        "error_code": error_code_for_exception(exc),
+        "error_code": error_code,
         "message": "Invalid MCP arguments."
         if isinstance(exc, InputNormalizationError)
         else safe_message_for_exception(exc),
         "retryable": False,
         "fallback_tool": fallback_tool,
         "fallback_args": fallback_args,
-        "recovery": _recovery_text_for_context(context, fallback_tool),
+        "recovery": _recovery_text_for_context(context, fallback_tool, error_code),
         "_meta": {
             "next_commands": next_commands,
             "unsafe_for_clinical_use": True,

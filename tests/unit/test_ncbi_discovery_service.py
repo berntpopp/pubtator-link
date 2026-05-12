@@ -259,6 +259,82 @@ async def test_ncbi_client_parses_ecitmatch_lines() -> None:
 
 
 @pytest.mark.asyncio
+async def test_lookup_citation_normalizes_prose_references_for_ecitmatch() -> None:
+    class Client(FakeDiscoveryClient):
+        requested_citations: Sequence[str] = ()
+
+        async def lookup_citations(self, citations):
+            self.requested_citations = citations
+            return [
+                CitationLookupRecord(
+                    citation=citations[0],
+                    status="matched",
+                    pmid="32404922",
+                ),
+                CitationLookupRecord(
+                    citation=citations[1],
+                    status="matched",
+                    pmid="37310422",
+                ),
+            ]
+
+    client = Client()
+    service = DiscoveryService(client)
+
+    response = await service.lookup_citation(
+        [
+            "Deignan JL, Astbury C, Cutting GR, et al. CFTR variant testing: "
+            "a technical standard of the American College of Medical Genetics "
+            "and Genomics (ACMG). Genet Med. 2020;22(8):1288-1295.",
+            "Deignan JL, Gregg AR, Grody WW, et al. Updated recommendations "
+            "for CFTR carrier screening: A position statement of the American "
+            "College of Medical Genetics and Genomics (ACMG). Genet Med. "
+            "2023;25(8):100867.",
+        ]
+    )
+
+    assert client.requested_citations == [
+        "Genet Med|2020|22|1288|Deignan|0|",
+        "Genet Med|2023|25|100867|Deignan|1|",
+    ]
+    assert response.candidate_pmids == ["32404922", "37310422"]
+
+
+@pytest.mark.asyncio
+async def test_lookup_citation_resolves_doi_only_inputs() -> None:
+    class Client(FakeDiscoveryClient):
+        async def lookup_citations(self, citations):
+            return [
+                CitationLookupRecord(
+                    citation=citation,
+                    status="not_found",
+                    reason="not_found",
+                )
+                for citation in citations
+            ]
+
+        async def find_pmid_by_doi(self, doi: str) -> str | None:
+            return {
+                "10.1038/s41436-020-0822-5": "32404922",
+                "10.1016/j.gim.2023.100867": "37310422",
+            }.get(doi)
+
+    service = DiscoveryService(Client())
+
+    response = await service.lookup_citation(
+        ["10.1038/s41436-020-0822-5", "10.1016/j.gim.2023.100867"]
+    )
+
+    assert [record.status for record in response.records] == ["matched", "matched"]
+    assert [record.pmid for record in response.records] == ["32404922", "37310422"]
+    assert [record.doi for record in response.records] == [
+        "10.1038/s41436-020-0822-5",
+        "10.1016/j.gim.2023.100867",
+    ]
+    assert response.candidate_pmids == ["32404922", "37310422"]
+
+
+@pytest.mark.asyncio
 async def test_ncbi_client_keeps_ecitmatch_blank_lines_aligned() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         text = (

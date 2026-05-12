@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from pubtator_link.api.client import PubTator3Client
+from pubtator_link.api.client import PubTator3Client, PubTatorAPIError
 from pubtator_link.api.search_filters import merge_search_filters
 from pubtator_link.config import text_processing_config
 from pubtator_link.mcp.errors import mcp_field_validation_error
@@ -481,7 +481,8 @@ async def search_literature_impl(
         year_min=year_min,
         year_max=year_max,
     )
-    result = await client.search_publications(
+    result, local_filter_fallback = await _search_publications_with_filter_fallback(
+        client=client,
         text=normalized_text,
         page=page,
         sort=sort,
@@ -528,9 +529,122 @@ async def search_literature_impl(
     }
     if coverage == "preflight" and preflight_service is not None:
         await attach_preflight_coverage(response, preflight_service)
+    if local_filter_fallback:
+        response.message = (
+            "PubTator3 filtered search was unavailable; returned an unfiltered page "
+            "with local best-effort filters applied."
+        )
+        response.source_versions["pubtator3_filtering"] = "local_fallback"
     dumped = response.model_dump()
     dumped["_meta"] = response_meta
     return dumped
+
+
+async def _search_publications_with_filter_fallback(
+    *,
+    client: PubTator3Client,
+    text: str,
+    page: int,
+    sort: str | None,
+    filters: str | None,
+    sections: str | None,
+) -> tuple[dict[str, Any], bool]:
+    try:
+        result = await client.search_publications(
+            text=text,
+            page=page,
+            sort=sort,
+            filters=filters,
+            sections=sections,
+        )
+        return result, False
+    except PubTatorAPIError as exc:
+        if filters is None or not _pubtator_filtered_search_unavailable(exc):
+            raise
+
+    fallback = await client.search_publications(
+        text=text,
+        page=page,
+        sort=sort,
+        filters=None,
+        sections=sections,
+    )
+    filtered_results = _apply_local_search_filters(list(fallback.get("results", [])), filters)
+    return (
+        {
+            **fallback,
+            "results": filtered_results,
+            "count": len(filtered_results),
+            "total": len(filtered_results),
+            "total_pages": 1,
+        },
+        True,
+    )
+
+
+def _pubtator_filtered_search_unavailable(exc: PubTatorAPIError) -> bool:
+    message = str(exc).lower()
+    return "currently updating the database" in message or "please try again later" in message
+
+
+def _apply_local_search_filters(
+    items: list[dict[str, Any]],
+    filters: str | None,
+) -> list[dict[str, Any]]:
+    if not filters:
+        return items
+    try:
+        parsed = json.loads(filters)
+    except json.JSONDecodeError:
+        return items
+    if not isinstance(parsed, dict):
+        return items
+    selected = items
+    year_filter = parsed.get("year")
+    if isinstance(year_filter, dict):
+        year_min = year_filter.get("min")
+        year_max = year_filter.get("max")
+        selected = [
+            item
+            for item in selected
+            if _item_matches_year_bounds(item, year_min=year_min, year_max=year_max)
+        ]
+    type_filter = parsed.get("type")
+    if isinstance(type_filter, list | tuple) and type_filter:
+        allowed = {str(value).lower() for value in type_filter}
+        selected = [
+            item
+            for item in selected
+            if allowed.intersection(
+                {str(value).lower() for value in item.get("publication_types", [])}
+            )
+        ]
+    return selected
+
+
+def _item_matches_year_bounds(
+    item: dict[str, Any],
+    *,
+    year_min: object,
+    year_max: object,
+) -> bool:
+    year = _item_publication_year(item)
+    if year is None:
+        return False
+    if isinstance(year_min, int) and year < year_min:
+        return False
+    return not (isinstance(year_max, int) and year > year_max)
+
+
+def _item_publication_year(item: dict[str, Any]) -> int | None:
+    for key in ("pub_year", "pub_date", "meta_date_publication", "date"):
+        value = item.get(key)
+        if value is None:
+            continue
+        match = re.search(r"\b(18\d{2}|19\d{2}|20\d{2})\b", str(value))
+        if match is not None:
+            return int(match.group(1))
+    return None
 
 
 def _selected_search_items(

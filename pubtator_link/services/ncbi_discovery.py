@@ -29,6 +29,7 @@ NCBI_ID_CONVERTER_BASE_URL = "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/a
 NCBI_EUTILS_SOURCE_URL = "https://www.ncbi.nlm.nih.gov/books/NBK25501/"
 NCBI_MESH_SOURCE_URL = "https://www.ncbi.nlm.nih.gov/mesh/"
 NBK_RE = re.compile(r"\bNBK\d+\b", re.IGNORECASE)
+DOI_RE = re.compile(r"\b10\.\d{4,9}/[-._;()/:A-Z0-9]+\b", re.IGNORECASE)
 QueryParamValue = str | int | float | bool | None
 QueryParams = (
     Mapping[str, QueryParamValue | Sequence[QueryParamValue]]
@@ -462,6 +463,11 @@ class DiscoveryService:
     async def lookup_citation(self, citations: Sequence[str]) -> CitationLookupResponse:
         lookup_values = _citation_lookup_values(citations)
         records = await self.client.lookup_citations(lookup_values)
+        records = [
+            record.model_copy(update={"citation": original})
+            for original, record in zip(citations, records, strict=False)
+        ]
+        records = await self._resolve_doi_citation_fallbacks(citations, records)
         nbk_ids = extract_nbk_ids(citations)
         nbk_conversion_records: list[ArticleIdConversionRecord] = []
         if nbk_ids:
@@ -492,6 +498,31 @@ class DiscoveryService:
             candidate_pmids=candidate_pmids,
             _meta=meta,
         )
+
+    async def _resolve_doi_citation_fallbacks(
+        self,
+        citations: Sequence[str],
+        records: list[CitationLookupRecord],
+    ) -> list[CitationLookupRecord]:
+        resolved: list[CitationLookupRecord] = []
+        for citation, record in zip(citations, records, strict=False):
+            doi = _extract_doi(citation)
+            if record.status == "matched" or doi is None:
+                resolved.append(record.model_copy(update={"doi": record.doi or doi}))
+                continue
+            pmid = await self.client.find_pmid_by_doi(doi)
+            if pmid is None:
+                resolved.append(record.model_copy(update={"doi": doi}))
+                continue
+            resolved.append(
+                CitationLookupRecord(
+                    citation=citation,
+                    status="matched",
+                    pmid=pmid,
+                    doi=doi,
+                )
+            )
+        return resolved
 
     async def find_related_articles(
         self,
@@ -524,11 +555,39 @@ def _dedupe(values: Iterable[str]) -> list[str]:
 
 
 def _citation_lookup_values(citations: Sequence[str]) -> list[str]:
-    return [
-        _nbk_lookup_hint(nbk_ids[0]) if _is_bookshelf_url(citation) and nbk_ids else citation
-        for citation in citations
-        for nbk_ids in [extract_nbk_ids([citation])]
-    ]
+    return [_citation_lookup_value(citation, index) for index, citation in enumerate(citations)]
+
+
+def _citation_lookup_value(citation: str, index: int) -> str:
+    nbk_ids = extract_nbk_ids([citation])
+    if _is_bookshelf_url(citation) and nbk_ids:
+        return _nbk_lookup_hint(nbk_ids[0])
+    return _ecitmatch_value_from_prose(citation, index) or citation
+
+
+def _ecitmatch_value_from_prose(citation: str, index: int) -> str | None:
+    author_match = re.match(r"\s*([A-Za-z][A-Za-z' -]+)", citation)
+    article_match = re.search(
+        r"\.\s*([^.;]+?)\.\s*(\d{4});\s*([^;:(]+)(?:\([^)]*\))?:\s*([A-Za-z0-9]+)",
+        citation,
+    )
+    if author_match is None or article_match is None:
+        return None
+    author = author_match.group(1).strip().split()[0]
+    journal = article_match.group(1).strip()
+    year = article_match.group(2).strip()
+    volume = article_match.group(3).strip()
+    first_page = article_match.group(4).strip()
+    if not all([author, journal, year, volume, first_page]):
+        return None
+    return f"{journal}|{year}|{volume}|{first_page}|{author}|{index}|"
+
+
+def _extract_doi(value: str) -> str | None:
+    match = DOI_RE.search(value)
+    if match is None:
+        return None
+    return match.group(0).rstrip(".,;").lower()
 
 
 def _is_bookshelf_url(value: str) -> bool:

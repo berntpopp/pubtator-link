@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from fastmcp.exceptions import ToolError
 
+from pubtator_link.api.client import PubTatorAPIError
 from pubtator_link.mcp.errors import (
     McpErrorContext,
     error_code_for_exception,
@@ -117,7 +118,23 @@ def test_mcp_tool_error_sanitizes_typed_upstream_message() -> None:
     payload = json.loads(str(error))
 
     assert payload["error_code"] == "upstream_unavailable"
-    assert payload["message"] == "The upstream service timed out."
+    assert payload["message"] == "The upstream service is temporarily unavailable."
+
+
+def test_pubtator_api_database_maintenance_is_upstream_unavailable() -> None:
+    error = mcp_tool_error(
+        PubTatorAPIError(
+            'HTTP 400: {"detail":"We are currently updating the Database. Please try again later"}',
+            status_code=400,
+        ),
+        McpErrorContext(tool_name="pubtator_search_literature"),
+    )
+
+    payload = json.loads(str(error))
+
+    assert payload["error_code"] == "upstream_unavailable"
+    assert payload["message"] == "The upstream service is temporarily unavailable."
+    assert "review schema" not in payload["recovery"].lower()
 
 
 def test_ground_question_error_uses_selected_pmids_for_fallback() -> None:

@@ -2256,6 +2256,79 @@ async def test_search_literature_adapter_merges_flat_filters() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_literature_retries_unfiltered_when_pubtator_filters_unavailable() -> None:
+    from pubtator_link.api.client import PubTatorAPIError
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class FilterUnavailableClient:
+        def __init__(self) -> None:
+            self.calls: list[str | None] = []
+
+        async def search_publications(
+            self,
+            text: str,
+            page: int,
+            sort: str | None,
+            filters: str | None,
+            sections: str | None,
+        ) -> dict[str, object]:
+            self.calls.append(filters)
+            if filters is not None:
+                raise PubTatorAPIError(
+                    'HTTP 400: {"detail":"We are currently updating the Database. '
+                    'Please try again later"}',
+                    status_code=400,
+                )
+            return {
+                "results": [
+                    {
+                        "pmid": "1",
+                        "title": "Older guideline",
+                        "date": "2019-01-01T00:00:00Z",
+                        "publication_types": ["Practice Guideline"],
+                    },
+                    {
+                        "pmid": "2",
+                        "title": "Recent guideline",
+                        "date": "2023-01-01T00:00:00Z",
+                        "publication_types": ["Practice Guideline"],
+                    },
+                    {
+                        "pmid": "3",
+                        "title": "Recent review",
+                        "date": "2024-01-01T00:00:00Z",
+                        "publication_types": ["Review"],
+                    },
+                ],
+                "count": 3,
+                "total_pages": 1,
+                "page_size": 10,
+            }
+
+    client = FilterUnavailableClient()
+
+    result = await search_literature_impl(
+        client=client,
+        text="CFTR",
+        publication_types=["Practice Guideline"],
+        year_min=2020,
+        year_max=2026,
+        metadata="none",
+    )
+
+    assert client.calls == [
+        '{"type":["Practice Guideline"],"year":{"min":2020,"max":2026}}',
+        None,
+    ]
+    assert [item["pmid"] for item in result["results"]] == ["2"]
+    assert result["message"] == (
+        "PubTator3 filtered search was unavailable; returned an unfiltered page "
+        "with local best-effort filters applied."
+    )
+    assert result["source_versions"]["pubtator3_filtering"] == "local_fallback"
+
+
+@pytest.mark.asyncio
 async def test_search_literature_adapter_rejects_filter_conflict() -> None:
     from pubtator_link.mcp.service_adapters import search_literature_impl
 
