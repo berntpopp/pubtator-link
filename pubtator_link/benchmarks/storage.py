@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import asyncpg
 from pydantic import BaseModel, ValidationError
 
+from pubtator_link.benchmarks.log_parser import ToolCallEvent
 from pubtator_link.benchmarks.models import (
     BenchmarkCase,
     BenchmarkMode,
@@ -123,6 +125,47 @@ class BenchmarkStorage:
                 scores.dataset,
                 json.dumps(jsonb_payload(BenchmarkScore, scores)),
             )
+        finally:
+            await conn.close()
+
+    async def insert_log_events(self, run_id: str, events: Sequence[Mapping[str, Any]]) -> None:
+        if not events:
+            return
+        conn = await self._connect()
+        try:
+            for event in events:
+                event_type = str(event.get("event_type") or event.get("type") or "event")
+                tool_name_value = event.get("tool_name") or event.get("name")
+                tool_name = str(tool_name_value) if tool_name_value is not None else None
+                await conn.execute(
+                    """
+                    insert into benchmark_log_events(run_id, event_type, tool_name, payload)
+                    values($1,$2,$3,$4::jsonb)
+                    """,
+                    run_id,
+                    event_type,
+                    tool_name,
+                    json.dumps(event, sort_keys=True),
+                )
+        finally:
+            await conn.close()
+
+    async def insert_tool_calls(self, run_id: str, tool_calls: list[ToolCallEvent]) -> None:
+        if not tool_calls:
+            return
+        conn = await self._connect()
+        try:
+            for tool_call in tool_calls:
+                await conn.execute(
+                    """
+                    insert into benchmark_tool_calls(run_id, tool_name, status, payload)
+                    values($1,$2,$3,$4::jsonb)
+                    """,
+                    run_id,
+                    tool_call.tool_name,
+                    tool_call.status or "unknown",
+                    json.dumps(tool_call.model_dump(mode="json"), sort_keys=True),
+                )
         finally:
             await conn.close()
 

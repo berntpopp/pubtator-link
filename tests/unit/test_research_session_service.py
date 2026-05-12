@@ -9,6 +9,7 @@ class FakeRepository:
     def __init__(self) -> None:
         self.sessions = {}
         self.candidates = []
+        self.session_sources = []
         self.return_none = False
 
     async def upsert_research_session(
@@ -33,6 +34,9 @@ class FakeRepository:
 
     async def upsert_research_session_candidate(self, **kwargs):
         self.candidates.append(kwargs["candidate"])
+
+    async def link_review_session_source(self, review_id, session_id, source_id):
+        self.session_sources.append((review_id, session_id, source_id))
 
     async def get_research_session(self, review_id, session_id):
         from pubtator_link.models.review_rerag import ResearchSessionManifest
@@ -131,6 +135,26 @@ async def test_stage_session_searches_preflights_and_queues_candidates() -> None
     assert response.manifest.candidates[0].status == "queued"
     assert response.manifest.candidates[1].status == "skipped"
     assert response.manifest.candidates[1].decision_reason == "queue_rejected"
+
+
+async def test_stage_session_links_queued_sources_to_session_scope() -> None:
+    repository = FakeRepository()
+    service = ResearchSessionService(
+        repository=repository,
+        search_provider=FakeSearch(),
+        preflight_service=FakePreflight(),
+        queue=FakeQueue(accepted_pmids={"1", "2"}),
+    )
+
+    await service.stage(
+        review_id="review-1",
+        request={"query": "FMF", "session_id": "session-1", "max_candidates": 2},
+    )
+
+    assert repository.session_sources == [
+        ("review-1", "session-1", "PMID:1"),
+        ("review-1", "session-1", "PMID:2"),
+    ]
 
 
 async def test_stage_preserves_explicit_pmid_order_and_reason() -> None:

@@ -109,6 +109,9 @@ class ResearchSessionService:
                 if queued:
                     status: ResearchSessionCandidateStatus = "queued"
                     reason: ResearchSessionDecisionReason = source_reason
+                    await self.repository.link_review_session_source(
+                        review_id, session_id, f"PMID:{pmid}"
+                    )
                 else:
                     status = "skipped"
                     reason = "queue_rejected"
