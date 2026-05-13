@@ -351,3 +351,33 @@ class TestPublicationService:
         mock_client.export_publications.assert_called_with(
             pmids=expected_pmids, format="biocjson", full=False
         )
+
+    @pytest.mark.asyncio
+    async def test_clear_cache_returns_actual_current_entry_count(
+        self,
+        publication_service: PublicationService,
+        mock_client: Mock,
+    ) -> None:
+        mock_client.export_publications.return_value = {"documents": [{"id": "1"}]}
+        mock_client.export_pmc_publications.return_value = {"documents": [{"id": "PMC1"}]}
+        mock_client.search_publications.return_value = {"results": [], "total": 0, "per_page": 20}
+
+        await publication_service.export_publications("1", format="biocjson", full=False)
+        await publication_service.export_pmc_publications("PMC1", format="biocjson")
+        await publication_service.search_publications("colchicine", page=1)
+
+        cleared = await publication_service.clear_cache()
+
+        assert cleared == 3
+        assert publication_service.get_cache_stats()["current_size"] == 0
+
+    @pytest.mark.asyncio
+    async def test_clear_cache_rejects_pattern_at_service_boundary(
+        self,
+        publication_service: PublicationService,
+    ) -> None:
+        with pytest.raises(
+            ValueError,
+            match=r"Pattern-based cache clearing is not supported\.",
+        ):
+            await publication_service.clear_cache(pattern="pub_export:*")

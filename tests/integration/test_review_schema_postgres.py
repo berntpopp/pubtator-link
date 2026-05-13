@@ -152,3 +152,50 @@ async def test_review_index_inspection_queries_postgres_schema() -> None:
     assert [source.source_id for source in filtered_sources] == ["PMID:222"]
     assert totals.source_count == 1
     assert totals.failed_source_count == 2
+
+
+@pytest.mark.asyncio
+async def test_claim_preparation_job_claims_queued_job_once_in_postgres() -> None:
+    database_url = os.getenv("PUBTATOR_LINK_TEST_DATABASE_URL")
+    if not database_url:
+        pytest.skip("PUBTATOR_LINK_TEST_DATABASE_URL is not set")
+
+    schema = Path("pubtator_link/db/review_schema.sql").read_text()
+    conn = await _connect_or_skip(database_url)
+    pool = await asyncpg.create_pool(database_url, min_size=1, max_size=2)
+    try:
+        await conn.execute(schema)
+        await conn.execute(
+            """
+            delete from review_passages;
+            delete from full_text_retrieval_attempts;
+            delete from review_preparation_jobs;
+            delete from reviews;
+            """
+        )
+        repository = PostgresReviewReragRepository(pool)
+        await repository.enqueue_preparation_job(
+            "review-claim",
+            "PMID:40234174",
+            "pubtator_full_bioc",
+        )
+
+        first_claim = await repository.claim_preparation_job(
+            review_id="review-claim",
+            source_id="PMID:40234174",
+        )
+        second_claim = await repository.claim_preparation_job(
+            review_id="review-claim",
+            source_id="PMID:40234174",
+        )
+        statuses = await repository.preparation_job_statuses(
+            "review-claim",
+            ["PMID:40234174"],
+        )
+    finally:
+        await pool.close()
+        await conn.close()
+
+    assert first_claim is True
+    assert second_claim is False
+    assert statuses == {"PMID:40234174": "running"}

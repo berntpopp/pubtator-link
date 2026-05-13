@@ -23,10 +23,17 @@ REMOTE_JOB_ANNOTATIONS = ToolAnnotations(
     openWorldHint=True,
 )
 
-REVIEW_WRITE_ANNOTATIONS = ToolAnnotations(
+IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS = ToolAnnotations(
     readOnlyHint=False,
     destructiveHint=False,
     idempotentHint=True,
+    openWorldHint=True,
+)
+
+NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=False,
+    idempotentHint=False,
     openWorldHint=True,
 )
 

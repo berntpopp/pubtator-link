@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 from uuid import uuid4
@@ -183,6 +183,9 @@ class ReviewReragRepository(Protocol):
         self, review_id: str, source_ids: Sequence[str]
     ) -> dict[str, str]:
         """Return current durable job statuses for source IDs."""
+
+    async def claim_preparation_job(self, *, review_id: str, source_id: str) -> bool:
+        """Atomically move a queued preparation job to running if available."""
 
     async def link_review_session_source(
         self, review_id: str, session_id: str, source_id: str
@@ -389,22 +392,10 @@ class ReviewReragRepository(Protocol):
     ) -> EvidenceCertaintyRecord | None:
         """Get one user-supplied certainty record."""
 
-    async def mark_job_running(self, *, review_id: str, source_id: str) -> None:
-        """Mark a preparation job as running."""
-
     async def mark_job_finished(
         self, *, review_id: str, source_id: str, status: str, error: str | None
     ) -> None:
         """Mark a preparation job as finished."""
-
-    async def with_preparation_lock(
-        self,
-        *,
-        review_id: str,
-        source_id: str,
-        callback: Callable[[], Awaitable[str]],
-    ) -> str:
-        """Run a callback inside a transaction-scoped preparation advisory lock."""
 
 
 class PostgresReviewReragRepository:
@@ -640,25 +631,28 @@ class PostgresReviewReragRepository:
             )
         return row is not None
 
-    async def mark_job_running(self, *, review_id: str, source_id: str) -> None:
-        async with self._acquire() as connection:
+    async def claim_preparation_job(self, *, review_id: str, source_id: str) -> bool:
+        async with self._acquire() as connection, connection.transaction():
             await connection.execute(
+                "select pg_advisory_xact_lock(hashtextextended($1, 0))",
+                f"{review_id}:{source_id}",
+            )
+            claimed = await connection.fetchrow(
                 """
-                with updated as (
-                    update review_preparation_jobs
-                    set status = 'running',
-                        started_at = now(),
-                        error = null
-                    where review_id = $1 and source_id = $2
-                    returning review_id
-                )
-                update reviews
-                set updated_at = now()
-                where review_id in (select review_id from updated)
+                update review_preparation_jobs
+                set status = 'running',
+                    started_at = now(),
+                    error = null
+                where review_id = $1 and source_id = $2 and status = 'queued'
+                returning job_id
                 """,
                 review_id,
                 source_id,
             )
+            if claimed is None:
+                return False
+            await self._touch_review_on_connection(connection, review_id)
+            return True
 
     async def mark_job_finished(
         self, *, review_id: str, source_id: str, status: str, error: str | None
@@ -683,20 +677,6 @@ class PostgresReviewReragRepository:
                 status,
                 error,
             )
-
-    async def with_preparation_lock(
-        self,
-        *,
-        review_id: str,
-        source_id: str,
-        callback: Callable[[], Awaitable[str]],
-    ) -> str:
-        async with self._acquire() as connection, connection.transaction():
-            await connection.execute(
-                "select pg_advisory_xact_lock(hashtextextended($1, 0))",
-                f"{review_id}:{source_id}",
-            )
-            return await callback()
 
     async def upsert_passages(self, passages: Sequence[ReviewPassageRow]) -> None:
         if not passages:

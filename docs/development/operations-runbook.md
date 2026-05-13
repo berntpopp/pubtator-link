@@ -72,12 +72,28 @@ defaults: `PUBTATOR_LINK_REVIEW_RETRIEVAL_CONCURRENCY=4` and
 `PUBTATOR_LINK_REVIEW_PREFLIGHT_CONCURRENCY=3`. Raise these only after checking
 upstream behavior and local database capacity.
 
+Full-text review preparation records retry attempt metadata from the exact
+PubTator export call being audited. Concurrent preparation jobs must use the
+sidecar metadata returned by `export_publications_with_metadata()` rather than
+shared mutable client state.
+
 For source coverage failures, inspect `coverage_reason` and
 `resolver_attempts` on `inspect_review_index` or
 `export_review_audit_bundle`. Common reasons include `no_pmcid`,
 `abstract_fallback_used`, `upstream_timeout`, `upstream_404`, and
 `retry_exhausted`. Treat abstract-only and title-only coverage as scientific
 limitations in downstream review notes.
+
+## Cache Management Endpoints
+
+`/api/cache/stats` and `/api/cache/clear` are disabled unless
+`PUBTATOR_LINK_ENABLE_CACHE_ENDPOINTS=true`. Hosted deployments should leave
+this flag off unless an operator explicitly needs local cache inspection.
+
+`DELETE /api/cache/clear` clears all publication-service async-lru caches and
+returns the number of entries present before clearing. Supplying any `pattern`
+query parameter returns HTTP 400 because scoped cache invalidation is not
+implemented.
 
 ## Logs
 

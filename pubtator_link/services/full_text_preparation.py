@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, cast
 from defusedxml import ElementTree
 from structlog.typing import FilteringBoundLogger
 
+from pubtator_link.api.client import PubTatorAPIError
 from pubtator_link.config import ReviewReragConfig
 from pubtator_link.models.review_rerag import (
     CoverageReason,
@@ -110,12 +111,24 @@ class FullTextPreparationService:
             "Review PMID preparation fetching full PubTator export",
             extra={"review_id": review_id, "pmid": pmid, "full": True},
         )
-        full_data = await self.pubtator_client.export_publications(
-            [pmid],
-            format="biocjson",
-            full=True,
-        )
-        full_retry_metadata = self._last_retry_metadata()
+        try:
+            full_data, full_retry_metadata = await self._export_publications_with_retry_metadata(
+                [pmid],
+                format="biocjson",
+                full=True,
+            )
+        except PubTatorAPIError as exc:
+            await self._record_pmid_attempt(
+                review_id=review_id,
+                pmid=pmid,
+                source_kind="pubtator_full_bioc",
+                status="failed",
+                reason=str(exc),
+                coverage_reason=coverage_hint.coverage_reason if coverage_hint else "unknown",
+                coverage_hint=coverage_hint,
+                retry_metadata=self._retry_metadata_from_api_error(exc),
+            )
+            return "failed"
         passages = self._passages_from_export(
             review_id=review_id,
             export_data=full_data,
@@ -202,12 +215,27 @@ class FullTextPreparationService:
                 "Review PMID preparation falling back to PubTator abstract export",
                 extra={"review_id": review_id, "pmid": pmid, "full": False},
             )
-            abstract_data = await self.pubtator_client.export_publications(
-                [pmid],
-                format="biocjson",
-                full=False,
-            )
-            abstract_retry_metadata = self._last_retry_metadata()
+            try:
+                (
+                    abstract_data,
+                    abstract_retry_metadata,
+                ) = await self._export_publications_with_retry_metadata(
+                    [pmid],
+                    format="biocjson",
+                    full=False,
+                )
+            except PubTatorAPIError as exc:
+                await self._record_pmid_attempt(
+                    review_id=review_id,
+                    pmid=pmid,
+                    source_kind="pubtator_abstract",
+                    status="failed",
+                    reason=str(exc),
+                    coverage_reason="abstract_fallback_used",
+                    coverage_hint=coverage_hint,
+                    retry_metadata=self._retry_metadata_from_api_error(exc),
+                )
+                return "failed"
             passages = self._passages_from_export(
                 review_id=review_id,
                 export_data=abstract_data,
@@ -416,13 +444,51 @@ class FullTextPreparationService:
         text = " ".join(part.strip() for part in target.itertext() if part.strip())
         return text or None
 
-    def _last_retry_metadata(self) -> dict[str, Any]:
-        metadata = getattr(self.pubtator_client, "last_retry_metadata", None)
+    @staticmethod
+    def _retry_metadata_dict(metadata: Any) -> dict[str, Any]:
         if metadata is None:
             return {}
         if hasattr(metadata, "__dict__"):
             return dict(metadata.__dict__)
         return dict(metadata)
+
+    async def _export_publications_with_retry_metadata(
+        self,
+        pmids: list[str],
+        *,
+        format: str,
+        full: bool,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        export_with_metadata = getattr(
+            self.pubtator_client,
+            "export_publications_with_metadata",
+            None,
+        )
+        if export_with_metadata is not None:
+            export_data, retry_metadata = await export_with_metadata(
+                pmids,
+                format=format,
+                full=full,
+            )
+            return export_data, self._retry_metadata_dict(retry_metadata)
+
+        export_data = await self.pubtator_client.export_publications(
+            pmids,
+            format=format,
+            full=full,
+        )
+        return export_data, self._last_retry_metadata()
+
+    def _last_retry_metadata(self) -> dict[str, Any]:
+        metadata = getattr(self.pubtator_client, "last_retry_metadata", None)
+        return self._retry_metadata_dict(metadata)
+
+    def _retry_metadata_from_api_error(self, exc: PubTatorAPIError) -> dict[str, Any]:
+        response_data = exc.response_data or {}
+        metadata = response_data.get("retry_metadata")
+        if metadata:
+            return self._retry_metadata_dict(metadata)
+        return self._retry_metadata_dict(exc.retry_metadata)
 
     async def _record_pmid_attempt(
         self,

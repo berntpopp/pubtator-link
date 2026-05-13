@@ -30,6 +30,7 @@ class ReviewPreparationQueue:
         self._queued: set[tuple[str, str]] = set()
         self._queued_lock = asyncio.Lock()
         self._workers: list[asyncio.Task[None]] = []
+        self._claim_retry_delay_seconds = 1.0
 
     async def start(self) -> None:
         """Repair abandoned jobs and start background workers."""
@@ -107,6 +108,8 @@ class ReviewPreparationQueue:
     async def _worker(self) -> None:
         while True:
             review_id, source_id, source_kind, source_value = await self._queue.get()
+            claimed = False
+            requeued = False
             try:
                 self.logger.info(
                     "Review preparation job started",
@@ -117,24 +120,31 @@ class ReviewPreparationQueue:
                         "timeout_seconds": self.config.document_timeout_seconds,
                     },
                 )
-                await self.repository.mark_job_running(review_id=review_id, source_id=source_id)
+                claimed = await self.repository.claim_preparation_job(
+                    review_id=review_id, source_id=source_id
+                )
+                if not claimed:
+                    self.logger.info(
+                        "Review preparation job skipped because it was not claimable",
+                        extra={
+                            "review_id": review_id,
+                            "source_id": source_id,
+                            "source_kind": source_kind,
+                        },
+                    )
+                    continue
 
-                async def run_preparation(
-                    review_id: str = review_id,
-                    source_id: str = source_id,
-                    source_kind: str = source_kind,
-                    source_value: str = source_value,
-                ) -> str:
-                    if source_kind == "pubtator_full_bioc":
-                        return await asyncio.wait_for(
-                            self.preparation.prepare_pmid(review_id, source_value),
-                            timeout=self.config.document_timeout_seconds,
-                        )
-                    if source_kind == "curated_pdf":
-                        return await asyncio.wait_for(
-                            self.preparation.prepare_curated_url(review_id, source_value),
-                            timeout=self.config.document_timeout_seconds,
-                        )
+                if source_kind == "pubtator_full_bioc":
+                    result = await asyncio.wait_for(
+                        self.preparation.prepare_pmid(review_id, source_value),
+                        timeout=self.config.document_timeout_seconds,
+                    )
+                elif source_kind == "curated_pdf":
+                    result = await asyncio.wait_for(
+                        self.preparation.prepare_curated_url(review_id, source_value),
+                        timeout=self.config.document_timeout_seconds,
+                    )
+                else:
                     self.logger.warning(
                         "Unknown review preparation source kind",
                         extra={
@@ -143,13 +153,7 @@ class ReviewPreparationQueue:
                             "source_kind": source_kind,
                         },
                     )
-                    return "failed"
-
-                result = await self.repository.with_preparation_lock(
-                    review_id=review_id,
-                    source_id=source_id,
-                    callback=run_preparation,
-                )
+                    result = "failed"
                 await self.repository.mark_job_finished(
                     review_id=review_id,
                     source_id=source_id,
@@ -179,19 +183,20 @@ class ReviewPreparationQueue:
                         "source_kind": source_kind,
                     },
                 )
-                await self.repository.record_retrieval_attempt(
-                    review_id,
-                    source_id,
-                    source_kind,
-                    "failed",
-                    reason=error,
-                )
-                await self.repository.mark_job_finished(
-                    review_id=review_id,
-                    source_id=source_id,
-                    status="failed",
-                    error=error,
-                )
+                if claimed:
+                    await self.repository.record_retrieval_attempt(
+                        review_id,
+                        source_id,
+                        source_kind,
+                        "failed",
+                        reason=error,
+                    )
+                    await self.repository.mark_job_finished(
+                        review_id=review_id,
+                        source_id=source_id,
+                        status="failed",
+                        error=error,
+                    )
             except Exception as exc:
                 self.logger.exception(
                     "Review preparation job failed",
@@ -201,16 +206,47 @@ class ReviewPreparationQueue:
                         "source_kind": source_kind,
                     },
                 )
-                await self.repository.mark_job_finished(
-                    review_id=review_id,
-                    source_id=source_id,
-                    status="failed",
-                    error=_error_message(exc),
-                )
+                if claimed:
+                    await self.repository.mark_job_finished(
+                        review_id=review_id,
+                        source_id=source_id,
+                        status="failed",
+                        error=_error_message(exc),
+                    )
+                else:
+                    await self._requeue_after_claim_error(
+                        review_id=review_id,
+                        source_id=source_id,
+                        source_kind=source_kind,
+                        source_value=source_value,
+                    )
+                    requeued = True
             finally:
-                async with self._queued_lock:
-                    self._queued.discard((review_id, source_id))
+                if not requeued:
+                    async with self._queued_lock:
+                        self._queued.discard((review_id, source_id))
                 self._queue.task_done()
+
+    async def _requeue_after_claim_error(
+        self,
+        *,
+        review_id: str,
+        source_id: str,
+        source_kind: str,
+        source_value: str,
+    ) -> None:
+        self.logger.warning(
+            "Review preparation job claim failed before work started; requeueing",
+            extra={
+                "review_id": review_id,
+                "source_id": source_id,
+                "source_kind": source_kind,
+                "retry_delay_seconds": self._claim_retry_delay_seconds,
+            },
+        )
+        if self._claim_retry_delay_seconds > 0:
+            await asyncio.sleep(self._claim_retry_delay_seconds)
+        await self._queue.put((review_id, source_id, source_kind, source_value))
 
 
 def _error_message(exc: Exception) -> str:

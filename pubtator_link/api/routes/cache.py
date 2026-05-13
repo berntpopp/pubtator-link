@@ -155,8 +155,11 @@ async def get_cache_statistics(
 @router.delete(
     "/clear",
     response_model=CacheClearResponse,
-    summary="Clear cache",
-    description="Clear cached data with optional pattern-based filtering.",
+    summary="Clear all caches",
+    description=(
+        "Clear all server-side async-lru publication caches. Pattern-based clearing "
+        "is not supported."
+    ),
     operation_id="clear_cache",
     responses={
         200: {
@@ -171,15 +174,6 @@ async def get_cache_statistics(
                                 "cleared_items": 347,
                                 "pattern": None,
                                 "message": "All cached items cleared successfully",
-                            },
-                        },
-                        "clear_pattern": {
-                            "summary": "Clear with pattern",
-                            "value": {
-                                "success": True,
-                                "cleared_items": 156,
-                                "pattern": "pub_export:*",
-                                "message": "Cache items matching pattern cleared successfully",
                             },
                         },
                     }
@@ -203,32 +197,12 @@ async def clear_cache(
     service: PublicationServiceDep,
     pattern: str | None = Query(
         default=None,
-        description="Cache key pattern to clear (clears all if not specified)",
+        description="Unsupported. Any supplied pattern returns HTTP 400.",
         examples=[
             {
                 "summary": "Clear all cache",
                 "description": "Clear all cached items",
                 "value": None,
-            },
-            {
-                "summary": "Clear publication cache",
-                "description": "Clear only publication export cache",
-                "value": "pub_export:*",
-            },
-            {
-                "summary": "Clear entity cache",
-                "description": "Clear only entity autocomplete cache",
-                "value": "entity_ac:*",
-            },
-            {
-                "summary": "Clear search cache",
-                "description": "Clear only literature search cache",
-                "value": "search:*",
-            },
-            {
-                "summary": "Clear relations cache",
-                "description": "Clear only entity relations cache",
-                "value": "relations:*",
             },
         ],
     ),
@@ -285,34 +259,15 @@ async def clear_cache(
         HTTPException(500): Error clearing cache
     """
     try:
-        # Validate pattern format if provided
         if pattern is not None:
-            # Basic pattern validation - ensure it's not empty string
-            if pattern.strip() == "":
-                raise HTTPException(
-                    status_code=400,
-                    detail="Cache pattern cannot be empty. Use null/undefined to clear all cache.",
-                )
-
-            # Validate that pattern contains valid cache prefixes
-            valid_prefixes = [
-                "pub_export:",
-                "entity_ac:",
-                "search:",
-                "relations:",
-                "text_proc:",
-            ]
-            if not any(pattern.startswith(prefix) for prefix in valid_prefixes):
-                logger.warning(f"Pattern '{pattern}' doesn't match known cache prefixes")
+            raise HTTPException(
+                status_code=400,
+                detail="Pattern-based cache clearing is not supported.",
+            )
 
         # Clear cache using the service
         cleared_count = await service.clear_cache(pattern=pattern)
-
-        # Determine success message
-        if pattern is None:
-            message = "All cached items cleared successfully"
-        else:
-            message = "Cache items matching pattern cleared successfully"
+        message = "All cached items cleared successfully"
 
         return CacheClearResponse(
             success=True, cleared_items=cleared_count, pattern=pattern, message=message

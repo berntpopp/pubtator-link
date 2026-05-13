@@ -1,8 +1,10 @@
+import asyncio
 import logging
 from typing import Any
 
 import pytest
 
+from pubtator_link.api.client import PubTatorAPIError
 from pubtator_link.config import ReviewReragConfig
 from pubtator_link.models.review_rerag import ReviewPassageRow, SourceCoverageHint
 from pubtator_link.services.full_text_preparation import (
@@ -75,6 +77,41 @@ class RecordingPubTatorClient:
             self.retry_metadata_by_call.pop(0) if self.retry_metadata_by_call else None
         )
         return self.responses.pop(0)
+
+
+class SidecarPubTatorClient:
+    def __init__(self, responses: dict[str, tuple[dict[str, Any], dict[str, Any]]]) -> None:
+        self.responses = responses
+        self.calls: list[dict[str, Any]] = []
+
+    async def export_publications_with_metadata(
+        self, pmids: list[str], format: str = "biocjson", full: bool = False
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        pmid = pmids[0]
+        self.calls.append({"pmids": pmids, "format": format, "full": full})
+        return self.responses[pmid]
+
+    async def export_publications(
+        self, pmids: list[str], format: str = "biocjson", full: bool = False
+    ) -> dict[str, Any]:
+        raise AssertionError("sidecar clients should not use shared mutable retry state")
+
+
+class FailingSidecarPubTatorClient:
+    async def export_publications_with_metadata(
+        self, pmids: list[str], format: str = "biocjson", full: bool = False
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        raise PubTatorAPIError(
+            "HTTP 503: busy",
+            status_code=503,
+            response_data={
+                "retry_metadata": {
+                    "attempt_count": 3,
+                    "last_status_code": 503,
+                    "terminal_reason": "retry_exhausted",
+                }
+            },
+        )
 
 
 class RecordingEmbeddingProvider:
@@ -306,6 +343,126 @@ async def test_prepare_pmid_falls_back_to_abstract_and_records_passages() -> Non
         },
     ]
     assert preflight.calls == [["40234174"]]
+
+
+@pytest.mark.asyncio
+async def test_prepare_pmid_records_sidecar_retry_metadata() -> None:
+    repository = RecordingRepository()
+    client = SidecarPubTatorClient(
+        {
+            "40234174": (
+                {
+                    "documents": [
+                        {
+                            "id": "40234174",
+                            "pmid": "40234174",
+                            "passages": [
+                                {
+                                    "infons": {"type": "abstract"},
+                                    "text": "Evidence passage.",
+                                },
+                            ],
+                        }
+                    ]
+                },
+                {"attempt_count": 2, "last_status_code": 200, "backoff_ms": 125},
+            )
+        }
+    )
+    service = FullTextPreparationService(
+        config=_config(),
+        repository=repository,
+        pubtator_client=client,
+    )
+
+    status = await service.prepare_pmid("review-1", "40234174")
+
+    assert status == "complete"
+    assert repository.attempts[0]["attempt_count"] == 2
+    assert repository.attempts[0]["last_status_code"] == 200
+    assert repository.attempts[0]["backoff_ms"] == 125
+
+
+@pytest.mark.asyncio
+async def test_prepare_pmid_sidecar_metadata_is_not_overwritten_between_concurrent_jobs() -> None:
+    repository = RecordingRepository()
+    client = SidecarPubTatorClient(
+        {
+            "111": (
+                {
+                    "documents": [
+                        {
+                            "id": "111",
+                            "pmid": "111",
+                            "passages": [{"infons": {"type": "abstract"}, "text": "First."}],
+                        }
+                    ]
+                },
+                {"attempt_count": 1, "last_status_code": 200},
+            ),
+            "222": (
+                {
+                    "documents": [
+                        {
+                            "id": "222",
+                            "pmid": "222",
+                            "passages": [{"infons": {"type": "abstract"}, "text": "Second."}],
+                        }
+                    ]
+                },
+                {"attempt_count": 3, "last_status_code": 200, "retry_after_ms": 1000},
+            ),
+        }
+    )
+    service = FullTextPreparationService(
+        config=_config(),
+        repository=repository,
+        pubtator_client=client,
+    )
+
+    await asyncio.gather(
+        service.prepare_pmid("review-1", "111"),
+        service.prepare_pmid("review-1", "222"),
+    )
+
+    attempts_by_source = {attempt["source_id"]: attempt for attempt in repository.attempts}
+    assert attempts_by_source["PMID:111"]["attempt_count"] == 1
+    assert attempts_by_source["PMID:222"]["attempt_count"] == 3
+    assert attempts_by_source["PMID:222"]["retry_after_ms"] == 1000
+
+
+@pytest.mark.asyncio
+async def test_prepare_pmid_records_retry_metadata_when_pubtator_export_fails() -> None:
+    repository = RecordingRepository()
+    service = FullTextPreparationService(
+        config=_config(),
+        repository=repository,
+        pubtator_client=FailingSidecarPubTatorClient(),
+    )
+
+    status = await service.prepare_pmid("review-1", "40234174")
+
+    assert status == "failed"
+    assert repository.attempts == [
+        {
+            "review_id": "review-1",
+            "source_id": "PMID:40234174",
+            "source_kind": "pubtator_full_bioc",
+            "status": "failed",
+            "content_type": "application/json",
+            "reason": "HTTP 503: busy",
+            "coverage_reason": "unknown",
+            "attempt_count": 3,
+            "last_status_code": 503,
+            "retry_after_ms": None,
+            "backoff_ms": None,
+            "terminal_reason": "retry_exhausted",
+            "pmcid": None,
+            "doi": None,
+            "license_or_access_hint": None,
+            "pmc_fallback_available": False,
+        }
+    ]
 
 
 @pytest.mark.asyncio
