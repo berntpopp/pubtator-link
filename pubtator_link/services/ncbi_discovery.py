@@ -23,6 +23,11 @@ from pubtator_link.models.discovery import (
     RelatedArticleScoreRecord,
     RelatedArticlesResponse,
 )
+from pubtator_link.services.discovery_metadata import (
+    DiscoveryMetadataLookup,
+    enrich_citation_records,
+    enrich_related_article_records,
+)
 from pubtator_link.services.ncbi_id_conversion import (
     conversion_records_from_response,
     convert_article_ids_individually,
@@ -345,8 +350,14 @@ class NcbiDiscoveryClient:
 
 
 class DiscoveryService:
-    def __init__(self, client: NcbiDiscoveryClientProtocol) -> None:
+    def __init__(
+        self,
+        client: NcbiDiscoveryClientProtocol,
+        *,
+        metadata_service: DiscoveryMetadataLookup | None = None,
+    ) -> None:
         self.client = client
+        self.metadata_service = metadata_service
 
     async def convert_article_ids(
         self,
@@ -427,6 +438,7 @@ class DiscoveryService:
                 },
                 *meta.next_commands,
             ]
+        records = await enrich_citation_records(records, self.metadata_service)
         return CitationLookupResponse(
             records=records,
             candidate_pmids=candidate_pmids,
@@ -494,6 +506,10 @@ class DiscoveryService:
         limit: int = 20,
     ) -> RelatedArticlesResponse:
         related_articles = await self.client.find_related_articles(pmids, mode, limit)
+        related_articles = await enrich_related_article_records(
+            related_articles,
+            self.metadata_service,
+        )
         candidate_pmids = _dedupe(record.pmid for record in related_articles)
         resolved_source_pmids = {record.source_pmid for record in related_articles}
         unresolved = [pmid for pmid in pmids if pmid not in resolved_source_pmids]

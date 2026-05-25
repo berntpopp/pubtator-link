@@ -97,6 +97,7 @@ class CitationLookupRecord(BaseModel):
     title: str | None = None
     journal: str | None = None
     year: int | None = None
+    authors: list[str] = Field(default_factory=list)
     reason: str | None = None
 
 

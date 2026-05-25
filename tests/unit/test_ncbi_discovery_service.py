@@ -13,6 +13,11 @@ from pubtator_link.models.discovery import (
     RelatedArticleMode,
     RelatedArticleRecord,
 )
+from pubtator_link.models.publication_metadata import (
+    PublicationAuthor,
+    PublicationMetadata,
+    PublicationMetadataResponse,
+)
 from pubtator_link.services.ncbi_discovery import DiscoveryService, NcbiDiscoveryClient
 from tests.fixtures.literature_graph import NCBI_ELINK_NEIGHBOR_SCORE
 
@@ -195,6 +200,47 @@ async def test_lookup_citation_falls_back_to_title_search_for_prose_reference() 
     assert response.records[0].pmid == "42135612"
     assert response.records[0].title == "MEFV variants of uncertain significance in children"
     assert client.title_queries == ["MEFV variants of uncertain significance in children"]
+
+
+@pytest.mark.asyncio
+async def test_lookup_citation_enriches_matched_metadata_fields() -> None:
+    class Client(FakeDiscoveryClient):
+        async def lookup_citations(self, citations):
+            return [CitationLookupRecord(citation=citations[0], status="matched", pmid="26802180")]
+
+    class Metadata:
+        async def get_metadata(self, request):
+            assert request.pmids == ["26802180"]
+            assert request.include_mesh is False
+            assert request.include_publication_types is False
+            assert request.include_citations == "none"
+            assert request.include_coverage is False
+            return PublicationMetadataResponse(
+                metadata=[
+                    PublicationMetadata(
+                        pmid="26802180",
+                        title="EULAR recommendations for the management of FMF",
+                        journal="Annals of the Rheumatic Diseases",
+                        pub_year=2016,
+                        authors=[
+                            PublicationAuthor(last_name="Ozen", initials="S"),
+                            PublicationAuthor(last_name="Demirkaya", initials="E"),
+                        ],
+                    )
+                ],
+                failed_pmids={},
+                _meta={"next_commands": []},
+            )
+
+    service = DiscoveryService(Client(), metadata_service=Metadata())
+
+    response = await service.lookup_citation(["Ozen S. EULAR recommendations. Ann Rheum Dis."])
+
+    assert response.candidate_pmids == ["26802180"]
+    assert response.records[0].title == "EULAR recommendations for the management of FMF"
+    assert response.records[0].journal == "Annals of the Rheumatic Diseases"
+    assert response.records[0].year == 2016
+    assert response.records[0].authors == ["Ozen S", "Demirkaya E"]
 
 
 @pytest.mark.asyncio
@@ -566,6 +612,42 @@ async def test_find_related_articles_deduplicates_candidates() -> None:
     }
     assert_no_prepare_mode(response.meta.next_commands)
     assert response.unresolved == ["999"]
+
+
+@pytest.mark.asyncio
+async def test_find_related_articles_enriches_metadata_fields() -> None:
+    class Client(FakeDiscoveryClient):
+        async def find_related_articles(self, pmids, mode, limit):
+            return [RelatedArticleRecord(source_pmid="123", pmid="456", relation=mode)]
+
+    class Metadata:
+        async def get_metadata(self, request):
+            assert request.pmids == ["456"]
+            assert request.include_mesh is False
+            assert request.include_publication_types is False
+            assert request.include_citations == "none"
+            assert request.include_coverage is False
+            return PublicationMetadataResponse(
+                metadata=[
+                    PublicationMetadata(
+                        pmid="456",
+                        title="Related FMF cohort",
+                        journal="Rheumatology",
+                        pub_year=2024,
+                    )
+                ],
+                failed_pmids={},
+                _meta={"next_commands": []},
+            )
+
+    service = DiscoveryService(Client(), metadata_service=Metadata())
+
+    response = await service.find_related_articles(["123"])
+
+    assert response.related_articles[0].title == "Related FMF cohort"
+    assert response.related_articles[0].journal == "Rheumatology"
+    assert response.related_articles[0].year == 2024
+    assert response.meta.next_commands[0]["arguments"] == {"pmids": ["456"]}
 
 
 @pytest.mark.asyncio

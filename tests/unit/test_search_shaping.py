@@ -306,6 +306,40 @@ def test_guideline_boost_prioritizes_named_consensus_guidelines() -> None:
     assert [item["pmid"] for item in selected] == ["2", "1"]
 
 
+def test_guideline_boost_uses_title_signals_without_publication_types() -> None:
+    items = [
+        {
+            "pmid": "1",
+            "title": "Familial Mediterranean fever review",
+            "abstract": "General review of MEFV.",
+            "publication_types": [],
+        },
+        {
+            "pmid": "2",
+            "title": (
+                "EULAR recommendations and systematic review for familial Mediterranean fever"
+            ),
+            "abstract": "Consensus guidance from SHARE and PRES.",
+            "publication_types": [],
+        },
+    ]
+
+    selected = selected_search_items(items, guideline_boost=True, limit=2)
+    result = shaped_search_result(
+        item=selected[0],
+        response_mode="standard",
+        include_citations="none",
+        text_hl_format="plain",
+        guideline_boost=True,
+        metadata="none",
+    )
+
+    assert [item["pmid"] for item in selected] == ["2", "1"]
+    assert "eular" in result.ranking_reasons
+    assert "recommendation" in result.ranking_reasons
+    assert "systematic review" in result.ranking_reasons
+
+
 def test_guideline_rank_features_include_reasons() -> None:
     result = shaped_search_result(
         item={

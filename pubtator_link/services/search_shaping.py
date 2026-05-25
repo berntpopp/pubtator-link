@@ -13,7 +13,16 @@ TextHighlightFormat = Literal["none", "plain", "annotated"]
 SearchMetadataMode = Literal["none", "basic", "with_abstract", "full"]
 INLINE_ABSTRACT_MAX_CHARS = 640
 
-GUIDELINE_TERMS = ("recommendation", "guideline", "consensus", "eular", "pres", "share")
+GUIDELINE_TERMS = (
+    "recommendation",
+    "guideline",
+    "consensus",
+    "eular",
+    "pres",
+    "share",
+    "systematic review",
+    "systematic-review",
+)
 GUIDELINE_TYPES = (
     "guideline",
     "practice guideline",
@@ -372,7 +381,7 @@ def _guideline_rank_features(item: dict[str, Any]) -> dict[str, Any]:
     for term in GUIDELINE_TERMS:
         if term in title or term in abstract:
             term_boost += 1
-            reasons.append(term)
+            reasons.append("systematic review" if term == "systematic-review" else term)
     return {
         "guideline_boost": type_boost + term_boost,
         "ranking_reasons": list(dict.fromkeys(reasons)),

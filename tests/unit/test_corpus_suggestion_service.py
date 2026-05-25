@@ -157,3 +157,54 @@ async def test_corpus_suggestion_skips_metadata_lookup_when_disabled() -> None:
     assert response.candidates[0].metadata is None
     assert response.candidates[0].title == "Large FMF cohort registry"
     assert response.candidates[0].role == "cohort"
+
+
+@pytest.mark.asyncio
+async def test_corpus_suggestion_discloses_relevance_and_omits_weak_candidates() -> None:
+    class FakeSearch:
+        async def search(self, query: str, *, limit: int, sort: str | None):
+            return {
+                "results": [
+                    {
+                        "pmid": "26802180",
+                        "title": "EULAR recommendations for familial Mediterranean fever",
+                    },
+                    {"pmid": "33726481", "title": "MEFV variant cohort registry"},
+                    {"pmid": "888", "title": "CRISPR oncology cell line assay"},
+                ]
+            }
+
+    class FakeMetadata:
+        async def get_metadata(self, request):
+            raise AssertionError("metadata should not be fetched")
+
+    class FakePreflight:
+        async def preflight_pmids(self, pmids: list[str]) -> list[SourceCoverageHint]:
+            return []
+
+    service = CorpusSuggestionService(
+        search_client=FakeSearch(),
+        metadata_service=FakeMetadata(),
+        source_preflight_service=FakePreflight(),
+    )
+
+    response = await service.suggest(
+        CorpusSuggestionRequest(
+            question="FMF MEFV colchicine guideline",
+            max_pmids=4,
+            must_include_pmids=["999"],
+            include_metadata=False,
+        )
+    )
+
+    assert response.candidate_pmids == ["999", "26802180", "33726481"]
+    assert "888" not in {candidate.pmid for candidate in response.candidates}
+    required = next(candidate for candidate in response.candidates if candidate.pmid == "999")
+    guideline = next(candidate for candidate in response.candidates if candidate.pmid == "26802180")
+    cohort = next(candidate for candidate in response.candidates if candidate.pmid == "33726481")
+    assert required.matched_terms == []
+    assert required.matched_intents == ["must_include"]
+    assert {"familial mediterranean fever", "guideline"} <= set(guideline.matched_terms)
+    assert "guideline" in guideline.matched_intents
+    assert "mefv" in cohort.matched_terms
+    assert "cohort" in cohort.matched_intents

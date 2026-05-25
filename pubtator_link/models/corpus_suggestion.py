@@ -44,6 +44,8 @@ class CorpusCandidate(BaseModel):
     title: str | None = None
     score: float = 0.0
     rationale: str
+    matched_terms: list[str] = Field(default_factory=list)
+    matched_intents: list[str] = Field(default_factory=list)
     metadata: PublicationMetadata | None = None
     coverage_hint: SourceCoverageHint | None = None
 

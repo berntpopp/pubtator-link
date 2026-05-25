@@ -62,6 +62,12 @@ class CorpusSuggestionService:
             metadata = metadata_by_pmid.get(pmid)
             title = _title_for(pmid, metadata_by_pmid, searches)
             role = _role_for(metadata, title=title)
+            matched_terms, matched_intents = _relevance_for(
+                request,
+                pmid=pmid,
+                title=title,
+                role=role,
+            )
             candidates.append(
                 CorpusCandidate(
                     pmid=pmid,
@@ -69,6 +75,8 @@ class CorpusSuggestionService:
                     title=title,
                     score=_score_for(pmid, searches),
                     rationale=_rationale_for(role),
+                    matched_terms=matched_terms,
+                    matched_intents=matched_intents,
                     metadata=metadata if request.include_metadata else None,
                     coverage_hint=coverage_by_pmid.get(pmid),
                 )
@@ -162,11 +170,25 @@ def _select_pmids(
             selected.append(pmid)
     for trace in searches:
         for pmid in trace.result_pmids:
+            title = trace.result_titles.get(pmid)
+            if pmid not in request.must_include_pmids and not _has_relevance(request, title):
+                continue
             if pmid not in selected:
                 selected.append(pmid)
             if len(selected) >= request.max_pmids:
                 return selected
     return selected[: request.max_pmids]
+
+
+def _has_relevance(request: CorpusSuggestionRequest, title: str | None) -> bool:
+    role = _role_for(None, title=title)
+    matched_terms, matched_intents = _relevance_for(
+        request,
+        pmid="",
+        title=title,
+        role=role,
+    )
+    return bool(matched_terms or matched_intents)
 
 
 def _role_for(
@@ -226,6 +248,50 @@ def _score_for(pmid: str, searches: list[CorpusSearchTrace]) -> float:
         if pmid in trace.result_pmids:
             score += max(1.0, 10.0 - trace_index)
     return score
+
+
+def _relevance_for(
+    request: CorpusSuggestionRequest,
+    *,
+    pmid: str,
+    title: str | None,
+    role: CorpusCandidateRole,
+) -> tuple[list[str], list[str]]:
+    title_lower = (title or "").lower()
+    matched_terms = _matched_question_terms(request, title_lower)
+    matched_intents: list[str] = []
+    if pmid in request.must_include_pmids:
+        matched_intents.append("must_include")
+    if role != "other":
+        matched_intents.append(role)
+    return list(dict.fromkeys(matched_terms)), list(dict.fromkeys(matched_intents))
+
+
+def _matched_question_terms(request: CorpusSuggestionRequest, title_lower: str) -> list[str]:
+    if not title_lower:
+        return []
+    terms: list[str] = []
+    question_terms = [
+        token
+        for token in (
+            "".join(character for character in word.lower() if character.isalnum())
+            for word in request.question.split()
+        )
+        if len(token) >= 3
+    ]
+    entity_terms = [
+        token.lower().removeprefix("@gene_")
+        for token in request.entity_ids
+        if token.lower().startswith("@gene_")
+    ]
+    for term in [*question_terms, *entity_terms]:
+        if term == "fmf" and "familial mediterranean fever" in title_lower:
+            terms.append("familial mediterranean fever")
+        elif term in title_lower:
+            terms.append(term)
+    if any(term in title_lower for term in ("guideline", "recommendation", "consensus", "eular")):
+        terms.append("guideline")
+    return terms
 
 
 def _rationale_for(role: CorpusCandidateRole) -> str:
