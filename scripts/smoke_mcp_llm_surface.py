@@ -65,17 +65,25 @@ def summarize_call(
     retry_response_chars: int | None = None,
     retry_elapsed_ms: int | None = None,
 ) -> dict[str, Any]:
+    first_call_success = _payload_succeeded(payload)
+    one_retry_success = _payload_succeeded(retry_payload or payload)
     return {
         "tool": tool,
         "success": payload.get("success"),
         "error_code": payload.get("error_code"),
-        "first_call_success": payload.get("success") is True,
-        "one_retry_success": (retry_payload or payload).get("success") is True,
+        "first_call_success": first_call_success,
+        "one_retry_success": one_retry_success,
         "response_chars": response_chars,
         "retry_response_chars": retry_response_chars,
         "elapsed_ms": elapsed_ms,
         "retry_elapsed_ms": retry_elapsed_ms,
     }
+
+
+def _payload_succeeded(payload: dict[str, Any]) -> bool:
+    if payload.get("success") is False:
+        return False
+    return "error_code" not in payload and "transport_error" not in payload
 
 
 def main() -> int:

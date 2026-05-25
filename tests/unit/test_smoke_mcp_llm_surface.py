@@ -25,3 +25,17 @@ def test_smoke_surface_summary_tracks_retry_success_and_payload_size() -> None:
         "elapsed_ms": 123,
         "retry_elapsed_ms": 50,
     }
+
+
+def test_smoke_surface_summary_treats_absent_success_without_error_as_success() -> None:
+    from scripts.smoke_mcp_llm_surface import summarize_call
+
+    summary = summarize_call(
+        tool="pubtator_lookup_mesh",
+        payload={"query": "familial Mediterranean fever", "descriptors": []},
+        response_chars=2048,
+        elapsed_ms=123,
+    )
+
+    assert summary["first_call_success"] is True
+    assert summary["one_retry_success"] is True
