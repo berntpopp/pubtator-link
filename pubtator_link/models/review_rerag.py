@@ -325,8 +325,6 @@ class ReviewQuickstartResponse(BaseModel):
 
 
 class GroundQuestionResponse(BaseModel):
-    """Composite one-call grounded question workflow response."""
-
     success: bool = True
     question: str
     query_length_warning: str | None = None

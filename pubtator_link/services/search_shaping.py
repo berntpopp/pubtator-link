@@ -90,6 +90,31 @@ def shaped_search_response(
     )
 
 
+def dump_search_response(
+    response: SearchResponse, *, response_mode: SearchResponseMode
+) -> dict[str, Any]:
+    dumped = response.model_dump(exclude_none=response_mode == "compact")
+    if response_mode != "compact":
+        return dumped
+    for result in dumped.get("results", []):
+        if not isinstance(result, dict):
+            continue
+        for field in (
+            "annotations",
+            "authors",
+            "mesh_headings",
+            "publication_types",
+            "ranking_reasons",
+            "matched_terms",
+        ):
+            if result.get(field) == []:
+                result.pop(field, None)
+        for field in ("citations", "rank_features", "coverage_hint", "source_versions"):
+            if result.get(field) == {}:
+                result.pop(field, None)
+    return dumped
+
+
 def shaped_search_result(
     *,
     item: dict[str, Any],

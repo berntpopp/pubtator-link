@@ -133,8 +133,7 @@ async def test_review_audit_bundle_ignores_malformed_event_payloads() -> None:
                 {
                     "event_type": "search_run",
                     "payload": (
-                        '{"query":"MEFV VUS","filters":{"year_min":2020},'
-                        '"returned_count":5}'
+                        '{"query":"MEFV VUS","filters":{"year_min":2020},"returned_count":5}'
                     ),
                     "created_at": "2026-05-01T10:02:00+00:00",
                 },

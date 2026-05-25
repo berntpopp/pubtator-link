@@ -163,7 +163,8 @@ async def test_lookup_citation_extracts_nbk_and_adds_recovery_hint() -> None:
 @pytest.mark.asyncio
 async def test_lookup_citation_falls_back_to_title_search_for_prose_reference() -> None:
     class Client(FakeDiscoveryClient):
-        title_queries: list[str] = []
+        def __init__(self) -> None:
+            self.title_queries: list[str] = []
 
         async def lookup_citations(self, citations):
             return [

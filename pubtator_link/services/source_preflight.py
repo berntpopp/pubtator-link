@@ -4,8 +4,7 @@ import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
-from pubtator_link.api.client import PubTator3Client
-from pubtator_link.api.client import PubTatorAPIError
+from pubtator_link.api.client import PubTator3Client, PubTatorAPIError
 from pubtator_link.models.review_rerag import (
     CoverageReason,
     ResolverAttemptSummary,
@@ -122,10 +121,10 @@ class SourcePreflightService:
                     source_kind="pmc_id_converter",
                     status="not_available",
                     pmid=pmid,
-                        terminal_reason=metadata.get("id_resolution_reason")
-                        or "pre_resolution_best_guess",
-                    )
+                    terminal_reason=metadata.get("id_resolution_reason")
+                    or "pre_resolution_best_guess",
                 )
+            )
             resolver_failures.append(id_resolution_attempts[-1])
 
         if pmcid:

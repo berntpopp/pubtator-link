@@ -135,7 +135,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"entity_id":"@CHEMICAL_remdesivir"}`
 - Next tools by profile: full: `pubtator_search_literature`; readonly: `pubtator_search_literature`
 - Resource links: None
-- Input schema: `entity_id` (string); `relation_type` (string | null; default: `None`); `target_entity_type` (string | null; default: `None`)
+- Input schema: `entity_id` (string); `relation_type` (string | null; default: `None`); `target_entity_type` (string | null; default: `None`); `limit` (integer; default: `20`); `response_mode` (string; enum: `compact`, `standard`, `full`; default: `compact`); `max_response_chars` (integer; default: `12000`)
 - Output schema: `RelationsResponse`; has_output_schema: `yes`
 
 ## `pubtator_find_related_articles`
@@ -585,7 +585,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"text":"BRCA1 ovarian cancer PARP inhibitor","limit":5,"metadata":"basic"}`
 - Next tools by profile: lean: `pubtator_preflight_review_sources`; full: `pubtator_preflight_review_sources`; readonly: `pubtator_preflight_review_sources`
 - Resource links: None
-- Input schema: `text` (string); `page` (integer; default: `1`); `sort` (string | null; default: `None`); `filters` (string | null; default: `None`); `publication_types` (array | null; default: `None`); `year_min` (integer | null; default: `None`); `year_max` (integer | null; default: `None`); `sections` (array | null; default: `None`); `response_mode` (string; enum: `compact`, `standard`, `full`; default: `compact`); `include_citations` (string; enum: `none`, `nlm`, `bibtex`, `both`; default: `none`); `text_hl_format` (string; enum: `none`, `plain`, `annotated`; default: `plain`); `limit` (integer | null; default: `5`); `entity_ids` (array | null; default: `None`); `guideline_boost` (boolean; default: `False`); `coverage` (string; enum: `none`, `preflight`; default: `none`); `metadata` (string; enum: `none`, `basic`, `full`; default: `basic`)
+- Input schema: `text` (string); `page` (integer; default: `1`); `sort` (string | null; default: `None`); `filters` (string | null; default: `None`); `publication_types` (array | null; default: `None`); `year_min` (integer | null; default: `None`); `year_max` (integer | null; default: `None`); `sections` (array | null; default: `None`); `response_mode` (string; enum: `compact`, `standard`, `full`; default: `compact`); `include_citations` (string; enum: `none`, `nlm`, `bibtex`, `both`; default: `none`); `text_hl_format` (string; enum: `none`, `plain`, `annotated`; default: `plain`); `limit` (integer | null; default: `5`); `entity_ids` (array | null; default: `None`); `guideline_boost` (boolean; default: `False`); `coverage` (string; enum: `none`, `preflight`; default: `none`); `metadata` (string; enum: `none`, `basic`, `with_abstract`, `full`; default: `basic`)
 - Output schema: `SearchResponse`; has_output_schema: `yes`
 
 ## `pubtator_stage_research_session`

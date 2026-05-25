@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -15,6 +14,14 @@ from pubtator_link.mcp.input_normalization import (
     attach_normalization_meta,
     normalize_retrieve_review_context_batch_args,
 )
+from pubtator_link.mcp.quickstart import (
+    query_length_warning,
+    quickstart_review_id,
+    quickstart_selected_pmids,
+    review_indexing_service_from_factory,
+    wait_for_quickstart_index,
+)
+from pubtator_link.mcp.relations import shape_entity_relations
 from pubtator_link.models.corpus_suggestion import CorpusSuggestionRequest
 from pubtator_link.models.literature_graph import (
     PublicationCitationGraphRequest,
@@ -33,8 +40,6 @@ from pubtator_link.models.responses import (
     EntityAutocompleteResponse,
     EntityMatch,
     PublicationExportResponse,
-    RelatedEntity,
-    RelationsResponse,
     TextAnnotationResultResponse,
     TextAnnotationSubmitResponse,
 )
@@ -96,6 +101,7 @@ from pubtator_link.services.search_shaping import (
     SearchResponseMode,
     TextHighlightFormat,
     combined_search_text,
+    dump_search_response,
     selected_search_items,
     shaped_search_response,
 )
@@ -535,35 +541,8 @@ async def search_literature_impl(
             "with local best-effort filters applied."
         )
         response.source_versions["pubtator3_filtering"] = "local_fallback"
-    dumped = _dump_search_response(response, response_mode=response_mode)
+    dumped = dump_search_response(response, response_mode=response_mode)
     dumped["_meta"] = response_meta
-    return dumped
-
-
-def _dump_search_response(
-    response: Any,
-    *,
-    response_mode: SearchResponseMode,
-) -> dict[str, Any]:
-    dumped = response.model_dump(exclude_none=response_mode == "compact")
-    if response_mode != "compact":
-        return dumped
-    for result in dumped.get("results", []):
-        if not isinstance(result, dict):
-            continue
-        for field in (
-            "annotations",
-            "authors",
-            "mesh_headings",
-            "publication_types",
-            "ranking_reasons",
-            "matched_terms",
-        ):
-            if result.get(field) == []:
-                result.pop(field, None)
-        for field in ("citations", "rank_features", "coverage_hint", "source_versions"):
-            if result.get(field) == {}:
-                result.pop(field, None)
     return dumped
 
 
@@ -753,51 +732,15 @@ async def find_entity_relations_impl(
     api_results = cast(
         list[dict[str, Any]], relation_response if isinstance(relation_response, list) else []
     )
-    limited_results = api_results[:limit]
-    related_entities: list[RelatedEntity] = []
-    for item in limited_results:
-        pmids = [] if response_mode == "compact" else item.get("pmids", [])
-        related_entities.append(
-            RelatedEntity(
-                entity_id=item.get("target", ""),
-                entity_name=item.get("entity_name"),
-                entity_type=item.get("entity_type"),
-                relation_type=item.get("type", ""),
-                confidence=item.get("confidence"),
-                pmids=pmids,
-                source=item.get("source"),
-                target=item.get("target", ""),
-                publications=item.get("publications"),
-            )
-        )
-    response_size_class = response_mode
-    omitted_count = max(0, len(api_results) - len(related_entities))
-    while related_entities:
-        projected = RelationsResponse(
-            success=True,
-            primary_entity=entity_id,
-            related_entities=related_entities,
-            total_relations=len(api_results),
-            relation_filter=relation_type,
-            entity_filter=target_entity_type,
-            omitted_count=omitted_count,
-            response_size_class=response_size_class,
-        ).model_dump()
-        if len(json.dumps(projected, separators=(",", ":"), default=str)) <= max_response_chars:
-            break
-        omitted_count += 1
-        related_entities.pop()
-        response_size_class = "truncated"
-    return RelationsResponse(
-        success=True,
-        primary_entity=entity_id,
-        related_entities=related_entities,
-        total_relations=len(api_results),
-        relation_filter=relation_type,
-        entity_filter=target_entity_type,
-        omitted_count=omitted_count,
-        response_size_class=response_size_class,
-    ).model_dump()
+    return shape_entity_relations(
+        entity_id=entity_id,
+        api_results=api_results,
+        relation_type=relation_type,
+        target_entity_type=target_entity_type,
+        limit=limit,
+        response_mode=response_mode,
+        max_response_chars=max_response_chars,
+    )
 
 
 async def lookup_variant_evidence_impl(
@@ -995,7 +938,7 @@ async def review_quickstart_impl(
     review_indexing_service_factory: Any = ReviewIndexingService,
 ) -> dict[str, Any]:
     normalized_topic = topic.strip()
-    selected_review_id = review_id or _quickstart_review_id(normalized_topic)
+    selected_review_id = review_id or quickstart_review_id(normalized_topic)
     staged = await stage_service.stage(
         review_id=selected_review_id,
         request=StageResearchSessionRequest(
@@ -1006,24 +949,16 @@ async def review_quickstart_impl(
         ),
     )
     manifest = staged.manifest
-    selected_pmids = [candidate.pmid for candidate in manifest.candidates if candidate.pmid]
-    if wait_until_ready and selected_pmids:
-        queue = getattr(stage_service, "queue", None)
-        if queue is not None:
-            indexing_service = _review_indexing_service_from_factory(
-                review_indexing_service_factory,
-                queue,
-            )
-            await indexing_service.index_review_evidence(
-                selected_review_id,
-                IndexReviewEvidenceRequest(
-                    pmids=selected_pmids,
-                    session_id=manifest.session_id,
-                    wait_for_completion=True,
-                    wait_for_status="complete_or_partial",
-                    timeout_ms=timeout_ms,
-                ),
-            )
+    selected_pmids = quickstart_selected_pmids(manifest)
+    if wait_until_ready:
+        await wait_for_quickstart_index(
+            review_id=selected_review_id,
+            session_id=manifest.session_id,
+            pmids=selected_pmids,
+            stage_service=stage_service,
+            timeout_ms=timeout_ms,
+            review_indexing_service_factory=review_indexing_service_factory,
+        )
     inspect_response = await context_service.inspect_review_index(
         selected_review_id,
         InspectReviewIndexRequest(session_id=manifest.session_id),
@@ -1076,8 +1011,8 @@ async def ground_question_impl(
     review_indexing_service_factory: Any = ReviewIndexingService,
 ) -> dict[str, Any]:
     normalized_question = question.strip()
-    query_length_warning = _query_length_warning(normalized_question)
-    selected_review_id = review_id or _quickstart_review_id(normalized_question)
+    warning = query_length_warning(normalized_question)
+    selected_review_id = review_id or quickstart_review_id(normalized_question)
     search_result = await search_literature_impl(
         client=client,
         text=normalized_question,
@@ -1102,7 +1037,7 @@ async def ground_question_impl(
     if not selected_pmids:
         return GroundQuestionResponse(
             question=normalized_question,
-            query_length_warning=query_length_warning,
+            query_length_warning=warning,
             review_id=selected_review_id,
             selected_pmids=[],
             search_total_results=search_total_results,
@@ -1113,7 +1048,7 @@ async def ground_question_impl(
         ).model_dump(mode="json")
 
     try:
-        indexing_service = _review_indexing_service_from_factory(
+        indexing_service = review_indexing_service_from_factory(
             review_indexing_service_factory,
             queue,
         )
@@ -1169,7 +1104,7 @@ async def ground_question_impl(
 
     return GroundQuestionResponse(
         question=normalized_question,
-        query_length_warning=query_length_warning,
+        query_length_warning=warning,
         review_id=selected_review_id,
         selected_pmids=selected_pmids,
         search_total_results=search_total_results,
@@ -1180,14 +1115,6 @@ async def ground_question_impl(
         next_tools=next_tools,
         recovery=recovery,
     ).model_dump(mode="json")
-
-
-def _query_length_warning(query: str) -> str | None:
-    if len(re.findall(r"\w+", query)) <= 18:
-        return None
-    return (
-        "Long natural-language question used for search; consider splitting into 6 or fewer key terms."
-    )
 
 
 def _ground_question_sources_ready(inspect_response: Any, selected_pmids: list[str]) -> bool:
@@ -1203,24 +1130,6 @@ def _ground_question_sources_ready(inspect_response: Any, selected_pmids: list[s
         if pmid in selected and (passage_count > 0 or coverage in ready_coverages):
             ready_pmids.add(pmid)
     return bool(ready_pmids)
-
-
-def _review_indexing_service_from_factory(factory: Any, queue: ReviewPreparationQueue) -> Any:
-    try:
-        return factory(repository=queue.repository, queue=queue)
-    except TypeError:
-        try:
-            return factory(queue)
-        except TypeError:
-            return factory(queue=queue)
-
-
-def _quickstart_review_id(topic: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", topic.lower()).strip("-")[:48]
-    if not slug:
-        slug = "review"
-    digest = hashlib.sha256(topic.encode("utf-8")).hexdigest()[:8]
-    return f"quickstart-{slug}-{digest}"
 
 
 async def get_research_session_status_impl(
