@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 
+from pubtator_link.api.client import PubTatorAPIError
 from pubtator_link.models.responses import SearchResult
 from pubtator_link.services.source_preflight import SourcePreflightService
 
@@ -179,6 +180,38 @@ async def test_preflight_uses_resolved_pmcid_from_id_conversion() -> None:
     assert hints[0].pmcid == "PMC7811395"
     assert hints[0].expected_coverage == "full_text"
     assert hints[0].coverage_reason == "pmc_oa_bioc"
+
+
+@pytest.mark.asyncio
+async def test_preflight_degrades_pmc_export_400_to_abstract_fallback() -> None:
+    async def id_converter(_pmid: str) -> dict[str, str]:
+        return {"pmcid": "PMC3911865", "id_resolution_status": "resolved"}
+
+    async def pmc_bioc_available(_pmcid: str) -> bool:
+        raise PubTatorAPIError(
+            'HTTP 400: {"detail":"Could not retrieve publications"}',
+            status_code=400,
+        )
+
+    async def abstract_available(_pmid: str) -> bool:
+        return True
+
+    service = SourcePreflightService(
+        id_converter=id_converter,
+        pmc_bioc_available=pmc_bioc_available,
+        pubtator_abstract_available=abstract_available,
+    )
+
+    [hint] = await service.preflight_pmids(["24166952"])
+
+    assert hint.expected_coverage == "abstract_only"
+    assert hint.coverage_reason == "abstract_fallback_used"
+    assert hint.pmcid == "PMC3911865"
+    assert hint.resolver_attempts[0].source_kind == "pmc_bioc"
+    assert hint.resolver_attempts[0].status == "failed"
+    assert hint.resolver_attempts[0].terminal_reason == "not_retrievable"
+    assert hint.resolver_attempts[1].source_kind == "pubtator_abstract"
+    assert hint.resolver_attempts[1].status == "success"
 
 
 @pytest.mark.asyncio
