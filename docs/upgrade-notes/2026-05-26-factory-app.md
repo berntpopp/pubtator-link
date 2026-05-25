@@ -17,10 +17,10 @@ senior engineer audit (item 1.1). The module-level
 Replace `pubtator_link.server_manager:app` with the factory entrypoint in your
 process manager command.
 
-Gunicorn requires `gunicorn >= 22`:
+Gunicorn factory entrypoints are invoked by appending `()` to the app module:
 
 ```bash
-gunicorn -c gunicorn_conf.py --factory pubtator_link.server_manager:create_app
+gunicorn -c gunicorn_conf.py 'pubtator_link.server_manager:create_app()'
 ```
 
 Uvicorn:

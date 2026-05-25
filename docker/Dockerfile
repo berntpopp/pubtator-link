@@ -86,4 +86,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -fsS http://localhost:8000/health || exit 1
 
 # Default production command using Gunicorn with Uvicorn workers
-CMD ["gunicorn", "-c", "gunicorn_conf.py", "--factory", "pubtator_link.server_manager:create_app"]
+CMD ["gunicorn", "-c", "gunicorn_conf.py", "pubtator_link.server_manager:create_app()"]
