@@ -669,7 +669,9 @@ async def test_related_evidence_citation_stage_timeout_returns_degraded_candidat
 
 
 @pytest.mark.asyncio
-async def test_related_evidence_metadata_timeout_keeps_unresolved_candidates() -> None:
+async def test_related_evidence_metadata_timeout_sets_metadata_status_and_keeps_candidates() -> (
+    None
+):
     service = RelatedEvidenceService(
         discovery_service=FakeDiscovery(),
         metadata_service=SlowCandidateMetadata(),
@@ -686,6 +688,7 @@ async def test_related_evidence_metadata_timeout_keeps_unresolved_candidates() -
 
     statuses = {(status.provider, status.operation): status for status in response.provider_status}
     assert response.candidate_pmids == ["111", "222"]
+    assert response.metadata_status == "timeout"
     assert all(
         candidate.paper.status == "unresolved_reference" for candidate in response.candidates
     )
@@ -695,6 +698,32 @@ async def test_related_evidence_metadata_timeout_keeps_unresolved_candidates() -
         warning.provider == "pubmed_metadata" and warning.status == "provider_failed"
         for warning in response.meta.warnings
     )
+
+
+@pytest.mark.asyncio
+async def test_related_evidence_metadata_failure_returns_metadata_status_without_hard_fail() -> (
+    None
+):
+    service = RelatedEvidenceService(
+        discovery_service=FakeDiscovery(),
+        metadata_service=FailingMetadata(),
+        citation_graph_service=FakeCitationGraph(),
+    )
+
+    response = await service.find_candidates(
+        RelatedEvidenceCandidatesRequest(
+            pmid="123",
+            include_citation_neighbors=False,
+        )
+    )
+
+    statuses = {(status.provider, status.operation): status for status in response.provider_status}
+    assert response.metadata_status == "unavailable"
+    assert response.candidate_pmids == ["111", "222"]
+    assert all(
+        candidate.paper.status == "unresolved_reference" for candidate in response.candidates
+    )
+    assert statuses[("pubmed_metadata", "candidate_metadata")].status == "failed"
 
 
 @pytest.mark.asyncio

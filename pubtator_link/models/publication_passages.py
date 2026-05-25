@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from pubtator_link.services.degradation import DegradedMode
 
@@ -18,6 +18,9 @@ PassageDropReasonCode = Literal[
     "upstream_error",
 ]
 PublicationPassageSource = Literal["pubtator_abstract", "pubtator_full_bioc"]
+MAX_PUBLICATION_PASSAGE_CHARS = 50_000
+RECOMMENDED_CONTEXT_SAFETY_NUMERATOR = 6
+RECOMMENDED_CONTEXT_SAFETY_DENOMINATOR = 5
 
 
 class PublicationPassageRequest(BaseModel):
@@ -84,6 +87,17 @@ class PublicationContextEstimate(BaseModel):
     sections_by_pmid: dict[str, list[str]]
     recommended_mode: PublicationPassageMode
     warning: str | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def recommended_max_chars(self) -> int:
+        """Recommended get_publication_passages max_chars with safety margin."""
+        with_margin = (
+            self.estimated_chars * RECOMMENDED_CONTEXT_SAFETY_NUMERATOR
+            + RECOMMENDED_CONTEXT_SAFETY_DENOMINATOR
+            - 1
+        ) // RECOMMENDED_CONTEXT_SAFETY_DENOMINATOR
+        return min(MAX_PUBLICATION_PASSAGE_CHARS, max(1000, with_margin))
 
 
 class PublicationPassageResponse(BaseModel):

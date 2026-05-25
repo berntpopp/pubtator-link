@@ -2780,6 +2780,31 @@ async def test_publication_passages_adapter_builds_request_from_flat_args() -> N
 
 
 @pytest.mark.asyncio
+async def test_estimate_publication_context_adapter_returns_recommended_max_chars() -> None:
+    from pubtator_link.mcp.service_adapters import estimate_publication_context_impl
+    from pubtator_link.models.publication_passages import PublicationContextEstimateResponse
+
+    class EstimateService:
+        async def estimate_context(self, request):
+            return PublicationContextEstimateResponse(
+                pmids=request.pmids,
+                mode=request.mode,
+                estimated_passages=4,
+                estimated_chars=10_000,
+                sections_by_pmid={"29355051": ["abstract"]},
+                recommended_mode="compact_passages",
+            )
+
+    result = await estimate_publication_context_impl(
+        service=EstimateService(),
+        pmids=["29355051"],
+    )
+
+    assert result["recommended_max_chars"] >= result["estimated_chars"]
+    assert result["recommended_max_chars"] <= 50_000
+
+
+@pytest.mark.asyncio
 async def test_get_publication_passages_adapter_passes_dry_run_and_verbosity() -> None:
     from pubtator_link.mcp.service_adapters import get_publication_passages_impl
     from pubtator_link.models.publication_passages import (

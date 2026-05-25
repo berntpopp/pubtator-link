@@ -52,7 +52,6 @@ LiteraturePaperStatus = Literal[
 
 
 def normalize_pmid(value: str) -> str:
-    """Normalize and validate a PubMed PMID string."""
     clean = value.strip()
     if clean.upper().startswith("PMID:"):
         clean = clean[5:].strip()
@@ -62,7 +61,6 @@ def normalize_pmid(value: str) -> str:
 
 
 def normalize_doi(value: str) -> str:
-    """Normalize and validate a DOI string."""
     clean = value.strip()
     if clean.lower().startswith("doi:"):
         clean = clean[4:].strip()
@@ -382,6 +380,7 @@ class PublicationCitationGraphResponse(BaseModel):
     identifier_resolution_status: list[LiteratureProviderStatus] = Field(default_factory=list)
     open_access_status: list[LiteratureProviderStatus] = Field(default_factory=list)
     provider_status: list[LiteratureProviderStatus] = Field(default_factory=list)
+    freshness_note: str | None = None
     meta: LiteratureGraphResponseMeta = Field(
         default_factory=LiteratureGraphResponseMeta,
         alias="_meta",
@@ -453,6 +452,7 @@ class RelatedEvidenceCandidatesResponse(BaseModel):
         "Related candidates are not substitutes and require passage-level review before use as "
         "evidence."
     )
+    metadata_status: Literal["success", "partial", "timeout", "unavailable"] = "unavailable"
     meta: LiteratureGraphResponseMeta = Field(
         default_factory=LiteratureGraphResponseMeta,
         alias="_meta",
