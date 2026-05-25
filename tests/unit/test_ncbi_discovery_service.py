@@ -612,6 +612,11 @@ async def test_find_related_articles_deduplicates_candidates() -> None:
     }
     assert_no_prepare_mode(response.meta.next_commands)
     assert response.unresolved == ["999"]
+    assert response.metadata_status == "unavailable"
+    assert any(
+        command["tool"] == "pubtator_get_publication_metadata"
+        for command in response.meta.next_commands
+    )
 
 
 @pytest.mark.asyncio
@@ -647,7 +652,46 @@ async def test_find_related_articles_enriches_metadata_fields() -> None:
     assert response.related_articles[0].title == "Related FMF cohort"
     assert response.related_articles[0].journal == "Rheumatology"
     assert response.related_articles[0].year == 2024
+    assert response.metadata_status == "success"
     assert response.meta.next_commands[0]["arguments"] == {"pmids": ["456"]}
+
+
+@pytest.mark.asyncio
+async def test_find_related_articles_reports_partial_metadata_enrichment() -> None:
+    class Client(FakeDiscoveryClient):
+        async def find_related_articles(self, pmids, mode, limit):
+            return [
+                RelatedArticleRecord(source_pmid="123", pmid="456", relation=mode),
+                RelatedArticleRecord(source_pmid="123", pmid="789", relation=mode),
+            ]
+
+    class Metadata:
+        async def get_metadata(self, request):
+            return PublicationMetadataResponse(
+                metadata=[
+                    PublicationMetadata(
+                        pmid="456",
+                        title="Related FMF cohort",
+                        journal="Rheumatology",
+                        pub_year=2024,
+                    )
+                ],
+                failed_pmids={"789": "metadata_not_found"},
+                _meta={"next_commands": []},
+            )
+
+    service = DiscoveryService(Client(), metadata_service=Metadata())
+
+    response = await service.find_related_articles(["123"])
+
+    assert response.metadata_status == "partial"
+    assert response.related_articles[0].title == "Related FMF cohort"
+    assert response.related_articles[1].title is None
+    assert any(
+        command["tool"] == "pubtator_get_publication_metadata"
+        and command["arguments"] == {"pmids": ["456", "789"]}
+        for command in response.meta.next_commands
+    )
 
 
 @pytest.mark.asyncio

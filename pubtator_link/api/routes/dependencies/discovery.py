@@ -58,12 +58,18 @@ async def get_discovery_service() -> DiscoveryService:
         if resources.discovery_service is None:
             if resources.ncbi_discovery_client is None:
                 resources.ncbi_discovery_client = NcbiDiscoveryClient()
-            resources.discovery_service = DiscoveryService(resources.ncbi_discovery_client)
+            resources.discovery_service = DiscoveryService(
+                resources.ncbi_discovery_client,
+                metadata_service=await get_publication_metadata_service(),
+            )
         return resources.discovery_service
     if _discovery_service is None:
         if _ncbi_discovery_client is None:
             _ncbi_discovery_client = NcbiDiscoveryClient()
-        _discovery_service = DiscoveryService(_ncbi_discovery_client)
+        _discovery_service = DiscoveryService(
+            _ncbi_discovery_client,
+            metadata_service=await get_publication_metadata_service(),
+        )
     return _discovery_service
 
 

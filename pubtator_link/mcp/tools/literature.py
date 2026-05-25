@@ -129,12 +129,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 text=search_text,
                 page=page,
                 sort="score desc",
-                publication_types=[
-                    "Guideline",
-                    "Practice Guideline",
-                    "Consensus Development Conference",
-                    "Systematic Review",
-                ],
+                publication_types=None,
                 year_min=year_min,
                 year_max=year_max,
                 sections=sections,

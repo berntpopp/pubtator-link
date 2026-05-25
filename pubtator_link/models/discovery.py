@@ -9,6 +9,7 @@ ArticleIdTarget = Literal["pmid", "pmcid", "doi"]
 ArticleIdStatus = Literal["resolved", "unresolved", "invalid", "failed"]
 CitationLookupStatus = Literal["matched", "not_found", "ambiguous", "failed"]
 RelatedArticleMode = Literal["similar", "cited_by", "references"]
+RelatedMetadataStatus = Literal["success", "partial", "unavailable"]
 
 
 class DiscoveryMeta(BaseModel):
@@ -148,6 +149,7 @@ class RelatedArticlesResponse(BaseModel):
     related_articles: list[RelatedArticleRecord] = Field(default_factory=list)
     candidate_pmids: list[str] = Field(default_factory=list)
     unresolved: list[str] = Field(default_factory=list)
+    metadata_status: RelatedMetadataStatus = "unavailable"
     meta: DiscoveryMeta = Field(default_factory=DiscoveryMeta, alias="_meta")
 
     @field_validator("candidate_pmids")

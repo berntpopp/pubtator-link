@@ -8,7 +8,6 @@ from pydantic import Field
 from pubtator_link.api.routes.dependencies import (
     get_corpus_suggestion_service,
     get_discovery_service,
-    get_publication_metadata_service,
 )
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from pubtator_link.mcp.argument_aliases import coalesce_query, merge_pmids
@@ -114,7 +113,6 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
 
         async def call() -> dict[str, Any]:
             service = await get_discovery_service()
-            service.metadata_service = await get_publication_metadata_service()
             response = await service.lookup_citation(citations=citations)
             return response.model_dump(by_alias=True)
 
@@ -137,7 +135,6 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
         async def call() -> dict[str, Any]:
             selected_pmids = merge_pmids(pmids, pmid, max_items=100)
             service = await get_discovery_service()
-            service.metadata_service = await get_publication_metadata_service()
             response = await service.find_related_articles(
                 pmids=selected_pmids,
                 mode=mode,

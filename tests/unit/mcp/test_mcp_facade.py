@@ -1010,6 +1010,7 @@ async def test_search_guidelines_accepts_query_alias(
 
     async def fake_search_literature_impl(**kwargs):
         assert kwargs["text"] == "familial mediterranean fever guidelines"
+        assert kwargs["publication_types"] is None
         assert kwargs["guideline_boost"] is True
         return {
             "success": True,
@@ -1030,6 +1031,55 @@ async def test_search_guidelines_accepts_query_alias(
 
     assert result.structured_content["success"] is True
     assert result.structured_content["query"] == "familial mediterranean fever guidelines"
+
+
+@pytest.mark.asyncio
+async def test_find_related_articles_uses_dependency_injected_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.discovery as discovery_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    class FakeDiscoveryService:
+        async def find_related_articles(self, **kwargs):
+            assert kwargs["pmids"] == ["123"]
+            return type(
+                "Response",
+                (),
+                {
+                    "model_dump": lambda self, by_alias: {
+                        "success": True,
+                        "source_pmids": ["123"],
+                        "mode": "similar",
+                        "related_articles": [],
+                        "candidate_pmids": [],
+                        "unresolved": [],
+                        "metadata_status": "unavailable",
+                        "_meta": {},
+                    }
+                },
+            )()
+
+    async def fake_get_discovery_service() -> FakeDiscoveryService:
+        return FakeDiscoveryService()
+
+    async def fake_get_publication_metadata_service() -> object:
+        raise AssertionError("metadata should be wired through service dependency construction")
+
+    monkeypatch.setattr(discovery_tools, "get_discovery_service", fake_get_discovery_service)
+    monkeypatch.setattr(
+        discovery_tools,
+        "get_publication_metadata_service",
+        fake_get_publication_metadata_service,
+        raising=False,
+    )
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_find_related_articles"
+    ]
+
+    result = await tool.run({"pmid": "123"})
+
+    assert result.structured_content["success"] is True
 
 
 @pytest.mark.asyncio

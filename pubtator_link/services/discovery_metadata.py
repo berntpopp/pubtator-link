@@ -3,7 +3,12 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
-from pubtator_link.models.discovery import CitationLookupRecord, RelatedArticleRecord
+from pubtator_link.models.discovery import (
+    CitationLookupRecord,
+    DiscoveryMeta,
+    RelatedArticleRecord,
+    RelatedMetadataStatus,
+)
 from pubtator_link.models.publication_metadata import (
     PublicationMetadata,
     PublicationMetadataRequest,
@@ -37,17 +42,41 @@ async def enrich_citation_records(
 async def enrich_related_article_records(
     records: Sequence[RelatedArticleRecord],
     metadata_service: DiscoveryMetadataLookup | None,
-) -> list[RelatedArticleRecord]:
+) -> tuple[list[RelatedArticleRecord], RelatedMetadataStatus]:
+    if not records:
+        return [], "success"
+    if metadata_service is None:
+        return list(records), "unavailable"
     metadata_by_pmid = await _metadata_by_pmid(
         [record.pmid for record in records],
         metadata_service,
     )
     if not metadata_by_pmid:
-        return list(records)
-    return [
+        return list(records), "unavailable"
+    enriched = [
         _enriched_related_article_record(record, metadata_by_pmid.get(record.pmid))
         for record in records
     ]
+    expected_pmids = {record.pmid for record in records}
+    status: RelatedMetadataStatus = (
+        "success" if expected_pmids.issubset(metadata_by_pmid) else "partial"
+    )
+    return enriched, status
+
+
+def add_related_metadata_next_command(
+    meta: DiscoveryMeta,
+    candidate_pmids: list[str],
+    metadata_status: RelatedMetadataStatus,
+) -> DiscoveryMeta:
+    if candidate_pmids and metadata_status in {"partial", "unavailable"}:
+        meta.next_commands.append(
+            {
+                "tool": "pubtator_get_publication_metadata",
+                "arguments": {"pmids": candidate_pmids},
+            }
+        )
+    return meta
 
 
 async def _metadata_by_pmid(

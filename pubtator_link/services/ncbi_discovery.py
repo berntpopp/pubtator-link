@@ -25,6 +25,7 @@ from pubtator_link.models.discovery import (
 )
 from pubtator_link.services.discovery_metadata import (
     DiscoveryMetadataLookup,
+    add_related_metadata_next_command,
     enrich_citation_records,
     enrich_related_article_records,
 )
@@ -506,7 +507,7 @@ class DiscoveryService:
         limit: int = 20,
     ) -> RelatedArticlesResponse:
         related_articles = await self.client.find_related_articles(pmids, mode, limit)
-        related_articles = await enrich_related_article_records(
+        related_articles, metadata_status = await enrich_related_article_records(
             related_articles,
             self.metadata_service,
         )
@@ -519,7 +520,12 @@ class DiscoveryService:
             related_articles=related_articles,
             candidate_pmids=candidate_pmids,
             unresolved=unresolved,
-            _meta=_candidate_meta(candidate_pmids),
+            metadata_status=metadata_status,
+            _meta=add_related_metadata_next_command(
+                _candidate_meta(candidate_pmids),
+                candidate_pmids,
+                metadata_status,
+            ),
         )
 
 
@@ -605,14 +611,6 @@ def _optional_str(value: object) -> str | None:
     return str(value)
 
 
-def _string_list(value: object) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, list | tuple):
-        return [str(item) for item in value]
-    return [str(value)]
-
-
 def _link_id_and_score(link: object) -> tuple[str | None, int]:
     if isinstance(link, dict):
         linked_id = _optional_str(link.get("id"))
@@ -626,21 +624,6 @@ def _link_id_and_score(link: object) -> tuple[str | None, int]:
     except (TypeError, ValueError):
         score = 0
     return linked_id, score
-
-
-def _mesh_tree_numbers(item: Mapping[str, object]) -> list[str]:
-    tree_numbers: list[str] = []
-    idx_links = item.get("ds_idxlinks")
-    if isinstance(idx_links, list | tuple):
-        for link in idx_links:
-            if not isinstance(link, dict):
-                continue
-            tree_number = _optional_str(link.get("treenum"))
-            if tree_number is not None:
-                tree_numbers.append(tree_number)
-    if tree_numbers:
-        return tree_numbers
-    return _string_list(item.get("ds_tree"))
 
 
 def _candidate_meta(candidate_pmids: list[str]) -> DiscoveryMeta:

@@ -174,7 +174,10 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
             coverage_provider=_publication_metadata_coverage_provider,
         )
         ncbi_discovery_client = NcbiDiscoveryClient()
-        discovery_service = DiscoveryService(ncbi_discovery_client)
+        discovery_service = DiscoveryService(
+            ncbi_discovery_client,
+            metadata_service=publication_metadata_service,
+        )
         crossref_client = CrossrefClient(mailto=settings.crossref_mailto)
         europe_pmc_literature_client = EuropePmcLiteratureClient(
             base_url=settings.europe_pmc_base_url,
