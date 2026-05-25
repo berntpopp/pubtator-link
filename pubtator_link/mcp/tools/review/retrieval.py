@@ -9,6 +9,7 @@ from pubtator_link.mcp.annotations import (
     NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
     READ_ONLY_OPEN_WORLD,
 )
+from pubtator_link.mcp.argument_aliases import coalesce_query, merge_pmids
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.tools import review as review_tools
@@ -40,9 +41,11 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
     )
     async def retrieve_review_context(
         review_id: str,
-        question: str,
+        question: str | None = None,
+        query: str | None = None,
         session_id: str | None = None,
         pmids: list[str] | None = None,
+        pmid: str | None = None,
         entity_ids: list[str] | None = None,
         sections: list[str] | None = None,
         max_passages: int = 8,
@@ -60,13 +63,15 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Use a short keyword query, PMID filters for paper-specific evidence, and diagnostics for zero-result debugging. If zero passages are returned, simplify the query, inspect the review index, or fall back to fetch_publication_annotations."""
 
         async def call() -> dict[str, Any]:
+            selected_question = coalesce_query(question, query)
+            selected_pmids = merge_pmids(pmids, pmid) if pmids or pmid else None
             service = await review_tools.get_review_context_service()
             result = await review_tools.retrieve_review_context_impl(
                 service=service,
                 review_id=review_id,
-                question=question,
+                question=selected_question,
                 session_id=session_id,
-                pmids=pmids,
+                pmids=selected_pmids,
                 entity_ids=entity_ids,
                 sections=sections,
                 max_passages=max_passages,
@@ -83,7 +88,11 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             await _warn_if_degraded(ctx, result)
             return result
 
-        return await run_mcp_tool("pubtator_retrieve_review_context", call, pmids=pmids)
+        try:
+            tool_pmids = merge_pmids(pmids, pmid)
+        except ValueError:
+            tool_pmids = None
+        return await run_mcp_tool("pubtator_retrieve_review_context", call, pmids=tool_pmids)
 
     @mcp_tool_for(
         "lean",
@@ -99,6 +108,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         queries: list[str],
         session_id: str | None = None,
         pmids: list[str] | None = None,
+        pmid: str | None = None,
         entity_ids: list[str] | None = None,
         sections: list[str] | None = None,
         response_mode: ReviewBatchResponseMode = "compact",
@@ -126,13 +136,14 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode uses query_fair budgeting, merged passages, per-query summaries, and next_steps for zero-result queries. Use response_mode="quotes" for short citable snippets or dry_run for diagnostics without passage text."""
 
         async def call() -> dict[str, Any]:
+            selected_pmids = merge_pmids(pmids, pmid) if pmids or pmid else None
             service = await review_tools.get_review_context_service()
             result = await review_tools.retrieve_review_context_batch_impl(
                 service=service,
                 review_id=review_id,
                 queries=queries,
                 session_id=session_id,
-                pmids=pmids,
+                pmids=selected_pmids,
                 entity_ids=entity_ids,
                 sections=sections,
                 response_mode=response_mode,
@@ -159,10 +170,14 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             await _warn_if_degraded(ctx, result)
             return result
 
+        try:
+            tool_pmids = merge_pmids(pmids, pmid)
+        except ValueError:
+            tool_pmids = None
         return await run_mcp_tool(
             "pubtator_retrieve_review_context_batch",
             call,
-            pmids=pmids,
+            pmids=tool_pmids,
         )
 
     @mcp_tool_for(

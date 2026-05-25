@@ -12,6 +12,7 @@ from pubtator_link.api.routes.dependencies import (
     get_variant_evidence_service,
 )
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
+from pubtator_link.mcp.argument_aliases import coalesce_query
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.service_adapters import (
@@ -65,10 +66,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         """Use this when a user needs PubMed literature search through PubTator3. Supports text or query, flat filters, optional section filters, and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false means continue with results or inspect diagnostics. Set include_meta=false for repeated searches after learning the workflow."""
 
         async def call() -> dict[str, Any]:
-            search_text = (text or query or "").strip()
-            if not search_text:
-                msg = "Provide text or query."
-                raise ValueError(msg)
+            search_text = coalesce_query(text, query)
             preflight_service = (
                 await get_source_preflight_service() if coverage == "preflight" else None
             )
@@ -108,7 +106,8 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def search_guidelines(
-        text: str,
+        text: Annotated[str | None, Field(min_length=1, max_length=1000)] = None,
+        query: Annotated[str | None, Field(min_length=1, max_length=1000)] = None,
         page: int = 1,
         year_min: int | None = None,
         year_max: int | None = None,
@@ -120,13 +119,14 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. This is a convenience wrapper over pubtator_search_literature with guideline/systematic-review publication-type filters and guideline boosting, not an independent guideline database. Defaults to source coverage preflight so abstract-only guideline hits are visible before indexing."""
 
         async def call() -> dict[str, Any]:
+            search_text = coalesce_query(text, query)
             preflight_service = (
                 await get_source_preflight_service() if coverage == "preflight" else None
             )
             client = await get_api_client()
             return await search_literature_impl(
                 client=client,
-                text=text,
+                text=search_text,
                 page=page,
                 sort="score desc",
                 publication_types=[

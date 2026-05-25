@@ -376,7 +376,8 @@ def test_ground_question_schema_exposes_one_call_arguments() -> None:
     tool = create_pubtator_mcp()._tool_manager._tools["pubtator_ground_question"]
     properties = tool.parameters["properties"]
 
-    assert properties["question"]["type"] == "string"
+    assert "question" in properties
+    assert "query" in properties
     assert properties["max_pmids"]["minimum"] == 1
     assert properties["max_pmids"]["maximum"] == 20
     assert properties["wait_until_ready"]["default"] is True
@@ -902,6 +903,43 @@ async def test_search_literature_accepts_query_alias(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.asyncio
+async def test_search_guidelines_accepts_query_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.literature as literature_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async def fake_get_api_client() -> object:
+        return object()
+
+    async def fake_get_source_preflight_service() -> object:
+        return object()
+
+    async def fake_search_literature_impl(**kwargs):
+        assert kwargs["text"] == "familial mediterranean fever guidelines"
+        assert kwargs["guideline_boost"] is True
+        return {
+            "success": True,
+            "query": kwargs["text"],
+            "results": [],
+        }
+
+    monkeypatch.setattr(literature_tools, "get_api_client", fake_get_api_client)
+    monkeypatch.setattr(
+        literature_tools,
+        "get_source_preflight_service",
+        fake_get_source_preflight_service,
+    )
+    monkeypatch.setattr(literature_tools, "search_literature_impl", fake_search_literature_impl)
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_guidelines"]
+
+    result = await tool.run({"query": " familial mediterranean fever guidelines "})
+
+    assert result.structured_content["success"] is True
+    assert result.structured_content["query"] == "familial mediterranean fever guidelines"
+
+
+@pytest.mark.asyncio
 async def test_get_publication_passages_accepts_scalar_pmid(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -943,6 +981,60 @@ async def test_get_publication_passages_accepts_scalar_pmid(
 
     assert result.structured_content["success"] is True
     assert result.structured_content["pmids"] == ["33454820"]
+
+
+def test_pmid_list_tools_expose_scalar_pmid_alias() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tools = create_pubtator_mcp(profile="full")._tool_manager._tools
+    for tool_name in (
+        "pubtator_preflight_review_sources",
+        "pubtator_get_publication_metadata",
+        "pubtator_estimate_publication_context",
+        "pubtator_find_related_articles",
+    ):
+        properties = tools[tool_name].parameters["properties"]
+        assert "pmids" in properties
+        assert "pmid" in properties
+
+
+@pytest.mark.asyncio
+async def test_get_publication_metadata_accepts_pmid_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.publications as publication_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async def fake_get_publication_metadata_service() -> object:
+        return object()
+
+    async def fake_get_publication_metadata_impl(**kwargs):
+        assert kwargs["pmids"] == ["33454820"]
+        return {
+            "success": True,
+            "metadata": [{"pmid": "33454820", "title": "FMF"}],
+            "failed_pmids": {},
+            "_meta": {},
+        }
+
+    monkeypatch.setattr(
+        publication_tools,
+        "get_publication_metadata_service",
+        fake_get_publication_metadata_service,
+    )
+    monkeypatch.setattr(
+        publication_tools,
+        "get_publication_metadata_impl",
+        fake_get_publication_metadata_impl,
+    )
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_get_publication_metadata"
+    ]
+
+    result = await tool.run({"pmid": " 33454820 "})
+
+    assert result.structured_content["success"] is True
+    assert result.structured_content["metadata"][0]["pmid"] == "33454820"
 
 
 @pytest.mark.asyncio
