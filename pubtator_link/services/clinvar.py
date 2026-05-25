@@ -121,9 +121,11 @@ def parse_clinvar_summary(document: dict[str, Any]) -> ClinVarRecord:
         or _optional_str(document.get("variation_name")),
         hgvs=_list_values(document.get("hgvs")),
         classification=_clinical_significance(document),
-        review_status=_optional_str(document.get("review_status")),
+        review_status=_optional_str(document.get("review_status"))
+        or _optional_str(_germline_classification(document).get("review_status")),
         condition=_condition(document),
-        last_evaluated=_optional_str(document.get("last_evaluated")),
+        last_evaluated=_optional_str(document.get("last_evaluated"))
+        or _optional_str(_germline_classification(document).get("last_evaluated")),
         url=f"https://www.ncbi.nlm.nih.gov/clinvar/variation/{variation_id}/",
     )
 
@@ -142,6 +144,11 @@ def _clinvar_term(
 
 
 def _clinical_significance(document: dict[str, Any]) -> str:
+    germline = _germline_classification(document)
+    if germline:
+        value = germline.get("description") or germline.get("label")
+        if value:
+            return str(value)
     value = document.get("clinical_significance")
     if isinstance(value, dict):
         return str(value.get("description") or value.get("label") or "not provided")
@@ -151,7 +158,7 @@ def _clinical_significance(document: dict[str, Any]) -> str:
 
 
 def _condition(document: dict[str, Any]) -> str | None:
-    trait_set = document.get("trait_set")
+    trait_set = document.get("trait_set") or _germline_classification(document).get("trait_set")
     if isinstance(trait_set, list):
         names = [
             str(item.get("trait_name"))
@@ -161,6 +168,11 @@ def _condition(document: dict[str, Any]) -> str | None:
         if names:
             return "; ".join(names)
     return _optional_str(document.get("condition"))
+
+
+def _germline_classification(document: dict[str, Any]) -> dict[str, Any]:
+    value = document.get("germline_classification")
+    return value if isinstance(value, dict) else {}
 
 
 def _list_values(value: Any) -> list[str]:

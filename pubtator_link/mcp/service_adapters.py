@@ -15,6 +15,7 @@ from pubtator_link.mcp.input_normalization import (
     attach_normalization_meta,
     normalize_retrieve_review_context_batch_args,
 )
+from pubtator_link.mcp.pmc_export import pmc_export_coverage
 from pubtator_link.mcp.quickstart import (
     query_length_warning,
     quickstart_review_id,
@@ -713,6 +714,7 @@ async def fetch_pmc_annotations_impl(
         full_text=True,
         export_data={"documents": documents},
         count=len(pmcids),
+        **pmc_export_coverage(pmcids, documents),
     ).model_dump()
 
 
@@ -1594,7 +1596,7 @@ async def export_review_audit_bundle_impl(
     session_id: str | None = None,
     export_path: str | None = None,
     fallback_inline: bool = False,
-    response_mode: Literal["full", "compact"] = "full",
+    response_mode: Literal["full", "compact"] = "compact",
 ) -> dict[str, Any]:
     bundle = await service.export_bundle(review_id, session_id=session_id)
     bundle_json = bundle.model_dump(mode="json")

@@ -62,6 +62,8 @@ class PublicationExportResponse(BaseResponse):
     full_text: bool = Field(default=False, description="Whether full text was included")
     export_data: dict[str, Any] = Field(..., description="Exported data")
     count: int = Field(..., description="Number of exported items")
+    coverage_by_pmcid: dict[str, str] = Field(default_factory=dict)
+    coverage_reason_by_pmcid: dict[str, str] = Field(default_factory=dict)
 
 
 class PMCExportResponse(BaseResponse):

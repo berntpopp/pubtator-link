@@ -481,6 +481,7 @@ async def test_export_review_audit_bundle_adapter_returns_bundle() -> None:
     result = await export_review_audit_bundle_impl(
         service=FakeService(),
         review_id="rev_123",
+        response_mode="full",
     )
 
     assert set(result) == {"success", "audit_bundle"}
@@ -504,6 +505,19 @@ async def test_export_review_audit_bundle_adapter_returns_compact_summary() -> N
     assert result["audit_bundle_summary"]["review_id"] == "rev_123"
     assert result["audit_bundle_summary"]["passage_id_count"] >= 0
     assert "stable_citation_keys" in result["audit_bundle_summary"]["omitted_fields"]
+
+
+@pytest.mark.asyncio
+async def test_export_review_audit_bundle_adapter_defaults_to_compact_summary() -> None:
+    from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
+
+    result = await export_review_audit_bundle_impl(
+        service=_FakeReviewAuditBundleService(),
+        review_id="rev_123",
+    )
+
+    assert "audit_bundle_summary" in result
+    assert "audit_bundle" not in result
 
 
 @pytest.mark.asyncio
@@ -2783,6 +2797,25 @@ async def test_pmc_adapter_returns_publication_export_shape() -> None:
     assert result["pmcids"] == ["PMC7696669"]
     assert result["full_text"] is True
     assert result["export_data"]["documents"] == [{"id": "PMC7696669"}]
+
+
+@pytest.mark.asyncio
+async def test_pmc_adapter_reports_empty_document_coverage_reason() -> None:
+    from pubtator_link.mcp.service_adapters import fetch_pmc_annotations_impl
+    from pubtator_link.models.publications import BioCDocument
+
+    class Result:
+        format = "biocjson"
+        documents: ClassVar[list[BioCDocument]] = [BioCDocument(id="PMC11911402")]
+
+    class FakeService:
+        async def export_pmc_publications_list(self, pmcids: list[str], format: str) -> Result:
+            return Result()
+
+    result = await fetch_pmc_annotations_impl(service=FakeService(), pmcids=["PMC11911402"])
+
+    assert result["coverage_by_pmcid"] == {"PMC11911402": "unknown"}
+    assert result["coverage_reason_by_pmcid"] == {"PMC11911402": "no_pmc_full_text_retrievable"}
 
 
 @pytest.mark.asyncio

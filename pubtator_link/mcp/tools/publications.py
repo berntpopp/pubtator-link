@@ -86,7 +86,10 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         )
         async def build_topic_literature_map(
             query: Annotated[str | None, Field(min_length=1, max_length=1000)] = None,
+            topic: Annotated[str | None, Field(min_length=1, max_length=1000)] = None,
+            question: Annotated[str | None, Field(min_length=1, max_length=1000)] = None,
             pmids: Annotated[list[str] | None, Field(min_length=1, max_length=100)] = None,
+            seed_pmids: Annotated[list[str] | None, Field(min_length=1, max_length=100)] = None,
             max_seed_papers: Annotated[int, Field(ge=1, le=50)] = 10,
             max_neighbors_per_paper: Annotated[int, Field(ge=1, le=20)] = 5,
             response_mode: LiteratureGraphResponseModeArg = "compact",
@@ -113,11 +116,13 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             """Use this when a user needs a bounded topic-level literature map from a query or seed PMIDs. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: pubtator_get_publication_passages."""
 
             async def call() -> dict[str, Any]:
+                selected_query = query or topic or question
+                selected_pmids = pmids or seed_pmids
                 service = await get_topic_literature_map_service()
                 return await build_topic_literature_map_impl(
                     service=service,
-                    query=query,
-                    pmids=pmids,
+                    query=selected_query,
+                    pmids=selected_pmids,
                     max_seed_papers=max_seed_papers,
                     max_neighbors_per_paper=max_neighbors_per_paper,
                     response_mode=response_mode,
@@ -145,7 +150,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             return await run_mcp_tool(
                 "pubtator_build_topic_literature_map",
                 call,
-                pmids=pmids,
+                pmids=pmids or seed_pmids,
             )
 
     @mcp.tool(

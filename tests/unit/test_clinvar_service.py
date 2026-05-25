@@ -52,6 +52,26 @@ def test_parse_clinvar_summary_source_attributed_classification() -> None:
     assert record.url == "https://www.ncbi.nlm.nih.gov/clinvar/variation/12345/"
 
 
+def test_parse_clinvar_summary_reads_germline_classification() -> None:
+    record = parse_clinvar_summary(
+        {
+            "uid": "449657",
+            "title": "NM_000243.3(MEFV):c.2080_2082delinsGTA (p.Met694Val)",
+            "germline_classification": {
+                "description": "Pathogenic",
+                "review_status": "criteria provided, single submitter",
+                "last_evaluated": "2017/10/26 00:00",
+                "trait_set": [{"trait_name": "Familial Mediterranean fever"}],
+            },
+        }
+    )
+
+    assert record.classification == "Pathogenic"
+    assert record.review_status == "criteria provided, single submitter"
+    assert record.last_evaluated == "2017/10/26 00:00"
+    assert record.condition == "Familial Mediterranean fever"
+
+
 def _summary_doc() -> dict[str, object]:
     return {
         "uid": "12345",

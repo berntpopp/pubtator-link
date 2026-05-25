@@ -27,7 +27,7 @@ def register_export_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         session_id: str | None = None,
         export_path: str | None = None,
         fallback_inline: bool = False,
-        response_mode: Literal["full", "compact"] = "full",
+        response_mode: Literal["full", "compact"] = "compact",
     ) -> dict[str, Any]:
         """Use this when a user needs to export review preparation status, source coverage, resolver attempts, retrieval runs, passage IDs, and stable citation keys for scientific auditability."""
 

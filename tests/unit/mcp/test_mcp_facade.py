@@ -247,7 +247,10 @@ def test_topic_literature_map_tool_schema_is_flat() -> None:
     properties = tool.parameters["properties"]
 
     assert "query" in properties
+    assert "topic" in properties
+    assert "question" in properties
     assert "pmids" in properties
+    assert "seed_pmids" in properties
     assert "max_seed_papers" in properties
     assert "max_neighbors_per_paper" in properties
     assert "include_authors" in properties
@@ -273,6 +276,41 @@ def test_literature_graph_mcp_schemas_default_to_compact() -> None:
         response_mode = tools[name].parameters["properties"]["response_mode"]
         assert response_mode["default"] == "compact"
         assert "full" in _schema_enum_values(response_mode)
+
+
+@pytest.mark.asyncio
+async def test_topic_literature_map_accepts_topic_and_seed_aliases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.publications as publication_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+    from pubtator_link.models.literature_graph import TopicLiteratureMapResponse
+
+    class FakeService:
+        async def build_map(self, request):
+            assert request.query == "MEFV VUS"
+            assert request.pmids == ["24166952"]
+            return TopicLiteratureMapResponse(
+                query=request.query,
+                seed_pmids=request.pmids or [],
+                response_mode=request.response_mode,
+            )
+
+    async def fake_get_topic_literature_map_service() -> FakeService:
+        return FakeService()
+
+    monkeypatch.setattr(
+        publication_tools,
+        "get_topic_literature_map_service",
+        fake_get_topic_literature_map_service,
+    )
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_build_topic_literature_map"
+    ]
+
+    result = await tool.run({"topic": "MEFV VUS", "seed_pmids": ["24166952"]})
+
+    assert result.structured_content["query"] == "MEFV VUS"
 
 
 def test_review_retrieval_schema_hides_resolver_trace_by_default() -> None:
@@ -986,6 +1024,7 @@ def test_export_review_audit_bundle_exposes_export_options() -> None:
     assert "fallback_inline" in properties
     assert "export_path" not in required
     assert "fallback_inline" not in required
+    assert properties["response_mode"]["default"] == "compact"
 
 
 def test_high_use_mcp_tools_expose_specific_output_schemas() -> None:
