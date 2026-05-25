@@ -288,6 +288,47 @@ async def test_list_sessions_attaches_preparation_status() -> None:
     assert response.sessions[0].preparation_status == PreparationStatus(queued=1)
 
 
+async def test_list_sessions_without_review_id_uses_bounded_global_repository_path() -> None:
+    class GlobalRepository(FakeRepository):
+        def __init__(self) -> None:
+            super().__init__()
+            self.global_limit = None
+
+        async def list_research_sessions_global(self, *, limit):
+            self.global_limit = limit
+            return [
+                await self.get_research_session("review-2", "session-2"),
+                await self.get_research_session("review-1", "session-1"),
+            ]
+
+    repository = GlobalRepository()
+    await repository.upsert_research_session(
+        review_id="review-1",
+        session_id="session-1",
+        query="older",
+        status="active",
+        request={"query": "older"},
+    )
+    await repository.upsert_research_session(
+        review_id="review-2",
+        session_id="session-2",
+        query="newer",
+        status="active",
+        request={"query": "newer"},
+    )
+    service = ResearchSessionService(
+        repository=repository,
+        search_provider=FakeSearch(),
+        preflight_service=FakePreflight(),
+        queue=FakeQueue(),
+    )
+
+    response = await service.list_sessions(review_id=None)
+
+    assert repository.global_limit == 20
+    assert [session.review_id for session in response.sessions] == ["review-2", "review-1"]
+
+
 async def test_get_status_reconciles_candidate_status_from_review_index() -> None:
     class SourceRepository(FakeRepository):
         async def list_review_sources(self, review_id, pmids=None, **kwargs):
@@ -318,3 +359,29 @@ async def test_get_status_reconciles_candidate_status_from_review_index() -> Non
     response = await service.get_status(review_id="review-1", session_id="session-1")
 
     assert response.manifest.candidates[0].status == "abstract_ready"
+
+
+async def test_get_status_resolves_globally_unique_session_id() -> None:
+    class GlobalRepository(FakeRepository):
+        async def find_research_sessions_by_session_id(self, session_id):
+            return [await self.get_research_session("review-1", session_id)]
+
+    repository = GlobalRepository()
+    await repository.upsert_research_session(
+        review_id="review-1",
+        session_id="session-1",
+        query="FMF",
+        status="active",
+        request={"query": "FMF"},
+    )
+    service = ResearchSessionService(
+        repository=repository,
+        search_provider=FakeSearch(),
+        preflight_service=FakePreflight(),
+        queue=FakeQueue(),
+    )
+
+    response = await service.get_status(review_id=None, session_id="session-1")
+
+    assert response.manifest.review_id == "review-1"
+    assert response.manifest.session_id == "session-1"

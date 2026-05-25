@@ -21,9 +21,14 @@ from pubtator_link.mcp.quickstart import (
     quickstart_review_id,
     quickstart_selected_pmids,
     review_indexing_service_from_factory,
+    search_pmids_for_query_variants,
     wait_for_quickstart_index,
 )
 from pubtator_link.mcp.relations import shape_entity_relations
+from pubtator_link.mcp.session_orientation import (
+    research_session_status_payload,
+    research_sessions_payload,
+)
 from pubtator_link.models.corpus_suggestion import CorpusSuggestionRequest
 from pubtator_link.models.literature_graph import (
     PublicationCitationGraphRequest,
@@ -1018,31 +1023,29 @@ async def ground_question_impl(
     normalized_question = question.strip()
     warning = query_length_warning(normalized_question)
     selected_review_id = review_id or quickstart_review_id(normalized_question)
-    search_result = await search_literature_impl(
-        client=client,
-        text=normalized_question,
-        limit=max_pmids,
-        entity_ids=entity_ids,
-        guideline_boost=guideline_boost,
-        response_mode="compact",
-        include_citations="none",
-        metadata="basic",
+
+    async def search_variant(search_query: str) -> dict[str, Any]:
+        return await search_literature_impl(
+            client=client,
+            text=search_query,
+            limit=max_pmids,
+            entity_ids=entity_ids,
+            guideline_boost=guideline_boost,
+            response_mode="compact",
+            include_citations="none",
+            metadata="basic",
+        )
+
+    search_result, selected_pmids, query_variants_attempted = await search_pmids_for_query_variants(
+        normalized_question, max_pmids=max_pmids, search=search_variant
     )
-    selected_pmids: list[str] = []
-    for item in search_result.get("results", []):
-        if not isinstance(item, dict):
-            continue
-        pmid = str(item.get("pmid") or "").strip()
-        if pmid and pmid not in selected_pmids:
-            selected_pmids.append(pmid)
-        if len(selected_pmids) >= max_pmids:
-            break
     search_total_results = int(search_result.get("total_results") or len(selected_pmids))
 
     if not selected_pmids:
         return GroundQuestionResponse(
             question=normalized_question,
             query_length_warning=warning,
+            query_variants_attempted=query_variants_attempted,
             review_id=selected_review_id,
             selected_pmids=[],
             search_total_results=search_total_results,
@@ -1091,10 +1094,7 @@ async def ground_question_impl(
                     include_diagnostics=False,
                 ),
             )
-            next_tools = [
-                "pubtator_record_review_context",
-                "pubtator_get_review_audit_trail",
-            ]
+            next_tools = ["pubtator_record_review_context", "pubtator_get_review_audit_trail"]
         else:
             recovery.append(
                 "Indexing has not produced passages yet; inspect the review index and retry retrieval."
@@ -1110,6 +1110,7 @@ async def ground_question_impl(
     return GroundQuestionResponse(
         question=normalized_question,
         query_length_warning=warning,
+        query_variants_attempted=query_variants_attempted,
         review_id=selected_review_id,
         selected_pmids=selected_pmids,
         search_total_results=search_total_results,
@@ -1138,17 +1139,15 @@ def _ground_question_sources_ready(inspect_response: Any, selected_pmids: list[s
 
 
 async def get_research_session_status_impl(
-    *, service: Any, review_id: str, session_id: str
+    *, service: Any, review_id: str | None, session_id: str
 ) -> dict[str, Any]:
-    result = (await service.get_status(review_id=review_id, session_id=session_id)).model_dump(
-        by_alias=True
+    return await research_session_status_payload(
+        service=service, review_id=review_id, session_id=session_id
     )
-    return cast(dict[str, Any], result)
 
 
-async def list_research_sessions_impl(*, service: Any, review_id: str) -> dict[str, Any]:
-    result = (await service.list_sessions(review_id=review_id)).model_dump(by_alias=True)
-    return cast(dict[str, Any], result)
+async def list_research_sessions_impl(*, service: Any, review_id: str | None) -> dict[str, Any]:
+    return await research_sessions_payload(service=service, review_id=review_id)
 
 
 async def review_summary_resource_impl(*, service: Any, review_id: str) -> dict[str, Any]:

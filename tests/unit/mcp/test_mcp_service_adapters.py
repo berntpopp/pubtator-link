@@ -900,6 +900,76 @@ async def test_review_quickstart_adapter_honors_wait_until_ready() -> None:
     assert "quickstart does not block on indexing" not in result["warnings"]
 
 
+@pytest.mark.asyncio
+async def test_list_research_sessions_adapter_uses_global_path_without_review_id() -> None:
+    from pubtator_link.mcp.service_adapters import list_research_sessions_impl
+    from pubtator_link.models.review_rerag import (
+        ListResearchSessionsResponse,
+        ResearchSessionManifest,
+    )
+
+    class Service:
+        local_calls = 0
+        global_calls = 0
+
+        async def list_sessions(self, *, review_id):
+            self.local_calls += 1
+            raise AssertionError("review-scoped path should not be used")
+
+        async def list_sessions_global(self, *, limit=20):
+            self.global_calls += 1
+            assert limit == 20
+            return ListResearchSessionsResponse(
+                sessions=[
+                    ResearchSessionManifest(
+                        review_id="review-2",
+                        session_id="session-2",
+                        updated_at="2026-05-02T00:00:00Z",
+                    ),
+                ]
+            )
+
+    service = Service()
+
+    result = await list_research_sessions_impl(service=service, review_id=None)
+
+    assert result["success"] is True
+    assert result["sessions"][0]["review_id"] == "review-2"
+    assert service.local_calls == 0
+    assert service.global_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_get_research_session_status_adapter_resolves_session_id_only() -> None:
+    from pubtator_link.mcp.service_adapters import get_research_session_status_impl
+    from pubtator_link.models.review_rerag import (
+        ResearchSessionManifest,
+        ResearchSessionStatusResponse,
+    )
+
+    class Service:
+        async def get_status(self, *, review_id, session_id):
+            raise AssertionError("review-scoped lookup should not be used")
+
+        async def get_status_by_session_id(self, *, session_id):
+            assert session_id == "session-1"
+            return ResearchSessionStatusResponse(
+                manifest=ResearchSessionManifest(
+                    review_id="review-1",
+                    session_id=session_id,
+                )
+            )
+
+    result = await get_research_session_status_impl(
+        service=Service(),
+        review_id=None,
+        session_id="session-1",
+    )
+
+    assert result["success"] is True
+    assert result["manifest"]["review_id"] == "review-1"
+
+
 async def _run_ground_question_fixture(service_adapters, **kwargs):
     from pubtator_link.models.review_rerag import (
         ContextPack,
@@ -1134,6 +1204,52 @@ async def test_ground_question_long_natural_language_query_returns_warning() -> 
     assert result["query_length_warning"] == (
         "Long natural-language question used for search; consider splitting into 6 or fewer key terms."
     )
+
+
+@pytest.mark.asyncio
+async def test_ground_question_long_query_attempts_shortened_variant_before_recovery() -> None:
+    from pubtator_link.mcp import service_adapters
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.queries: list[str] = []
+
+        async def search_publications(self, **kwargs):
+            self.queries.append(kwargs["text"])
+            return {"count": 0, "page": 1, "results": []}
+
+    class FakeQueue:
+        repository = object()
+
+    class FakeContextService:
+        async def inspect_review_index(self, review_id, request):
+            raise AssertionError("inspect should not be called without selected PMIDs")
+
+        async def retrieve_context_batch(self, review_id, request):
+            raise AssertionError("retrieve should not be called without selected PMIDs")
+
+    client = FakeClient()
+    question = (
+        "What are the best practices for treating a child with a variant of "
+        "uncertain significance in MEFV when considering colchicine and monitoring?"
+    )
+
+    result = await service_adapters.ground_question_impl(
+        client=client,
+        queue=FakeQueue(),
+        context_service=FakeContextService(),
+        question=question,
+        max_pmids=8,
+        review_indexing_service_factory=lambda **kwargs: None,
+    )
+
+    assert len(client.queries) >= 2
+    assert client.queries[0] == question
+    assert all("What are the best practices" not in query for query in client.queries[1:])
+    assert result["query_variants_attempted"] == client.queries
+    assert result["recovery"] == [
+        "Refine the search query or provide candidate PMIDs explicitly.",
+    ]
 
 
 @pytest.mark.asyncio

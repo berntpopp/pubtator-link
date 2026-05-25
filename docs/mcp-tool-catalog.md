@@ -255,7 +255,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"review_id":"demo","session_id":"session-1"}`
 - Next tools by profile: full: `pubtator_index_review_evidence`; readonly: None
 - Resource links: `pubtator://reviews/{review_id}/sessions/{session_id}`
-- Input schema: `review_id` (string); `session_id` (string)
+- Input schema: `session_id` (string); `review_id` (string | null; default: `None`)
 - Output schema: `ResearchSessionStatusResponse`; has_output_schema: `yes`
 
 ## `pubtator_get_review_audit_trail`
@@ -400,12 +400,12 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `review`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user needs staged research sessions for one review ID.
+- Description: Use this when a user needs staged research sessions for orientation or one review ID.
 - Do not use for: `inspecting a specific session in detail`
 - Example: `{"review_id":"demo"}`
 - Next tools by profile: full: `pubtator_get_research_session_status`; readonly: `pubtator_get_research_session_status`
 - Resource links: `pubtator://reviews/{review_id}/sessions`
-- Input schema: `review_id` (string)
+- Input schema: `review_id` (string | null; default: `None`)
 - Output schema: `ListResearchSessionsResponse`; has_output_schema: `yes`
 
 ## `pubtator_list_review_indexes`
@@ -495,7 +495,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"review_id":"demo","event_type":"passage_selected","passage_ids":["p1"],"selected_passage_ids":["p1"],"summary":"used in answer"}`
 - Next tools by profile: lean: `pubtator_get_review_audit_trail`; full: `pubtator_get_review_audit_trail`
 - Resource links: `pubtator://reviews/{review_id}/llm-context/latest`
-- Input schema: `review_id` (string); `event_type` (string; enum: `context_created`, `session_selected`, `pmids_selected`, `pmids_rejected`, `query_succeeded`, `query_failed`, `passage_selected`, `audit_passage_selected`, `question_opened`, `decision_recorded`, `next_commands_recorded`, `context_summarized`); `session_id` (string | null; default: `None`); `summary` (string | null; default: `None`); `pmids` (array | null; default: `None`); `passage_ids` (array | null; default: `None`); `queries` (array | null; default: `None`); `decision` (object | null; default: `None`); `topic` (string | null; default: `None`); `research_question` (string | null; default: `None`); `question_hash` (string | null; default: `None`); `request` (object | null; default: `None`); `response_summary` (object | null; default: `None`); `selected_pmids` (array | null; default: `None`); `rejected_pmids` (array | null; default: `None`); `preferred_entity_ids` (array | null; default: `None`); `selected_passage_ids` (array | null; default: `None`); `audit_passage_ids` (array | null; default: `None`); `active_queries` (array | null; default: `None`); `successful_queries` (array | null; default: `None`); `failed_queries` (array | null; default: `None`); `open_questions` (array | null; default: `None`); `user_decisions` (array | null; default: `None`); `last_next_commands` (array | null; default: `None`); `stable_citation_keys` (object | null; default: `None`); `cache_key` (string | null; default: `None`); `token_estimate` (integer | null; default: `None`); `payload` (object | null; default: `None`); `created_by` (string | null; default: `None`)
+- Input schema: `review_id` (string); `event_type` (string; enum: `context_created`, `session_selected`, `pmids_selected`, `pmids_rejected`, `query_succeeded`, `query_failed`, `passage_selected`, `audit_passage_selected`, `question_opened`, `decision_recorded`, `next_commands_recorded`, `context_summarized`, `note`); `session_id` (string | null; default: `None`); `summary` (string | null; default: `None`); `pmids` (array | null; default: `None`); `passage_ids` (array | null; default: `None`); `queries` (array | null; default: `None`); `decision` (object | null; default: `None`); `topic` (string | null; default: `None`); `research_question` (string | null; default: `None`); `question_hash` (string | null; default: `None`); `request` (object | null; default: `None`); `response_summary` (object | null; default: `None`); `selected_pmids` (array | null; default: `None`); `rejected_pmids` (array | null; default: `None`); `preferred_entity_ids` (array | null; default: `None`); `selected_passage_ids` (array | null; default: `None`); `audit_passage_ids` (array | null; default: `None`); `active_queries` (array | null; default: `None`); `successful_queries` (array | null; default: `None`); `failed_queries` (array | null; default: `None`); `open_questions` (array | null; default: `None`); `user_decisions` (array | null; default: `None`); `last_next_commands` (array | null; default: `None`); `stable_citation_keys` (object | null; default: `None`); `cache_key` (string | null; default: `None`); `token_estimate` (integer | null; default: `None`); `payload` (object | null; default: `None`); `created_by` (string | null; default: `None`)
 - Output schema: `RecordReviewContextResponse`; has_output_schema: `yes`
 
 ## `pubtator_retrieve_review_context`

@@ -373,9 +373,46 @@ def test_review_quickstart_schema_is_flat_and_returns_retrieval_handoff() -> Non
     output_schema = _tool_output_schema(tool)
 
     assert "topic" in schema["properties"]
+    assert "question" in schema["properties"]
     assert schema["properties"]["n_pmids"]["default"] == 8
     assert output_schema["properties"]["ready_to_retrieve"]
     assert output_schema["properties"]["next_commands"]
+
+
+@pytest.mark.asyncio
+async def test_review_quickstart_accepts_question_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.review as review_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async def fake_review_quickstart_impl(**kwargs):
+        assert kwargs["topic"] == "Does colchicine prevent FMF flares?"
+        return {
+            "success": True,
+            "review_id": "review-1",
+            "session_id": "session-1",
+            "topic": kwargs["topic"],
+            "selected_pmids": [],
+            "coverage_summary": {},
+            "preparation_status": {},
+            "indexed_totals": {},
+            "ready_to_retrieve": False,
+            "next_commands": [],
+            "warnings": [],
+        }
+
+    async def fake_dependency():
+        return object()
+
+    monkeypatch.setattr(review_tools, "review_quickstart_impl", fake_review_quickstart_impl)
+    monkeypatch.setattr(review_tools, "get_research_session_service", fake_dependency)
+    monkeypatch.setattr(review_tools, "get_review_context_service", fake_dependency)
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_review_quickstart"]
+
+    result = await tool.run({"question": "Does colchicine prevent FMF flares?"})
+
+    assert result.structured_content["success"] is True
 
 
 def test_ground_question_schema_exposes_one_call_arguments() -> None:
@@ -400,6 +437,29 @@ def test_ground_question_schema_exposes_verbosity_and_auto_budget() -> None:
 
     assert properties["verbosity"]["default"] == "lean"
     assert properties["max_response_chars"]["default"] == "auto"
+
+
+def test_research_session_tools_allow_orientation_without_review_id() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tools = create_pubtator_mcp(profile="full")._tool_manager._tools
+    list_schema = tools["pubtator_list_research_sessions"].parameters
+    status_schema = tools["pubtator_get_research_session_status"].parameters
+
+    assert "review_id" not in list_schema.get("required", [])
+    assert "review_id" not in status_schema.get("required", [])
+    assert "session_id" in status_schema.get("required", [])
+
+
+def test_record_review_context_schema_accepts_note_event_type() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_record_review_context"
+    ]
+    event_type_schema = tool.parameters["properties"]["event_type"]
+
+    assert "note" in _schema_enum_values(event_type_schema)
 
 
 def test_index_review_evidence_schema_does_not_expose_prepare_mode() -> None:

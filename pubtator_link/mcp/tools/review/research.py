@@ -212,7 +212,10 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         output_schema=ResearchSessionStatusResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
     )
-    async def get_research_session_status(review_id: str, session_id: str) -> dict[str, Any]:
+    async def get_research_session_status(
+        session_id: Annotated[str, Field(min_length=1)],
+        review_id: Annotated[str | None, Field(min_length=1)] = None,
+    ) -> dict[str, Any]:
         """Use this when a user needs staged candidate, coverage, and preparation status for a research session."""
 
         async def call() -> dict[str, Any]:
@@ -233,8 +236,10 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         output_schema=ListResearchSessionsResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
     )
-    async def list_research_sessions(review_id: str) -> dict[str, Any]:
-        """Use this when a user needs staged research sessions for one review ID."""
+    async def list_research_sessions(
+        review_id: Annotated[str | None, Field(min_length=1)] = None,
+    ) -> dict[str, Any]:
+        """Use this when a user needs staged research sessions for orientation or one review ID."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_research_session_service()

@@ -2,9 +2,26 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from pubtator_link.models.review_rerag import IndexReviewEvidenceRequest
+
+_QUERY_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "best",
+    "considering",
+    "for",
+    "in",
+    "of",
+    "the",
+    "what",
+    "when",
+    "with",
+}
 
 
 def quickstart_selected_pmids(manifest: Any) -> list[str]:
@@ -15,6 +32,51 @@ def query_length_warning(query: str) -> str | None:
     if len(query.split()) <= 18:
         return None
     return "Long natural-language question used for search; consider splitting into 6 or fewer key terms."
+
+
+def query_variants_for_question(question: str) -> list[str]:
+    variants = [question]
+    words = re.findall(r"[A-Za-z0-9@_-]+", question)
+    if len(words) <= 18:
+        return variants
+    keywords = [word for word in words if word.lower() not in _QUERY_STOPWORDS and len(word) > 2][
+        :8
+    ]
+    shortened = " ".join(keywords)
+    if shortened and shortened.lower() != question.lower():
+        variants.append(shortened)
+    return variants
+
+
+def selected_pmids_from_search_result(search_result: dict[str, Any], max_pmids: int) -> list[str]:
+    selected_pmids: list[str] = []
+    for item in search_result.get("results", []):
+        if not isinstance(item, dict):
+            continue
+        pmid = str(item.get("pmid") or "").strip()
+        if pmid and pmid not in selected_pmids:
+            selected_pmids.append(pmid)
+        if len(selected_pmids) >= max_pmids:
+            break
+    return selected_pmids
+
+
+async def search_pmids_for_query_variants(
+    question: str,
+    *,
+    max_pmids: int,
+    search: Callable[[str], Awaitable[dict[str, Any]]],
+) -> tuple[dict[str, Any], list[str], list[str]]:
+    search_result: dict[str, Any] = {}
+    selected_pmids: list[str] = []
+    attempted: list[str] = []
+    for search_query in query_variants_for_question(question):
+        attempted.append(search_query)
+        search_result = await search(search_query)
+        selected_pmids = selected_pmids_from_search_result(search_result, max_pmids)
+        if selected_pmids:
+            break
+    return search_result, selected_pmids, attempted
 
 
 def quickstart_review_id(topic: str) -> str:
