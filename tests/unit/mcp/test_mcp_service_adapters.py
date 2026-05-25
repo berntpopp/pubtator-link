@@ -2607,6 +2607,40 @@ async def test_relations_adapter_maps_related_entities() -> None:
 
 
 @pytest.mark.asyncio
+async def test_relations_adapter_compact_mode_applies_budget_controls() -> None:
+    from pubtator_link.mcp.service_adapters import find_entity_relations_impl
+
+    class FakeClient:
+        async def find_relations(
+            self, e1: str, relation_type: str | None, e2: str | None
+        ) -> list[dict[str, object]]:
+            return [
+                {
+                    "target": f"@DISEASE_{index}",
+                    "type": "associate",
+                    "pmids": [str(1000 + index), str(2000 + index)],
+                    "publications": index,
+                }
+                for index in range(5)
+            ]
+
+    result = await find_entity_relations_impl(
+        client=FakeClient(),
+        entity_id="@GENE_MEFV",
+        limit=2,
+        response_mode="compact",
+        max_response_chars=12000,
+    )
+
+    assert result["success"] is True
+    assert len(result["related_entities"]) == 2
+    assert result["omitted_count"] == 3
+    assert result["response_size_class"] == "compact"
+    assert result["related_entities"][0]["pmids"] == []
+    assert result["related_entities"][0]["publications"] == 0
+
+
+@pytest.mark.asyncio
 async def test_lookup_variant_evidence_adapter_calls_service() -> None:
     from pubtator_link.mcp.service_adapters import lookup_variant_evidence_impl
     from pubtator_link.models.variants import VariantEvidenceResponse

@@ -188,6 +188,9 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             ],
             relation_type: str | None = None,
             target_entity_type: str | None = None,
+            limit: Annotated[int, Field(ge=1, le=100)] = 20,
+            response_mode: Literal["compact", "standard", "full"] = "compact",
+            max_response_chars: Annotated[int, Field(ge=1000, le=50000)] = 12_000,
         ) -> dict[str, Any]:
             """Use this when a user has a PubTator entity ID and needs literature-derived related entities to expand a corpus. Do not use this for canonical entity lookup; use pubtator_search_biomedical_entities. Next: pubtator_search_literature."""
 
@@ -198,6 +201,9 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                     entity_id=entity_id,
                     relation_type=relation_type,
                     target_entity_type=target_entity_type,
+                    limit=limit,
+                    response_mode=response_mode,
+                    max_response_chars=max_response_chars,
                 )
 
             return await run_mcp_tool("pubtator_find_entity_relations", call)

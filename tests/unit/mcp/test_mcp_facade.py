@@ -300,6 +300,25 @@ def test_search_literature_schema_defaults_to_no_citations_for_compact_metadata(
     assert "retryable=false" in tool.description
 
 
+def test_find_entity_relations_schema_exposes_budget_controls() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_find_entity_relations"
+    ]
+    properties = tool.parameters["properties"]
+
+    assert properties["limit"]["default"] == 20
+    assert properties["limit"]["maximum"] == 100
+    assert properties["response_mode"]["default"] == "compact"
+    assert set(_schema_enum_values(properties["response_mode"])) == {
+        "compact",
+        "standard",
+        "full",
+    }
+    assert properties["max_response_chars"]["default"] == 12000
+
+
 def test_review_quickstart_schema_is_flat_and_returns_retrieval_handoff() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 

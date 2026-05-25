@@ -713,6 +713,9 @@ async def find_entity_relations_impl(
     entity_id: str,
     relation_type: str | None = None,
     target_entity_type: str | None = None,
+    limit: int = 20,
+    response_mode: Literal["compact", "standard", "full"] = "compact",
+    max_response_chars: int = 12_000,
 ) -> dict[str, Any]:
     raw_response = await client.find_relations(
         e1=entity_id,
@@ -723,27 +726,50 @@ async def find_entity_relations_impl(
     api_results = cast(
         list[dict[str, Any]], relation_response if isinstance(relation_response, list) else []
     )
-    related_entities = [
-        RelatedEntity(
-            entity_id=item.get("target", ""),
-            entity_name=item.get("entity_name"),
-            entity_type=item.get("entity_type"),
-            relation_type=item.get("type", ""),
-            confidence=item.get("confidence"),
-            pmids=item.get("pmids", []),
-            source=item.get("source"),
-            target=item.get("target", ""),
-            publications=item.get("publications"),
+    limited_results = api_results[:limit]
+    related_entities: list[RelatedEntity] = []
+    for item in limited_results:
+        pmids = [] if response_mode == "compact" else item.get("pmids", [])
+        related_entities.append(
+            RelatedEntity(
+                entity_id=item.get("target", ""),
+                entity_name=item.get("entity_name"),
+                entity_type=item.get("entity_type"),
+                relation_type=item.get("type", ""),
+                confidence=item.get("confidence"),
+                pmids=pmids,
+                source=item.get("source"),
+                target=item.get("target", ""),
+                publications=item.get("publications"),
+            )
         )
-        for item in api_results
-    ]
+    response_size_class = response_mode
+    omitted_count = max(0, len(api_results) - len(related_entities))
+    while related_entities:
+        projected = RelationsResponse(
+            success=True,
+            primary_entity=entity_id,
+            related_entities=related_entities,
+            total_relations=len(api_results),
+            relation_filter=relation_type,
+            entity_filter=target_entity_type,
+            omitted_count=omitted_count,
+            response_size_class=response_size_class,
+        ).model_dump()
+        if len(json.dumps(projected, separators=(",", ":"), default=str)) <= max_response_chars:
+            break
+        omitted_count += 1
+        related_entities.pop()
+        response_size_class = "truncated"
     return RelationsResponse(
         success=True,
         primary_entity=entity_id,
         related_entities=related_entities,
-        total_relations=len(related_entities),
+        total_relations=len(api_results),
         relation_filter=relation_type,
         entity_filter=target_entity_type,
+        omitted_count=omitted_count,
+        response_size_class=response_size_class,
     ).model_dump()
 
 

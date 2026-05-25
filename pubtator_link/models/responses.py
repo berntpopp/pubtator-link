@@ -325,6 +325,8 @@ class RelationsResponse(BaseResponse):
     total_relations: int = Field(..., description="Total number of relations")
     relation_filter: str | None = Field(default=None, description="Applied relation type filter")
     entity_filter: str | None = Field(default=None, description="Applied entity type filter")
+    omitted_count: int = Field(default=0, description="Relations omitted by response budget")
+    response_size_class: str = Field(default="standard", description="Approximate payload class")
 
 
 class AnnotationEntity(BaseModel):
