@@ -160,8 +160,7 @@ def _is_non_transactional_migration(sql: str) -> bool:
     DDL) must include the sentinel '-- pragma: non-transactional' on a line
     by itself in the first 8 lines of the file.
     """
-    head = "\n".join(sql.splitlines()[:8])
-    return _NON_TX_SENTINEL in head
+    return any(line.strip() == _NON_TX_SENTINEL for line in sql.splitlines()[:8])
 
 
 async def apply_migrations(database_url: str | None = None) -> list[str]:

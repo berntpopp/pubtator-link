@@ -106,6 +106,11 @@ def test_migration_with_sentinel_in_first_lines_skips_transaction_wrapper() -> N
     assert _is_non_transactional_migration(sql) is True
 
 
+def test_sentinel_text_inline_in_first_lines_is_ignored() -> None:
+    sql = "-- mentions -- pragma: non-transactional in a longer comment\nSELECT 1;"
+    assert _is_non_transactional_migration(sql) is False
+
+
 def test_sentinel_after_first_8_lines_is_ignored() -> None:
     sql = ("\n" * 9) + "-- pragma: non-transactional\nSELECT 1;"
     assert _is_non_transactional_migration(sql) is False
