@@ -27,6 +27,7 @@ COMMON_RELEVANCE_STOPWORDS = {
     "the",
     "with",
 }
+GUIDELINE_INTENT_TERMS = ("guideline", "recommendation", "consensus", "eular", "pres", "share")
 
 
 class CorpusSearchClient(Protocol):
@@ -194,13 +195,13 @@ def _select_pmids(
 
 def _has_relevance(request: CorpusSuggestionRequest, title: str | None) -> bool:
     role = _role_for(None, title=title)
-    matched_terms, matched_intents = _relevance_for(
+    matched_terms, _matched_intents = _relevance_for(
         request,
         pmid="",
         title=title,
         role=role,
     )
-    return bool(matched_terms or matched_intents)
+    return bool(matched_terms)
 
 
 def _role_for(
@@ -301,13 +302,22 @@ def _matched_question_terms(request: CorpusSuggestionRequest, title_lower: str) 
             terms.append("familial mediterranean fever")
         elif _contains_term(title_lower, term):
             terms.append(term)
-    if any(term in title_lower for term in ("guideline", "recommendation", "consensus", "eular")):
+    if (
+        terms
+        and _request_has_guideline_intent(request)
+        and any(term in title_lower for term in GUIDELINE_INTENT_TERMS)
+    ):
         terms.append("guideline")
     return terms
 
 
 def _contains_term(text: str, term: str) -> bool:
     return re.search(rf"\b{re.escape(term)}\b", text) is not None
+
+
+def _request_has_guideline_intent(request: CorpusSuggestionRequest) -> bool:
+    request_text = " ".join([request.question, *request.entity_ids]).lower()
+    return any(term in request_text for term in GUIDELINE_INTENT_TERMS)
 
 
 def _rationale_for(role: CorpusCandidateRole) -> str:

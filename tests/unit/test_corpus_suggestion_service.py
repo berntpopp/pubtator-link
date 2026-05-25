@@ -260,3 +260,62 @@ async def test_corpus_suggestion_relevance_ignores_stopword_only_overlap() -> No
     )
     assert required.matched_terms == []
     assert required.matched_intents == ["must_include"]
+
+
+@pytest.mark.asyncio
+async def test_corpus_suggestion_relevance_requires_topical_overlap_not_role_only() -> None:
+    class FakeSearch:
+        async def search(self, query: str, *, limit: int, sort: str | None):
+            return {
+                "results": [
+                    {
+                        "pmid": "26802180",
+                        "title": "EULAR recommendations for MEFV familial Mediterranean fever",
+                    },
+                    {"pmid": "888", "title": "Treatment recommendations for asthma"},
+                    {"pmid": "889", "title": "National diabetes registry outcomes"},
+                ]
+            }
+
+    class FakeMetadata:
+        async def get_metadata(self, request):
+            raise AssertionError("metadata should not be fetched")
+
+    class FakePreflight:
+        async def preflight_pmids(self, pmids: list[str]) -> list[SourceCoverageHint]:
+            return []
+
+    service = CorpusSuggestionService(
+        search_client=FakeSearch(),
+        metadata_service=FakeMetadata(),
+        source_preflight_service=FakePreflight(),
+    )
+
+    response = await service.suggest(
+        CorpusSuggestionRequest(
+            question="MEFV FMF EULAR guidance",
+            max_pmids=4,
+            include_metadata=False,
+        )
+    )
+
+    assert response.candidate_pmids == ["26802180"]
+    guideline = response.candidates[0]
+    assert {"mefv", "eular", "familial mediterranean fever"} <= set(guideline.matched_terms)
+    assert "guideline" in guideline.matched_intents
+
+    required_response = await service.suggest(
+        CorpusSuggestionRequest(
+            question="MEFV FMF EULAR guidance",
+            max_pmids=4,
+            must_include_pmids=["888"],
+            include_metadata=False,
+        )
+    )
+
+    assert required_response.candidate_pmids == ["888", "26802180"]
+    required = next(
+        candidate for candidate in required_response.candidates if candidate.pmid == "888"
+    )
+    assert required.matched_terms == []
+    assert {"must_include", "guideline"} <= set(required.matched_intents)
