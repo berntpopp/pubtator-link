@@ -329,6 +329,18 @@ async def test_list_sessions_without_review_id_uses_bounded_global_repository_pa
     assert [session.review_id for session in response.sessions] == ["review-2", "review-1"]
 
 
+def test_production_repository_exposes_global_research_session_lookup_contract() -> None:
+    from pubtator_link.repositories.review_rerag import (
+        PostgresReviewReragRepository,
+        ReviewReragRepository,
+    )
+
+    assert hasattr(ReviewReragRepository, "list_research_sessions_global")
+    assert hasattr(ReviewReragRepository, "find_research_sessions_by_session_id")
+    assert hasattr(PostgresReviewReragRepository, "list_research_sessions_global")
+    assert hasattr(PostgresReviewReragRepository, "find_research_sessions_by_session_id")
+
+
 async def test_get_status_reconciles_candidate_status_from_review_index() -> None:
     class SourceRepository(FakeRepository):
         async def list_review_sources(self, review_id, pmids=None, **kwargs):
@@ -385,3 +397,24 @@ async def test_get_status_resolves_globally_unique_session_id() -> None:
 
     assert response.manifest.review_id == "review-1"
     assert response.manifest.session_id == "session-1"
+
+
+async def test_get_status_by_session_id_reports_ambiguous_session_id() -> None:
+    from pubtator_link.models.review_rerag import ResearchSessionManifest
+
+    class AmbiguousRepository(FakeRepository):
+        async def find_research_sessions_by_session_id(self, session_id):
+            return [
+                ResearchSessionManifest(review_id="review-1", session_id=session_id),
+                ResearchSessionManifest(review_id="review-2", session_id=session_id),
+            ]
+
+    service = ResearchSessionService(
+        repository=AmbiguousRepository(),
+        search_provider=FakeSearch(),
+        preflight_service=FakePreflight(),
+        queue=FakeQueue(),
+    )
+
+    with pytest.raises(ValueError, match="ambiguous"):
+        await service.get_status(review_id=None, session_id="session-1")

@@ -17,6 +17,7 @@ from pubtator_link.models.review_rerag import (
 from pubtator_link.repositories.review_rerag import (
     PostgresReviewReragRepository,
     ReviewPassageEmbeddingRecord,
+    ReviewReragRepository,
 )
 
 
@@ -356,6 +357,119 @@ async def test_list_research_sessions_groups_candidates_with_bounded_queries() -
     assert all("from review_research_sessions" not in sql for sql, _args in connection.executed[1:])
     assert connection.executed[0][1] == ("review-1",)
     assert connection.executed[1][1] == ("review-1",)
+
+
+def test_repository_protocol_includes_global_research_session_lookup_methods() -> None:
+    assert hasattr(ReviewReragRepository, "list_research_sessions_global")
+    assert hasattr(ReviewReragRepository, "find_research_sessions_by_session_id")
+    assert hasattr(PostgresReviewReragRepository, "list_research_sessions_global")
+    assert hasattr(PostgresReviewReragRepository, "find_research_sessions_by_session_id")
+
+
+@pytest.mark.asyncio
+async def test_list_research_sessions_global_orders_and_groups_candidates() -> None:
+    connection = FakeConnection()
+    connection.fetched_row_batches = [
+        [
+            {
+                "review_id": "review-2",
+                "session_id": "session-2",
+                "query": "new query",
+                "status": "active",
+                "created_at": "2026-05-02T00:02:00Z",
+                "updated_at": "2026-05-02T00:04:00Z",
+            },
+            {
+                "review_id": "review-1",
+                "session_id": "session-1",
+                "query": "old query",
+                "status": "active",
+                "created_at": "2026-05-02T00:01:00Z",
+                "updated_at": "2026-05-02T00:03:00Z",
+            },
+        ],
+        [
+            {
+                "review_id": "review-2",
+                "session_id": "session-2",
+                "pmid": "37747561",
+                "rank": 1,
+                "title": "Candidate",
+                "status": "queued",
+                "decision_reason": "selected_by_rank",
+                "coverage_hint": None,
+                "source_id": "PMID:37747561",
+                "error": None,
+            }
+        ],
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    sessions = await repository.list_research_sessions_global(limit=20)
+
+    assert [session.review_id for session in sessions] == ["review-2", "review-1"]
+    assert sessions[0].candidate_count == 1
+    assert sessions[0].candidates[0].pmid == "37747561"
+    session_sql, session_args = connection.executed[0]
+    candidate_sql, candidate_args = connection.executed[1]
+    assert "order by updated_at desc, created_at desc" in session_sql.lower()
+    assert "limit $1" in session_sql.lower()
+    assert "review_research_session_candidates" in candidate_sql.lower()
+    assert session_args == (20,)
+    assert candidate_args == (20,)
+
+
+@pytest.mark.asyncio
+async def test_find_research_sessions_by_session_id_returns_all_matches() -> None:
+    connection = FakeConnection()
+    connection.fetched_row_batches = [
+        [
+            {
+                "review_id": "review-2",
+                "session_id": "shared-session",
+                "query": "new query",
+                "status": "active",
+                "created_at": "2026-05-02T00:02:00Z",
+                "updated_at": "2026-05-02T00:04:00Z",
+            },
+            {
+                "review_id": "review-1",
+                "session_id": "shared-session",
+                "query": "old query",
+                "status": "active",
+                "created_at": "2026-05-02T00:01:00Z",
+                "updated_at": "2026-05-02T00:03:00Z",
+            },
+        ],
+        [
+            {
+                "review_id": "review-1",
+                "session_id": "shared-session",
+                "pmid": "111",
+                "rank": 1,
+                "title": "Candidate",
+                "status": "queued",
+                "decision_reason": "selected_by_rank",
+                "coverage_hint": None,
+                "source_id": "PMID:111",
+                "error": None,
+            }
+        ],
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    sessions = await repository.find_research_sessions_by_session_id("shared-session")
+
+    assert [session.review_id for session in sessions] == ["review-2", "review-1"]
+    assert sessions[1].candidate_count == 1
+    assert sessions[1].candidates[0].pmid == "111"
+    session_sql, session_args = connection.executed[0]
+    candidate_sql, candidate_args = connection.executed[1]
+    assert "where session_id = $1" in session_sql.lower()
+    assert "order by updated_at desc, created_at desc" in session_sql.lower()
+    assert "where session_id = $1" in candidate_sql.lower()
+    assert session_args == ("shared-session",)
+    assert candidate_args == ("shared-session",)
 
 
 @pytest.mark.asyncio

@@ -27,6 +27,7 @@ from pubtator_link.models.review_rerag import (
     SampleSectionPolicy,
     UpsertEvidenceCertaintyRequest,
 )
+from pubtator_link.repositories import review_research_sessions
 from pubtator_link.repositories.review_rerag_mappers import (
     _evidence_certainty_from_row,
     _failed_source_summary_from_row,
@@ -370,6 +371,14 @@ class ReviewReragRepository(Protocol):
     async def list_research_sessions(self, review_id: str) -> list[ResearchSessionManifest]:
         """List staged research session manifests for a review."""
 
+    async def list_research_sessions_global(self, limit: int = 20) -> list[ResearchSessionManifest]:
+        """List staged research session manifests across reviews."""
+
+    async def find_research_sessions_by_session_id(
+        self, session_id: str
+    ) -> list[ResearchSessionManifest]:
+        """Return all staged research sessions matching one session ID."""
+
     async def cleanup_expired_review_indexes(self, *, ttl_seconds: int) -> list[str]:
         """Delete review indexes whose updated timestamp is older than the TTL."""
 
@@ -405,10 +414,6 @@ class PostgresReviewReragRepository:
 
     def __init__(self, pool: Any, *, acquire_timeout: float | None = None) -> None:
         self._pool = pool
-        # Bounded pool acquisition prevents request hangs when the pool saturates
-        # under concurrent agent traffic (review prep + retrieval + audit writes).
-        # Saturation surfaces as asyncpg.PoolAcquireTimeoutError, which mcp/errors.py
-        # sanitizes to error_code: review_index_unavailable for the LLM client.
         self._acquire_timeout: float | None = (
             acquire_timeout if acquire_timeout is not None else self.DEFAULT_ACQUIRE_TIMEOUT_SECONDS
         )
@@ -2051,59 +2056,21 @@ class PostgresReviewReragRepository:
         )
 
     async def list_research_sessions(self, review_id: str) -> list[ResearchSessionManifest]:
-        async with (
-            self._acquire() as connection,
-            connection.transaction(
-                isolation="repeatable_read",
-                readonly=True,
-            ),
-        ):
-            sessions = await connection.fetch(
-                """
-                select review_id, session_id, query, status,
-                       created_at::text as created_at, updated_at::text as updated_at
-                from review_research_sessions
-                where review_id = $1
-                order by updated_at desc, session_id
-                """,
-                review_id,
-            )
-            if not sessions:
-                return []
-            candidate_rows = await connection.fetch(
-                """
-                select session_id, pmid, rank, title, status, decision_reason, coverage_hint,
-                       source_id, error
-                from review_research_session_candidates
-                where review_id = $1
-                order by session_id, rank nulls last, pmid
-                """,
-                review_id,
-            )
-        candidates_by_session_id: dict[str, list[ResearchSessionCandidate]] = {}
-        for row in candidate_rows:
-            candidates_by_session_id.setdefault(row["session_id"], []).append(
-                _research_session_candidate_from_row(row)
-            )
-        manifests: list[ResearchSessionManifest] = []
-        for session in sessions:
-            candidates = candidates_by_session_id.get(session["session_id"], [])
-            manifests.append(
-                ResearchSessionManifest(
-                    review_id=session["review_id"],
-                    session_id=session["session_id"],
-                    query=session["query"],
-                    status=session["status"],
-                    candidates=candidates,
-                    candidate_count=len(candidates),
-                    queued_count=sum(1 for item in candidates if item.status == "queued"),
-                    skipped_count=sum(1 for item in candidates if item.status == "skipped"),
-                    coverage_summary=_coverage_summary(candidates),
-                    created_at=session["created_at"],
-                    updated_at=session["updated_at"],
-                )
-            )
-        return manifests
+        return await review_research_sessions.list_research_sessions_for_review(
+            self._acquire, review_id
+        )
+
+    async def list_research_sessions_global(self, limit: int = 20) -> list[ResearchSessionManifest]:
+        return await review_research_sessions.list_research_sessions_global(
+            self._acquire, limit=limit
+        )
+
+    async def find_research_sessions_by_session_id(
+        self, session_id: str
+    ) -> list[ResearchSessionManifest]:
+        return await review_research_sessions.find_research_sessions_by_session_id(
+            self._acquire, session_id
+        )
 
     async def upsert_evidence_certainty(
         self,

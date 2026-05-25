@@ -970,6 +970,35 @@ async def test_get_research_session_status_adapter_resolves_session_id_only() ->
     assert result["manifest"]["review_id"] == "review-1"
 
 
+@pytest.mark.asyncio
+async def test_get_research_session_status_adapter_maps_session_id_only_errors() -> None:
+    from pubtator_link.mcp.service_adapters import get_research_session_status_impl
+
+    class NotFoundService:
+        async def get_status_by_session_id(self, *, session_id):
+            raise LookupError(f"Research session not found: {session_id}")
+
+    class AmbiguousService:
+        async def get_status_by_session_id(self, *, session_id):
+            raise ValueError(f"Research session id is ambiguous: {session_id}")
+
+    not_found = await get_research_session_status_impl(
+        service=NotFoundService(),
+        review_id=None,
+        session_id="missing",
+    )
+    ambiguous = await get_research_session_status_impl(
+        service=AmbiguousService(),
+        review_id=None,
+        session_id="session-1",
+    )
+
+    assert not_found["success"] is False
+    assert not_found["error_code"] == "not_found"
+    assert ambiguous["success"] is False
+    assert ambiguous["error_code"] == "validation_failed"
+
+
 async def _run_ground_question_fixture(service_adapters, **kwargs):
     from pubtator_link.models.review_rerag import (
         ContextPack,
