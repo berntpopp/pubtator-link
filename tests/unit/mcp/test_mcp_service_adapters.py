@@ -1027,7 +1027,7 @@ async def test_index_review_evidence_adapter_returns_lifecycle_guidance() -> Non
         async def preparation_job_statuses(self, review_id, source_ids):
             return {
                 "PMID:40234175": "complete",
-                "URL:https://example.org/already-prepared.pdf": "complete",
+                "URL:https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7811395/": "complete",
             }
 
         async def source_coverage_summary(self, review_id, source_ids):
@@ -1055,7 +1055,7 @@ async def test_index_review_evidence_adapter_returns_lifecycle_guidance() -> Non
         queue=FakeQueue(),
         review_id="rev",
         pmids=["40234174", "40234175"],
-        curated_urls=["https://example.org/already-prepared.pdf"],
+        curated_urls=["https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7811395/"],
     )
 
     assert result["queued"] == 1
