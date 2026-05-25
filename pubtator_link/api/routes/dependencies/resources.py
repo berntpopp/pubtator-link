@@ -260,10 +260,15 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
         async def inspect_schema_for_diagnostics() -> ReviewSchemaDiagnostics:
             return await inspect_review_schema(review_rerag_config.database_url)
 
+        async def pubtator_api_status() -> dict[str, Any]:
+            await api_client.search_publications(text="pubtator", page=1)
+            return {"status": "ready", "probe": "search"}
+
         diagnostics_service = DiagnosticsService(
             inspect_schema=inspect_schema_for_diagnostics,
             review_queue_available=lambda: review_queue is not None,
             europe_pmc_enabled=lambda: europe_pmc_client is not None,
+            pubtator_api_status=pubtator_api_status,
         )
 
         return AppResources(

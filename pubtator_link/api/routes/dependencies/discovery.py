@@ -257,6 +257,11 @@ def _build_diagnostics_service(resources: AppResources | None) -> DiagnosticsSer
     async def inspect_schema_for_diagnostics() -> ReviewSchemaDiagnostics:
         return await inspect_review_schema(review_rerag_config.database_url)
 
+    async def pubtator_api_status() -> dict[str, Any]:
+        client = resources.api_client if resources is not None else await get_api_client()
+        await client.search_publications(text="pubtator", page=1)
+        return {"status": "ready", "probe": "search"}
+
     return DiagnosticsService(
         inspect_schema=inspect_schema_for_diagnostics,
         review_queue_available=lambda: (
@@ -269,6 +274,7 @@ def _build_diagnostics_service(resources: AppResources | None) -> DiagnosticsSer
             if resources is not None
             else getattr(review_rerag_config, "enable_europe_pmc_fallback", False)
         ),
+        pubtator_api_status=pubtator_api_status,
     )
 
 

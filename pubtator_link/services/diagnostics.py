@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -17,14 +18,17 @@ class DiagnosticsService:
         inspect_schema: Callable[[], Awaitable[ReviewSchemaDiagnostics]],
         review_queue_available: Callable[[], bool],
         europe_pmc_enabled: Callable[[], bool],
+        pubtator_api_status: Callable[[], dict[str, Any] | Awaitable[dict[str, Any]]] | None = None,
     ) -> None:
         self._inspect_schema = inspect_schema
         self._review_queue_available = review_queue_available
         self._europe_pmc_enabled = europe_pmc_enabled
+        self._pubtator_api_status = pubtator_api_status
 
     async def get_diagnostics(self) -> DiagnosticsResponse:
         recovery: list[str] = []
         schema = await self._inspect_schema()
+        pubtator_api = await self._probe_pubtator_api()
         recent_errors = get_recent_mcp_errors()
         database: dict[str, Any] = {
             "connected": schema.connected,
@@ -44,7 +48,7 @@ class DiagnosticsService:
         subsystems: dict[str, dict[str, Any]] = {
             "database": database,
             "review_queue": {"available": self._review_queue_available()},
-            "pubtator_api": {"status": "unknown"},
+            "pubtator_api": pubtator_api,
             "europe_pmc": {"enabled": self._europe_pmc_enabled()},
             "recent_mcp_errors": {"count": len(recent_errors), "latest": recent_errors},
         }
@@ -89,3 +93,18 @@ class DiagnosticsService:
             recovery=recovery,
             minimum_workflow=minimum_workflow,
         )
+
+    async def _probe_pubtator_api(self) -> dict[str, Any]:
+        if self._pubtator_api_status is None:
+            return {"status": "unknown", "probe": "not_configured"}
+        try:
+            status = self._pubtator_api_status()
+            if inspect.isawaitable(status):
+                status = await status
+            if not isinstance(status, dict):
+                raise TypeError("pubtator api status probe must return a dict")
+            if not isinstance(status.get("status"), str):
+                raise TypeError("pubtator api status probe must include a status string")
+            return status
+        except Exception as exc:
+            return {"status": "unavailable", "probe": "search", "error": type(exc).__name__}
