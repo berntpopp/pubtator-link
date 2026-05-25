@@ -137,6 +137,22 @@ def test_pubtator_api_database_maintenance_is_upstream_unavailable() -> None:
     assert "review schema" not in payload["recovery"].lower()
 
 
+def test_pubtator_api_transport_failure_is_upstream_unavailable() -> None:
+    error = mcp_tool_error(
+        PubTatorAPIError(
+            "Request failed: Server disconnected without sending a response.",
+            retry_metadata={"terminal_reason": "request_error", "attempt_count": 3},
+        ),
+        McpErrorContext(tool_name="pubtator_search_literature"),
+    )
+
+    payload = json.loads(str(error))
+
+    assert payload["error_code"] == "upstream_unavailable"
+    assert payload["message"] == "The upstream service is temporarily unavailable."
+    assert payload["retryable"] is True
+
+
 def test_ground_question_error_uses_selected_pmids_for_fallback() -> None:
     error_source = RuntimeError("review database unavailable")
     error_source.pmids = ["11111111", "22222222"]  # type: ignore[attr-defined]

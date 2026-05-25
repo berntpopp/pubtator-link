@@ -89,8 +89,10 @@ def _is_pubtator_upstream_unavailable(exc: Exception) -> bool:
     if not isinstance(exc, PubTatorAPIError):
         return False
     message = str(exc).lower()
+    terminal_reason = exc.terminal_reason or exc.retry_metadata.get("terminal_reason")
     return (
         exc.status_code in {502, 503, 504}
+        or terminal_reason == "request_error"
         or "currently updating the database" in message
         or "please try again later" in message
     )
@@ -267,7 +269,7 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> ToolError:
         "message": "Invalid MCP arguments."
         if isinstance(exc, InputNormalizationError)
         else safe_message_for_exception(exc),
-        "retryable": False,
+        "retryable": error_code == "upstream_unavailable",
         "fallback_tool": fallback_tool,
         "fallback_args": fallback_args,
         "recovery": _recovery_text_for_context(context, fallback_tool, error_code),
