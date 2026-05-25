@@ -812,6 +812,14 @@ def test_common_mcp_tools_are_flat_and_unversioned() -> None:
     assert search_schema["properties"]["coverage"]["default"] == "none"
     assert "preflight" in _schema_enum_values(search_schema["properties"]["coverage"])
     assert search_schema["properties"]["metadata"]["default"] == "basic"
+    assert "query" in search_schema["properties"]
+    assert search_schema["properties"]["include_meta"]["default"] is True
+
+    passages_schema = tools["pubtator_get_publication_passages"].parameters
+    assert "pmid" in passages_schema["properties"]
+
+    ground_schema = tools["pubtator_ground_question"].parameters
+    assert "max_results" in ground_schema["properties"]
 
 
 def test_review_context_schema_defaults_are_stable() -> None:
@@ -831,6 +839,108 @@ def test_review_context_schema_defaults_are_stable() -> None:
     assert batch_schema["budget_strategy"]["default"] == "query_fair"
     assert batch_schema["include_diagnostics"]["default"] is False
     assert batch_schema["table_mode"]["default"] == "preview"
+
+
+@pytest.mark.asyncio
+async def test_search_literature_accepts_query_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pubtator_link.mcp.tools.literature as literature_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            assert kwargs["text"] == "MEFV"
+            return {"results": [{"pmid": "1", "title": "FMF"}], "count": 1}
+
+    async def fake_get_api_client() -> FakeClient:
+        return FakeClient()
+
+    monkeypatch.setattr(literature_tools, "get_api_client", fake_get_api_client)
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_literature"]
+
+    result = await tool.run({"query": "MEFV"})
+
+    assert result.structured_content["success"] is True
+    assert result.structured_content["query"] == "MEFV"
+
+
+@pytest.mark.asyncio
+async def test_get_publication_passages_accepts_scalar_pmid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.publications as publication_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+    from pubtator_link.models.publication_passages import (
+        PublicationContextEstimate,
+        PublicationPassageResponse,
+    )
+
+    class FakeService:
+        async def get_passages(self, request):
+            assert request.pmids == ["33454820"]
+            return PublicationPassageResponse(
+                pmids=request.pmids,
+                mode=request.mode,
+                passages=[],
+                context_estimate=PublicationContextEstimate(
+                    estimated_passages=0,
+                    estimated_chars=0,
+                    sections_by_pmid={},
+                    recommended_mode=request.mode,
+                ),
+            )
+
+    async def fake_get_publication_passage_service() -> FakeService:
+        return FakeService()
+
+    monkeypatch.setattr(
+        publication_tools,
+        "get_publication_passage_service",
+        fake_get_publication_passage_service,
+    )
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_get_publication_passages"
+    ]
+
+    result = await tool.run({"pmid": "33454820"})
+
+    assert result.structured_content["success"] is True
+    assert result.structured_content["pmids"] == ["33454820"]
+
+
+@pytest.mark.asyncio
+async def test_ground_question_accepts_max_results_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.review as review_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async def fake_ground_question_impl(**kwargs):
+        assert kwargs["max_pmids"] == 3
+        return {
+            "success": True,
+            "question": kwargs["question"],
+            "review_id": "review-1",
+            "selected_pmids": [],
+            "search_total_results": 0,
+            "coverage_summary": {},
+            "ready_to_retrieve": False,
+            "context": None,
+            "next_tools": [],
+            "recovery": [],
+        }
+
+    async def fake_dependency():
+        return object()
+
+    monkeypatch.setattr(review_tools, "ground_question_impl", fake_ground_question_impl)
+    monkeypatch.setattr(review_tools, "get_api_client", fake_dependency)
+    monkeypatch.setattr(review_tools, "get_review_queue", fake_dependency)
+    monkeypatch.setattr(review_tools, "get_review_context_service", fake_dependency)
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_ground_question"]
+
+    result = await tool.run({"question": "MEFV treatment", "max_results": 3})
+
+    assert result.structured_content["success"] is True
 
 
 def test_public_mcp_tools_use_flat_arguments_consistently() -> None:

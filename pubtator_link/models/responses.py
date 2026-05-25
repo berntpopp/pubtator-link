@@ -168,6 +168,10 @@ class SearchResult(BaseModel):
     date: str | None = Field(default=None, description="Publication date ISO format")
     text_hl: str | None = Field(default=None, description="Highlighted text snippet")
     citations: dict[str, str] | None = Field(default=None, description="Citation formats")
+    recommended_citation: str | None = Field(
+        default=None,
+        description="Paste-ready compact citation for LLM answers and audit notes",
+    )
     volume: str | None = Field(default=None, description="Journal volume")
     issue: str | None = Field(default=None, description="Journal issue")
     pages: str | None = Field(default=None, description="Article pages")

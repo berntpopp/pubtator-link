@@ -115,6 +115,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
     async def ground_question(
         question: Annotated[str, Field(min_length=1)],
         max_pmids: Annotated[int, Field(ge=1, le=20)] = 8,
+        max_results: Annotated[int | None, Field(ge=1, le=20)] = None,
         review_id: Annotated[str | None, Field(min_length=1)] = None,
         entity_ids: list[str] | None = None,
         guideline_boost: bool = True,
@@ -134,7 +135,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 queue=queue,
                 context_service=context_service,
                 question=question,
-                max_pmids=max_pmids,
+                max_pmids=max_results or max_pmids,
                 review_id=review_id,
                 entity_ids=entity_ids,
                 guideline_boost=guideline_boost,

@@ -240,7 +240,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"pmids":["12345"],"max_passages_per_pmid":6,"verbosity":"standard"}`
 - Next tools by profile: lean: `pubtator_preflight_review_sources`; full: `pubtator_preflight_review_sources`; readonly: `pubtator_preflight_review_sources`
 - Resource links: None
-- Input schema: `pmids` (array); `sections` (array | null; default: `None`); `mode` (string; enum: `abstracts`, `full_abstract`, `compact_passages`, `section_text`; default: `compact_passages`); `full` (boolean; default: `False`); `max_passages_per_pmid` (integer; default: `6`); `max_chars` (integer; default: `12000`); `include_tables` (boolean; default: `True`); `include_references` (boolean; default: `False`); `dry_run` (boolean; default: `False`); `verbosity` (string; enum: `lean`, `standard`, `full`; default: `standard`)
+- Input schema: `pmids` (array | null; default: `None`); `pmid` (string | null; default: `None`); `sections` (array | null; default: `None`); `mode` (string; enum: `abstracts`, `full_abstract`, `compact_passages`, `section_text`; default: `compact_passages`); `full` (boolean; default: `False`); `max_passages_per_pmid` (integer; default: `6`); `max_chars` (integer; default: `12000`); `include_tables` (boolean; default: `True`); `include_references` (boolean; default: `False`); `dry_run` (boolean; default: `False`); `verbosity` (string; enum: `lean`, `standard`, `full`; default: `standard`)
 - Output schema: `PublicationPassageResponse`; has_output_schema: `yes`
 
 ## `pubtator_get_research_session_status`
@@ -345,7 +345,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"question":"Does colchicine prevent FMF flares?","max_pmids":8}`
 - Next tools by profile: lean: `pubtator_record_review_context`, `pubtator_get_review_audit_trail`; full: `pubtator_record_review_context`, `pubtator_get_review_audit_trail`
 - Resource links: `pubtator://workflow-help`
-- Input schema: `question` (string); `max_pmids` (integer; default: `8`); `review_id` (string | null; default: `None`); `entity_ids` (array | null; default: `None`); `guideline_boost` (boolean; default: `True`); `wait_until_ready` (boolean; default: `True`); `timeout_ms` (integer; default: `30000`); `verbosity` (string; enum: `lean`, `standard`, `full`; default: `lean`); `max_response_chars` (integer | string; default: `auto`)
+- Input schema: `question` (string); `max_pmids` (integer; default: `8`); `max_results` (integer | null; default: `None`); `review_id` (string | null; default: `None`); `entity_ids` (array | null; default: `None`); `guideline_boost` (boolean; default: `True`); `wait_until_ready` (boolean; default: `True`); `timeout_ms` (integer; default: `30000`); `verbosity` (string; enum: `lean`, `standard`, `full`; default: `lean`); `max_response_chars` (integer | string; default: `auto`)
 - Output schema: `GroundQuestionResponse`; has_output_schema: `yes`
 
 ## `pubtator_index_review_evidence`
@@ -580,12 +580,12 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `literature`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user needs PubMed literature search through PubTator3. Supports short biomedical queries, flat filters, optional section filters, and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false means continue with results or inspect diagnostics.
+- Description: Use this when a user needs PubMed literature search through PubTator3. Supports text or query, flat filters, optional section filters, and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false means continue with results or inspect diagnostics. Set include_meta=false for repeated searches after learning the workflow.
 - Do not use for: `fetching known PMID passage text`
 - Example: `{"text":"BRCA1 ovarian cancer PARP inhibitor","limit":5,"metadata":"basic"}`
 - Next tools by profile: lean: `pubtator_preflight_review_sources`; full: `pubtator_preflight_review_sources`; readonly: `pubtator_preflight_review_sources`
 - Resource links: None
-- Input schema: `text` (string); `page` (integer; default: `1`); `sort` (string | null; default: `None`); `filters` (string | null; default: `None`); `publication_types` (array | null; default: `None`); `year_min` (integer | null; default: `None`); `year_max` (integer | null; default: `None`); `sections` (array | null; default: `None`); `response_mode` (string; enum: `compact`, `standard`, `full`; default: `compact`); `include_citations` (string; enum: `none`, `nlm`, `bibtex`, `both`; default: `none`); `text_hl_format` (string; enum: `none`, `plain`, `annotated`; default: `plain`); `limit` (integer | null; default: `5`); `entity_ids` (array | null; default: `None`); `guideline_boost` (boolean; default: `False`); `coverage` (string; enum: `none`, `preflight`; default: `none`); `metadata` (string; enum: `none`, `basic`, `with_abstract`, `full`; default: `basic`)
+- Input schema: `text` (string | null; default: `None`); `query` (string | null; default: `None`); `page` (integer; default: `1`); `sort` (string | null; default: `None`); `filters` (string | null; default: `None`); `publication_types` (array | null; default: `None`); `year_min` (integer | null; default: `None`); `year_max` (integer | null; default: `None`); `sections` (array | null; default: `None`); `response_mode` (string; enum: `compact`, `standard`, `full`; default: `compact`); `include_citations` (string; enum: `none`, `nlm`, `bibtex`, `both`; default: `none`); `text_hl_format` (string; enum: `none`, `plain`, `annotated`; default: `plain`); `limit` (integer | null; default: `5`); `entity_ids` (array | null; default: `None`); `guideline_boost` (boolean; default: `False`); `coverage` (string; enum: `none`, `preflight`; default: `none`); `metadata` (string; enum: `none`, `basic`, `with_abstract`, `full`; default: `basic`); `include_meta` (boolean; default: `True`)
 - Output schema: `SearchResponse`; has_output_schema: `yes`
 
 ## `pubtator_stage_research_session`

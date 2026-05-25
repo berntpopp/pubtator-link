@@ -1917,6 +1917,31 @@ async def test_search_literature_meta_uses_short_next_tool_hints() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_literature_can_omit_meta_for_repeated_searches() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "results": [{"pmid": "1", "title": "FMF guideline"}],
+                "count": 1,
+                "total_pages": 1,
+                "page_size": 10,
+            }
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="FMF",
+        include_meta=False,
+    )
+
+    assert "_meta" not in result
+    assert "cache_key" not in result
+    assert "corpus_snapshot_date" not in result
+    assert "source_versions" not in result
+
+
+@pytest.mark.asyncio
 async def test_search_literature_default_does_not_require_preflight_service() -> None:
     from pubtator_link.mcp.service_adapters import search_literature_impl
 

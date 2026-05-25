@@ -43,7 +43,8 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def search_literature(
-        text: str,
+        text: str | None = None,
+        query: str | None = None,
         page: int = 1,
         sort: str | None = None,
         filters: str | None = None,
@@ -59,10 +60,15 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         guideline_boost: bool = False,
         coverage: SearchCoverageMode = "none",
         metadata: SearchMetadataMode = "basic",
+        include_meta: bool = True,
     ) -> dict[str, Any]:
-        """Use this when a user needs PubMed literature search through PubTator3. Supports short biomedical queries, flat filters, optional section filters, and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false means continue with results or inspect diagnostics."""
+        """Use this when a user needs PubMed literature search through PubTator3. Supports text or query, flat filters, optional section filters, and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false means continue with results or inspect diagnostics. Set include_meta=false for repeated searches after learning the workflow."""
 
         async def call() -> dict[str, Any]:
+            search_text = (text or query or "").strip()
+            if not search_text:
+                msg = "Provide text or query."
+                raise ValueError(msg)
             preflight_service = (
                 await get_source_preflight_service() if coverage == "preflight" else None
             )
@@ -72,7 +78,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             client = await get_api_client()
             return await search_literature_impl(
                 client=client,
-                text=text,
+                text=search_text,
                 page=page,
                 sort=sort,
                 filters=filters,
@@ -90,6 +96,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 preflight_service=preflight_service,
                 metadata=metadata,
                 metadata_service=metadata_service,
+                include_meta=include_meta,
             )
 
         return await run_mcp_tool("pubtator_search_literature", call)

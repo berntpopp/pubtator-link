@@ -146,6 +146,7 @@ def shaped_search_result(
         date=item.get("date"),
         text_hl=_shape_text_hl(item.get("text_hl"), text_hl_format) if include_text_hl else None,
         citations=_shape_citations(item.get("citations"), include_citations),
+        recommended_citation=_recommended_citation(item, raw_authors),
         volume=item.get("volume") or item.get("meta_volume"),
         issue=item.get("issue") or item.get("meta_issue"),
         pages=item.get("pages") or item.get("meta_pages"),
@@ -239,6 +240,55 @@ def _author_summary(authors: list[PublicationAuthor]) -> str | None:
     if not first:
         return None
     return f"{first} et al." if len(authors) > 1 else first
+
+
+def _recommended_citation(item: dict[str, Any], authors: list[PublicationAuthor]) -> str | None:
+    existing = item.get("recommended_citation")
+    if isinstance(existing, str) and existing.strip():
+        return existing.strip()
+    nlm = item.get("nlm_citation")
+    if isinstance(nlm, str) and nlm.strip():
+        return nlm.strip()
+
+    parts: list[str] = []
+    author_label = _author_summary(authors)
+    if author_label:
+        parts.append(author_label)
+    title = _clean_citation_part(item.get("title"))
+    if title:
+        parts.append(title)
+    journal = _clean_citation_part(item.get("journal"))
+    if journal:
+        parts.append(journal)
+    year = _clean_citation_part(item.get("pub_year") or _citation_year(item))
+    if year:
+        parts.append(year)
+    pmid = _clean_citation_part(item.get("pmid"))
+    if pmid:
+        parts.append(f"PMID:{pmid}")
+    doi = _clean_citation_part(item.get("doi"))
+    if doi:
+        parts.append(f"doi:{doi}")
+    if not parts:
+        return None
+    return ". ".join(part.rstrip(".") for part in parts) + "."
+
+
+def _clean_citation_part(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = " ".join(str(value).split())
+    return text or None
+
+
+def _citation_year(item: dict[str, Any]) -> str | None:
+    for key in ("pub_date", "meta_date_publication", "date"):
+        text = _clean_citation_part(item.get(key))
+        if text:
+            match = re.search(r"\b(18\d{2}|19\d{2}|20\d{2})\b", text)
+            if match is not None:
+                return match.group(1)
+    return None
 
 
 def search_cache_key(

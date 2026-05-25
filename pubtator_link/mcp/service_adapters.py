@@ -480,6 +480,7 @@ async def search_literature_impl(
     preflight_service: SearchCoveragePreflight | None = None,
     metadata: SearchMetadataMode = "basic",
     metadata_service: PublicationMetadataService | None = None,
+    include_meta: bool = True,
 ) -> dict[str, Any]:
     normalized_text = combined_search_text(text, entity_ids)
     merged_filters = merge_search_filters(
@@ -527,10 +528,7 @@ async def search_literature_impl(
             "Search is read-only metadata discovery. Use coverage='preflight' or "
             "pubtator_preflight_review_sources before indexing if source coverage matters."
         ),
-        "next_tools": [
-            "pubtator_preflight_review_sources",
-            "pubtator_index_review_evidence",
-        ],
+        "next_tools": ["pubtator_preflight_review_sources", "pubtator_index_review_evidence"],
         "workflow": "search -> preflight -> index -> inspect -> retrieve",
         "details_resource": "pubtator://workflow-help",
     }
@@ -543,7 +541,11 @@ async def search_literature_impl(
         )
         response.source_versions["pubtator3_filtering"] = "local_fallback"
     dumped = dump_search_response(response, response_mode=response_mode)
-    dumped["_meta"] = response_meta
+    if include_meta:
+        dumped["_meta"] = response_meta
+    else:
+        for field in ("cache_key", "corpus_snapshot_date", "source_versions"):
+            dumped.pop(field, None)
     return dumped
 
 

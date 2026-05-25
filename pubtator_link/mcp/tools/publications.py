@@ -155,7 +155,8 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_publication_passages(
-        pmids: list[str],
+        pmids: list[str] | None = None,
+        pmid: str | None = None,
         sections: list[str] | None = None,
         mode: PublicationPassageMode = "compact_passages",
         full: bool = False,
@@ -169,10 +170,17 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. For article-local answering, use mode='full_abstract' first; it returns all title/abstract passages without truncating structured abstracts. If full=True returns only abstracts, inspect coverage_by_pmid and answer from available evidence. Do not use for prepared review RAG; use pubtator_retrieve_review_context_batch."""
 
         async def call() -> dict[str, Any]:
+            selected_pmids = list(pmids or [])
+            if pmid:
+                selected_pmids.append(pmid)
+            selected_pmids = [value.strip() for value in selected_pmids if value.strip()]
+            if not selected_pmids:
+                msg = "Provide pmids or pmid."
+                raise ValueError(msg)
             service = await get_publication_passage_service()
             return await get_publication_passages_impl(
                 service=service,
-                pmids=pmids,
+                pmids=selected_pmids,
                 sections=sections,
                 mode=mode,
                 full=full,
@@ -184,7 +192,10 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 verbosity=verbosity,
             )
 
-        return await run_mcp_tool("pubtator_get_publication_passages", call, pmids=pmids)
+        tool_pmids = list(pmids or [])
+        if pmid:
+            tool_pmids.append(pmid)
+        return await run_mcp_tool("pubtator_get_publication_passages", call, pmids=tool_pmids)
 
     @mcp.tool(
         name="pubtator_get_publication_metadata",
