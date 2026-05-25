@@ -273,7 +273,7 @@ class PubTator3Client:
                         extensions=response.extensions,
                     )
 
-            if retry and method_upper == "GET":
+            if retry and (method_upper == "GET" or use_text_client):
                 policy = RetryPolicy()
                 try:
                     response, retry_metadata = await call_with_retries(
@@ -565,8 +565,28 @@ class PubTator3Client:
             url,
             data=data,
             use_text_client=True,
-            retry=False,
+            retry=True,
         )
+
+    async def retrieve_text_annotation_until_ready(
+        self, session_id: str, timeout_ms: int = 30000
+    ) -> dict[str, Any] | None:
+        """Poll text annotation results until ready or timeout."""
+        deadline = asyncio.get_running_loop().time() + (timeout_ms / 1000)
+        delay = 0.25
+        while True:
+            result = await self.retrieve_text_annotation(session_id)
+            if str(result.get("status", "")).lower() not in {
+                "submitted",
+                "processing",
+                "pending",
+                "queued",
+            }:
+                return result
+            if asyncio.get_running_loop().time() + delay > deadline:
+                return None
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 2.0)
 
     async def get_annotation_results(self, session_id: str) -> dict[str, Any]:
         """Alias for retrieve_text_annotation to match test expectations.

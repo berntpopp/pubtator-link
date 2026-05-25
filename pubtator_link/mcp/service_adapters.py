@@ -782,41 +782,49 @@ async def submit_text_annotation_impl(
     client: PubTator3Client,
     text: str,
     bioconcepts: str = "Gene",
+    wait: bool = False,
+    timeout_ms: int = 30000,
 ) -> dict[str, Any]:
-    if bioconcepts.lower() == "all":
-        selected_bioconcepts = list(text_processing_config.supported_bioconcepts)
-    else:
-        selected_bioconcepts = [item.strip() for item in bioconcepts.split(",") if item.strip()]
-
+    supported = text_processing_config.supported_bioconcepts
+    selected_bioconcepts = (
+        list(supported)
+        if bioconcepts.lower() == "all"
+        else [item.strip() for item in bioconcepts.split(",") if item.strip()]
+    )
     invalid_bioconcepts = [
-        bioconcept
-        for bioconcept in selected_bioconcepts
-        if bioconcept not in text_processing_config.supported_bioconcepts
+        bioconcept for bioconcept in selected_bioconcepts if bioconcept not in supported
     ]
     if invalid_bioconcepts:
         raise ValueError(
             f"Invalid bioconcept(s): {', '.join(invalid_bioconcepts)}. "
-            f"Supported types: {', '.join(text_processing_config.supported_bioconcepts)}"
+            f"Supported types: {', '.join(supported)}"
         )
 
     normalized_text = text.strip()
     session_id = await client.submit_text_annotation(
         text=normalized_text, bioconcept=selected_bioconcepts[0]
     )
-    if len(normalized_text) < 1000:
-        estimated_time = 15
-    elif len(normalized_text) < 5000:
-        estimated_time = 45
-    else:
-        estimated_time = 90
-
+    if wait:
+        result = await client.retrieve_text_annotation_until_ready(
+            session_id, timeout_ms=timeout_ms
+        )
+        if result is not None:
+            return await get_text_annotation_results_impl(
+                client=client, session_id=session_id, result=result
+            )
+    estimated_time = (
+        15 if len(normalized_text) < 1000 else 45 if len(normalized_text) < 5000 else 90
+    )
     return TextAnnotationSubmitResponse(
-        success=True,
         session_id=session_id,
-        status="submitted",
+        status="pending" if wait else "submitted",
         bioconcepts=selected_bioconcepts,
         estimated_time=estimated_time,
-        message="Text submitted for processing. Use session_id to retrieve results.",
+        message=(
+            "Text annotation is still processing. Retry pubtator_get_text_annotation_results."
+            if wait
+            else "Text submitted for processing. Use session_id to retrieve results."
+        ),
     ).model_dump()
 
 
@@ -824,33 +832,23 @@ async def get_text_annotation_results_impl(
     *,
     client: PubTator3Client,
     session_id: str,
+    result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    result = await client.retrieve_text_annotation(session_id=session_id)
+    result = result or await client.retrieve_text_annotation(session_id=session_id)
     status = str(result.get("status", "unknown"))
     annotations = [
-        AnnotationEntity(
-            start=annotation.get("start", 0),
-            end=annotation.get("end", 0),
-            text=annotation.get("text", ""),
-            entity_id=annotation.get("entity_id", ""),
-            entity_type=annotation.get("entity_type", ""),
-            confidence=annotation.get("confidence"),
-        )
-        for annotation in result.get("annotations", [])
+        AnnotationEntity.model_validate(annotation) for annotation in result.get("annotations", [])
     ]
     return TextAnnotationResultResponse(
-        success=True,
         session_id=session_id,
         status=status,
         original_text=str(result.get("original_text", "")),
         bioconcept=str(result.get("bioconcept", "")),
         annotations=annotations,
         processing_time=result.get("processing_time"),
-        message=(
-            "Processing in progress. Please try again in a few moments."
-            if status in {"processing", "submitted"}
-            else None
-        ),
+        message="Processing in progress. Please try again in a few moments."
+        if status in {"processing", "submitted"}
+        else None,
     ).model_dump()
 
 

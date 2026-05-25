@@ -1500,6 +1500,51 @@ def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
     )
 
 
+@pytest.mark.asyncio
+async def test_submit_text_annotation_tool_waits_for_result(monkeypatch) -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+    from pubtator_link.mcp.tools import text_annotations as annotation_tools
+
+    class FakeClient:
+        async def submit_text_annotation(self, text: str, bioconcept: str) -> str:
+            return "ABC123DEF456"
+
+        async def retrieve_text_annotation(self, session_id: str) -> dict[str, object]:
+            return {
+                "status": "completed",
+                "original_text": "MEFV and colchicine",
+                "bioconcept": "Gene",
+                "annotations": [
+                    {
+                        "start": 0,
+                        "end": 4,
+                        "text": "MEFV",
+                        "entity_id": "@GENE_4210",
+                        "entity_type": "Gene",
+                    }
+                ],
+            }
+
+        async def retrieve_text_annotation_until_ready(
+            self, session_id: str, timeout_ms: int = 30000
+        ) -> dict[str, object] | None:
+            return await self.retrieve_text_annotation(session_id)
+
+    async def fake_get_api_client() -> FakeClient:
+        return FakeClient()
+
+    monkeypatch.setattr(annotation_tools, "get_api_client", fake_get_api_client)
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_submit_text_annotation"
+    ]
+
+    result = await tool.run({"text": "MEFV and colchicine", "wait": True})
+
+    assert result.structured_content["success"] is True
+    assert result.structured_content["status"] == "completed"
+    assert result.structured_content["annotations"][0]["entity_id"] == "@GENE_4210"
+
+
 def test_export_review_audit_bundle_exposes_export_options() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 

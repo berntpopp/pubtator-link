@@ -3125,6 +3125,47 @@ async def test_submit_text_annotation_adapter_returns_session_metadata() -> None
 
 
 @pytest.mark.asyncio
+async def test_submit_text_annotation_adapter_waits_for_completed_result() -> None:
+    from pubtator_link.mcp.service_adapters import submit_text_annotation_impl
+
+    class FakeClient:
+        async def submit_text_annotation(self, text: str, bioconcept: str) -> str:
+            return "ABC123DEF456"
+
+        async def retrieve_text_annotation(self, session_id: str) -> dict[str, object]:
+            return {
+                "status": "completed",
+                "original_text": "MEFV and colchicine",
+                "bioconcept": "Gene",
+                "annotations": [
+                    {
+                        "start": 0,
+                        "end": 4,
+                        "text": "MEFV",
+                        "entity_id": "@GENE_4210",
+                        "entity_type": "Gene",
+                    }
+                ],
+            }
+
+        async def retrieve_text_annotation_until_ready(
+            self, session_id: str, timeout_ms: int = 30000
+        ) -> dict[str, object] | None:
+            return await self.retrieve_text_annotation(session_id)
+
+    result = await submit_text_annotation_impl(
+        client=FakeClient(),
+        text="MEFV and colchicine",
+        bioconcepts="Gene",
+        wait=True,
+    )
+
+    assert result["success"] is True
+    assert result["status"] == "completed"
+    assert result["annotations"][0]["entity_id"] == "@GENE_4210"
+
+
+@pytest.mark.asyncio
 async def test_get_text_annotation_results_adapter_maps_completed_results() -> None:
     from pubtator_link.mcp.service_adapters import get_text_annotation_results_impl
 

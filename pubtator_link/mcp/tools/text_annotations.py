@@ -33,6 +33,10 @@ def register_text_annotation_tools(mcp: FastMCP, profile: MCPToolProfile = "lean
             bioconcepts: Annotated[
                 str, Field(description="Comma-separated PubTator bioconcepts or 'all'.")
             ] = "Gene",
+            wait: Annotated[
+                bool, Field(description="Poll briefly and return results when ready.")
+            ] = False,
+            timeout_ms: Annotated[int, Field(ge=1000, le=30000)] = 30000,
         ) -> dict[str, Any]:
             """Use this when research text should be submitted for PubTator biomedical named entity recognition. Do not use this for PubMed or PMC IDs; use pubtator_fetch_publication_annotations. Next: pubtator_get_text_annotation_results."""
 
@@ -42,6 +46,8 @@ def register_text_annotation_tools(mcp: FastMCP, profile: MCPToolProfile = "lean
                     client=client,
                     text=text,
                     bioconcepts=bioconcepts,
+                    wait=wait,
+                    timeout_ms=timeout_ms,
                 )
 
             return await run_mcp_tool("pubtator_submit_text_annotation", call)
