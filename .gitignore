@@ -188,6 +188,9 @@ CLAUDE.local.md
 PLAN.md
 TODO.md
 
+# Understand Anything knowledge graph (local-only)
+.understand-anything/
+
 # benchmark raw artifacts
 benchmarks/results/
 benchmarks/logs/
