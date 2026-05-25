@@ -8,7 +8,7 @@ See docs/superpowers/plans/2026-05-26-phase-1-hosted-mcp-ship-blockers.md.
 from __future__ import annotations
 
 import sys
-from types import ModuleType
+from types import ModuleType as _ModuleType
 from typing import Any
 
 from . import core_api as _core_api
@@ -179,7 +179,7 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-class _DependenciesModule(ModuleType):
+class _DependenciesModule(_ModuleType):
     def __getattribute__(self, name: str) -> Any:
         if name in {
             "_LEGACY_MUTABLE_EXPORTS",
