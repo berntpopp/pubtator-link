@@ -140,9 +140,6 @@ async def cleanup_dependencies() -> None:
 
     root = sys.modules["pubtator_link.api.routes.dependencies"]
     legacy_names = tuple(_LEGACY_PRIVATE_EXPORTS)
-    for name, module in _LEGACY_PRIVATE_EXPORTS.items():
-        if name in root.__dict__:
-            setattr(module, name, root.__dict__[name])
 
     await core_api._cleanup_core_api_dependencies()
     await discovery._cleanup_discovery_dependencies()

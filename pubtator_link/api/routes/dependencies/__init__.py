@@ -7,10 +7,13 @@ See docs/superpowers/plans/2026-05-26-phase-1-hosted-mcp-ship-blockers.md.
 
 from __future__ import annotations
 
+import sys
+from types import ModuleType
 from typing import Any
 
 from . import core_api as _core_api
 from . import discovery as _discovery
+from . import resources as _resources
 from . import review as _review
 from .core_api import (
     ClientDep as ClientDep,
@@ -151,11 +154,55 @@ _LEGACY_PRIVATE_EXPORTS = {
     "_research_session_service": _review,
 }
 
+_LEGACY_MUTABLE_EXPORTS = {
+    **{name: (module,) for name, module in _LEGACY_PRIVATE_EXPORTS.items()},
+    "asyncpg": (_resources, _review),
+    "apply_migrations": (_resources,),
+    "FullTextPreparationService": (_review,),
+    "inspect_review_schema": (_resources, _discovery),
+    "PostgresReviewReragRepository": (_resources, _review),
+    "PublicationPassageService": (_resources, _core_api),
+    "PublicationService": (_resources, _core_api),
+    "PubTator3Client": (_resources, _core_api, _discovery, _review),
+    "ReviewContextService": (_resources, _review),
+    "review_rerag_config": (_resources, _discovery, _review),
+    "ReviewPreparationQueue": (_resources, _review),
+    "SentenceTransformerEmbeddingProvider": (_review,),
+    "_build_full_text_preparation": (_review,),
+    "_build_review_context_service": (_review,),
+}
+
 
 def __getattr__(name: str) -> Any:
-    if name in _LEGACY_PRIVATE_EXPORTS:
-        return getattr(_LEGACY_PRIVATE_EXPORTS[name], name)
+    if name in _LEGACY_MUTABLE_EXPORTS:
+        return getattr(_LEGACY_MUTABLE_EXPORTS[name][0], name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+class _DependenciesModule(ModuleType):
+    def __getattribute__(self, name: str) -> Any:
+        if name in {
+            "_LEGACY_MUTABLE_EXPORTS",
+            "__dict__",
+            "__class__",
+            "__name__",
+            "__spec__",
+            "__loader__",
+            "__package__",
+        }:
+            return super().__getattribute__(name)
+        exports = super().__getattribute__("_LEGACY_MUTABLE_EXPORTS")
+        if name in exports:
+            return getattr(exports[name][0], name)
+        return super().__getattribute__(name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        super().__setattr__(name, value)
+        for module in _LEGACY_MUTABLE_EXPORTS.get(name, ()):
+            setattr(module, name, value)
+
+
+sys.modules[__name__].__class__ = _DependenciesModule
 
 
 __all__ = [
