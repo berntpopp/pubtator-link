@@ -70,7 +70,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             """Use this when a user provides PubMed IDs and needs raw PubTator BioC annotation export. Do not use this for compact grounded answers; use pubtator_get_publication_passages. Next: pubtator_get_publication_passages."""
 
             async def call() -> dict[str, Any]:
-                selected_pmids = merge_pmids(pmids, pmid)
+                selected_pmids = merge_pmids(pmids, pmid, max_items=50)
                 service = await get_publication_service()
                 return await fetch_publication_annotations_impl(
                     service=service,
@@ -80,7 +80,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 )
 
             try:
-                tool_pmids = merge_pmids(pmids, pmid)
+                tool_pmids = merge_pmids(pmids, pmid, max_items=50)
             except ValueError:
                 tool_pmids = None
             return await run_mcp_tool(
@@ -132,7 +132,9 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                     coalesce_query(query, topic, question) if query or topic or question else None
                 )
                 selected_pmids = (
-                    merge_pmids(pmids or seed_pmids, pmid) if pmids or seed_pmids or pmid else None
+                    merge_pmids(pmids or seed_pmids, pmid, max_items=100)
+                    if pmids or seed_pmids or pmid
+                    else None
                 )
                 service = await get_topic_literature_map_service()
                 return await build_topic_literature_map_impl(
@@ -164,7 +166,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 )
 
             try:
-                tool_pmids = merge_pmids(pmids or seed_pmids, pmid)
+                tool_pmids = merge_pmids(pmids or seed_pmids, pmid, max_items=100)
             except ValueError:
                 tool_pmids = None
             return await run_mcp_tool(
@@ -195,7 +197,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. For article-local answering, use mode='full_abstract' first; it returns all title/abstract passages without truncating structured abstracts. If full=True returns only abstracts, inspect coverage_by_pmid and answer from available evidence. Do not use for prepared review RAG; use pubtator_retrieve_review_context_batch."""
 
         async def call() -> dict[str, Any]:
-            selected_pmids = merge_pmids(pmids, pmid)
+            selected_pmids = merge_pmids(pmids, pmid, max_items=25)
             service = await get_publication_passage_service()
             return await get_publication_passages_impl(
                 service=service,
@@ -212,7 +214,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             )
 
         try:
-            tool_pmids = merge_pmids(pmids, pmid)
+            tool_pmids = merge_pmids(pmids, pmid, max_items=25)
         except ValueError:
             tool_pmids = None
         return await run_mcp_tool("pubtator_get_publication_passages", call, pmids=tool_pmids)
@@ -234,7 +236,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         """Use this when a user needs citation-grade metadata for known PMIDs. Do not use this for article text or annotations; use pubtator_get_publication_passages. Next: pubtator_get_publication_passages."""
 
         async def call() -> dict[str, Any]:
-            selected_pmids = merge_pmids(pmids, pmid)
+            selected_pmids = merge_pmids(pmids, pmid, max_items=100)
             service = await get_publication_metadata_service()
             return await get_publication_metadata_impl(
                 service=service,
@@ -246,7 +248,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             )
 
         try:
-            tool_pmids = merge_pmids(pmids, pmid)
+            tool_pmids = merge_pmids(pmids, pmid, max_items=100)
         except ValueError:
             tool_pmids = None
         return await run_mcp_tool("pubtator_get_publication_metadata", call, pmids=tool_pmids)
@@ -360,7 +362,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             """Use this when a user needs to estimate passage count and context size before fetching publication passages. Do not use this for text retrieval; use pubtator_get_publication_passages. Next: pubtator_get_publication_passages."""
 
             async def call() -> dict[str, Any]:
-                selected_pmids = merge_pmids(pmids, pmid)
+                selected_pmids = merge_pmids(pmids, pmid, max_items=25)
                 service = await get_publication_passage_service()
                 return await estimate_publication_context_impl(
                     service=service,
@@ -374,7 +376,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 )
 
             try:
-                tool_pmids = merge_pmids(pmids, pmid)
+                tool_pmids = merge_pmids(pmids, pmid, max_items=25)
             except ValueError:
                 tool_pmids = None
             return await run_mcp_tool(

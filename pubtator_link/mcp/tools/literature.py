@@ -63,7 +63,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         metadata: SearchMetadataMode = "basic",
         include_meta: bool = True,
     ) -> dict[str, Any]:
-        """Use this when a user needs PubMed literature search through PubTator3. Supports text or query, flat filters, optional section filters, and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false means continue with results or inspect diagnostics. Set include_meta=false for repeated searches after learning the workflow."""
+        """Use this when a user needs PubMed literature search through PubTator3. Provide one of text or query. Supports flat filters, section filters, and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false means continue with results or inspect diagnostics."""
 
         async def call() -> dict[str, Any]:
             search_text = coalesce_query(text, query)
@@ -116,7 +116,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         entity_ids: list[str] | None = None,
         coverage: SearchCoverageMode = "preflight",
     ) -> dict[str, Any]:
-        """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. This is a convenience wrapper over pubtator_search_literature with guideline/systematic-review publication-type filters and guideline boosting, not an independent guideline database. Defaults to source coverage preflight so abstract-only guideline hits are visible before indexing."""
+        """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. Provide one of text or query. Wraps pubtator_search_literature with guideline/systematic-review filters and guideline boosting; not an independent guideline database."""
 
         async def call() -> dict[str, Any]:
             search_text = coalesce_query(text, query)

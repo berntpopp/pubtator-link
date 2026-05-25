@@ -91,7 +91,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         """Use this when a user needs to stage candidate PMIDs with coverage hints and queued review preparation after search planning."""
 
         async def call() -> dict[str, Any]:
-            selected_pmids = merge_pmids(pmids, pmid) if pmids or pmid else None
+            selected_pmids = merge_pmids(pmids, pmid, max_items=100) if pmids or pmid else None
             service = await review_tools.get_research_session_service()
             return await review_tools.stage_research_session_impl(
                 service=service,
@@ -111,7 +111,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             )
 
         try:
-            tool_pmids = merge_pmids(pmids, pmid)
+            tool_pmids = merge_pmids(pmids, pmid, max_items=100)
         except ValueError:
             tool_pmids = None
         return await run_mcp_tool(
@@ -141,7 +141,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         verbosity: ReviewResponseVerbosity = "lean",
         max_response_chars: MaxResponseChars = "auto",
     ) -> dict[str, Any]:
-        """Use this when a user wants one compact grounded evidence workflow from a question: search literature, index candidate PMIDs, inspect readiness, and retrieve citable review context."""
+        """Use this when a user wants one compact grounded evidence workflow from a question: search literature, index candidate PMIDs, inspect readiness, and retrieve citable review context. Provide one of question or query."""
 
         async def call() -> dict[str, Any]:
             selected_question = coalesce_query(question, query)
@@ -182,7 +182,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         wait_until_ready: bool = False,
         timeout_ms: Annotated[int, Field(ge=0, le=120_000)] = 0,
     ) -> dict[str, Any]:
-        """Use this when a user wants one-shot casual review setup: search topic, stage/index up to n_pmids, inspect coverage, and return review_id/session_id for retrieve_review_context_batch."""
+        """Use this when a user wants one-shot casual review setup: search topic, stage/index up to n_pmids, inspect coverage, and return review_id/session_id for retrieve_review_context_batch. Provide one of topic, query, or question."""
 
         async def call() -> dict[str, Any]:
             selected_topic = coalesce_query(topic, query, question)

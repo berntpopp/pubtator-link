@@ -60,11 +60,11 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         include_resolver_trace: bool = False,
         ctx: Context | None = None,
     ) -> dict[str, Any]:
-        """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Use a short keyword query, PMID filters for paper-specific evidence, and diagnostics for zero-result debugging. If zero passages are returned, simplify the query, inspect the review index, or fall back to fetch_publication_annotations."""
+        """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Provide one of question or query. Use a short keyword query and PMID filters. If zero passages are returned, simplify the query, inspect the review index, or fall back to fetch_publication_annotations."""
 
         async def call() -> dict[str, Any]:
             selected_question = coalesce_query(question, query)
-            selected_pmids = merge_pmids(pmids, pmid) if pmids or pmid else None
+            selected_pmids = merge_pmids(pmids, pmid, max_items=100) if pmids or pmid else None
             service = await review_tools.get_review_context_service()
             result = await review_tools.retrieve_review_context_impl(
                 service=service,
@@ -89,7 +89,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             return result
 
         try:
-            tool_pmids = merge_pmids(pmids, pmid)
+            tool_pmids = merge_pmids(pmids, pmid, max_items=100)
         except ValueError:
             tool_pmids = None
         return await run_mcp_tool("pubtator_retrieve_review_context", call, pmids=tool_pmids)
@@ -136,7 +136,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode uses query_fair budgeting, merged passages, per-query summaries, and next_steps for zero-result queries. Use response_mode="quotes" for short citable snippets or dry_run for diagnostics without passage text."""
 
         async def call() -> dict[str, Any]:
-            selected_pmids = merge_pmids(pmids, pmid) if pmids or pmid else None
+            selected_pmids = merge_pmids(pmids, pmid, max_items=100) if pmids or pmid else None
             service = await review_tools.get_review_context_service()
             result = await review_tools.retrieve_review_context_batch_impl(
                 service=service,
@@ -171,7 +171,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             return result
 
         try:
-            tool_pmids = merge_pmids(pmids, pmid)
+            tool_pmids = merge_pmids(pmids, pmid, max_items=100)
         except ValueError:
             tool_pmids = None
         return await run_mcp_tool(

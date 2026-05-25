@@ -44,7 +44,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
         prefer_guidelines: bool = True,
         include_metadata: bool = True,
     ) -> dict[str, Any]:
-        """Use this when a user needs a compact, review-feeding PMID corpus for a research question. Returns candidate PMIDs, roles, coverage hints, metadata, and next commands."""
+        """Use this when a user needs a compact, review-feeding PMID corpus for a research question. Provide one of question or query. Returns candidate PMIDs, roles, coverage hints, metadata, and next commands."""
 
         async def call() -> dict[str, Any]:
             selected_question = coalesce_query(question, query)
@@ -133,7 +133,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
         """Use this when a user has seed PMIDs and needs similar, cited-by, or reference-linked articles to expand a research corpus."""
 
         async def call() -> dict[str, Any]:
-            selected_pmids = merge_pmids(pmids, pmid)
+            selected_pmids = merge_pmids(pmids, pmid, max_items=100)
             service = await get_discovery_service()
             response = await service.find_related_articles(
                 pmids=selected_pmids,
@@ -143,7 +143,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
             return response.model_dump(by_alias=True)
 
         try:
-            tool_pmids = merge_pmids(pmids, pmid)
+            tool_pmids = merge_pmids(pmids, pmid, max_items=100)
         except ValueError:
             tool_pmids = None
         return await run_mcp_tool("pubtator_find_related_articles", call, pmids=tool_pmids)

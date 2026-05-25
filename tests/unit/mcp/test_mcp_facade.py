@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import re
 
 import pytest
+from fastmcp.exceptions import ToolError
 
 from pubtator_link.mcp.profiles import LEAN_TOOLS
 
@@ -111,6 +113,12 @@ def _schema_enum_values(schema: dict[str, object]) -> set[object]:
                 if isinstance(nested_schema, dict):
                     values.update(_schema_enum_values(nested_schema))
     return values
+
+
+def _tool_error_payload(exc: ToolError) -> dict[str, object]:
+    payload = json.loads(str(exc))
+    assert isinstance(payload, dict)
+    return payload
 
 
 def test_all_tool_names_match_anthropic_remote_mcp_regex(
@@ -940,6 +948,74 @@ async def test_search_guidelines_accepts_query_alias(
 
 
 @pytest.mark.asyncio
+async def test_query_alias_missing_all_returns_validation_failed_tool_error() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_guidelines"]
+
+    with pytest.raises(ToolError) as exc_info:
+        await tool.run({})
+
+    payload = _tool_error_payload(exc_info.value)
+    assert payload["error_code"] == "validation_failed"
+    assert payload["success"] is False
+
+
+@pytest.mark.asyncio
+async def test_query_alias_conflict_returns_validation_failed_tool_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.literature as literature_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async def fake_get_api_client() -> object:
+        return object()
+
+    async def fake_get_source_preflight_service() -> object:
+        return object()
+
+    async def fake_search_literature_impl(**kwargs):
+        return {
+            "success": True,
+            "query": kwargs["text"],
+            "results": [],
+        }
+
+    monkeypatch.setattr(literature_tools, "get_api_client", fake_get_api_client)
+    monkeypatch.setattr(
+        literature_tools,
+        "get_source_preflight_service",
+        fake_get_source_preflight_service,
+    )
+    monkeypatch.setattr(literature_tools, "search_literature_impl", fake_search_literature_impl)
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_guidelines"]
+
+    with pytest.raises(ToolError) as exc_info:
+        await tool.run({"text": "MEFV guideline", "query": "colchicine guideline"})
+
+    payload = _tool_error_payload(exc_info.value)
+    assert payload["error_code"] == "validation_failed"
+    assert payload["success"] is False
+
+
+def test_query_alias_tool_descriptions_document_required_alias_groups() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tools = create_pubtator_mcp(profile="full")._tool_manager._tools
+    expected_fragments = {
+        "pubtator_search_literature": "Provide one of text or query.",
+        "pubtator_search_guidelines": "Provide one of text or query.",
+        "pubtator_suggest_corpus": "Provide one of question or query.",
+        "pubtator_ground_question": "Provide one of question or query.",
+        "pubtator_review_quickstart": "Provide one of topic, query, or question.",
+        "pubtator_retrieve_review_context": "Provide one of question or query.",
+    }
+
+    for tool_name, fragment in expected_fragments.items():
+        assert fragment in (tools[tool_name].description or "")
+
+
+@pytest.mark.asyncio
 async def test_get_publication_passages_accepts_scalar_pmid(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1035,6 +1111,47 @@ async def test_get_publication_metadata_accepts_pmid_alias(
 
     assert result.structured_content["success"] is True
     assert result.structured_content["metadata"][0]["pmid"] == "33454820"
+
+
+@pytest.mark.asyncio
+async def test_pmid_limit_rejects_combined_list_and_scalar_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.publications as publication_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async def fake_get_publication_metadata_service() -> object:
+        return object()
+
+    async def fake_get_publication_metadata_impl(**kwargs):
+        return {
+            "success": True,
+            "metadata": [],
+            "failed_pmids": {},
+            "_meta": {},
+        }
+
+    monkeypatch.setattr(
+        publication_tools,
+        "get_publication_metadata_service",
+        fake_get_publication_metadata_service,
+    )
+    monkeypatch.setattr(
+        publication_tools,
+        "get_publication_metadata_impl",
+        fake_get_publication_metadata_impl,
+    )
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_get_publication_metadata"
+    ]
+    pmids = [str(10_000_000 + index) for index in range(100)]
+
+    with pytest.raises(ToolError) as exc_info:
+        await tool.run({"pmids": pmids, "pmid": "99999999"})
+
+    payload = _tool_error_payload(exc_info.value)
+    assert payload["error_code"] == "validation_failed"
+    assert payload["success"] is False
 
 
 @pytest.mark.asyncio

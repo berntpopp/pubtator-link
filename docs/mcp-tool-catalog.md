@@ -505,7 +505,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `retrieval`
 - Profiles: `full`, `readonly`
 - Stability: `compat`
-- Description: Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Use a short keyword query, PMID filters for paper-specific evidence, and diagnostics for zero-result debugging. If zero passages are returned, simplify the query, inspect the review index, or fall back to fetch_publication_annotations.
+- Description: Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Provide one of question or query. Use a short keyword query and PMID filters. If zero passages are returned, simplify the query, inspect the review index, or fall back to fetch_publication_annotations.
 - Do not use for: `multiple query variants in one call`
 - Example: `{"review_id":"demo","question":"EGFR resistance","max_passages":8}`
 - Next tools by profile: full: `pubtator_get_review_audit_trail`; readonly: `pubtator_get_review_audit_trail`
@@ -535,7 +535,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `review`
 - Profiles: `full`
 - Stability: `advanced`
-- Description: Use this when a user wants one-shot casual review setup: search topic, stage/index up to n_pmids, inspect coverage, and return review_id/session_id for retrieve_review_context_batch.
+- Description: Use this when a user wants one-shot casual review setup: search topic, stage/index up to n_pmids, inspect coverage, and return review_id/session_id for retrieve_review_context_batch. Provide one of topic, query, or question.
 - Do not use for: `readonly deployments`
 - Example: `{"topic":"EGFR resistance in lung cancer","n_pmids":8}`
 - Next tools by profile: full: `pubtator_retrieve_review_context_batch`
@@ -565,7 +565,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `literature`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. This is a convenience wrapper over pubtator_search_literature with guideline/systematic-review publication-type filters and guideline boosting, not an independent guideline database. Defaults to source coverage preflight so abstract-only guideline hits are visible before indexing.
+- Description: Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. Provide one of text or query. Wraps pubtator_search_literature with guideline/systematic-review filters and guideline boosting; not an independent guideline database.
 - Do not use for: `non-guideline exhaustive PubMed search`
 - Example: `{"text":"asthma treatment adults","limit":5}`
 - Next tools by profile: lean: `pubtator_preflight_review_sources`; full: `pubtator_preflight_review_sources`; readonly: `pubtator_preflight_review_sources`
@@ -580,7 +580,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `literature`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user needs PubMed literature search through PubTator3. Supports text or query, flat filters, optional section filters, and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false means continue with results or inspect diagnostics. Set include_meta=false for repeated searches after learning the workflow.
+- Description: Use this when a user needs PubMed literature search through PubTator3. Provide one of text or query. Supports flat filters, section filters, and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false means continue with results or inspect diagnostics.
 - Do not use for: `fetching known PMID passage text`
 - Example: `{"text":"BRCA1 ovarian cancer PARP inhibitor","limit":5,"metadata":"basic"}`
 - Next tools by profile: lean: `pubtator_preflight_review_sources`; full: `pubtator_preflight_review_sources`; readonly: `pubtator_preflight_review_sources`
@@ -625,7 +625,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `discovery`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user needs a compact, review-feeding PMID corpus for a research question. Returns candidate PMIDs, roles, coverage hints, metadata, and next commands.
+- Description: Use this when a user needs a compact, review-feeding PMID corpus for a research question. Provide one of question or query. Returns candidate PMIDs, roles, coverage hints, metadata, and next commands.
 - Do not use for: `final evidence retrieval`
 - Example: `{"question":"EGFR resistance in lung cancer","max_pmids":8}`
 - Next tools by profile: full: `pubtator_preflight_review_sources`, `pubtator_index_review_evidence`; readonly: `pubtator_preflight_review_sources`
