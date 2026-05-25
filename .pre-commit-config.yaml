@@ -25,3 +25,10 @@ repos:
         entry: uv run mypy pubtator_link server.py mcp_server.py
         language: system
         pass_filenames: false
+
+      - id: file-size-budget
+        name: per-file line budget (see AGENTS.md "File Size Discipline")
+        entry: uv run python scripts/check_file_size.py
+        language: system
+        pass_filenames: false
+        files: ^(pubtator_link/|server\.py$|mcp_server\.py$|\.loc-allowlist$)

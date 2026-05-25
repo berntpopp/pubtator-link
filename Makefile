@@ -1,4 +1,4 @@
-.PHONY: help install lock upgrade sync format format-check lint lint-ci lint-fix typecheck typecheck-fast typecheck-stop typecheck-fresh test test-fast test-unit test-integration test-cov test-all check ci-local precommit clean dev mcp-serve mcp-serve-http benchmark-smoke benchmark-pubmedqa benchmark-bioasq benchmark-compare db-init docker-build docker-up docker-down docker-logs docker-prod-config docker-npm-config
+.PHONY: help install lock upgrade sync format format-check lint lint-ci lint-fix lint-loc typecheck typecheck-fast typecheck-stop typecheck-fresh test test-fast test-unit test-integration test-cov test-all check ci-local precommit clean dev mcp-serve mcp-serve-http benchmark-smoke benchmark-pubmedqa benchmark-bioasq benchmark-compare db-init docker-build docker-up docker-down docker-logs docker-prod-config docker-npm-config
 
 DOCKER_COMPOSE := $(shell if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then echo "docker compose"; elif command -v docker-compose >/dev/null 2>&1; then echo "docker-compose"; else echo "docker compose"; fi)
 
@@ -32,6 +32,9 @@ lint-ci: ## Lint Python code without modifying files
 
 lint-fix: ## Lint and apply safe fixes
 	uv run ruff check pubtator_link tests server.py mcp_server.py --fix
+
+lint-loc: ## Enforce per-file line budget (see AGENTS.md "File Size Discipline")
+	uv run python scripts/check_file_size.py
 
 typecheck: ## Type check package
 	uv run mypy pubtator_link server.py mcp_server.py
@@ -84,7 +87,7 @@ test-all: test-cov ## Alias for full test run with coverage
 
 check: format lint ## Format and lint
 
-ci-local: format-check lint-ci typecheck-fast test-fast ## Run fast local CI-equivalent checks
+ci-local: format-check lint-ci lint-loc typecheck-fast test-fast ## Run fast local CI-equivalent checks
 
 precommit: ci-local ## Run checks expected before commit
 
