@@ -23,6 +23,7 @@ from pubtator_link.services.errors import (
     ValidationFailureError,
 )
 from pubtator_link.services.mcp_diagnostics import bounded_diagnostics_snapshot
+from pubtator_link.services.url_safety import UrlSafetyError
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,7 @@ def sanitize_error_message(message: str) -> str:
         "The tool response did not match its declared MCP output schema.",
         "Review database schema is not current.",
         "Review database operation failed.",
+        "Curated URL rejected by hostname allowlist.",
         "The upstream service is temporarily unavailable.",
         "The tool could not complete the requested operation.",
     }
@@ -102,6 +104,8 @@ def safe_message_for_exception(exc: Exception) -> str:
         return "Review database operation failed."
     if isinstance(exc, UpstreamUnavailableError):
         return "The upstream service is temporarily unavailable."
+    if isinstance(exc, UrlSafetyError):
+        return "Curated URL rejected by hostname allowlist."
     if _is_pubtator_upstream_unavailable(exc):
         return "The upstream service is temporarily unavailable."
     if isinstance(exc, ValidationFailureError):
@@ -146,6 +150,8 @@ def error_code_for_exception(exc: Exception) -> str:
         return "review_index_unavailable"
     if isinstance(exc, UpstreamUnavailableError):
         return "upstream_unavailable"
+    if isinstance(exc, UrlSafetyError):
+        return "curated_url_rejected"
     if _is_pubtator_upstream_unavailable(exc):
         return "upstream_unavailable"
     if isinstance(exc, ValidationFailureError):
@@ -203,6 +209,8 @@ def _recovery_text_for_context(
                 "filters and post-filter the returned results client-side."
             )
         return "Retry later or run pubtator_diagnostics if the upstream failure persists."
+    if error_code == "curated_url_rejected":
+        return "Use curated URLs from the configured public literature source allowlist."
     return (
         "Run pubtator_diagnostics. If the review schema is stale, apply database migrations "
         "and retry."

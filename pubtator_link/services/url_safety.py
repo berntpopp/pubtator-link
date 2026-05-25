@@ -17,6 +17,20 @@ class UrlSafetyError(ValueError):
     """Raised when a URL is unsafe or cannot be fetched within safety limits."""
 
 
+def enforce_host_allowlist(allowlist: tuple[str, ...], hostname: str) -> None:
+    """Allow exact configured hosts or their subdomains."""
+    normalized_hostname = hostname.lower().rstrip(".")
+    normalized_allowlist = tuple(
+        host.strip().lower().rstrip(".") for host in allowlist if host.strip()
+    )
+
+    for allowed_host in normalized_allowlist:
+        if normalized_hostname == allowed_host or normalized_hostname.endswith(f".{allowed_host}"):
+            return
+
+    raise UrlSafetyError(f"Host '{hostname}' not in allowlist for curated_urls")
+
+
 class SafeUrlFetcher:
     """Fetch curated source URLs with SSRF and response-size protections."""
 
@@ -67,6 +81,7 @@ class SafeUrlFetcher:
         if not parsed.hostname:
             raise UrlSafetyError("URL must include a hostname")
 
+        enforce_host_allowlist(self._config.curated_url_host_allowlist, parsed.hostname)
         self._validate_resolved_addresses(parsed.hostname, parsed.port)
 
     def _validate_resolved_addresses(self, hostname: str, port: int | None) -> None:

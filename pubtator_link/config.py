@@ -146,6 +146,20 @@ class ServerSettings(BaseSettings):
     allow_http_urls: bool = Field(
         default=False, description="Allow http URLs for local curated URL development"
     )
+    review_prep_curated_url_host_allowlist: list[str] = Field(
+        default_factory=lambda: [
+            "ncbi.nlm.nih.gov",
+            "www.ncbi.nlm.nih.gov",
+            "europepmc.org",
+            "www.ebi.ac.uk",
+            "api.openalex.org",
+            "api.crossref.org",
+        ],
+        description=(
+            "Suffix-match hostnames allowed for pubtator_index_review_evidence "
+            "curated_urls. Empty list means no curated URLs accepted."
+        ),
+    )
     enable_docling: bool = Field(default=False, description="Enable Docling PDF fallback")
     enable_europe_pmc_fallback: bool = Field(
         default=False,
@@ -299,6 +313,7 @@ class ReviewReragConfig:
     text_max_bytes: int
     allow_http_urls: bool
     enable_docling: bool
+    curated_url_host_allowlist: tuple[str, ...] = field(default_factory=tuple)
     auto_migrate: bool = False
     require_schema_current: bool = False
     retrieval_concurrency: int = 4
@@ -332,6 +347,9 @@ class ReviewReragConfig:
             text_max_bytes=server_settings.review_prep_text_max_bytes,
             allow_http_urls=server_settings.allow_http_urls,
             enable_docling=server_settings.enable_docling,
+            curated_url_host_allowlist=tuple(
+                server_settings.review_prep_curated_url_host_allowlist
+            ),
             retrieval_concurrency=server_settings.review_retrieval_concurrency,
             preflight_concurrency=server_settings.review_preflight_concurrency,
             index_ttl_seconds=server_settings.review_index_ttl_seconds,
