@@ -255,9 +255,12 @@ class PubTator3Client:
                             raise_payload_too_large(response, max_bytes)
                         body_parts.append(chunk)
 
+                    headers = httpx.Headers(response.headers)
+                    headers.pop("content-encoding", None)
+                    headers.pop("content-length", None)
                     return httpx.Response(
                         response.status_code,
-                        headers=response.headers,
+                        headers=headers,
                         content=b"".join(body_parts),
                         request=response.request,
                         extensions=response.extensions,
