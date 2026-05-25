@@ -294,6 +294,12 @@ def mcp_validation_tool_error(
         error_code="validation_failed",
         message=payload["message"],
     )
+    record_mcp_tool_call(
+        tool_name=tool_name,
+        outcome="failure",
+        error_code="validation_failed",
+        latency_seconds=0.0,
+    )
     return ToolError(json.dumps(payload, separators=(",", ":"), sort_keys=True))
 
 
