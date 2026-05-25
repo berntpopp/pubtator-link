@@ -38,7 +38,6 @@ async def test_diagnostics_reports_recent_review_database_tool_error() -> None:
         tool_name="pubtator_index_review_evidence",
         error_code="review_index_unavailable",
         message="Review database operation failed.",
-        raw_message="relation review_sources does not exist",
     )
 
     async def inspect_schema() -> ReviewSchemaDiagnostics:

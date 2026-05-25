@@ -121,14 +121,17 @@ def record_mcp_error(
         "tool_name": tool_name,
         "error_code": error_code,
         "message": sanitize_error_message(message)[:500],
-        "raw_message": raw_message[:500] if raw_message else None,
+        "_raw_message": raw_message[:500] if raw_message else None,
     }
     _RECENT_MCP_ERRORS.append(entry)
     del _RECENT_MCP_ERRORS[:-RECENT_MCP_ERROR_LIMIT]
 
 
 def get_recent_mcp_errors(limit: int = 10) -> list[dict[str, Any]]:
-    return [dict(item) for item in _RECENT_MCP_ERRORS[-limit:]]
+    return [
+        {key: value for key, value in item.items() if not key.startswith("_")}
+        for item in _RECENT_MCP_ERRORS[-limit:]
+    ]
 
 
 def clear_recent_mcp_errors() -> None:

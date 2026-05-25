@@ -259,7 +259,7 @@ def test_recent_mcp_errors_are_bounded_and_clearable() -> None:
 
     assert errors[-1]["tool_name"] == "pubtator_index_review_evidence"
     assert errors[-1]["error_code"] == "review_index_unavailable"
-    assert "relation review_sources does not exist" in errors[-1]["raw_message"]
+    assert "raw_message" not in errors[-1]
 
     for index in range(RECENT_MCP_ERROR_LIMIT + 5):
         record_mcp_error(
@@ -297,7 +297,8 @@ def test_record_mcp_error_sanitizes_stored_message() -> None:
     errors = get_recent_mcp_errors()
 
     assert errors[-1]["message"] == "Review database operation failed."
-    assert "db.internal" in errors[-1]["raw_message"]
+    assert "raw_message" not in errors[-1]
+    assert "db.internal" not in json.dumps(errors)
 
 
 def test_mcp_output_validation_error_is_actionable_and_recorded() -> None:

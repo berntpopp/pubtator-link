@@ -53,7 +53,6 @@ def actionable_output_validation_error(
         tool_name=tool_name,
         error_code="output_validation_failed",
         message=payload["message"],
-        raw_message=message,
     )
     return payload
 

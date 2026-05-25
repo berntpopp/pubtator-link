@@ -61,7 +61,7 @@ class DiagnosticsService:
         ]
         for error in recent_review_errors:
             tool_name = error["tool_name"]
-            reason = error.get("raw_message") or error.get("message")
+            reason = error.get("message", "see logs for details")
             recovery.append(f"Recent MCP tool failure in {tool_name}: {reason}")
         if not database["connected"]:
             status = "not_ready"
