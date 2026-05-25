@@ -15,7 +15,6 @@ pubtator_link/api/routes/dependencies.py:1282
 pubtator_link/models/review_rerag.py:1253
 pubtator_link/services/citation_graph.py:1244
 pubtator_link/services/review_context_service.py:1160
-pubtator_link/mcp/tools/review.py:856
 pubtator_link/mcp/resources.py:775
 pubtator_link/services/full_text_preparation.py:742
 pubtator_link/services/ncbi_discovery.py:663
