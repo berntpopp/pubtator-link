@@ -153,6 +153,46 @@ def test_pubtator_api_transport_failure_is_upstream_unavailable() -> None:
     assert payload["retryable"] is True
 
 
+def test_generic_internal_error_does_not_claim_schema_is_stale() -> None:
+    error = mcp_tool_error(
+        RuntimeError("unexpected adapter failure"),
+        McpErrorContext(tool_name="pubtator_unknown_tool"),
+    )
+
+    payload = json.loads(str(error))
+
+    assert payload["error_code"] == "internal_error"
+    assert "review schema" not in payload["recovery"].lower()
+    assert "recent_mcp_errors" in payload["recovery"]
+
+
+def test_schema_stale_recovery_is_reserved_for_schema_errors() -> None:
+    error = mcp_tool_error(
+        ReviewSchemaStaleError("schema stale"),
+        McpErrorContext(tool_name="pubtator_index_review_evidence"),
+    )
+
+    payload = json.loads(str(error))
+
+    assert payload["error_code"] == "review_schema_not_current"
+    assert "review schema is stale" in payload["recovery"].lower()
+
+
+def test_tool_specific_recovery_text_for_discovery_text_and_audit_errors() -> None:
+    cases = {
+        "pubtator_convert_article_ids": "Retry with one identifier at a time",
+        "pubtator_submit_text_annotation": "Retry with a shorter text",
+        "pubtator_export_review_audit_bundle": "Use fallback_inline=True",
+    }
+
+    for tool_name, expected in cases.items():
+        error = mcp_tool_error(RuntimeError("boom"), McpErrorContext(tool_name=tool_name))
+        payload = json.loads(str(error))
+
+        assert expected in payload["recovery"]
+        assert "review schema" not in payload["recovery"].lower()
+
+
 def test_ground_question_error_uses_selected_pmids_for_fallback() -> None:
     error_source = RuntimeError("review database unavailable")
     error_source.pmids = ["11111111", "22222222"]  # type: ignore[attr-defined]

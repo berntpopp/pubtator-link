@@ -198,6 +198,11 @@ def _recovery_text_for_context(
     fallback_tool: str | None,
     error_code: str = "internal_error",
 ) -> str:
+    if error_code == "review_schema_not_current":
+        return (
+            "Run pubtator_diagnostics. If the review schema is stale, apply database "
+            "migrations and retry."
+        )
     if context.tool_name == "pubtator_preflight_review_sources" and fallback_tool:
         return (
             "Call pubtator_get_publication_passages with the same PMIDs. "
@@ -213,9 +218,24 @@ def _recovery_text_for_context(
         return "Retry later or run pubtator_diagnostics if the upstream failure persists."
     if error_code == "curated_url_rejected":
         return "Use curated URLs from the configured public literature source allowlist."
+    if context.tool_name == "pubtator_convert_article_ids":
+        return (
+            "Retry with one identifier at a time. If only DOI conversion fails, search "
+            "the DOI or title with pubtator_search_literature."
+        )
+    if context.tool_name == "pubtator_submit_text_annotation":
+        return (
+            "Retry with a shorter text or fewer bioconcepts. If submission still fails, "
+            "use pubtator_search_biomedical_entities for entity lookup."
+        )
+    if context.tool_name == "pubtator_export_review_audit_bundle":
+        return (
+            "Use fallback_inline=True or choose a writable export_path. Inspect "
+            "pubtator_get_review_audit_trail if bundle export still fails."
+        )
     return (
-        "Run pubtator_diagnostics. If the review schema is stale, apply database migrations "
-        "and retry."
+        "Inspect recent_mcp_errors in pubtator_diagnostics and retry with the documented "
+        "fallback if available."
     )
 
 
