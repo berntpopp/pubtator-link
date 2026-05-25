@@ -55,6 +55,11 @@ def test_strip_meta_for_repeated_call_removes_diagnostics_and_preserves_answer_c
                 "dense_rank_position": 2,
                 "rank_features": {"guideline_boost": 1.0},
                 "provider_status": [{"provider": "dense", "status": "success"}],
+                "score_explanation": "dense neighbor score",
+                "match_reasons": ["entity_overlap"],
+                "omitted_candidate_preview": [{"pmid": "1"}],
+                "abstract": None,
+                "mesh_headings": [],
             }
         ],
     }

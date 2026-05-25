@@ -265,12 +265,12 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `audit`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user needs a copy-ready audit block for selected prepared review passage IDs without calling upstream APIs.
+- Description: Use this when a user needs a copy-ready audit block for selected prepared review passage IDs or the latest recorded audit passages without calling upstream APIs.
 - Do not use for: `retrieving full passage context`
 - Example: `{"review_id":"demo","passage_ids":["p1"],"max_chars_per_passage":500}`
 - Next tools by profile: lean: None; full: None; readonly: None
 - Resource links: `pubtator://reviews/{review_id}/audit/{passage_id}`
-- Input schema: `review_id` (string); `passage_ids` (array); `session_id` (string | null; default: `None`); `max_chars_per_passage` (integer; default: `500`)
+- Input schema: `review_id` (string); `passage_ids` (array | null; default: `None`); `session_id` (string | null; default: `None`); `max_chars_per_passage` (integer; default: `500`)
 - Output schema: `ReviewAuditTrailResponse`; has_output_schema: `yes`
 
 ## `pubtator_get_review_index_summary`
@@ -615,7 +615,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"text":"BRCA1 is associated with breast cancer.","bioconcepts":"Gene,Disease"}`
 - Next tools by profile: full: `pubtator_get_text_annotation_results`
 - Resource links: `pubtator://text-processing`
-- Input schema: `text` (string); `bioconcepts` (string; default: `Gene`)
+- Input schema: `text` (string); `bioconcepts` (string; default: `Gene`); `wait` (boolean; default: `False`); `timeout_ms` (integer; default: `30000`)
 - Output schema: `TextAnnotationSubmitResponse`; has_output_schema: `yes`
 
 ## `pubtator_suggest_corpus`
