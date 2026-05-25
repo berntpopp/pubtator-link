@@ -16,6 +16,7 @@ from pubtator_link.models.literature_graph import (
     LiteraturePaper,
     ProviderWarning,
 )
+from pubtator_link.services.upstream_http import default_async_client
 
 CROSSREF_PROVIDER = "crossref"
 EUROPE_PMC_PROVIDER = "europe_pmc"
@@ -35,7 +36,10 @@ class CrossrefClient:
         mailto: str | None = None,
         retry_policy: RetryPolicy | None = None,
     ) -> None:
-        self._client = http_client or httpx.AsyncClient()
+        user_agent = (
+            f"PubTator-Link/crossref (mailto:{mailto})" if mailto else "PubTator-Link/crossref"
+        )
+        self._client = http_client or default_async_client(headers={"User-Agent": user_agent})
         self._owns_client = http_client is None
         self.base_url = base_url.rstrip("/")
         self.mailto = mailto
@@ -104,7 +108,9 @@ class EuropePmcLiteratureClient:
         base_url: str = "https://www.ebi.ac.uk/europepmc/webservices/rest",
         retry_policy: RetryPolicy | None = None,
     ) -> None:
-        self._client = http_client or httpx.AsyncClient()
+        self._client = http_client or default_async_client(
+            headers={"User-Agent": "PubTator-Link/europe-pmc"},
+        )
         self._owns_client = http_client is None
         self.base_url = base_url.rstrip("/")
         self.retry_policy = retry_policy or RetryPolicy()
@@ -150,7 +156,10 @@ class OpenAlexClient:
         mailto: str | None = None,
         retry_policy: RetryPolicy | None = None,
     ) -> None:
-        self._client = http_client or httpx.AsyncClient()
+        user_agent = (
+            f"PubTator-Link/openalex (mailto:{mailto})" if mailto else "PubTator-Link/openalex"
+        )
+        self._client = http_client or default_async_client(headers={"User-Agent": user_agent})
         self._owns_client = http_client is None
         self.base_url = base_url.rstrip("/")
         self.mailto = mailto
@@ -237,7 +246,10 @@ class UnpaywallClient:
         email: str | None,
         retry_policy: RetryPolicy | None = None,
     ) -> None:
-        self._client = http_client or httpx.AsyncClient()
+        user_agent = (
+            f"PubTator-Link/unpaywall (email:{email})" if email else "PubTator-Link/unpaywall"
+        )
+        self._client = http_client or default_async_client(headers={"User-Agent": user_agent})
         self._owns_client = http_client is None
         self.base_url = base_url.rstrip("/")
         self.email = email
