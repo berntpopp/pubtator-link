@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections import Counter
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -148,7 +149,7 @@ class ReviewAuditService:
         search_runs: list[ReviewSearchRun] = []
         retrieval_runs: list[ReviewRetrievalRun] = []
         for event in events:
-            payload = dict(event.get("payload") or {})
+            payload = _event_payload(event.get("payload"))
             created_at = event.get("created_at")
             if event.get("event_type") == "search_run":
                 search_runs.append(
@@ -169,3 +170,15 @@ class ReviewAuditService:
                     )
                 )
         return search_runs, retrieval_runs
+
+
+def _event_payload(value: Any) -> dict[str, Any]:
+    if isinstance(value, Mapping):
+        return dict(value)
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return dict(parsed) if isinstance(parsed, Mapping) else {}
+    return {}

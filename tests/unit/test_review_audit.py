@@ -116,6 +116,39 @@ async def test_review_audit_bundle_exports_sources_attempts_events_and_citation_
 
 
 @pytest.mark.asyncio
+async def test_review_audit_bundle_ignores_malformed_event_payloads() -> None:
+    class MalformedPayloadRepository(FakeAuditRepository):
+        async def list_review_audit_events(self, review_id: str, *, limit: int | None = None):
+            return [
+                {
+                    "event_type": "search_run",
+                    "payload": "not-json",
+                    "created_at": "2026-05-01T10:00:00+00:00",
+                },
+                {
+                    "event_type": "retrieval_run",
+                    "payload": ["bad"],
+                    "created_at": "2026-05-01T10:01:00+00:00",
+                },
+                {
+                    "event_type": "search_run",
+                    "payload": (
+                        '{"query":"MEFV VUS","filters":{"year_min":2020},'
+                        '"returned_count":5}'
+                    ),
+                    "created_at": "2026-05-01T10:02:00+00:00",
+                },
+            ]
+
+    bundle = await ReviewAuditService(MalformedPayloadRepository()).export_bundle("review-1")
+
+    assert [run.query for run in bundle.search_runs] == ["", "MEFV VUS"]
+    assert bundle.search_runs[1].filters == {"year_min": 2020}
+    assert bundle.search_runs[1].returned_count == 5
+    assert bundle.retrieval_runs[0].queries == []
+
+
+@pytest.mark.asyncio
 async def test_review_audit_resource_summary_uses_bounded_events() -> None:
     class BoundedEventRepository(FakeAuditRepository):
         seen_limit: int | None = None
