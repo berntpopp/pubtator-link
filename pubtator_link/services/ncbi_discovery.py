@@ -128,7 +128,47 @@ class NcbiDiscoveryClient:
         params = {"ids": ",".join(ids), "format": "json", "tool": "pubtator-link"}
         if source != "auto":
             params["idtype"] = source
-        response = await self._get_absolute(self.id_converter_url, params)
+        try:
+            response = await self._get_absolute(self.id_converter_url, params)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 400 and len(ids) > 1:
+                return await self._convert_article_ids_individually(ids, source)
+            raise
+        return self._conversion_records_from_response(ids, source, response)
+
+    async def _convert_article_ids_individually(
+        self,
+        ids: Sequence[str],
+        source: ArticleIdKind,
+    ) -> list[ArticleIdConversionRecord]:
+        records: list[ArticleIdConversionRecord] = []
+        for article_id in ids:
+            params = {"ids": article_id, "format": "json", "tool": "pubtator-link"}
+            if source != "auto":
+                params["idtype"] = source
+            try:
+                response = await self._get_absolute(self.id_converter_url, params)
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == 400:
+                    records.append(
+                        ArticleIdConversionRecord(
+                            input_id=article_id,
+                            input_kind=source,
+                            status="failed",
+                            reason="upstream_rejected_identifier",
+                        )
+                    )
+                    continue
+                raise
+            records.extend(self._conversion_records_from_response([article_id], source, response))
+        return records
+
+    @staticmethod
+    def _conversion_records_from_response(
+        ids: Sequence[str],
+        source: ArticleIdKind,
+        response: httpx.Response,
+    ) -> list[ArticleIdConversionRecord]:
         payload = response.json()
         records_payload = payload.get("records", []) if isinstance(payload, dict) else []
 

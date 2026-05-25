@@ -42,6 +42,17 @@ class SequentialMockTransport:
         return httpx.Response(200, json=payload, request=request)
 
 
+class SequentialStatusTransport:
+    def __init__(self, responses: Sequence[tuple[int, dict[str, object]]]) -> None:
+        self.responses = list(responses)
+        self.requests: list[httpx.Request] = []
+
+    async def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        status_code, payload = self.responses[len(self.requests) - 1]
+        return httpx.Response(status_code, json=payload, request=request)
+
+
 class FakeDiscoveryClient:
     async def convert_article_ids(
         self,
@@ -185,6 +196,44 @@ async def test_ncbi_client_parses_id_conversion_json() -> None:
     assert transport.requests[0].url.params["format"] == "json"
     assert transport.requests[0].url.params["tool"] == "pubtator-link"
     assert "idtype" not in transport.requests[0].url.params
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_ncbi_client_retries_mixed_id_conversion_per_identifier_after_batch_400() -> None:
+    transport = SequentialStatusTransport(
+        [
+            (400, {"status": "error"}),
+            (200, {"records": [{"requested-id": "24166952", "pmid": "24166952"}]}),
+            (200, {"records": [{"requested-id": "PMC12758588", "pmid": "41480953"}]}),
+            (400, {"status": "error"}),
+        ]
+    )
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = NcbiDiscoveryClient(http_client=http_client)
+
+    records = await client.convert_article_ids(
+        ["24166952", "PMC12758588", "10.1038/s41431-022-01127-3"],
+        "auto",
+    )
+
+    assert [record.input_id for record in records] == [
+        "24166952",
+        "PMC12758588",
+        "10.1038/s41431-022-01127-3",
+    ]
+    assert records[0].status == "resolved"
+    assert records[0].pmid == "24166952"
+    assert records[1].status == "resolved"
+    assert records[1].pmid == "41480953"
+    assert records[2].status == "failed"
+    assert records[2].reason == "upstream_rejected_identifier"
+    assert [request.url.params["ids"] for request in transport.requests] == [
+        "24166952,PMC12758588,10.1038/s41431-022-01127-3",
+        "24166952",
+        "PMC12758588",
+        "10.1038/s41431-022-01127-3",
+    ]
     await client.close()
 
 
