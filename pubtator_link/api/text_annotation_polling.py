@@ -26,10 +26,10 @@ async def poll_text_annotation_until_ready(
             async with asyncio.timeout(remaining):
                 result: dict[str, Any] = await retrieve(session_id)
         except TimeoutError:
-            return None
+            return _upstream_unavailable_result()
         except Exception as exc:
             if is_transient_error(exc):
-                return None
+                return _upstream_unavailable_result()
             raise
         if str(result.get("status", "")).lower() not in PENDING_TEXT_ANNOTATION_STATUSES:
             return result
@@ -39,3 +39,11 @@ async def poll_text_annotation_until_ready(
             async with asyncio.timeout(deadline - asyncio.get_running_loop().time()):
                 await asyncio.sleep(delay)
         delay = min(delay * 2, 2.0)
+
+
+def _upstream_unavailable_result() -> dict[str, Any]:
+    return {
+        "status": "upstream_unavailable",
+        "retryable": True,
+        "message": "PubTator text annotation upstream is unavailable.",
+    }

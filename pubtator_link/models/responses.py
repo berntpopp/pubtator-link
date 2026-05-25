@@ -368,6 +368,8 @@ class TextAnnotationResultResponse(BaseResponse):
         default_factory=list, description="Extracted annotations"
     )
     processing_time: float | None = Field(default=None, description="Processing time in seconds")
+    retryable: bool | None = Field(default=None, description="Whether retrying may succeed")
+    next_tools: list[str] = Field(default_factory=list, description="Suggested follow-up MCP tools")
 
 
 class CacheStats(BaseModel):

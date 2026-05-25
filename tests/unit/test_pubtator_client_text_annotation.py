@@ -138,4 +138,8 @@ async def test_wait_for_text_annotation_respects_timeout_during_retries(monkeypa
     finally:
         await client.close()
 
-    assert result is None
+    assert result == {
+        "status": "upstream_unavailable",
+        "retryable": True,
+        "message": "PubTator text annotation upstream is unavailable.",
+    }

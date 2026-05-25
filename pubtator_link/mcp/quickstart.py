@@ -45,7 +45,39 @@ def query_variants_for_question(question: str) -> list[str]:
     shortened = " ".join(keywords)
     if shortened and shortened.lower() != question.lower():
         variants.append(shortened)
+    anchors = _biomedical_query_anchors(words)
+    if len(anchors) >= 2:
+        _append_query_variant(variants, " ".join(anchors[:3]))
+        _append_query_variant(variants, " ".join(anchors[:6]))
     return variants
+
+
+def _biomedical_query_anchors(words: list[str]) -> list[str]:
+    lowered = {word.lower() for word in words}
+    anchors: list[str] = []
+    for word in words:
+        if re.fullmatch(r"@?[A-Z][A-Z0-9_-]{1,15}", word):
+            _append_query_variant(anchors, word)
+    if "fmf" in lowered or "familial" in lowered:
+        _append_query_variant(anchors, "FMF")
+    for term in ("colchicine", "treatment", "therapy"):
+        if term in lowered:
+            _append_query_variant(anchors, term)
+    if lowered & {"child", "children", "pediatric", "paediatric", "juvenile"}:
+        _append_query_variant(anchors, "pediatric")
+    for term in ("diagnosis", "monitoring"):
+        if term in lowered:
+            _append_query_variant(anchors, term)
+    if lowered & {"vus", "uncertain"}:
+        _append_query_variant(anchors, "VUS")
+    if "variant" in lowered or "variants" in lowered:
+        _append_query_variant(anchors, "variant")
+    return anchors
+
+
+def _append_query_variant(variants: list[str], query: str) -> None:
+    if query and all(query.lower() != existing.lower() for existing in variants):
+        variants.append(query)
 
 
 def selected_pmids_from_search_result(search_result: dict[str, Any], max_pmids: int) -> list[str]:

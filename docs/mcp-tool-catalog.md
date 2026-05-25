@@ -555,7 +555,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"query":"TP53","concept":"Gene","limit":10}`
 - Next tools by profile: lean: `pubtator_search_literature`; full: `pubtator_search_literature`; readonly: `pubtator_search_literature`
 - Resource links: `pubtator://bioconcepts`
-- Input schema: `query` (string); `concept` (string | null; enum: `Gene`, `Disease`, `Chemical`, `Species`, `Variant`, `CellLine`, `Phenotype`; default: `None`); `limit` (integer; default: `10`)
+- Input schema: `query` (string | null; default: `None`); `text` (string | null; default: `None`); `concept` (string | null; enum: `Gene`, `Disease`, `Chemical`, `Species`, `Variant`, `CellLine`, `Phenotype`; default: `None`); `limit` (integer; default: `10`)
 - Output schema: `EntityAutocompleteResponse`; has_output_schema: `yes`
 
 ## `pubtator_search_guidelines`

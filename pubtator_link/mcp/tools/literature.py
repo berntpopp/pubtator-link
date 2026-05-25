@@ -152,7 +152,8 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def search_biomedical_entities(
-        query: str,
+        query: str | None = None,
+        text: str | None = None,
         concept: (
             Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine", "Phenotype"]
             | None
@@ -165,7 +166,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             client = await get_api_client()
             return await search_biomedical_entities_impl(
                 client=client,
-                query=query,
+                query=query if query and query.strip() else text or "",
                 concept=concept,
                 limit=limit,
             )

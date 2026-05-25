@@ -1466,6 +1466,42 @@ async def test_ground_question_accepts_max_results_alias(
     assert result.structured_content["success"] is True
 
 
+@pytest.mark.asyncio
+async def test_search_biomedical_entities_accepts_text_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.literature as literature_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async def fake_search_biomedical_entities_impl(**kwargs):
+        assert kwargs["query"] == "MEFV"
+        return {
+            "success": True,
+            "query": kwargs["query"],
+            "matches": [],
+            "total_matches": 0,
+            "concept_filter": kwargs["concept"],
+        }
+
+    async def fake_dependency():
+        return object()
+
+    monkeypatch.setattr(
+        literature_tools,
+        "search_biomedical_entities_impl",
+        fake_search_biomedical_entities_impl,
+    )
+    monkeypatch.setattr(literature_tools, "get_api_client", fake_dependency)
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_search_biomedical_entities"
+    ]
+
+    result = await tool.run({"text": "MEFV", "concept": "Gene"})
+
+    assert result.structured_content["success"] is True
+    assert result.structured_content["query"] == "MEFV"
+
+
 def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
@@ -1614,6 +1650,8 @@ def test_submit_text_annotation_output_schema_documents_wait_result() -> None:
     assert "annotations" in properties
     assert "original_text" in properties
     assert "session_id" in properties
+    assert "retryable" in properties
+    assert "next_tools" in properties
 
 
 def test_batch_output_schema_allows_omitted_empty_results() -> None:

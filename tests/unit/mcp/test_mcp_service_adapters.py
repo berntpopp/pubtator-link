@@ -1287,6 +1287,68 @@ async def test_ground_question_long_query_attempts_shortened_variant_before_reco
 
 
 @pytest.mark.asyncio
+async def test_ground_question_long_query_uses_decomposed_variant_hits() -> None:
+    from pubtator_link.mcp import service_adapters
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.queries: list[str] = []
+
+        async def search_publications(self, **kwargs):
+            self.queries.append(kwargs["text"])
+            if kwargs["text"] == "MEFV colchicine pediatric":
+                return {"count": 1, "page": 1, "results": [{"pmid": "42135612"}]}
+            return {"count": 0, "page": 1, "results": []}
+
+    class FakeQueue:
+        repository = object()
+
+    class FakeContextService:
+        async def inspect_review_index(self, review_id, request):
+            return type(
+                "InspectResponse",
+                (),
+                {
+                    "preparation_status": PreparationStatus(complete=1),
+                    "coverage_summary": {"abstract_only": 1},
+                    "sources": [
+                        type(
+                            "Source",
+                            (),
+                            {"pmid": "42135612", "coverage": "abstract_only", "passage_count": 1},
+                        )()
+                    ],
+                },
+            )()
+
+        async def retrieve_context_batch(self, review_id, request):
+            return None
+
+    class FakeIndexingService:
+        async def index_review_evidence(self, review_id, request):
+            return None
+
+    client = FakeClient()
+    question = (
+        "What are the best practices for treating a child with a variant of "
+        "uncertain significance in MEFV when considering colchicine and monitoring?"
+    )
+
+    result = await service_adapters.ground_question_impl(
+        client=client,
+        queue=FakeQueue(),
+        context_service=FakeContextService(),
+        question=question,
+        max_pmids=8,
+        review_indexing_service_factory=lambda **kwargs: FakeIndexingService(),
+    )
+
+    assert "MEFV colchicine pediatric" in client.queries
+    assert result["selected_pmids"] == ["42135612"]
+    assert result["search_total_results"] == 1
+
+
+@pytest.mark.asyncio
 async def test_ground_question_adapter_waits_when_selected_pmids_are_not_ready() -> None:
     from pubtator_link.mcp import service_adapters
     from pubtator_link.models.review_rerag import (
@@ -3168,6 +3230,37 @@ async def test_submit_text_annotation_adapter_waits_for_completed_result() -> No
     assert result["success"] is True
     assert result["status"] == "completed"
     assert result["annotations"][0]["entity_id"] == "@GENE_4210"
+
+
+@pytest.mark.asyncio
+async def test_submit_text_annotation_wait_returns_structured_retryable_degraded_result() -> None:
+    from pubtator_link.mcp.service_adapters import submit_text_annotation_impl
+
+    class FakeClient:
+        async def submit_text_annotation(self, text: str, bioconcept: str) -> str:
+            return "ABC123DEF456"
+
+        async def retrieve_text_annotation_until_ready(
+            self, session_id: str, timeout_ms: int = 30000
+        ) -> dict[str, object] | None:
+            return {
+                "status": "upstream_unavailable",
+                "retryable": True,
+                "message": "PubTator text annotation upstream is unavailable.",
+            }
+
+    result = await submit_text_annotation_impl(
+        client=FakeClient(),
+        text="MEFV and colchicine",
+        bioconcepts="Gene",
+        wait=True,
+    )
+
+    assert result["success"] is False
+    assert result["session_id"] == "ABC123DEF456"
+    assert result["status"] == "upstream_unavailable"
+    assert result["retryable"] is True
+    assert result["next_tools"] == ["pubtator_get_text_annotation_results"]
 
 
 @pytest.mark.asyncio

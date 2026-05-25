@@ -29,6 +29,7 @@ from pubtator_link.mcp.session_orientation import (
     research_session_status_payload,
     research_sessions_payload,
 )
+from pubtator_link.mcp.text_annotation_degraded import text_annotation_degraded_payload
 from pubtator_link.models.corpus_suggestion import CorpusSuggestionRequest
 from pubtator_link.models.literature_graph import (
     PublicationCitationGraphRequest,
@@ -836,6 +837,8 @@ async def get_text_annotation_results_impl(
 ) -> dict[str, Any]:
     result = result or await client.retrieve_text_annotation(session_id=session_id)
     status = str(result.get("status", "unknown"))
+    if status == "upstream_unavailable" and result.get("retryable") is True:
+        return text_annotation_degraded_payload(session_id, status, result.get("message"))
     annotations = [
         AnnotationEntity.model_validate(annotation) for annotation in result.get("annotations", [])
     ]
