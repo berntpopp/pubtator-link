@@ -95,13 +95,13 @@ clean: ## Remove local caches and generated reports
 	rm -rf .pytest_cache .ruff_cache .mypy_cache htmlcov .coverage
 
 dev: ## Start REST plus MCP development server
-	uv run python server.py --transport unified --host 127.0.0.1 --port 8000
+	PUBTATOR_LINK_TRANSPORT=unified uv run uvicorn pubtator_link.server_manager:create_app --factory --host 127.0.0.1 --port 8000 --reload --reload-dir pubtator_link
 
 mcp-serve: ## Start local stdio MCP server
 	uv run python mcp_server.py
 
 mcp-serve-http: ## Start hosted MCP endpoint with REST API
-	uv run python server.py --transport unified --host 127.0.0.1 --port 8000
+	PUBTATOR_LINK_TRANSPORT=unified uv run uvicorn pubtator_link.server_manager:create_app --factory --host 127.0.0.1 --port 8000
 
 benchmark-smoke: ## Run PubMedQA benchmark smoke
 	uv run python -m pubtator_link.benchmarks run --suite benchmarks/suites/pubmedqa_smoke.yaml --answer-stack $${ANSWER_STACK:-dry_run:deterministic} $${BENCHMARK_ARGS:-}

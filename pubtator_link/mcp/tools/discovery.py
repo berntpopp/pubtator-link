@@ -10,6 +10,7 @@ from pubtator_link.api.routes.dependencies import (
     get_discovery_service,
 )
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
+from pubtator_link.mcp.argument_aliases import coalesce_query, merge_pmids
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.service_adapters import suggest_corpus_impl
@@ -35,20 +36,22 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def suggest_corpus(
-        question: Annotated[str, Field(min_length=3, max_length=1000)],
+        question: Annotated[str | None, Field(min_length=3, max_length=1000)] = None,
+        query: Annotated[str | None, Field(min_length=3, max_length=1000)] = None,
         max_pmids: Annotated[int, Field(ge=1, le=20)] = 8,
         entity_ids: list[str] | None = None,
         must_include_pmids: list[str] | None = None,
         prefer_guidelines: bool = True,
         include_metadata: bool = True,
     ) -> dict[str, Any]:
-        """Use this when a user needs a compact, review-feeding PMID corpus for a research question. Returns candidate PMIDs, roles, coverage hints, metadata, and next commands."""
+        """Use this when a user needs a compact, review-feeding PMID corpus for a research question. Provide one of question or query. Returns candidate PMIDs, roles, coverage hints, metadata, and next commands."""
 
         async def call() -> dict[str, Any]:
+            selected_question = coalesce_query(question, query)
             service = await get_corpus_suggestion_service()
             return await suggest_corpus_impl(
                 service=service,
-                question=question,
+                question=selected_question,
                 max_pmids=max_pmids,
                 entity_ids=entity_ids,
                 must_include_pmids=must_include_pmids,
@@ -84,15 +87,17 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def lookup_mesh(
-        query: Annotated[str, Field(min_length=1, max_length=500)],
+        query: Annotated[str | None, Field(min_length=1, max_length=500)] = None,
+        text: Annotated[str | None, Field(min_length=1, max_length=500)] = None,
         limit: Annotated[int, Field(ge=1, le=50)] = 10,
         exact: bool = False,
     ) -> dict[str, Any]:
         """Use this when a user needs MeSH descriptors and candidate PubMed search terms for a biomedical research query."""
 
         async def call() -> dict[str, Any]:
+            selected_query = coalesce_query(query, text)
             service = await get_discovery_service()
-            response = await service.lookup_mesh(query=query, limit=limit, exact=exact)
+            response = await service.lookup_mesh(query=selected_query, limit=limit, exact=exact)
             return response.model_dump(by_alias=True)
 
         return await run_mcp_tool("pubtator_lookup_mesh", call)
@@ -122,15 +127,25 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def find_related_articles(
-        pmids: Annotated[list[str], Field(min_length=1, max_length=100)],
+        pmids: Annotated[list[str] | None, Field(min_length=1, max_length=100)] = None,
+        pmid: Annotated[str | None, Field(min_length=1)] = None,
         mode: RelatedArticleMode = "similar",
         limit: Annotated[int, Field(ge=1, le=100)] = 20,
     ) -> dict[str, Any]:
         """Use this when a user has seed PMIDs and needs similar, cited-by, or reference-linked articles to expand a research corpus."""
 
         async def call() -> dict[str, Any]:
+            selected_pmids = merge_pmids(pmids, pmid, max_items=100)
             service = await get_discovery_service()
-            response = await service.find_related_articles(pmids=pmids, mode=mode, limit=limit)
+            response = await service.find_related_articles(
+                pmids=selected_pmids,
+                mode=mode,
+                limit=limit,
+            )
             return response.model_dump(by_alias=True)
 
-        return await run_mcp_tool("pubtator_find_related_articles", call, pmids=pmids)
+        try:
+            tool_pmids = merge_pmids(pmids, pmid, max_items=100)
+        except ValueError:
+            tool_pmids = None
+        return await run_mcp_tool("pubtator_find_related_articles", call, pmids=tool_pmids)

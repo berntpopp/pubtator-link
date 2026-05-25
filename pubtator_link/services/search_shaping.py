@@ -10,9 +10,19 @@ from pubtator_link.services.provenance import corpus_snapshot_date, stable_cache
 SearchResponseMode = Literal["compact", "standard", "full"]
 IncludeCitations = Literal["none", "nlm", "bibtex", "both"]
 TextHighlightFormat = Literal["none", "plain", "annotated"]
-SearchMetadataMode = Literal["none", "basic", "full"]
+SearchMetadataMode = Literal["none", "basic", "with_abstract", "full"]
+INLINE_ABSTRACT_MAX_CHARS = 640
 
-GUIDELINE_TERMS = ("recommendation", "guideline", "consensus", "eular", "pres", "share")
+GUIDELINE_TERMS = (
+    "recommendation",
+    "guideline",
+    "consensus",
+    "eular",
+    "pres",
+    "share",
+    "systematic review",
+    "systematic-review",
+)
 GUIDELINE_TYPES = (
     "guideline",
     "practice guideline",
@@ -89,6 +99,31 @@ def shaped_search_response(
     )
 
 
+def dump_search_response(
+    response: SearchResponse, *, response_mode: SearchResponseMode
+) -> dict[str, Any]:
+    dumped = response.model_dump(exclude_none=response_mode == "compact")
+    if response_mode != "compact":
+        return dumped
+    for result in dumped.get("results", []):
+        if not isinstance(result, dict):
+            continue
+        for field in (
+            "annotations",
+            "authors",
+            "mesh_headings",
+            "publication_types",
+            "ranking_reasons",
+            "matched_terms",
+        ):
+            if result.get(field) == []:
+                result.pop(field, None)
+        for field in ("citations", "rank_features", "coverage_hint", "source_versions"):
+            if result.get(field) == {}:
+                result.pop(field, None)
+    return dumped
+
+
 def shaped_search_result(
     *,
     item: dict[str, Any],
@@ -106,7 +141,9 @@ def shaped_search_result(
     shaped = SearchResult(
         pmid=item.get("pmid", ""),
         title=item.get("title", ""),
-        abstract=item.get("abstract") if response_mode in {"standard", "full"} else None,
+        abstract=_inline_abstract(item.get("abstract"))
+        if response_mode in {"standard", "full"} or metadata == "with_abstract"
+        else None,
         authors=raw_authors if include_author_array else [],
         first_author_et_al=_author_summary(raw_authors),
         journal=item.get("journal"),
@@ -118,6 +155,7 @@ def shaped_search_result(
         date=item.get("date"),
         text_hl=_shape_text_hl(item.get("text_hl"), text_hl_format) if include_text_hl else None,
         citations=_shape_citations(item.get("citations"), include_citations),
+        recommended_citation=_recommended_citation(item, raw_authors),
         volume=item.get("volume") or item.get("meta_volume"),
         issue=item.get("issue") or item.get("meta_issue"),
         pages=item.get("pages") or item.get("meta_pages"),
@@ -169,6 +207,17 @@ def _has_metadata_value(value: Any) -> bool:
     return value not in (None, "", [], {})
 
 
+def _inline_abstract(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = " ".join(value.split())
+    if not normalized:
+        return None
+    if len(normalized) <= INLINE_ABSTRACT_MAX_CHARS:
+        return normalized
+    return f"{normalized[: INLINE_ABSTRACT_MAX_CHARS - 1].rstrip()}..."
+
+
 def _shape_authors(authors: Any) -> list[PublicationAuthor]:
     if not isinstance(authors, list):
         return []
@@ -200,6 +249,55 @@ def _author_summary(authors: list[PublicationAuthor]) -> str | None:
     if not first:
         return None
     return f"{first} et al." if len(authors) > 1 else first
+
+
+def _recommended_citation(item: dict[str, Any], authors: list[PublicationAuthor]) -> str | None:
+    existing = item.get("recommended_citation")
+    if isinstance(existing, str) and existing.strip():
+        return existing.strip()
+    nlm = item.get("nlm_citation")
+    if isinstance(nlm, str) and nlm.strip():
+        return nlm.strip()
+
+    parts: list[str] = []
+    author_label = _author_summary(authors)
+    if author_label:
+        parts.append(author_label)
+    title = _clean_citation_part(item.get("title"))
+    if title:
+        parts.append(title)
+    journal = _clean_citation_part(item.get("journal"))
+    if journal:
+        parts.append(journal)
+    year = _clean_citation_part(item.get("pub_year") or _citation_year(item))
+    if year:
+        parts.append(year)
+    pmid = _clean_citation_part(item.get("pmid"))
+    if pmid:
+        parts.append(f"PMID:{pmid}")
+    doi = _clean_citation_part(item.get("doi"))
+    if doi:
+        parts.append(f"doi:{doi}")
+    if not parts:
+        return None
+    return ". ".join(part.rstrip(".") for part in parts) + "."
+
+
+def _clean_citation_part(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = " ".join(str(value).split())
+    return text or None
+
+
+def _citation_year(item: dict[str, Any]) -> str | None:
+    for key in ("pub_date", "meta_date_publication", "date"):
+        text = _clean_citation_part(item.get(key))
+        if text:
+            match = re.search(r"\b(18\d{2}|19\d{2}|20\d{2})\b", text)
+            if match is not None:
+                return match.group(1)
+    return None
 
 
 def search_cache_key(
@@ -283,7 +381,7 @@ def _guideline_rank_features(item: dict[str, Any]) -> dict[str, Any]:
     for term in GUIDELINE_TERMS:
         if term in title or term in abstract:
             term_boost += 1
-            reasons.append(term)
+            reasons.append("systematic review" if term == "systematic-review" else term)
     return {
         "guideline_boost": type_boost + term_boost,
         "ranking_reasons": list(dict.fromkeys(reasons)),

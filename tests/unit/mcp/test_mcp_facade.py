@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import re
 
 import pytest
+from fastmcp.exceptions import ToolError
 
 from pubtator_link.mcp.profiles import LEAN_TOOLS
 
@@ -111,6 +113,12 @@ def _schema_enum_values(schema: dict[str, object]) -> set[object]:
                 if isinstance(nested_schema, dict):
                     values.update(_schema_enum_values(nested_schema))
     return values
+
+
+def _tool_error_payload(exc: ToolError) -> dict[str, object]:
+    payload = json.loads(str(exc))
+    assert isinstance(payload, dict)
+    return payload
 
 
 def test_all_tool_names_match_anthropic_remote_mcp_regex(
@@ -247,7 +255,10 @@ def test_topic_literature_map_tool_schema_is_flat() -> None:
     properties = tool.parameters["properties"]
 
     assert "query" in properties
+    assert "topic" in properties
+    assert "question" in properties
     assert "pmids" in properties
+    assert "seed_pmids" in properties
     assert "max_seed_papers" in properties
     assert "max_neighbors_per_paper" in properties
     assert "include_authors" in properties
@@ -275,6 +286,41 @@ def test_literature_graph_mcp_schemas_default_to_compact() -> None:
         assert "full" in _schema_enum_values(response_mode)
 
 
+@pytest.mark.asyncio
+async def test_topic_literature_map_accepts_topic_and_seed_aliases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.publications as publication_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+    from pubtator_link.models.literature_graph import TopicLiteratureMapResponse
+
+    class FakeService:
+        async def build_map(self, request):
+            assert request.query == "MEFV VUS"
+            assert request.pmids == ["24166952"]
+            return TopicLiteratureMapResponse(
+                query=request.query,
+                seed_pmids=request.pmids or [],
+                response_mode=request.response_mode,
+            )
+
+    async def fake_get_topic_literature_map_service() -> FakeService:
+        return FakeService()
+
+    monkeypatch.setattr(
+        publication_tools,
+        "get_topic_literature_map_service",
+        fake_get_topic_literature_map_service,
+    )
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_build_topic_literature_map"
+    ]
+
+    result = await tool.run({"topic": "MEFV VUS", "seed_pmids": ["24166952"]})
+
+    assert result.structured_content["query"] == "MEFV VUS"
+
+
 def test_review_retrieval_schema_hides_resolver_trace_by_default() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
@@ -300,6 +346,25 @@ def test_search_literature_schema_defaults_to_no_citations_for_compact_metadata(
     assert "retryable=false" in tool.description
 
 
+def test_find_entity_relations_schema_exposes_budget_controls() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_find_entity_relations"
+    ]
+    properties = tool.parameters["properties"]
+
+    assert properties["limit"]["default"] == 20
+    assert properties["limit"]["maximum"] == 100
+    assert properties["response_mode"]["default"] == "compact"
+    assert set(_schema_enum_values(properties["response_mode"])) == {
+        "compact",
+        "standard",
+        "full",
+    }
+    assert properties["max_response_chars"]["default"] == 12000
+
+
 def test_review_quickstart_schema_is_flat_and_returns_retrieval_handoff() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
@@ -308,9 +373,46 @@ def test_review_quickstart_schema_is_flat_and_returns_retrieval_handoff() -> Non
     output_schema = _tool_output_schema(tool)
 
     assert "topic" in schema["properties"]
+    assert "question" in schema["properties"]
     assert schema["properties"]["n_pmids"]["default"] == 8
     assert output_schema["properties"]["ready_to_retrieve"]
     assert output_schema["properties"]["next_commands"]
+
+
+@pytest.mark.asyncio
+async def test_review_quickstart_accepts_question_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.review as review_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async def fake_review_quickstart_impl(**kwargs):
+        assert kwargs["topic"] == "Does colchicine prevent FMF flares?"
+        return {
+            "success": True,
+            "review_id": "review-1",
+            "session_id": "session-1",
+            "topic": kwargs["topic"],
+            "selected_pmids": [],
+            "coverage_summary": {},
+            "preparation_status": {},
+            "indexed_totals": {},
+            "ready_to_retrieve": False,
+            "next_commands": [],
+            "warnings": [],
+        }
+
+    async def fake_dependency():
+        return object()
+
+    monkeypatch.setattr(review_tools, "review_quickstart_impl", fake_review_quickstart_impl)
+    monkeypatch.setattr(review_tools, "get_research_session_service", fake_dependency)
+    monkeypatch.setattr(review_tools, "get_review_context_service", fake_dependency)
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_review_quickstart"]
+
+    result = await tool.run({"question": "Does colchicine prevent FMF flares?"})
+
+    assert result.structured_content["success"] is True
 
 
 def test_ground_question_schema_exposes_one_call_arguments() -> None:
@@ -319,7 +421,8 @@ def test_ground_question_schema_exposes_one_call_arguments() -> None:
     tool = create_pubtator_mcp()._tool_manager._tools["pubtator_ground_question"]
     properties = tool.parameters["properties"]
 
-    assert properties["question"]["type"] == "string"
+    assert "question" in properties
+    assert "query" in properties
     assert properties["max_pmids"]["minimum"] == 1
     assert properties["max_pmids"]["maximum"] == 20
     assert properties["wait_until_ready"]["default"] is True
@@ -334,6 +437,29 @@ def test_ground_question_schema_exposes_verbosity_and_auto_budget() -> None:
 
     assert properties["verbosity"]["default"] == "lean"
     assert properties["max_response_chars"]["default"] == "auto"
+
+
+def test_research_session_tools_allow_orientation_without_review_id() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tools = create_pubtator_mcp(profile="full")._tool_manager._tools
+    list_schema = tools["pubtator_list_research_sessions"].parameters
+    status_schema = tools["pubtator_get_research_session_status"].parameters
+
+    assert "review_id" not in list_schema.get("required", [])
+    assert "review_id" not in status_schema.get("required", [])
+    assert "session_id" in status_schema.get("required", [])
+
+
+def test_record_review_context_schema_accepts_note_event_type() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_record_review_context"
+    ]
+    event_type_schema = tool.parameters["properties"]["event_type"]
+
+    assert "note" in _schema_enum_values(event_type_schema)
 
 
 def test_index_review_evidence_schema_does_not_expose_prepare_mode() -> None:
@@ -427,7 +553,12 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
     assert "pubtator_workflow_help" in capabilities["tool_groups"]["workflow"]
     assert "pubtator_get_publication_metadata" in capabilities["tools"]
     assert "pubtator_suggest_corpus" in capabilities["tool_groups"]["discovery"]
-    assert capabilities["search_defaults"]["metadata_modes"] == ["none", "basic", "full"]
+    assert capabilities["search_defaults"]["metadata_modes"] == [
+        "none",
+        "basic",
+        "with_abstract",
+        "full",
+    ]
     assert sample_calls["pubtator_search_literature"]["metadata"] == "basic"
     assert any(
         fallback["tool_name"] == "pubtator_lookup_citation"
@@ -788,6 +919,14 @@ def test_common_mcp_tools_are_flat_and_unversioned() -> None:
     assert search_schema["properties"]["coverage"]["default"] == "none"
     assert "preflight" in _schema_enum_values(search_schema["properties"]["coverage"])
     assert search_schema["properties"]["metadata"]["default"] == "basic"
+    assert "query" in search_schema["properties"]
+    assert search_schema["properties"]["include_meta"]["default"] is True
+
+    passages_schema = tools["pubtator_get_publication_passages"].parameters
+    assert "pmid" in passages_schema["properties"]
+
+    ground_schema = tools["pubtator_ground_question"].parameters
+    assert "max_results" in ground_schema["properties"]
 
 
 def test_review_context_schema_defaults_are_stable() -> None:
@@ -809,6 +948,588 @@ def test_review_context_schema_defaults_are_stable() -> None:
     assert batch_schema["table_mode"]["default"] == "preview"
 
 
+def test_repeated_call_tools_expose_include_meta_default_true() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tools = create_pubtator_mcp(profile="full")._tool_manager._tools
+
+    for tool_name in (
+        "pubtator_stage_research_session",
+        "pubtator_retrieve_review_context",
+        "pubtator_retrieve_review_context_batch",
+        "pubtator_find_related_evidence_candidates",
+        "pubtator_build_topic_literature_map",
+    ):
+        properties = tools[tool_name].parameters["properties"]
+        assert properties["include_meta"]["default"] is True
+
+
+@pytest.mark.asyncio
+async def test_retrieve_review_context_batch_tool_include_meta_false_strips_meta(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.review as review_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async def fake_get_review_context_service() -> object:
+        return object()
+
+    async def fake_retrieve_review_context_batch_impl(**kwargs):
+        return {
+            "success": True,
+            "review_id": kwargs["review_id"],
+            "_meta": {"normalized_arguments": {"queries": kwargs["queries"]}},
+            "provider_status": [{"provider": "embedding", "status": "success"}],
+            "results": [
+                {
+                    "review_id": kwargs["review_id"],
+                    "context_pack": {
+                        "question": kwargs["queries"][0],
+                        "passages": [
+                            {
+                                "passage_id": "rev:40234174:abstract:0",
+                                "pmid": "40234174",
+                                "title": "FMF colchicine",
+                                "text": "Colchicine reduced attacks.",
+                                "rrf_score": 0.75,
+                                "rank_features": {"dense": 0.8},
+                            }
+                        ],
+                        "citation_map": {"40234174": "PMID:40234174"},
+                    },
+                    "provider_status": [{"provider": "lexical", "status": "success"}],
+                }
+            ],
+        }
+
+    monkeypatch.setattr(
+        review_tools,
+        "get_review_context_service",
+        fake_get_review_context_service,
+    )
+    monkeypatch.setattr(
+        review_tools,
+        "retrieve_review_context_batch_impl",
+        fake_retrieve_review_context_batch_impl,
+    )
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_retrieve_review_context_batch"
+    ]
+
+    result = await tool.run(
+        {"review_id": "rev_123", "queries": ["colchicine"], "include_meta": False}
+    )
+
+    payload = result.structured_content
+    passage = payload["results"][0]["context_pack"]["passages"][0]
+    assert "_meta" not in payload
+    assert "provider_status" not in payload
+    assert "provider_status" not in payload["results"][0]
+    assert "rrf_score" not in passage
+    assert "rank_features" not in passage
+    assert passage["passage_id"] == "rev:40234174:abstract:0"
+    assert passage["pmid"] == "40234174"
+    assert passage["title"] == "FMF colchicine"
+    assert passage["text"] == "Colchicine reduced attacks."
+
+
+@pytest.mark.asyncio
+async def test_search_literature_accepts_query_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pubtator_link.mcp.tools.literature as literature_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            assert kwargs["text"] == "MEFV"
+            return {"results": [{"pmid": "1", "title": "FMF"}], "count": 1}
+
+    async def fake_get_api_client() -> FakeClient:
+        return FakeClient()
+
+    monkeypatch.setattr(literature_tools, "get_api_client", fake_get_api_client)
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_literature"]
+
+    result = await tool.run({"query": "MEFV"})
+
+    assert result.structured_content["success"] is True
+    assert result.structured_content["query"] == "MEFV"
+
+
+@pytest.mark.asyncio
+async def test_search_guidelines_accepts_query_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.literature as literature_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async def fake_get_api_client() -> object:
+        return object()
+
+    async def fake_get_source_preflight_service() -> object:
+        return object()
+
+    async def fake_search_literature_impl(**kwargs):
+        assert kwargs["text"] == "familial mediterranean fever guidelines"
+        assert kwargs["publication_types"] is None
+        assert kwargs["guideline_boost"] is True
+        return {
+            "success": True,
+            "query": kwargs["text"],
+            "results": [],
+        }
+
+    monkeypatch.setattr(literature_tools, "get_api_client", fake_get_api_client)
+    monkeypatch.setattr(
+        literature_tools,
+        "get_source_preflight_service",
+        fake_get_source_preflight_service,
+    )
+    monkeypatch.setattr(literature_tools, "search_literature_impl", fake_search_literature_impl)
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_guidelines"]
+
+    result = await tool.run({"query": " familial mediterranean fever guidelines "})
+
+    assert result.structured_content["success"] is True
+    assert result.structured_content["query"] == "familial mediterranean fever guidelines"
+
+
+@pytest.mark.asyncio
+async def test_find_related_articles_uses_dependency_injected_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.discovery as discovery_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    class FakeDiscoveryService:
+        async def find_related_articles(self, **kwargs):
+            assert kwargs["pmids"] == ["123"]
+            return type(
+                "Response",
+                (),
+                {
+                    "model_dump": lambda self, by_alias: {
+                        "success": True,
+                        "source_pmids": ["123"],
+                        "mode": "similar",
+                        "related_articles": [],
+                        "candidate_pmids": [],
+                        "unresolved": [],
+                        "metadata_status": "unavailable",
+                        "_meta": {},
+                    }
+                },
+            )()
+
+    async def fake_get_discovery_service() -> FakeDiscoveryService:
+        return FakeDiscoveryService()
+
+    async def fake_get_publication_metadata_service() -> object:
+        raise AssertionError("metadata should be wired through service dependency construction")
+
+    monkeypatch.setattr(discovery_tools, "get_discovery_service", fake_get_discovery_service)
+    monkeypatch.setattr(
+        discovery_tools,
+        "get_publication_metadata_service",
+        fake_get_publication_metadata_service,
+        raising=False,
+    )
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_find_related_articles"
+    ]
+
+    result = await tool.run({"pmid": "123"})
+
+    assert result.structured_content["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_query_alias_missing_all_returns_validation_failed_tool_error() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_guidelines"]
+
+    with pytest.raises(ToolError) as exc_info:
+        await tool.run({})
+
+    payload = _tool_error_payload(exc_info.value)
+    assert payload["error_code"] == "validation_failed"
+    assert payload["success"] is False
+
+
+@pytest.mark.asyncio
+async def test_tool_validation_unknown_argument_reports_valid_and_unexpected_params() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_literature"]
+
+    with pytest.raises(ToolError) as exc_info:
+        await tool.run({"query": "familial mediterranean fever", "bogus": "x"})
+
+    payload = _tool_error_payload(exc_info.value)
+    assert payload["success"] is False
+    assert payload["error_code"] == "validation_failed"
+    assert "query" in payload["valid_params"]
+    assert "text" in payload["valid_params"]
+    assert payload["unexpected_params"] == ["bogus"]
+    assert payload["_meta"]["next_commands"] == [{"tool": "pubtator_diagnostics", "arguments": {}}]
+
+
+@pytest.mark.asyncio
+async def test_tool_validation_bad_enum_reports_valid_values() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_literature"]
+
+    with pytest.raises(ToolError) as exc_info:
+        await tool.run(
+            {
+                "query": "familial mediterranean fever",
+                "response_mode": "tiny",
+            }
+        )
+
+    payload = _tool_error_payload(exc_info.value)
+    assert payload["success"] is False
+    assert payload["error_code"] == "validation_failed"
+    assert payload["valid_values_for"]["response_mode"] == [
+        "compact",
+        "standard",
+        "full",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_tool_validation_failure_records_failure_metrics() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+    from pubtator_link.observability.metrics import metrics_payload
+
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_literature"]
+
+    with pytest.raises(ToolError):
+        await tool.run({"query": "familial mediterranean fever", "response_mode": "tiny"})
+
+    metrics = metrics_payload().decode()
+    assert (
+        'mcp_tool_calls_total{error_code="validation_failed",'
+        'outcome="failure",tool_name="pubtator_search_literature"}'
+    ) in metrics
+
+
+@pytest.mark.asyncio
+async def test_validation_error_handler_is_idempotent() -> None:
+    from pubtator_link.mcp.errors import install_validation_error_handler
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp(profile="full")
+    install_validation_error_handler(mcp)
+    tool = mcp._tool_manager._tools["pubtator_search_literature"]
+
+    with pytest.raises(ToolError) as exc_info:
+        await tool.run({"query": "familial mediterranean fever", "response_mode": "tiny"})
+
+    payload = _tool_error_payload(exc_info.value)
+    assert payload["success"] is False
+    assert payload["error_code"] == "validation_failed"
+    assert payload["valid_values_for"]["response_mode"] == [
+        "compact",
+        "standard",
+        "full",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_query_alias_conflict_returns_validation_failed_tool_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.literature as literature_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async def fake_get_api_client() -> object:
+        return object()
+
+    async def fake_get_source_preflight_service() -> object:
+        return object()
+
+    async def fake_search_literature_impl(**kwargs):
+        return {
+            "success": True,
+            "query": kwargs["text"],
+            "results": [],
+        }
+
+    monkeypatch.setattr(literature_tools, "get_api_client", fake_get_api_client)
+    monkeypatch.setattr(
+        literature_tools,
+        "get_source_preflight_service",
+        fake_get_source_preflight_service,
+    )
+    monkeypatch.setattr(literature_tools, "search_literature_impl", fake_search_literature_impl)
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_guidelines"]
+
+    with pytest.raises(ToolError) as exc_info:
+        await tool.run({"text": "MEFV guideline", "query": "colchicine guideline"})
+
+    payload = _tool_error_payload(exc_info.value)
+    assert payload["error_code"] == "validation_failed"
+    assert payload["success"] is False
+
+
+def test_query_alias_tool_descriptions_document_required_alias_groups() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tools = create_pubtator_mcp(profile="full")._tool_manager._tools
+    expected_fragments = {
+        "pubtator_search_literature": "Provide one of text or query.",
+        "pubtator_search_guidelines": "Provide one of text or query.",
+        "pubtator_suggest_corpus": "Provide one of question or query.",
+        "pubtator_ground_question": "Provide one of question or query.",
+        "pubtator_review_quickstart": "Provide one of topic, query, or question.",
+        "pubtator_retrieve_review_context": "Provide one of question or query.",
+    }
+
+    for tool_name, fragment in expected_fragments.items():
+        assert fragment in (tools[tool_name].description or "")
+
+
+@pytest.mark.asyncio
+async def test_get_publication_passages_accepts_scalar_pmid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.publications as publication_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+    from pubtator_link.models.publication_passages import (
+        PublicationContextEstimate,
+        PublicationPassageResponse,
+    )
+
+    class FakeService:
+        async def get_passages(self, request):
+            assert request.pmids == ["33454820"]
+            return PublicationPassageResponse(
+                pmids=request.pmids,
+                mode=request.mode,
+                passages=[],
+                context_estimate=PublicationContextEstimate(
+                    estimated_passages=0,
+                    estimated_chars=0,
+                    sections_by_pmid={},
+                    recommended_mode=request.mode,
+                ),
+            )
+
+    async def fake_get_publication_passage_service() -> FakeService:
+        return FakeService()
+
+    monkeypatch.setattr(
+        publication_tools,
+        "get_publication_passage_service",
+        fake_get_publication_passage_service,
+    )
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_get_publication_passages"
+    ]
+
+    result = await tool.run({"pmid": "33454820"})
+
+    assert result.structured_content["success"] is True
+    assert result.structured_content["pmids"] == ["33454820"]
+
+
+def test_pmid_list_tools_expose_scalar_pmid_alias() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tools = create_pubtator_mcp(profile="full")._tool_manager._tools
+    for tool_name in (
+        "pubtator_preflight_review_sources",
+        "pubtator_get_publication_metadata",
+        "pubtator_estimate_publication_context",
+        "pubtator_find_related_articles",
+    ):
+        properties = tools[tool_name].parameters["properties"]
+        assert "pmids" in properties
+        assert "pmid" in properties
+
+
+@pytest.mark.asyncio
+async def test_get_publication_metadata_accepts_pmid_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.publications as publication_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async def fake_get_publication_metadata_service() -> object:
+        return object()
+
+    async def fake_get_publication_metadata_impl(**kwargs):
+        assert kwargs["pmids"] == ["33454820"]
+        return {
+            "success": True,
+            "metadata": [{"pmid": "33454820", "title": "FMF"}],
+            "failed_pmids": {},
+            "_meta": {},
+        }
+
+    monkeypatch.setattr(
+        publication_tools,
+        "get_publication_metadata_service",
+        fake_get_publication_metadata_service,
+    )
+    monkeypatch.setattr(
+        publication_tools,
+        "get_publication_metadata_impl",
+        fake_get_publication_metadata_impl,
+    )
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_get_publication_metadata"
+    ]
+
+    result = await tool.run({"pmid": " 33454820 "})
+
+    assert result.structured_content["success"] is True
+    assert result.structured_content["metadata"][0]["pmid"] == "33454820"
+
+
+@pytest.mark.asyncio
+async def test_pmid_limit_rejects_combined_list_and_scalar_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.publications as publication_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async def fake_get_publication_metadata_service() -> object:
+        return object()
+
+    async def fake_get_publication_metadata_impl(**kwargs):
+        return {
+            "success": True,
+            "metadata": [],
+            "failed_pmids": {},
+            "_meta": {},
+        }
+
+    monkeypatch.setattr(
+        publication_tools,
+        "get_publication_metadata_service",
+        fake_get_publication_metadata_service,
+    )
+    monkeypatch.setattr(
+        publication_tools,
+        "get_publication_metadata_impl",
+        fake_get_publication_metadata_impl,
+    )
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_get_publication_metadata"
+    ]
+    pmids = [str(10_000_000 + index) for index in range(100)]
+
+    with pytest.raises(ToolError) as exc_info:
+        await tool.run({"pmids": pmids, "pmid": "99999999"})
+
+    payload = _tool_error_payload(exc_info.value)
+    assert payload["error_code"] == "validation_failed"
+    assert payload["success"] is False
+
+
+@pytest.mark.asyncio
+async def test_ground_question_accepts_max_results_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.review as review_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async def fake_ground_question_impl(**kwargs):
+        assert kwargs["max_pmids"] == 3
+        return {
+            "success": True,
+            "question": kwargs["question"],
+            "review_id": "review-1",
+            "selected_pmids": [],
+            "search_total_results": 0,
+            "coverage_summary": {},
+            "ready_to_retrieve": False,
+            "context": None,
+            "next_tools": [],
+            "recovery": [],
+        }
+
+    async def fake_dependency():
+        return object()
+
+    monkeypatch.setattr(review_tools, "ground_question_impl", fake_ground_question_impl)
+    monkeypatch.setattr(review_tools, "get_api_client", fake_dependency)
+    monkeypatch.setattr(review_tools, "get_review_queue", fake_dependency)
+    monkeypatch.setattr(review_tools, "get_review_context_service", fake_dependency)
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_ground_question"]
+
+    result = await tool.run({"question": "MEFV treatment", "max_results": 3})
+
+    assert result.structured_content["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_search_biomedical_entities_accepts_text_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.literature as literature_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async def fake_search_biomedical_entities_impl(**kwargs):
+        assert kwargs["query"] == "MEFV"
+        return {
+            "success": True,
+            "query": kwargs["query"],
+            "matches": [],
+            "total_matches": 0,
+            "concept_filter": kwargs["concept"],
+        }
+
+    async def fake_dependency():
+        return object()
+
+    monkeypatch.setattr(
+        literature_tools,
+        "search_biomedical_entities_impl",
+        fake_search_biomedical_entities_impl,
+    )
+    monkeypatch.setattr(literature_tools, "get_api_client", fake_dependency)
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_search_biomedical_entities"
+    ]
+
+    result = await tool.run({"text": "MEFV", "concept": "Gene"})
+
+    assert result.structured_content["success"] is True
+    assert result.structured_content["query"] == "MEFV"
+
+
+@pytest.mark.asyncio
+async def test_lookup_mesh_accepts_text_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pubtator_link.mcp.tools.discovery as discovery_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    class FakeService:
+        async def lookup_mesh(self, *, query: str, limit: int, exact: bool):
+            assert query == "familial Mediterranean fever"
+            assert limit == 5
+            assert exact is False
+            return type(
+                "Response",
+                (),
+                {"model_dump": lambda self, by_alias=False: {"success": True, "query": query}},
+            )()
+
+    async def fake_get_discovery_service():
+        return FakeService()
+
+    monkeypatch.setattr(discovery_tools, "get_discovery_service", fake_get_discovery_service)
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_lookup_mesh"]
+
+    result = await tool.run({"text": "familial Mediterranean fever", "limit": 5})
+
+    assert result.structured_content["success"] is True
+    assert result.structured_content["query"] == "familial Mediterranean fever"
+
+
 def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
@@ -825,7 +1546,7 @@ def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
         "pubtator_preflight_review_sources": ("pmids",),
         "pubtator_index_review_evidence": ("review_id",),
         "pubtator_get_review_passages_by_id": ("review_id", "passage_ids"),
-        "pubtator_get_review_audit_trail": ("review_id", "passage_ids"),
+        "pubtator_get_review_audit_trail": ("review_id",),
         "pubtator_get_neighboring_review_passages": ("review_id", "passage_id"),
         "pubtator_export_review_audit_bundle": ("review_id",),
         "pubtator_convert_article_ids": ("ids",),
@@ -838,6 +1559,54 @@ def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
         assert "request" not in properties
         for property_name in expected_properties:
             assert property_name in properties
+    assert "passage_ids" not in tools["pubtator_get_review_audit_trail"].parameters.get(
+        "required", []
+    )
+
+
+@pytest.mark.asyncio
+async def test_submit_text_annotation_tool_waits_for_result(monkeypatch) -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+    from pubtator_link.mcp.tools import text_annotations as annotation_tools
+
+    class FakeClient:
+        async def submit_text_annotation(self, text: str, bioconcept: str) -> str:
+            return "ABC123DEF456"
+
+        async def retrieve_text_annotation(self, session_id: str) -> dict[str, object]:
+            return {
+                "status": "completed",
+                "original_text": "MEFV and colchicine",
+                "bioconcept": "Gene",
+                "annotations": [
+                    {
+                        "start": 0,
+                        "end": 4,
+                        "text": "MEFV",
+                        "entity_id": "@GENE_4210",
+                        "entity_type": "Gene",
+                    }
+                ],
+            }
+
+        async def retrieve_text_annotation_until_ready(
+            self, session_id: str, timeout_ms: int = 30000
+        ) -> dict[str, object] | None:
+            return await self.retrieve_text_annotation(session_id)
+
+    async def fake_get_api_client() -> FakeClient:
+        return FakeClient()
+
+    monkeypatch.setattr(annotation_tools, "get_api_client", fake_get_api_client)
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_submit_text_annotation"
+    ]
+
+    result = await tool.run({"text": "MEFV and colchicine", "wait": True})
+
+    assert result.structured_content["success"] is True
+    assert result.structured_content["status"] == "completed"
+    assert result.structured_content["annotations"][0]["entity_id"] == "@GENE_4210"
 
 
 def test_export_review_audit_bundle_exposes_export_options() -> None:
@@ -852,6 +1621,7 @@ def test_export_review_audit_bundle_exposes_export_options() -> None:
     assert "fallback_inline" in properties
     assert "export_path" not in required
     assert "fallback_inline" not in required
+    assert properties["response_mode"]["default"] == "compact"
 
 
 def test_high_use_mcp_tools_expose_specific_output_schemas() -> None:
@@ -894,6 +1664,22 @@ def test_high_use_mcp_tools_expose_specific_output_schemas() -> None:
 
     for name, required in expected.items():
         _assert_specific_object_schema(_tool_output_schema(tools[name]), required)
+
+
+def test_submit_text_annotation_output_schema_documents_wait_result() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_submit_text_annotation"
+    ]
+    schema = _tool_output_schema(tool)
+    properties = schema.get("properties")
+    assert isinstance(properties, dict)
+    assert "annotations" in properties
+    assert "original_text" in properties
+    assert "session_id" in properties
+    assert "retryable" in properties
+    assert "next_tools" in properties
 
 
 def test_batch_output_schema_allows_omitted_empty_results() -> None:

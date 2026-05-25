@@ -95,20 +95,14 @@ ResearchSessionDecisionReason = Literal[
     "queue_rejected",
 ]
 ReviewLlmContextKind = Literal["retrieval_context"]
+# fmt: off
 ReviewLlmContextEventType = Literal[
-    "context_created",
-    "session_selected",
-    "pmids_selected",
-    "pmids_rejected",
-    "query_succeeded",
-    "query_failed",
-    "passage_selected",
-    "audit_passage_selected",
-    "question_opened",
-    "decision_recorded",
-    "next_commands_recorded",
-    "context_summarized",
+    "context_created", "session_selected", "pmids_selected", "pmids_rejected",
+    "query_succeeded", "query_failed", "passage_selected", "audit_passage_selected",
+    "question_opened", "decision_recorded", "next_commands_recorded", "context_summarized",
+    "note",
 ]
+# fmt: on
 
 
 class McpToolKind(StrEnum):
@@ -325,10 +319,10 @@ class ReviewQuickstartResponse(BaseModel):
 
 
 class GroundQuestionResponse(BaseModel):
-    """Composite one-call grounded question workflow response."""
-
     success: bool = True
     question: str
+    query_length_warning: str | None = None
+    query_variants_attempted: list[str] = Field(default_factory=list)
     review_id: str
     selected_pmids: list[str] = Field(default_factory=list)
     search_total_results: int = 0
@@ -342,7 +336,9 @@ class GroundQuestionResponse(BaseModel):
 
 class ResearchSessionStatusResponse(BaseModel):
     success: bool = True
-    manifest: ResearchSessionManifest
+    manifest: ResearchSessionManifest | None = None
+    error_code: Literal["not_found", "validation_failed"] | None = None
+    message: str | None = None
 
 
 class ListResearchSessionsResponse(BaseModel):
@@ -1003,6 +999,7 @@ class McpReviewAuditBundleResponse(BaseModel):
 
     success: bool = True
     audit_bundle: ReviewAuditBundle | None = None
+    audit_bundle_summary: dict[str, Any] | None = None
     inline_bundle: dict[str, Any] | None = None
     export_path: str | None = None
     error: dict[str, Any] | None = None

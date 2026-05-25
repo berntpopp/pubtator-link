@@ -130,6 +130,11 @@ class FailingEuropePmc:
         raise RuntimeError("Europe PMC unavailable")
 
 
+class EmptyEuropePmc:
+    async def get_citations(self, pmid: str, *, limit: int) -> list[LiteraturePaper]:
+        return []
+
+
 class FakeOpenAlex:
     async def get_references(self, doi: str, *, limit: int) -> list[LiteraturePaper]:
         assert doi == "10.1016/j.ard.2025.05.020"
@@ -1327,3 +1332,36 @@ async def test_citation_graph_batches_reference_doi_resolution() -> None:
     assert any(
         status.operation == "doi_to_pmid" for status in response.identifier_resolution_status
     )
+
+
+@pytest.mark.asyncio
+async def test_citation_graph_empty_recent_publication_adds_freshness_note() -> None:
+    service = CitationGraphService(
+        europe_pmc=EmptyEuropePmc(),
+        metadata_service=MetadataWithSourceDoi(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(pmid="40562663", direction="cited_by")
+    )
+
+    assert response.references == []
+    assert response.cited_by == []
+    assert response.freshness_note is not None
+    assert "providers typically lag for new papers" in response.freshness_note
+    assert "about" in response.freshness_note
+
+
+@pytest.mark.asyncio
+async def test_citation_graph_nonempty_publication_omits_freshness_note() -> None:
+    service = CitationGraphService(
+        europe_pmc=FakeEuropePmc(),
+        metadata_service=MetadataWithSourceDoi(),
+    )
+
+    response = await service.get_citation_graph(
+        PublicationCitationGraphRequest(pmid="40562663", direction="cited_by")
+    )
+
+    assert response.cited_by
+    assert response.freshness_note is None

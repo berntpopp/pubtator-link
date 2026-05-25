@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from collections.abc import Sequence
+from types import SimpleNamespace
 
 import pytest
 
@@ -46,6 +47,7 @@ class FakeReviewContextRepository:
         self.session_exists = True
         self.embeddings_by_passage_id: dict[str, list[float]] = {}
         self.embedding_calls: list[dict[str, object]] = []
+        self.latest_context = None
         self.calls: dict[str, int] = {
             "preparation_status": 0,
             "indexed_pmids": 0,
@@ -85,6 +87,11 @@ class FakeReviewContextRepository:
     ) -> dict[str, int]:
         self.calls["preparation_status"] += 1
         return self.preparation_status_value
+
+    async def get_latest_llm_context(
+        self, review_id: str, *, session_id: str | None = None
+    ) -> object | None:
+        return self.latest_context
 
     async def list_review_sources(
         self,
@@ -614,6 +621,34 @@ async def test_get_audit_trail_returns_copy_ready_items() -> None:
     assert response.items[0].stable_citation_key.startswith("c_")
     assert response.not_found == ["missing"]
     assert "PMID:40234174:abstract:0" in response.audit_block
+
+
+@pytest.mark.asyncio
+async def test_get_audit_trail_defaults_to_latest_audit_passages() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage(
+                "PMID:40234174:abstract:0",
+                pmid="40234174",
+                text="MEFV variants respond to colchicine in familial Mediterranean fever.",
+                section="abstract",
+            )
+        ]
+    )
+    repository.latest_context = SimpleNamespace(
+        audit_passage_ids=["PMID:40234174:abstract:0"],
+        selected_passage_ids=["ignored"],
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.get_audit_trail(
+        review_id="review-1",
+        passage_ids=[],
+        max_chars_per_passage=500,
+    )
+
+    assert [item.passage_id for item in response.items] == ["PMID:40234174:abstract:0"]
+    assert response.not_found == []
 
 
 @pytest.mark.asyncio

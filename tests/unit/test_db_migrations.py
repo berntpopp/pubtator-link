@@ -3,6 +3,7 @@ from typing import NamedTuple
 
 from pubtator_link.db.migrate import (
     MIGRATIONS_PACKAGE,
+    _is_non_transactional_migration,
     required_review_schema_items,
     schema_repair_statements,
 )
@@ -93,3 +94,23 @@ def test_schema_repair_statements_are_non_destructive() -> None:
         "alter table reviews add column if not exists updated_at" in item.lower()
         for item in statements
     )
+
+
+def test_migration_without_sentinel_runs_inside_transaction_wrapper() -> None:
+    sql = "CREATE TABLE foo (id int);"
+    assert _is_non_transactional_migration(sql) is False
+
+
+def test_migration_with_sentinel_in_first_lines_skips_transaction_wrapper() -> None:
+    sql = "-- pragma: non-transactional\nCREATE INDEX CONCURRENTLY ix_foo ON foo(id);"
+    assert _is_non_transactional_migration(sql) is True
+
+
+def test_sentinel_text_inline_in_first_lines_is_ignored() -> None:
+    sql = "-- mentions -- pragma: non-transactional in a longer comment\nSELECT 1;"
+    assert _is_non_transactional_migration(sql) is False
+
+
+def test_sentinel_after_first_8_lines_is_ignored() -> None:
+    sql = ("\n" * 9) + "-- pragma: non-transactional\nSELECT 1;"
+    assert _is_non_transactional_migration(sql) is False

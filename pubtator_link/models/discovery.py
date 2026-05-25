@@ -9,6 +9,7 @@ ArticleIdTarget = Literal["pmid", "pmcid", "doi"]
 ArticleIdStatus = Literal["resolved", "unresolved", "invalid", "failed"]
 CitationLookupStatus = Literal["matched", "not_found", "ambiguous", "failed"]
 RelatedArticleMode = Literal["similar", "cited_by", "references"]
+RelatedMetadataStatus = Literal["success", "partial", "unavailable"]
 
 
 class DiscoveryMeta(BaseModel):
@@ -44,6 +45,7 @@ class ArticleIdConversionResponse(BaseModel):
 
     model_config = ConfigDict(serialize_by_alias=True, validate_by_name=True)
 
+    success: bool = True
     records: list[ArticleIdConversionRecord]
     candidate_pmids: list[str] = Field(default_factory=list)
     unresolved: list[str] = Field(default_factory=list)
@@ -96,6 +98,7 @@ class CitationLookupRecord(BaseModel):
     title: str | None = None
     journal: str | None = None
     year: int | None = None
+    authors: list[str] = Field(default_factory=list)
     reason: str | None = None
 
 
@@ -106,6 +109,7 @@ class CitationLookupResponse(BaseModel):
 
     records: list[CitationLookupRecord]
     candidate_pmids: list[str] = Field(default_factory=list)
+    metadata_status: RelatedMetadataStatus = "unavailable"
     meta: DiscoveryMeta = Field(default_factory=DiscoveryMeta, alias="_meta")
 
 
@@ -146,6 +150,7 @@ class RelatedArticlesResponse(BaseModel):
     related_articles: list[RelatedArticleRecord] = Field(default_factory=list)
     candidate_pmids: list[str] = Field(default_factory=list)
     unresolved: list[str] = Field(default_factory=list)
+    metadata_status: RelatedMetadataStatus = "unavailable"
     meta: DiscoveryMeta = Field(default_factory=DiscoveryMeta, alias="_meta")
 
     @field_validator("candidate_pmids")

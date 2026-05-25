@@ -116,6 +116,41 @@ def test_shaped_search_response_full_metadata_includes_mesh_and_citations() -> N
     assert result.bibtex == "@article{pmid33454820}"
 
 
+def test_shaped_search_result_includes_recommended_citation() -> None:
+    shaped = shaped_search_response(
+        raw={
+            "total": 1,
+            "results": [
+                {
+                    "pmid": "33454820",
+                    "title": "Clinical and genetic findings in children with MEFV variants",
+                    "journal": "Rheumatology International",
+                    "date": "2022",
+                    "doi": "10.1007/s00296-020-04776-1",
+                    "authors": ["Kavrul Kayaalp GK", "Ozen S"],
+                }
+            ],
+        },
+        query="MEFV",
+        page=1,
+        sort=None,
+        filters=None,
+        sections=None,
+        response_mode="compact",
+        include_citations="none",
+        text_hl_format="plain",
+        limit=None,
+        guideline_boost=False,
+    )
+
+    assert (
+        shaped.results[0].recommended_citation
+        == "Kavrul Kayaalp GK et al. Clinical and genetic findings in children with "
+        "MEFV variants. Rheumatology International. 2022. PMID:33454820. "
+        "doi:10.1007/s00296-020-04776-1."
+    )
+
+
 def test_shaped_search_response_none_metadata_preserves_existing_values() -> None:
     shaped = shaped_search_response(
         raw={
@@ -269,6 +304,40 @@ def test_guideline_boost_prioritizes_named_consensus_guidelines() -> None:
     selected = selected_search_items(items, guideline_boost=True, limit=2)
 
     assert [item["pmid"] for item in selected] == ["2", "1"]
+
+
+def test_guideline_boost_uses_title_signals_without_publication_types() -> None:
+    items = [
+        {
+            "pmid": "1",
+            "title": "Familial Mediterranean fever review",
+            "abstract": "General review of MEFV.",
+            "publication_types": [],
+        },
+        {
+            "pmid": "2",
+            "title": (
+                "EULAR recommendations and systematic review for familial Mediterranean fever"
+            ),
+            "abstract": "Consensus guidance from SHARE and PRES.",
+            "publication_types": [],
+        },
+    ]
+
+    selected = selected_search_items(items, guideline_boost=True, limit=2)
+    result = shaped_search_result(
+        item=selected[0],
+        response_mode="standard",
+        include_citations="none",
+        text_hl_format="plain",
+        guideline_boost=True,
+        metadata="none",
+    )
+
+    assert [item["pmid"] for item in selected] == ["2", "1"]
+    assert "eular" in result.ranking_reasons
+    assert "recommendation" in result.ranking_reasons
+    assert "systematic review" in result.ranking_reasons
 
 
 def test_guideline_rank_features_include_reasons() -> None:

@@ -23,6 +23,7 @@ from pubtator_link.models.literature_graph import (
     PublicationCitationGraphResponse,
     dedupe_papers,
 )
+from pubtator_link.models.literature_graph_hints import graph_freshness_note
 from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 from pubtator_link.services.literature_graph_compact import (
     candidate_summary,
@@ -413,6 +414,7 @@ class CitationGraphService:
             provider_status=provider_status,
             _meta=meta,
         )
+        response.freshness_note = graph_freshness_note(response)
         response = _enforce_citation_graph_budget(response)
         response.meta.response_size_class = json_size_class(response.model_dump(by_alias=True))
         return response
@@ -570,10 +572,6 @@ class CitationGraphService:
                 return LiteraturePaper(pmid=pmid, doi=request.doi), resolution_result
             return LiteraturePaper(doi=request.doi), resolution_result
         raise ValueError("exactly one of pmid or doi is required")
-
-    async def _pmid_for_doi(self, doi: str) -> str | None:
-        result = await self.doi_resolver.resolve([doi], max_ids=1)
-        return next(iter(result.resolved.values()), None)
 
     async def _metadata_for_pmid(self, pmid: str) -> Any | None:
         if self.metadata_service is None:

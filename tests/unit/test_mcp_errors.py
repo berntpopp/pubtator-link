@@ -14,6 +14,7 @@ from pubtator_link.mcp.errors import (
     run_mcp_tool,
     sanitize_error_message,
 )
+from pubtator_link.mcp.validation_errors import extract_validation_details
 from pubtator_link.services.errors import (
     ReviewIndexUnavailableError,
     ReviewSchemaStaleError,
@@ -26,6 +27,30 @@ def test_sanitize_error_message_removes_database_details() -> None:
     message = 'column "updated_at" of relation "reviews" does not exist'
 
     assert sanitize_error_message(message) == "Review database schema is not current."
+
+
+def test_extract_validation_details_finds_direct_and_anyof_enum_values() -> None:
+    details = extract_validation_details(
+        {
+            "type": "object",
+            "properties": {
+                "response_mode": {"enum": ["compact", "standard", "full"]},
+                "concept": {
+                    "anyOf": [
+                        {"enum": ["Gene", "Disease"]},
+                        {"type": "null"},
+                    ]
+                },
+                "query": {"type": "string"},
+            },
+        }
+    )
+
+    assert details["valid_params"] == ["concept", "query", "response_mode"]
+    assert details["valid_values_for"] == {
+        "concept": ["Gene", "Disease"],
+        "response_mode": ["compact", "standard", "full"],
+    }
 
 
 def test_mcp_tool_error_serializes_recovery_envelope() -> None:
@@ -135,6 +160,62 @@ def test_pubtator_api_database_maintenance_is_upstream_unavailable() -> None:
     assert payload["error_code"] == "upstream_unavailable"
     assert payload["message"] == "The upstream service is temporarily unavailable."
     assert "review schema" not in payload["recovery"].lower()
+
+
+def test_pubtator_api_transport_failure_is_upstream_unavailable() -> None:
+    error = mcp_tool_error(
+        PubTatorAPIError(
+            "Request failed: Server disconnected without sending a response.",
+            retry_metadata={"terminal_reason": "request_error", "attempt_count": 3},
+        ),
+        McpErrorContext(tool_name="pubtator_search_literature"),
+    )
+
+    payload = json.loads(str(error))
+
+    assert payload["error_code"] == "upstream_unavailable"
+    assert payload["message"] == "The upstream service is temporarily unavailable."
+    assert payload["retryable"] is True
+
+
+def test_generic_internal_error_does_not_claim_schema_is_stale() -> None:
+    error = mcp_tool_error(
+        RuntimeError("unexpected adapter failure"),
+        McpErrorContext(tool_name="pubtator_unknown_tool"),
+    )
+
+    payload = json.loads(str(error))
+
+    assert payload["error_code"] == "internal_error"
+    assert "review schema" not in payload["recovery"].lower()
+    assert "recent_mcp_errors" in payload["recovery"]
+
+
+def test_schema_stale_recovery_is_reserved_for_schema_errors() -> None:
+    error = mcp_tool_error(
+        ReviewSchemaStaleError("schema stale"),
+        McpErrorContext(tool_name="pubtator_index_review_evidence"),
+    )
+
+    payload = json.loads(str(error))
+
+    assert payload["error_code"] == "review_schema_not_current"
+    assert "review schema is stale" in payload["recovery"].lower()
+
+
+def test_tool_specific_recovery_text_for_discovery_text_and_audit_errors() -> None:
+    cases = {
+        "pubtator_convert_article_ids": "Retry with one identifier at a time",
+        "pubtator_submit_text_annotation": "Retry with a shorter text",
+        "pubtator_export_review_audit_bundle": "Use fallback_inline=True",
+    }
+
+    for tool_name, expected in cases.items():
+        error = mcp_tool_error(RuntimeError("boom"), McpErrorContext(tool_name=tool_name))
+        payload = json.loads(str(error))
+
+        assert expected in payload["recovery"]
+        assert "review schema" not in payload["recovery"].lower()
 
 
 def test_ground_question_error_uses_selected_pmids_for_fallback() -> None:
@@ -259,7 +340,7 @@ def test_recent_mcp_errors_are_bounded_and_clearable() -> None:
 
     assert errors[-1]["tool_name"] == "pubtator_index_review_evidence"
     assert errors[-1]["error_code"] == "review_index_unavailable"
-    assert "relation review_sources does not exist" in errors[-1]["raw_message"]
+    assert "raw_message" not in errors[-1]
 
     for index in range(RECENT_MCP_ERROR_LIMIT + 5):
         record_mcp_error(
@@ -297,7 +378,8 @@ def test_record_mcp_error_sanitizes_stored_message() -> None:
     errors = get_recent_mcp_errors()
 
     assert errors[-1]["message"] == "Review database operation failed."
-    assert "db.internal" in errors[-1]["raw_message"]
+    assert "raw_message" not in errors[-1]
+    assert "db.internal" not in json.dumps(errors)
 
 
 def test_mcp_output_validation_error_is_actionable_and_recorded() -> None:

@@ -12,6 +12,7 @@ from pubtator_link.api.routes.dependencies import (
     get_variant_evidence_service,
 )
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
+from pubtator_link.mcp.argument_aliases import coalesce_query
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.service_adapters import (
@@ -43,7 +44,8 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def search_literature(
-        text: str,
+        text: str | None = None,
+        query: str | None = None,
         page: int = 1,
         sort: str | None = None,
         filters: str | None = None,
@@ -59,10 +61,12 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         guideline_boost: bool = False,
         coverage: SearchCoverageMode = "none",
         metadata: SearchMetadataMode = "basic",
+        include_meta: bool = True,
     ) -> dict[str, Any]:
-        """Use this when a user needs PubMed literature search through PubTator3. Supports short biomedical queries, flat filters, optional section filters, and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false means continue with results or inspect diagnostics."""
+        """Use this when a user needs PubMed literature search through PubTator3. Provide one of text or query. Supports flat filters, section filters, and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false means continue with results or inspect diagnostics."""
 
         async def call() -> dict[str, Any]:
+            search_text = coalesce_query(text, query)
             preflight_service = (
                 await get_source_preflight_service() if coverage == "preflight" else None
             )
@@ -72,7 +76,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             client = await get_api_client()
             return await search_literature_impl(
                 client=client,
-                text=text,
+                text=search_text,
                 page=page,
                 sort=sort,
                 filters=filters,
@@ -90,6 +94,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 preflight_service=preflight_service,
                 metadata=metadata,
                 metadata_service=metadata_service,
+                include_meta=include_meta,
             )
 
         return await run_mcp_tool("pubtator_search_literature", call)
@@ -101,7 +106,8 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def search_guidelines(
-        text: str,
+        text: Annotated[str | None, Field(min_length=1, max_length=1000)] = None,
+        query: Annotated[str | None, Field(min_length=1, max_length=1000)] = None,
         page: int = 1,
         year_min: int | None = None,
         year_max: int | None = None,
@@ -110,24 +116,20 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         entity_ids: list[str] | None = None,
         coverage: SearchCoverageMode = "preflight",
     ) -> dict[str, Any]:
-        """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. This is a convenience wrapper over pubtator_search_literature with guideline/systematic-review publication-type filters and guideline boosting, not an independent guideline database. Defaults to source coverage preflight so abstract-only guideline hits are visible before indexing."""
+        """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. Provide one of text or query. Wraps pubtator_search_literature with guideline/systematic-review filters and guideline boosting; not an independent guideline database."""
 
         async def call() -> dict[str, Any]:
+            search_text = coalesce_query(text, query)
             preflight_service = (
                 await get_source_preflight_service() if coverage == "preflight" else None
             )
             client = await get_api_client()
             return await search_literature_impl(
                 client=client,
-                text=text,
+                text=search_text,
                 page=page,
                 sort="score desc",
-                publication_types=[
-                    "Guideline",
-                    "Practice Guideline",
-                    "Consensus Development Conference",
-                    "Systematic Review",
-                ],
+                publication_types=None,
                 year_min=year_min,
                 year_max=year_max,
                 sections=sections,
@@ -150,7 +152,8 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def search_biomedical_entities(
-        query: str,
+        query: str | None = None,
+        text: str | None = None,
         concept: (
             Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine", "Phenotype"]
             | None
@@ -163,7 +166,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             client = await get_api_client()
             return await search_biomedical_entities_impl(
                 client=client,
-                query=query,
+                query=query if query and query.strip() else text or "",
                 concept=concept,
                 limit=limit,
             )
@@ -188,6 +191,9 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             ],
             relation_type: str | None = None,
             target_entity_type: str | None = None,
+            limit: Annotated[int, Field(ge=1, le=100)] = 20,
+            response_mode: Literal["compact", "standard", "full"] = "compact",
+            max_response_chars: Annotated[int, Field(ge=1000, le=50000)] = 12_000,
         ) -> dict[str, Any]:
             """Use this when a user has a PubTator entity ID and needs literature-derived related entities to expand a corpus. Do not use this for canonical entity lookup; use pubtator_search_biomedical_entities. Next: pubtator_search_literature."""
 
@@ -198,6 +204,9 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                     entity_id=entity_id,
                     relation_type=relation_type,
                     target_entity_type=target_entity_type,
+                    limit=limit,
+                    response_mode=response_mode,
+                    max_response_chars=max_response_chars,
                 )
 
             return await run_mcp_tool("pubtator_find_entity_relations", call)

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -10,11 +9,27 @@ from typing import Any, Literal, cast
 from pubtator_link.api.client import PubTator3Client, PubTatorAPIError
 from pubtator_link.api.search_filters import merge_search_filters
 from pubtator_link.config import text_processing_config
+from pubtator_link.mcp.audit_export import compact_audit_bundle_summary
 from pubtator_link.mcp.errors import mcp_field_validation_error
 from pubtator_link.mcp.input_normalization import (
     attach_normalization_meta,
     normalize_retrieve_review_context_batch_args,
 )
+from pubtator_link.mcp.pmc_export import pmc_export_coverage
+from pubtator_link.mcp.quickstart import (
+    query_length_warning,
+    quickstart_review_id,
+    quickstart_selected_pmids,
+    review_indexing_service_from_factory,
+    search_pmids_for_query_variants,
+    wait_for_quickstart_index,
+)
+from pubtator_link.mcp.relations import shape_entity_relations
+from pubtator_link.mcp.session_orientation import (
+    research_session_status_payload,
+    research_sessions_payload,
+)
+from pubtator_link.mcp.text_annotation_degraded import text_annotation_degraded_payload
 from pubtator_link.models.corpus_suggestion import CorpusSuggestionRequest
 from pubtator_link.models.literature_graph import (
     PublicationCitationGraphRequest,
@@ -33,8 +48,6 @@ from pubtator_link.models.responses import (
     EntityAutocompleteResponse,
     EntityMatch,
     PublicationExportResponse,
-    RelatedEntity,
-    RelationsResponse,
     TextAnnotationResultResponse,
     TextAnnotationSubmitResponse,
 )
@@ -96,6 +109,7 @@ from pubtator_link.services.search_shaping import (
     SearchResponseMode,
     TextHighlightFormat,
     combined_search_text,
+    dump_search_response,
     selected_search_items,
     shaped_search_response,
 )
@@ -473,6 +487,7 @@ async def search_literature_impl(
     preflight_service: SearchCoveragePreflight | None = None,
     metadata: SearchMetadataMode = "basic",
     metadata_service: PublicationMetadataService | None = None,
+    include_meta: bool = True,
 ) -> dict[str, Any]:
     normalized_text = combined_search_text(text, entity_ids)
     merged_filters = merge_search_filters(
@@ -520,10 +535,7 @@ async def search_literature_impl(
             "Search is read-only metadata discovery. Use coverage='preflight' or "
             "pubtator_preflight_review_sources before indexing if source coverage matters."
         ),
-        "next_tools": [
-            "pubtator_preflight_review_sources",
-            "pubtator_index_review_evidence",
-        ],
+        "next_tools": ["pubtator_preflight_review_sources", "pubtator_index_review_evidence"],
         "workflow": "search -> preflight -> index -> inspect -> retrieve",
         "details_resource": "pubtator://workflow-help",
     }
@@ -535,8 +547,12 @@ async def search_literature_impl(
             "with local best-effort filters applied."
         )
         response.source_versions["pubtator3_filtering"] = "local_fallback"
-    dumped = response.model_dump()
-    dumped["_meta"] = response_meta
+    dumped = dump_search_response(response, response_mode=response_mode)
+    if include_meta:
+        dumped["_meta"] = response_meta
+    else:
+        for field in ("cache_key", "corpus_snapshot_date", "source_versions"):
+            dumped.pop(field, None)
     return dumped
 
 
@@ -704,6 +720,7 @@ async def fetch_pmc_annotations_impl(
         full_text=True,
         export_data={"documents": documents},
         count=len(pmcids),
+        **pmc_export_coverage(pmcids, documents),
     ).model_dump()
 
 
@@ -713,6 +730,9 @@ async def find_entity_relations_impl(
     entity_id: str,
     relation_type: str | None = None,
     target_entity_type: str | None = None,
+    limit: int = 20,
+    response_mode: Literal["compact", "standard", "full"] = "compact",
+    max_response_chars: int = 12_000,
 ) -> dict[str, Any]:
     raw_response = await client.find_relations(
         e1=entity_id,
@@ -723,28 +743,15 @@ async def find_entity_relations_impl(
     api_results = cast(
         list[dict[str, Any]], relation_response if isinstance(relation_response, list) else []
     )
-    related_entities = [
-        RelatedEntity(
-            entity_id=item.get("target", ""),
-            entity_name=item.get("entity_name"),
-            entity_type=item.get("entity_type"),
-            relation_type=item.get("type", ""),
-            confidence=item.get("confidence"),
-            pmids=item.get("pmids", []),
-            source=item.get("source"),
-            target=item.get("target", ""),
-            publications=item.get("publications"),
-        )
-        for item in api_results
-    ]
-    return RelationsResponse(
-        success=True,
-        primary_entity=entity_id,
-        related_entities=related_entities,
-        total_relations=len(related_entities),
-        relation_filter=relation_type,
-        entity_filter=target_entity_type,
-    ).model_dump()
+    return shape_entity_relations(
+        entity_id=entity_id,
+        api_results=api_results,
+        relation_type=relation_type,
+        target_entity_type=target_entity_type,
+        limit=limit,
+        response_mode=response_mode,
+        max_response_chars=max_response_chars,
+    )
 
 
 async def lookup_variant_evidence_impl(
@@ -776,41 +783,49 @@ async def submit_text_annotation_impl(
     client: PubTator3Client,
     text: str,
     bioconcepts: str = "Gene",
+    wait: bool = False,
+    timeout_ms: int = 30000,
 ) -> dict[str, Any]:
-    if bioconcepts.lower() == "all":
-        selected_bioconcepts = list(text_processing_config.supported_bioconcepts)
-    else:
-        selected_bioconcepts = [item.strip() for item in bioconcepts.split(",") if item.strip()]
-
+    supported = text_processing_config.supported_bioconcepts
+    selected_bioconcepts = (
+        list(supported)
+        if bioconcepts.lower() == "all"
+        else [item.strip() for item in bioconcepts.split(",") if item.strip()]
+    )
     invalid_bioconcepts = [
-        bioconcept
-        for bioconcept in selected_bioconcepts
-        if bioconcept not in text_processing_config.supported_bioconcepts
+        bioconcept for bioconcept in selected_bioconcepts if bioconcept not in supported
     ]
     if invalid_bioconcepts:
         raise ValueError(
             f"Invalid bioconcept(s): {', '.join(invalid_bioconcepts)}. "
-            f"Supported types: {', '.join(text_processing_config.supported_bioconcepts)}"
+            f"Supported types: {', '.join(supported)}"
         )
 
     normalized_text = text.strip()
     session_id = await client.submit_text_annotation(
         text=normalized_text, bioconcept=selected_bioconcepts[0]
     )
-    if len(normalized_text) < 1000:
-        estimated_time = 15
-    elif len(normalized_text) < 5000:
-        estimated_time = 45
-    else:
-        estimated_time = 90
-
+    if wait:
+        result = await client.retrieve_text_annotation_until_ready(
+            session_id, timeout_ms=timeout_ms
+        )
+        if result is not None:
+            return await get_text_annotation_results_impl(
+                client=client, session_id=session_id, result=result
+            )
+    estimated_time = (
+        15 if len(normalized_text) < 1000 else 45 if len(normalized_text) < 5000 else 90
+    )
     return TextAnnotationSubmitResponse(
-        success=True,
         session_id=session_id,
-        status="submitted",
+        status="pending" if wait else "submitted",
         bioconcepts=selected_bioconcepts,
         estimated_time=estimated_time,
-        message="Text submitted for processing. Use session_id to retrieve results.",
+        message=(
+            "Text annotation is still processing. Retry pubtator_get_text_annotation_results."
+            if wait
+            else "Text submitted for processing. Use session_id to retrieve results."
+        ),
     ).model_dump()
 
 
@@ -818,33 +833,25 @@ async def get_text_annotation_results_impl(
     *,
     client: PubTator3Client,
     session_id: str,
+    result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    result = await client.retrieve_text_annotation(session_id=session_id)
+    result = result or await client.retrieve_text_annotation(session_id=session_id)
     status = str(result.get("status", "unknown"))
+    if status == "upstream_unavailable" and result.get("retryable") is True:
+        return text_annotation_degraded_payload(session_id, status, result.get("message"))
     annotations = [
-        AnnotationEntity(
-            start=annotation.get("start", 0),
-            end=annotation.get("end", 0),
-            text=annotation.get("text", ""),
-            entity_id=annotation.get("entity_id", ""),
-            entity_type=annotation.get("entity_type", ""),
-            confidence=annotation.get("confidence"),
-        )
-        for annotation in result.get("annotations", [])
+        AnnotationEntity.model_validate(annotation) for annotation in result.get("annotations", [])
     ]
     return TextAnnotationResultResponse(
-        success=True,
         session_id=session_id,
         status=status,
         original_text=str(result.get("original_text", "")),
         bioconcept=str(result.get("bioconcept", "")),
         annotations=annotations,
         processing_time=result.get("processing_time"),
-        message=(
-            "Processing in progress. Please try again in a few moments."
-            if status in {"processing", "submitted"}
-            else None
-        ),
+        message="Processing in progress. Please try again in a few moments."
+        if status in {"processing", "submitted"}
+        else None,
     ).model_dump()
 
 
@@ -939,9 +946,10 @@ async def review_quickstart_impl(
     session_id: str | None = None,
     wait_until_ready: bool = False,
     timeout_ms: int = 0,
+    review_indexing_service_factory: Any = ReviewIndexingService,
 ) -> dict[str, Any]:
     normalized_topic = topic.strip()
-    selected_review_id = review_id or _quickstart_review_id(normalized_topic)
+    selected_review_id = review_id or quickstart_review_id(normalized_topic)
     staged = await stage_service.stage(
         review_id=selected_review_id,
         request=StageResearchSessionRequest(
@@ -952,6 +960,16 @@ async def review_quickstart_impl(
         ),
     )
     manifest = staged.manifest
+    selected_pmids = quickstart_selected_pmids(manifest)
+    if wait_until_ready:
+        await wait_for_quickstart_index(
+            review_id=selected_review_id,
+            session_id=manifest.session_id,
+            pmids=selected_pmids,
+            stage_service=stage_service,
+            timeout_ms=timeout_ms,
+            review_indexing_service_factory=review_indexing_service_factory,
+        )
     inspect_response = await context_service.inspect_review_index(
         selected_review_id,
         InspectReviewIndexRequest(session_id=manifest.session_id),
@@ -967,13 +985,11 @@ async def review_quickstart_impl(
         warnings.append(
             "quickstart queued sources but no passages are ready yet; poll inspect_review_index"
         )
-    if timeout_ms and not ready_to_retrieve:
-        warnings.append("quickstart does not block on indexing; use inspect_review_index to poll")
     response = ReviewQuickstartResponse(
         review_id=selected_review_id,
         session_id=manifest.session_id,
         topic=normalized_topic,
-        selected_pmids=[candidate.pmid for candidate in manifest.candidates],
+        selected_pmids=selected_pmids,
         coverage_summary=inspect_response.coverage_summary or manifest.coverage_summary,
         preparation_status=preparation_status,
         indexed_totals=inspect_response.totals,
@@ -1006,31 +1022,31 @@ async def ground_question_impl(
     review_indexing_service_factory: Any = ReviewIndexingService,
 ) -> dict[str, Any]:
     normalized_question = question.strip()
-    selected_review_id = review_id or _quickstart_review_id(normalized_question)
-    search_result = await search_literature_impl(
-        client=client,
-        text=normalized_question,
-        limit=max_pmids,
-        entity_ids=entity_ids,
-        guideline_boost=guideline_boost,
-        response_mode="compact",
-        include_citations="none",
-        metadata="basic",
+    warning = query_length_warning(normalized_question)
+    selected_review_id = review_id or quickstart_review_id(normalized_question)
+
+    async def search_variant(search_query: str) -> dict[str, Any]:
+        return await search_literature_impl(
+            client=client,
+            text=search_query,
+            limit=max_pmids,
+            entity_ids=entity_ids,
+            guideline_boost=guideline_boost,
+            response_mode="compact",
+            include_citations="none",
+            metadata="basic",
+        )
+
+    search_result, selected_pmids, query_variants_attempted = await search_pmids_for_query_variants(
+        normalized_question, max_pmids=max_pmids, search=search_variant
     )
-    selected_pmids: list[str] = []
-    for item in search_result.get("results", []):
-        if not isinstance(item, dict):
-            continue
-        pmid = str(item.get("pmid") or "").strip()
-        if pmid and pmid not in selected_pmids:
-            selected_pmids.append(pmid)
-        if len(selected_pmids) >= max_pmids:
-            break
     search_total_results = int(search_result.get("total_results") or len(selected_pmids))
 
     if not selected_pmids:
         return GroundQuestionResponse(
             question=normalized_question,
+            query_length_warning=warning,
+            query_variants_attempted=query_variants_attempted,
             review_id=selected_review_id,
             selected_pmids=[],
             search_total_results=search_total_results,
@@ -1041,7 +1057,7 @@ async def ground_question_impl(
         ).model_dump(mode="json")
 
     try:
-        indexing_service = _review_indexing_service_from_factory(
+        indexing_service = review_indexing_service_from_factory(
             review_indexing_service_factory,
             queue,
         )
@@ -1079,10 +1095,7 @@ async def ground_question_impl(
                     include_diagnostics=False,
                 ),
             )
-            next_tools = [
-                "pubtator_record_review_context",
-                "pubtator_get_review_audit_trail",
-            ]
+            next_tools = ["pubtator_record_review_context", "pubtator_get_review_audit_trail"]
         else:
             recovery.append(
                 "Indexing has not produced passages yet; inspect the review index and retry retrieval."
@@ -1097,6 +1110,8 @@ async def ground_question_impl(
 
     return GroundQuestionResponse(
         question=normalized_question,
+        query_length_warning=warning,
+        query_variants_attempted=query_variants_attempted,
         review_id=selected_review_id,
         selected_pmids=selected_pmids,
         search_total_results=search_total_results,
@@ -1124,36 +1139,16 @@ def _ground_question_sources_ready(inspect_response: Any, selected_pmids: list[s
     return bool(ready_pmids)
 
 
-def _review_indexing_service_from_factory(factory: Any, queue: ReviewPreparationQueue) -> Any:
-    try:
-        return factory(repository=queue.repository, queue=queue)
-    except TypeError:
-        try:
-            return factory(queue)
-        except TypeError:
-            return factory(queue=queue)
-
-
-def _quickstart_review_id(topic: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", topic.lower()).strip("-")[:48]
-    if not slug:
-        slug = "review"
-    digest = hashlib.sha256(topic.encode("utf-8")).hexdigest()[:8]
-    return f"quickstart-{slug}-{digest}"
-
-
 async def get_research_session_status_impl(
-    *, service: Any, review_id: str, session_id: str
+    *, service: Any, review_id: str | None, session_id: str
 ) -> dict[str, Any]:
-    result = (await service.get_status(review_id=review_id, session_id=session_id)).model_dump(
-        by_alias=True
+    return await research_session_status_payload(
+        service=service, review_id=review_id, session_id=session_id
     )
-    return cast(dict[str, Any], result)
 
 
-async def list_research_sessions_impl(*, service: Any, review_id: str) -> dict[str, Any]:
-    result = (await service.list_sessions(review_id=review_id)).model_dump(by_alias=True)
-    return cast(dict[str, Any], result)
+async def list_research_sessions_impl(*, service: Any, review_id: str | None) -> dict[str, Any]:
+    return await research_sessions_payload(service=service, review_id=review_id)
 
 
 async def review_summary_resource_impl(*, service: Any, review_id: str) -> dict[str, Any]:
@@ -1558,7 +1553,7 @@ async def get_review_audit_trail_impl(
     *,
     service: ReviewContextService,
     review_id: str,
-    passage_ids: list[str],
+    passage_ids: list[str] | None = None,
     session_id: str | None = None,
     max_chars_per_passage: int = 500,
 ) -> dict[str, Any]:
@@ -1601,10 +1596,15 @@ async def export_review_audit_bundle_impl(
     session_id: str | None = None,
     export_path: str | None = None,
     fallback_inline: bool = False,
+    response_mode: Literal["full", "compact"] = "compact",
 ) -> dict[str, Any]:
     bundle = await service.export_bundle(review_id, session_id=session_id)
     bundle_json = bundle.model_dump(mode="json")
     if export_path is None:
+        if response_mode == "compact":
+            return McpReviewAuditBundleResponse(
+                audit_bundle_summary=compact_audit_bundle_summary(bundle_json)
+            ).model_dump(mode="json", exclude_none=True)
         return McpReviewAuditBundleResponse(audit_bundle=bundle).model_dump(
             mode="json",
             exclude_none=True,

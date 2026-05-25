@@ -23,6 +23,18 @@ from pubtator_link.models.discovery import (
     RelatedArticleScoreRecord,
     RelatedArticlesResponse,
 )
+from pubtator_link.services.discovery_metadata import (
+    DiscoveryMetadataLookup,
+    add_citation_metadata_next_command,
+    add_related_metadata_next_command,
+    enrich_citation_records,
+    enrich_related_article_records,
+)
+from pubtator_link.services.ncbi_id_conversion import (
+    conversion_records_from_response,
+    convert_article_ids_individually,
+)
+from pubtator_link.services.ncbi_mesh import lookup_mesh_descriptors
 
 NCBI_EUTILS_BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 NCBI_ID_CONVERTER_BASE_URL = "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/"
@@ -61,6 +73,9 @@ class NcbiDiscoveryClientProtocol(Protocol):
 
     async def find_pmid_by_doi(self, doi: str) -> str | None:
         """Resolve a DOI to a PMID via PubMed search."""
+
+    async def find_pmid_by_title(self, title: str) -> str | None:
+        """Resolve an article title to a PMID via PubMed search."""
 
     async def lookup_mesh(self, query: str, limit: int, exact: bool) -> list[MeshDescriptor]:
         """Look up MeSH descriptors for a query."""
@@ -128,45 +143,18 @@ class NcbiDiscoveryClient:
         params = {"ids": ",".join(ids), "format": "json", "tool": "pubtator-link"}
         if source != "auto":
             params["idtype"] = source
-        response = await self._get_absolute(self.id_converter_url, params)
-        payload = response.json()
-        records_payload = payload.get("records", []) if isinstance(payload, dict) else []
-
-        records_by_requested_id: dict[str, ArticleIdConversionRecord] = {}
-        for item in records_payload:
-            if not isinstance(item, dict):
-                continue
-
-            pmid = _optional_str(item.get("pmid"))
-            pmcid = _optional_str(item.get("pmcid"))
-            doi = _optional_str(item.get("doi"))
-            requested_id = _optional_str(item.get("requested-id")) or pmcid or pmid or doi
-            if requested_id is None:
-                continue
-
-            resolved = pmid is not None or pmcid is not None or doi is not None
-            records_by_requested_id[requested_id] = ArticleIdConversionRecord(
-                input_id=requested_id,
-                input_kind=source,
-                status="resolved" if resolved else "unresolved",
-                pmid=pmid,
-                pmcid=pmcid,
-                doi=doi,
-                reason=None if resolved else "not_found",
-            )
-
-        return [
-            records_by_requested_id.get(
-                requested,
-                ArticleIdConversionRecord(
-                    input_id=requested,
-                    input_kind=source,
-                    status="unresolved",
-                    reason="not_found",
-                ),
-            )
-            for requested in ids
-        ]
+        try:
+            response = await self._get_absolute(self.id_converter_url, params)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 400 and len(ids) > 1:
+                return await convert_article_ids_individually(
+                    ids=ids,
+                    source=source,
+                    url=self.id_converter_url,
+                    get_absolute=self._get_absolute,
+                )
+            raise
+        return conversion_records_from_response(ids, source, response)
 
     async def find_pmid_by_doi(self, doi: str) -> str | None:
         response = await self._get(
@@ -180,77 +168,29 @@ class NcbiDiscoveryClient:
             },
         )
         payload = response.json()
-        if not isinstance(payload, dict):
-            return None
-        esearch_result = payload.get("esearchresult")
-        idlist_payload = (
-            esearch_result.get("idlist", []) if isinstance(esearch_result, dict) else []
-        )
-        if not isinstance(idlist_payload, list | tuple) or not idlist_payload:
-            return None
-        return str(idlist_payload[0])
+        return _first_pubmed_id(payload)
 
-    async def lookup_mesh(self, query: str, limit: int, exact: bool) -> list[MeshDescriptor]:
-        term = f'"{query}"[MeSH Terms]' if exact else query
-        search_response = await self._get(
+    async def find_pmid_by_title(self, title: str) -> str | None:
+        response = await self._get(
             "esearch.fcgi",
             {
-                "db": "mesh",
-                "term": term,
+                "db": "pubmed",
+                "term": f'"{title}"[Title]',
                 "retmode": "json",
-                "retmax": str(limit),
+                "retmax": "1",
                 "tool": "pubtator-link",
             },
         )
-        search_payload = search_response.json()
-        if not isinstance(search_payload, dict):
-            return []
+        payload = response.json()
+        return _first_pubmed_id(payload)
 
-        esearch_result = search_payload.get("esearchresult")
-        idlist_payload = (
-            esearch_result.get("idlist", []) if isinstance(esearch_result, dict) else []
+    async def lookup_mesh(self, query: str, limit: int, exact: bool) -> list[MeshDescriptor]:
+        return await lookup_mesh_descriptors(
+            get=self._get,
+            query=query,
+            limit=limit,
+            exact=exact,
         )
-        idlist = [str(mesh_id) for mesh_id in idlist_payload]
-        if not idlist:
-            return []
-
-        summary_payload = search_payload
-        if "result" not in summary_payload:
-            summary_response = await self._get(
-                "esummary.fcgi",
-                {
-                    "db": "mesh",
-                    "id": ",".join(idlist),
-                    "retmode": "json",
-                    "tool": "pubtator-link",
-                },
-            )
-            summary_json = summary_response.json()
-            summary_payload = summary_json if isinstance(summary_json, dict) else {}
-
-        result_payload = summary_payload.get("result")
-        results = result_payload if isinstance(result_payload, dict) else {}
-        descriptors: list[MeshDescriptor] = []
-        for mesh_id in idlist:
-            item = results.get(mesh_id)
-            if not isinstance(item, dict):
-                continue
-
-            uid = _optional_str(item.get("uid")) or mesh_id
-            mesh_terms = _string_list(item.get("ds_meshterms"))
-            name = mesh_terms[0] if mesh_terms else _optional_str(item.get("title")) or uid
-            descriptors.append(
-                MeshDescriptor(
-                    ui=_optional_str(item.get("ds_meshui")) or uid,
-                    name=name,
-                    scope_note=_optional_str(item.get("ds_scopenote")),
-                    entry_terms=mesh_terms[1:],
-                    tree_numbers=_mesh_tree_numbers(item),
-                    search_terms=[f"{name}[MeSH Terms]"],
-                )
-            )
-
-        return descriptors
 
     async def lookup_citations(self, citations: Sequence[str]) -> list[CitationLookupRecord]:
         response = await self._get(
@@ -412,8 +352,14 @@ class NcbiDiscoveryClient:
 
 
 class DiscoveryService:
-    def __init__(self, client: NcbiDiscoveryClientProtocol) -> None:
+    def __init__(
+        self,
+        client: NcbiDiscoveryClientProtocol,
+        *,
+        metadata_service: DiscoveryMetadataLookup | None = None,
+    ) -> None:
         self.client = client
+        self.metadata_service = metadata_service
 
     async def convert_article_ids(
         self,
@@ -468,6 +414,7 @@ class DiscoveryService:
             for original, record in zip(citations, records, strict=False)
         ]
         records = await self._resolve_doi_citation_fallbacks(citations, records)
+        records = await self._resolve_title_citation_fallbacks(citations, records)
         nbk_ids = extract_nbk_ids(citations)
         nbk_conversion_records: list[ArticleIdConversionRecord] = []
         if nbk_ids:
@@ -493,10 +440,16 @@ class DiscoveryService:
                 },
                 *meta.next_commands,
             ]
+        records, metadata_status = await enrich_citation_records(records, self.metadata_service)
         return CitationLookupResponse(
             records=records,
             candidate_pmids=candidate_pmids,
-            _meta=meta,
+            metadata_status=metadata_status,
+            _meta=add_citation_metadata_next_command(
+                meta,
+                candidate_pmids,
+                metadata_status,
+            ),
         )
 
     async def _resolve_doi_citation_fallbacks(
@@ -524,6 +477,35 @@ class DiscoveryService:
             )
         return resolved
 
+    async def _resolve_title_citation_fallbacks(
+        self,
+        citations: Sequence[str],
+        records: list[CitationLookupRecord],
+    ) -> list[CitationLookupRecord]:
+        resolved: list[CitationLookupRecord] = []
+        for citation, record in zip(citations, records, strict=False):
+            if record.status == "matched":
+                resolved.append(record)
+                continue
+            title = _extract_reference_title(citation)
+            if title is None:
+                resolved.append(record)
+                continue
+            pmid = await self.client.find_pmid_by_title(title)
+            if pmid is None:
+                resolved.append(record)
+                continue
+            resolved.append(
+                CitationLookupRecord(
+                    citation=citation,
+                    status="matched",
+                    pmid=pmid,
+                    doi=record.doi,
+                    title=title,
+                )
+            )
+        return resolved
+
     async def find_related_articles(
         self,
         pmids: Sequence[str],
@@ -531,6 +513,10 @@ class DiscoveryService:
         limit: int = 20,
     ) -> RelatedArticlesResponse:
         related_articles = await self.client.find_related_articles(pmids, mode, limit)
+        related_articles, metadata_status = await enrich_related_article_records(
+            related_articles,
+            self.metadata_service,
+        )
         candidate_pmids = _dedupe(record.pmid for record in related_articles)
         resolved_source_pmids = {record.source_pmid for record in related_articles}
         unresolved = [pmid for pmid in pmids if pmid not in resolved_source_pmids]
@@ -540,7 +526,12 @@ class DiscoveryService:
             related_articles=related_articles,
             candidate_pmids=candidate_pmids,
             unresolved=unresolved,
-            _meta=_candidate_meta(candidate_pmids),
+            metadata_status=metadata_status,
+            _meta=add_related_metadata_next_command(
+                _candidate_meta(candidate_pmids),
+                candidate_pmids,
+                metadata_status,
+            ),
         )
 
 
@@ -554,6 +545,16 @@ def _dedupe(values: Iterable[str]) -> list[str]:
     return deduped
 
 
+def _first_pubmed_id(payload: object) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    esearch_result = payload.get("esearchresult")
+    idlist_payload = esearch_result.get("idlist", []) if isinstance(esearch_result, dict) else []
+    if not isinstance(idlist_payload, list | tuple) or not idlist_payload:
+        return None
+    return str(idlist_payload[0])
+
+
 def _citation_lookup_values(citations: Sequence[str]) -> list[str]:
     return [_citation_lookup_value(citation, index) for index, citation in enumerate(citations)]
 
@@ -563,6 +564,16 @@ def _citation_lookup_value(citation: str, index: int) -> str:
     if _is_bookshelf_url(citation) and nbk_ids:
         return _nbk_lookup_hint(nbk_ids[0])
     return _ecitmatch_value_from_prose(citation, index) or citation
+
+
+def _extract_reference_title(citation: str) -> str | None:
+    parts = [part.strip() for part in citation.split(".") if part.strip()]
+    if len(parts) < 2:
+        return None
+    title = parts[1]
+    if re.search(r"\b(?:et al|19\d{2}|20\d{2})\b", title, flags=re.IGNORECASE):
+        return None
+    return title or None
 
 
 def _ecitmatch_value_from_prose(citation: str, index: int) -> str | None:
@@ -606,14 +617,6 @@ def _optional_str(value: object) -> str | None:
     return str(value)
 
 
-def _string_list(value: object) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, list | tuple):
-        return [str(item) for item in value]
-    return [str(value)]
-
-
 def _link_id_and_score(link: object) -> tuple[str | None, int]:
     if isinstance(link, dict):
         linked_id = _optional_str(link.get("id"))
@@ -627,21 +630,6 @@ def _link_id_and_score(link: object) -> tuple[str | None, int]:
     except (TypeError, ValueError):
         score = 0
     return linked_id, score
-
-
-def _mesh_tree_numbers(item: Mapping[str, object]) -> list[str]:
-    tree_numbers: list[str] = []
-    idx_links = item.get("ds_idxlinks")
-    if isinstance(idx_links, list | tuple):
-        for link in idx_links:
-            if not isinstance(link, dict):
-                continue
-            tree_number = _optional_str(link.get("treenum"))
-            if tree_number is not None:
-                tree_numbers.append(tree_number)
-    if tree_numbers:
-        return tree_numbers
-    return _string_list(item.get("ds_tree"))
 
 
 def _candidate_meta(candidate_pmids: list[str]) -> DiscoveryMeta:

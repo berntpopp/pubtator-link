@@ -1,0 +1,149 @@
+"""Validation helpers and legacy dependency cleanup."""
+
+from __future__ import annotations
+
+import functools
+import logging
+import sys
+from collections.abc import Callable
+from typing import Any
+
+import httpx
+from fastapi import HTTPException
+
+logger = logging.getLogger("pubtator_link.api.routes.dependencies")
+
+
+def handle_api_errors(func: Callable[..., Any]) -> Callable[..., Any]:
+    """Handle common API errors and convert to HTTP exceptions."""
+
+    @functools.wraps(func)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return await func(*args, **kwargs)
+        except HTTPException:
+            # Re-raise HTTP exceptions as-is (from route-level error handling)
+            raise
+        except ValueError as e:
+            # Client-side validation errors
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except httpx.HTTPStatusError as e:
+            # Upstream service returned an HTTP error response
+            raise HTTPException(status_code=502, detail="Upstream service error") from e
+        except httpx.RequestError as e:
+            # Upstream service transport failures
+            raise HTTPException(status_code=503, detail="Service temporarily unavailable") from e
+        except ConnectionError as e:
+            # Network/connection errors
+            raise HTTPException(status_code=503, detail="Service temporarily unavailable") from e
+        except TimeoutError as e:
+            # Request timeout errors
+            raise HTTPException(status_code=504, detail="Request timeout") from e
+        except Exception as e:
+            # Generic server errors
+            logger.error(f"Unexpected error in {func.__name__}: {e}")
+            raise HTTPException(status_code=500, detail="Internal server error") from e
+
+    return wrapper
+
+
+def create_error_response(error: Exception, status_code: int) -> dict[str, Any]:
+    """Create standardized error response."""
+    return {
+        "error": {
+            "code": status_code,
+            "message": str(error),
+            "type": type(error).__name__,
+        }
+    }
+
+
+def validate_pmids(pmids_str: str) -> list[str]:
+    """Validate and parse comma-separated PMIDs."""
+    if not pmids_str or pmids_str.strip() == "":
+        raise ValueError("PMIDs parameter is required")
+
+    pmids = [pmid.strip() for pmid in pmids_str.split(",") if pmid.strip()]
+
+    if not pmids:
+        raise ValueError("At least one PMID must be provided")
+
+    # Validate PMID format (should be numeric)
+    for pmid in pmids:
+        if not pmid.isdigit():
+            raise ValueError(f"Invalid PMID format: {pmid}. PMIDs must be numeric.")
+
+    return pmids
+
+
+def validate_pmcids(pmcids_str: str) -> list[str]:
+    """Validate and parse comma-separated PMC IDs."""
+    if not pmcids_str or pmcids_str.strip() == "":
+        raise ValueError("PMCIDs parameter is required")
+
+    pmcids = [pmcid.strip() for pmcid in pmcids_str.split(",") if pmcid.strip()]
+
+    if not pmcids:
+        raise ValueError("At least one PMCID must be provided")
+
+    # Validate PMCID format (should start with PMC followed by digits)
+    for pmcid in pmcids:
+        if not pmcid.startswith("PMC") or not pmcid[3:].isdigit():
+            raise ValueError(
+                f"Invalid PMCID format: {pmcid}. PMCIDs must start with 'PMC' followed by digits."
+            )
+
+    return pmcids
+
+
+def validate_entity_id(entity_id: str) -> str:
+    """Validate entity ID format for PubTator3."""
+    if not entity_id or not entity_id.startswith("@"):
+        raise ValueError("Entity ID must start with '@' (e.g., @CHEMICAL_remdesivir)")
+
+    if len(entity_id) < 5:  # Minimum: @A_B
+        raise ValueError("Entity ID too short. Format: @CONCEPT_identifier")
+
+    return entity_id
+
+
+def validate_page_number(page: int) -> int:
+    """Validate page number for pagination."""
+    if page < 1:
+        raise ValueError("Page number must be positive (starting from 1)")
+
+    if page > 1000:  # Reasonable upper limit
+        raise ValueError("Page number too large (maximum 1000)")
+
+    return page
+
+
+def validate_limit(limit: int, max_limit: int = 100) -> int:
+    """Validate limit parameter for result count."""
+    if limit < 1:
+        raise ValueError("Limit must be positive")
+
+    if limit > max_limit:
+        raise ValueError(f"Limit too large (maximum {max_limit})")
+
+    return limit
+
+
+async def cleanup_dependencies() -> None:
+    """Cleanup function for graceful shutdown."""
+    from pubtator_link.api.routes.dependencies import (
+        _LEGACY_PRIVATE_EXPORTS,
+        core_api,
+        discovery,
+        review,
+    )
+
+    root = sys.modules["pubtator_link.api.routes.dependencies"]
+    legacy_names = tuple(_LEGACY_PRIVATE_EXPORTS)
+
+    await core_api._cleanup_core_api_dependencies()
+    await discovery._cleanup_discovery_dependencies()
+    await review._cleanup_review_dependencies()
+
+    for name in legacy_names:
+        root.__dict__[name] = getattr(_LEGACY_PRIVATE_EXPORTS[name], name)

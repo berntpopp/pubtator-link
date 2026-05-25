@@ -13,6 +13,11 @@ from pubtator_link.models.discovery import (
     RelatedArticleMode,
     RelatedArticleRecord,
 )
+from pubtator_link.models.publication_metadata import (
+    PublicationAuthor,
+    PublicationMetadata,
+    PublicationMetadataResponse,
+)
 from pubtator_link.services.ncbi_discovery import DiscoveryService, NcbiDiscoveryClient
 from tests.fixtures.literature_graph import NCBI_ELINK_NEIGHBOR_SCORE
 
@@ -42,6 +47,17 @@ class SequentialMockTransport:
         return httpx.Response(200, json=payload, request=request)
 
 
+class SequentialStatusTransport:
+    def __init__(self, responses: Sequence[tuple[int, dict[str, object]]]) -> None:
+        self.responses = list(responses)
+        self.requests: list[httpx.Request] = []
+
+    async def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        status_code, payload = self.responses[len(self.requests) - 1]
+        return httpx.Response(status_code, json=payload, request=request)
+
+
 class FakeDiscoveryClient:
     async def convert_article_ids(
         self,
@@ -65,6 +81,9 @@ class FakeDiscoveryClient:
         ]
 
     async def find_pmid_by_doi(self, doi: str) -> str | None:
+        return None
+
+    async def find_pmid_by_title(self, title: str) -> str | None:
         return None
 
     async def lookup_mesh(self, query: str, limit: int, exact: bool) -> list[MeshDescriptor]:
@@ -147,6 +166,111 @@ async def test_lookup_citation_extracts_nbk_and_adds_recovery_hint() -> None:
 
 
 @pytest.mark.asyncio
+async def test_lookup_citation_falls_back_to_title_search_for_prose_reference() -> None:
+    class Client(FakeDiscoveryClient):
+        def __init__(self) -> None:
+            self.title_queries: list[str] = []
+
+        async def lookup_citations(self, citations):
+            return [
+                CitationLookupRecord(
+                    citation=citations[0],
+                    status="not_found",
+                    reason="not_found",
+                )
+            ]
+
+        async def find_pmid_by_title(self, title: str) -> str | None:
+            self.title_queries.append(title)
+            return "42135612"
+
+    client = Client()
+    service = DiscoveryService(client)
+
+    response = await service.lookup_citation(
+        [
+            (
+                "Ozen S. MEFV variants of uncertain significance in children. "
+                "Rheumatology. 2026;65:100-110."
+            )
+        ]
+    )
+
+    assert response.records[0].status == "matched"
+    assert response.records[0].pmid == "42135612"
+    assert response.records[0].title == "MEFV variants of uncertain significance in children"
+    assert client.title_queries == ["MEFV variants of uncertain significance in children"]
+
+
+@pytest.mark.asyncio
+async def test_lookup_citation_enriches_matched_metadata_fields() -> None:
+    class Client(FakeDiscoveryClient):
+        async def lookup_citations(self, citations):
+            return [CitationLookupRecord(citation=citations[0], status="matched", pmid="26802180")]
+
+    class Metadata:
+        async def get_metadata(self, request):
+            assert request.pmids == ["26802180"]
+            assert request.include_mesh is False
+            assert request.include_publication_types is False
+            assert request.include_citations == "none"
+            assert request.include_coverage is False
+            return PublicationMetadataResponse(
+                metadata=[
+                    PublicationMetadata(
+                        pmid="26802180",
+                        title="EULAR recommendations for the management of FMF",
+                        journal="Annals of the Rheumatic Diseases",
+                        pub_year=2016,
+                        authors=[
+                            PublicationAuthor(last_name="Ozen", initials="S"),
+                            PublicationAuthor(last_name="Demirkaya", initials="E"),
+                        ],
+                    )
+                ],
+                failed_pmids={},
+                _meta={"next_commands": []},
+            )
+
+    service = DiscoveryService(Client(), metadata_service=Metadata())
+
+    response = await service.lookup_citation(["Ozen S. EULAR recommendations. Ann Rheum Dis."])
+
+    assert response.candidate_pmids == ["26802180"]
+    assert response.records[0].title == "EULAR recommendations for the management of FMF"
+    assert response.records[0].journal == "Annals of the Rheumatic Diseases"
+    assert response.records[0].year == 2016
+    assert response.records[0].authors == ["Ozen S", "Demirkaya E"]
+
+
+@pytest.mark.asyncio
+async def test_lookup_citation_preserves_match_when_metadata_enrichment_fails() -> None:
+    class Client(FakeDiscoveryClient):
+        async def lookup_citations(self, citations):
+            return [CitationLookupRecord(citation=citations[0], status="matched", pmid="26802180")]
+
+    class Metadata:
+        async def get_metadata(self, request):
+            raise RuntimeError("metadata upstream unavailable")
+
+    service = DiscoveryService(Client(), metadata_service=Metadata())
+
+    response = await service.lookup_citation(["Ozen S. EULAR recommendations. Ann Rheum Dis."])
+
+    assert response.candidate_pmids == ["26802180"]
+    assert response.records[0].status == "matched"
+    assert response.records[0].pmid == "26802180"
+    assert response.records[0].title is None
+    assert response.metadata_status == "unavailable"
+    assert response.meta.next_commands[0]["arguments"] == {"pmids": ["26802180"]}
+    assert any(
+        command["tool"] == "pubtator_get_publication_metadata"
+        and command["arguments"] == {"pmids": ["26802180"]}
+        for command in response.meta.next_commands
+    )
+
+
+@pytest.mark.asyncio
 async def test_ncbi_client_parses_id_conversion_json() -> None:
     transport = MockTransport(
         {
@@ -185,6 +309,44 @@ async def test_ncbi_client_parses_id_conversion_json() -> None:
     assert transport.requests[0].url.params["format"] == "json"
     assert transport.requests[0].url.params["tool"] == "pubtator-link"
     assert "idtype" not in transport.requests[0].url.params
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_ncbi_client_retries_mixed_id_conversion_per_identifier_after_batch_400() -> None:
+    transport = SequentialStatusTransport(
+        [
+            (400, {"status": "error"}),
+            (200, {"records": [{"requested-id": "24166952", "pmid": "24166952"}]}),
+            (200, {"records": [{"requested-id": "PMC12758588", "pmid": "41480953"}]}),
+            (400, {"status": "error"}),
+        ]
+    )
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
+    client = NcbiDiscoveryClient(http_client=http_client)
+
+    records = await client.convert_article_ids(
+        ["24166952", "PMC12758588", "10.1038/s41431-022-01127-3"],
+        "auto",
+    )
+
+    assert [record.input_id for record in records] == [
+        "24166952",
+        "PMC12758588",
+        "10.1038/s41431-022-01127-3",
+    ]
+    assert records[0].status == "resolved"
+    assert records[0].pmid == "24166952"
+    assert records[1].status == "resolved"
+    assert records[1].pmid == "41480953"
+    assert records[2].status == "failed"
+    assert records[2].reason == "upstream_rejected_identifier"
+    assert [request.url.params["ids"] for request in transport.requests] == [
+        "24166952,PMC12758588,10.1038/s41431-022-01127-3",
+        "24166952",
+        "PMC12758588",
+        "10.1038/s41431-022-01127-3",
+    ]
     await client.close()
 
 
@@ -477,6 +639,114 @@ async def test_find_related_articles_deduplicates_candidates() -> None:
     }
     assert_no_prepare_mode(response.meta.next_commands)
     assert response.unresolved == ["999"]
+    assert response.metadata_status == "unavailable"
+    assert any(
+        command["tool"] == "pubtator_get_publication_metadata"
+        for command in response.meta.next_commands
+    )
+
+
+@pytest.mark.asyncio
+async def test_find_related_articles_enriches_metadata_fields() -> None:
+    class Client(FakeDiscoveryClient):
+        async def find_related_articles(self, pmids, mode, limit):
+            return [RelatedArticleRecord(source_pmid="123", pmid="456", relation=mode)]
+
+    class Metadata:
+        async def get_metadata(self, request):
+            assert request.pmids == ["456"]
+            assert request.include_mesh is False
+            assert request.include_publication_types is False
+            assert request.include_citations == "none"
+            assert request.include_coverage is False
+            return PublicationMetadataResponse(
+                metadata=[
+                    PublicationMetadata(
+                        pmid="456",
+                        title="Related FMF cohort",
+                        journal="Rheumatology",
+                        pub_year=2024,
+                    )
+                ],
+                failed_pmids={},
+                _meta={"next_commands": []},
+            )
+
+    service = DiscoveryService(Client(), metadata_service=Metadata())
+
+    response = await service.find_related_articles(["123"])
+
+    assert response.related_articles[0].title == "Related FMF cohort"
+    assert response.related_articles[0].journal == "Rheumatology"
+    assert response.related_articles[0].year == 2024
+    assert response.metadata_status == "success"
+    assert response.meta.next_commands[0]["arguments"] == {"pmids": ["456"]}
+
+
+@pytest.mark.asyncio
+async def test_find_related_articles_reports_partial_metadata_enrichment() -> None:
+    class Client(FakeDiscoveryClient):
+        async def find_related_articles(self, pmids, mode, limit):
+            return [
+                RelatedArticleRecord(source_pmid="123", pmid="456", relation=mode),
+                RelatedArticleRecord(source_pmid="123", pmid="789", relation=mode),
+            ]
+
+    class Metadata:
+        async def get_metadata(self, request):
+            return PublicationMetadataResponse(
+                metadata=[
+                    PublicationMetadata(
+                        pmid="456",
+                        title="Related FMF cohort",
+                        journal="Rheumatology",
+                        pub_year=2024,
+                    )
+                ],
+                failed_pmids={"789": "metadata_not_found"},
+                _meta={"next_commands": []},
+            )
+
+    service = DiscoveryService(Client(), metadata_service=Metadata())
+
+    response = await service.find_related_articles(["123"])
+
+    assert response.metadata_status == "partial"
+    assert response.related_articles[0].title == "Related FMF cohort"
+    assert response.related_articles[1].title is None
+    assert any(
+        command["tool"] == "pubtator_get_publication_metadata"
+        and command["arguments"] == {"pmids": ["456", "789"]}
+        for command in response.meta.next_commands
+    )
+
+
+@pytest.mark.asyncio
+async def test_find_related_articles_reports_unavailable_when_metadata_enrichment_fails() -> None:
+    class Client(FakeDiscoveryClient):
+        async def find_related_articles(self, pmids, mode, limit):
+            return [RelatedArticleRecord(source_pmid="123", pmid="456", relation=mode)]
+
+    class Metadata:
+        async def get_metadata(self, request):
+            raise RuntimeError("metadata upstream unavailable")
+
+    service = DiscoveryService(Client(), metadata_service=Metadata())
+
+    response = await service.find_related_articles(["123"])
+
+    assert response.candidate_pmids == ["456"]
+    assert response.metadata_status == "unavailable"
+    assert response.related_articles[0] == RelatedArticleRecord(
+        source_pmid="123",
+        pmid="456",
+        relation="similar",
+    )
+    assert any(
+        command["tool"] == "pubtator_get_publication_metadata"
+        and command["arguments"] == {"pmids": ["456"]}
+        for command in response.meta.next_commands
+    )
 
 
 @pytest.mark.asyncio

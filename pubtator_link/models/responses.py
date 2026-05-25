@@ -62,6 +62,8 @@ class PublicationExportResponse(BaseResponse):
     full_text: bool = Field(default=False, description="Whether full text was included")
     export_data: dict[str, Any] = Field(..., description="Exported data")
     count: int = Field(..., description="Number of exported items")
+    coverage_by_pmcid: dict[str, str] = Field(default_factory=dict)
+    coverage_reason_by_pmcid: dict[str, str] = Field(default_factory=dict)
 
 
 class PMCExportResponse(BaseResponse):
@@ -168,6 +170,10 @@ class SearchResult(BaseModel):
     date: str | None = Field(default=None, description="Publication date ISO format")
     text_hl: str | None = Field(default=None, description="Highlighted text snippet")
     citations: dict[str, str] | None = Field(default=None, description="Citation formats")
+    recommended_citation: str | None = Field(
+        default=None,
+        description="Paste-ready compact citation for LLM answers and audit notes",
+    )
     volume: str | None = Field(default=None, description="Journal volume")
     issue: str | None = Field(default=None, description="Journal issue")
     pages: str | None = Field(default=None, description="Article pages")
@@ -325,6 +331,8 @@ class RelationsResponse(BaseResponse):
     total_relations: int = Field(..., description="Total number of relations")
     relation_filter: str | None = Field(default=None, description="Applied relation type filter")
     entity_filter: str | None = Field(default=None, description="Applied entity type filter")
+    omitted_count: int = Field(default=0, description="Relations omitted by response budget")
+    response_size_class: str = Field(default="standard", description="Approximate payload class")
 
 
 class AnnotationEntity(BaseModel):
@@ -360,6 +368,8 @@ class TextAnnotationResultResponse(BaseResponse):
         default_factory=list, description="Extracted annotations"
     )
     processing_time: float | None = Field(default=None, description="Processing time in seconds")
+    retryable: bool | None = Field(default=None, description="Whether retrying may succeed")
+    next_tools: list[str] = Field(default_factory=list, description="Suggested follow-up MCP tools")
 
 
 class CacheStats(BaseModel):

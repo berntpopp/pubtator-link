@@ -35,7 +35,7 @@ services:
     init: true
 
     # Use the default production command (Gunicorn)
-    command: ["gunicorn", "-c", "gunicorn_conf.py", "pubtator_link.server_manager:app"]
+    command: ["gunicorn", "-c", "gunicorn_conf.py", "--factory", "pubtator_link.server_manager:create_app"]
 
     # Production resource limits
     deploy:

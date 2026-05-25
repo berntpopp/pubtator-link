@@ -19,13 +19,28 @@ from pubtator_link.models.responses import (
 )
 
 
+def _submit_text_annotation_output_schema() -> dict[str, Any]:
+    schema = TextAnnotationSubmitResponse.model_json_schema()
+    properties = schema.setdefault("properties", {})
+    result_properties = TextAnnotationResultResponse.model_json_schema().get("properties", {})
+    if isinstance(properties, dict) and isinstance(result_properties, dict):
+        properties.update(
+            {
+                key: value
+                for key, value in result_properties.items()
+                if key not in {"success", "message", "session_id", "status"}
+            }
+        )
+    return schema
+
+
 def register_text_annotation_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
     if profile == "full":
 
         @mcp.tool(
             name="pubtator_submit_text_annotation",
             title="Submit Text Annotation",
-            output_schema=TextAnnotationSubmitResponse.model_json_schema(),
+            output_schema=_submit_text_annotation_output_schema(),
             annotations=REMOTE_JOB_ANNOTATIONS,
         )
         async def submit_text_annotation(
@@ -33,6 +48,10 @@ def register_text_annotation_tools(mcp: FastMCP, profile: MCPToolProfile = "lean
             bioconcepts: Annotated[
                 str, Field(description="Comma-separated PubTator bioconcepts or 'all'.")
             ] = "Gene",
+            wait: Annotated[
+                bool, Field(description="Poll briefly and return results when ready.")
+            ] = False,
+            timeout_ms: Annotated[int, Field(ge=1000, le=30000)] = 30000,
         ) -> dict[str, Any]:
             """Use this when research text should be submitted for PubTator biomedical named entity recognition. Do not use this for PubMed or PMC IDs; use pubtator_fetch_publication_annotations. Next: pubtator_get_text_annotation_results."""
 
@@ -42,6 +61,8 @@ def register_text_annotation_tools(mcp: FastMCP, profile: MCPToolProfile = "lean
                     client=client,
                     text=text,
                     bioconcepts=bioconcepts,
+                    wait=wait,
+                    timeout_ms=timeout_ms,
                 )
 
             return await run_mcp_tool("pubtator_submit_text_annotation", call)

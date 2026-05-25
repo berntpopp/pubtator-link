@@ -6,7 +6,9 @@ import asyncio
 import re
 import time
 from typing import Any, Protocol
+from urllib.parse import urlparse
 
+from pubtator_link.config import review_rerag_config
 from pubtator_link.models.review_rerag import (
     IndexReviewEvidenceRequest,
     IndexReviewEvidenceResponse,
@@ -14,6 +16,7 @@ from pubtator_link.models.review_rerag import (
     PreparationStatus,
 )
 from pubtator_link.services.review_state import index_snapshot_date, retry_after_ms_for_status
+from pubtator_link.services.url_safety import UrlSafetyError, enforce_host_allowlist
 
 DEFAULT_WAIT_TIMEOUT_MS = 120_000
 
@@ -61,6 +64,7 @@ class ReviewIndexingService:
         review_id: str,
         request: IndexReviewEvidenceRequest,
     ) -> IndexReviewEvidenceResponse:
+        _validate_curated_url_policy(request.curated_urls)
         bookshelf_urls = _bookshelf_urls(request.curated_urls)
         if bookshelf_urls:
             nbk_ids = _nbk_ids(bookshelf_urls)
@@ -164,6 +168,18 @@ def _source_specs(request: IndexReviewEvidenceRequest) -> list[tuple[str, str, s
         *[(f"PMID:{pmid}", "pmid", pmid) for pmid in request.pmids],
         *[(f"URL:{url}", "url", url) for url in request.curated_urls],
     ]
+
+
+def _validate_curated_url_policy(urls: list[str]) -> None:
+    for url in urls:
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"}:
+            raise UrlSafetyError("Unsupported URL scheme")
+        if parsed.scheme == "http" and not review_rerag_config.allow_http_urls:
+            raise UrlSafetyError("HTTP URLs are disabled")
+        if not parsed.hostname:
+            raise UrlSafetyError("URL must include a hostname")
+        enforce_host_allowlist(review_rerag_config.curated_url_host_allowlist, parsed.hostname)
 
 
 def _bookshelf_urls(urls: list[str]) -> list[str]:

@@ -357,7 +357,7 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
             "text_hl_format": "plain",
             "coverage": "preflight",
             "metadata": "none",
-            "metadata_modes": ["none", "basic", "full"],
+            "metadata_modes": ["none", "basic", "with_abstract", "full"],
             "guideline_tool": "pubtator_search_guidelines",
             "coverage_preflight_errors": {
                 "coverage_preflight_timeout": {"retryable": True},

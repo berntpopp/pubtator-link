@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
-from pubtator_link.api.client import PubTator3Client
+from pubtator_link.api.client import PubTator3Client, PubTatorAPIError
 from pubtator_link.models.review_rerag import (
     CoverageReason,
     ResolverAttemptSummary,
@@ -114,6 +114,7 @@ class SourcePreflightService:
             not pmcid and metadata.get("id_resolution_status") in {"unresolved", "failed"}
         ) or bool(id_resolution_attempts)
         best_guess_notes = [PRE_RESOLUTION_BEST_GUESS_NOTE] if id_resolution_failed else []
+        resolver_failures: list[ResolverAttemptSummary] = [*id_resolution_attempts]
         if id_resolution_failed and not id_resolution_attempts:
             id_resolution_attempts.append(
                 ResolverAttemptSummary(
@@ -124,6 +125,7 @@ class SourcePreflightService:
                     or "pre_resolution_best_guess",
                 )
             )
+            resolver_failures.append(id_resolution_attempts[-1])
 
         if pmcid:
             try:
@@ -166,6 +168,19 @@ class SourcePreflightService:
                             terminal_reason="upstream_timeout",
                         )
                     ],
+                )
+            except PubTatorAPIError as exc:
+                if not _is_not_retrievable_pmc_probe(exc):
+                    raise
+                resolver_failures.append(
+                    ResolverAttemptSummary(
+                        source_kind="pmc_bioc",
+                        status="failed",
+                        pmid=pmid,
+                        pmcid=pmcid,
+                        doi=doi,
+                        terminal_reason="not_retrievable",
+                    )
                 )
 
         if self.europe_pmc_client is not None:
@@ -218,7 +233,7 @@ class SourcePreflightService:
                     pmc_fallback_available=False,
                     notes=best_guess_notes,
                     resolver_attempts=[
-                        *id_resolution_attempts,
+                        *resolver_failures,
                         ResolverAttemptSummary(
                             source_kind="pubtator_abstract",
                             status="success",
@@ -257,7 +272,7 @@ class SourcePreflightService:
             doi=doi,
             license_or_access_hint=license_or_access_hint,
             notes=best_guess_notes,
-            resolver_attempts=id_resolution_attempts,
+            resolver_attempts=resolver_failures,
         )
 
     @staticmethod
@@ -271,3 +286,10 @@ class SourcePreflightService:
     @staticmethod
     async def _no_pubtator_abstract(_pmid: str) -> bool:
         return False
+
+
+def _is_not_retrievable_pmc_probe(exc: PubTatorAPIError) -> bool:
+    message = str(exc).lower()
+    return exc.status_code == 400 and (
+        "could not retrieve publications" in message or "not found" in message
+    )

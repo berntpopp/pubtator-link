@@ -17,6 +17,7 @@ from pubtator_link.models.literature_graph import (
     RelatedEvidenceCandidatesRequest,
     RelatedEvidenceCandidatesResponse,
 )
+from pubtator_link.models.literature_graph_hints import related_metadata_status
 from pubtator_link.models.publication_metadata import PublicationMetadataRequest
 from pubtator_link.services.literature_graph_compact import (
     candidate_summary,
@@ -250,6 +251,7 @@ class RelatedEvidenceService:
             provider_status=provider_status,
             _meta=meta,
         )
+        response.metadata_status = related_metadata_status(provider_status)
         response.meta.response_size_class = json_size_class(response.model_dump(by_alias=True))
         return response
 
@@ -269,7 +271,7 @@ class RelatedEvidenceService:
         metadata = getattr(metadata_response, "metadata", [])
         if not metadata:
             return LiteraturePaper(pmid=pmid), []
-        return _paper_from_metadata(metadata[0]), []
+        return paper_from_publication_metadata(metadata[0]), []
 
     async def _find_related_article_scores(self, pmids: list[str], limit: int) -> Any:
         finder = getattr(self.discovery_service, "find_related_article_scores", None)
@@ -398,7 +400,7 @@ class RelatedEvidenceService:
             if metadata is None:
                 paper = LiteraturePaper(pmid=pmid, status="unresolved_reference")
             else:
-                paper = _paper_from_metadata(metadata)
+                paper = paper_from_publication_metadata(metadata)
 
             if not _matches_filters(paper, request):
                 continue
@@ -433,10 +435,6 @@ class RelatedEvidenceService:
                 budget_ms=request.metadata_timeout_ms,
             ),
         )
-
-
-def _paper_from_metadata(metadata: Any) -> LiteraturePaper:
-    return paper_from_publication_metadata(metadata)
 
 
 def _matches_filters(paper: LiteraturePaper, request: RelatedEvidenceCandidatesRequest) -> bool:

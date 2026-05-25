@@ -30,7 +30,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"query":"familial Mediterranean fever colchicine","max_seed_papers":10}`
 - Next tools by profile: full: `pubtator_get_publication_passages`, `pubtator_index_review_evidence`
 - Resource links: None
-- Input schema: `query` (string | null; default: `None`); `pmids` (array | null; default: `None`); `max_seed_papers` (integer; default: `10`); `max_neighbors_per_paper` (integer; default: `5`); `response_mode` (string; enum: `compact`, `nodes_edges`, `full`; default: `compact`); `max_candidates` (integer; default: `8`); `include_demoted` (boolean; default: `True`); `max_demoted` (integer; default: `3`); `bias_toward` (array | null; default: `None`); `max_graph_nodes` (integer; default: `30`); `max_graph_edges` (integer; default: `60`); `include_authors` (boolean; default: `True`); `include_citations` (boolean; default: `True`); `include_pubtator_entities` (boolean; default: `True`); `include_related_candidates` (boolean; default: `True`); `year_min` (integer | null; default: `None`); `year_max` (integer | null; default: `None`); `prefer_full_text` (boolean; default: `True`); `timeout_ms` (integer; default: `45000`); `partial_ok` (boolean; default: `True`); `expand_query_seeds` (boolean; default: `False`); `citation_graph_timeout_ms` (integer | null; default: `15000`); `related_evidence_timeout_ms` (integer | null; default: `20000`); `metadata_backfill_timeout_ms` (integer | null; default: `10000`)
+- Input schema: `query` (string | null; default: `None`); `topic` (string | null; default: `None`); `question` (string | null; default: `None`); `pmids` (array | null; default: `None`); `pmid` (string | null; default: `None`); `seed_pmids` (array | null; default: `None`); `max_seed_papers` (integer; default: `10`); `max_neighbors_per_paper` (integer; default: `5`); `response_mode` (string; enum: `compact`, `nodes_edges`, `full`; default: `compact`); `max_candidates` (integer; default: `8`); `include_demoted` (boolean; default: `True`); `max_demoted` (integer; default: `3`); `bias_toward` (array | null; default: `None`); `max_graph_nodes` (integer; default: `30`); `max_graph_edges` (integer; default: `60`); `include_authors` (boolean; default: `True`); `include_citations` (boolean; default: `True`); `include_pubtator_entities` (boolean; default: `True`); `include_related_candidates` (boolean; default: `True`); `year_min` (integer | null; default: `None`); `year_max` (integer | null; default: `None`); `prefer_full_text` (boolean; default: `True`); `timeout_ms` (integer; default: `45000`); `partial_ok` (boolean; default: `True`); `expand_query_seeds` (boolean; default: `False`); `citation_graph_timeout_ms` (integer | null; default: `15000`); `related_evidence_timeout_ms` (integer | null; default: `20000`); `metadata_backfill_timeout_ms` (integer | null; default: `10000`); `include_meta` (boolean; default: `True`)
 - Output schema: `TopicLiteratureMapResponse`; has_output_schema: `yes`
 
 ## `pubtator_convert_article_ids`
@@ -75,7 +75,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"pmids":["12345"],"max_passages_per_pmid":6}`
 - Next tools by profile: full: `pubtator_get_publication_passages`; readonly: `pubtator_get_publication_passages`
 - Resource links: None
-- Input schema: `pmids` (array); `sections` (array | null; default: `None`); `mode` (string; enum: `abstracts`, `full_abstract`, `compact_passages`, `section_text`; default: `compact_passages`); `full` (boolean; default: `False`); `max_passages_per_pmid` (integer; default: `6`); `include_tables` (boolean; default: `True`); `include_references` (boolean; default: `False`)
+- Input schema: `pmids` (array | null; default: `None`); `pmid` (string | null; default: `None`); `sections` (array | null; default: `None`); `mode` (string; enum: `abstracts`, `full_abstract`, `compact_passages`, `section_text`; default: `compact_passages`); `full` (boolean; default: `False`); `max_passages_per_pmid` (integer; default: `6`); `include_tables` (boolean; default: `True`); `include_references` (boolean; default: `False`)
 - Output schema: `PublicationContextEstimateResponse`; has_output_schema: `yes`
 
 ## `pubtator_export_review_audit_bundle`
@@ -90,7 +90,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"review_id":"demo","fallback_inline":true}`
 - Next tools by profile: full: `pubtator_get_review_audit_trail`
 - Resource links: `pubtator://reviews/{review_id}/audit`
-- Input schema: `review_id` (string); `session_id` (string | null; default: `None`); `export_path` (string | null; default: `None`); `fallback_inline` (boolean; default: `False`)
+- Input schema: `review_id` (string); `session_id` (string | null; default: `None`); `export_path` (string | null; default: `None`); `fallback_inline` (boolean; default: `False`); `response_mode` (string; enum: `full`, `compact`; default: `compact`)
 - Output schema: `McpReviewAuditBundleResponse`; has_output_schema: `yes`
 
 ## `pubtator_fetch_pmc_annotations`
@@ -120,7 +120,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"pmids":["12345"],"format":"biocjson","full":false}`
 - Next tools by profile: full: `pubtator_get_publication_passages`
 - Resource links: None
-- Input schema: `pmids` (array); `format` (string; enum: `pubtator`, `biocxml`, `biocjson`; default: `biocjson`); `full` (boolean; default: `False`)
+- Input schema: `pmids` (array | null; default: `None`); `pmid` (string | null; default: `None`); `format` (string; enum: `pubtator`, `biocxml`, `biocjson`; default: `biocjson`); `full` (boolean; default: `False`)
 - Output schema: `PublicationExportResponse`; has_output_schema: `yes`
 
 ## `pubtator_find_entity_relations`
@@ -135,7 +135,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"entity_id":"@CHEMICAL_remdesivir"}`
 - Next tools by profile: full: `pubtator_search_literature`; readonly: `pubtator_search_literature`
 - Resource links: None
-- Input schema: `entity_id` (string); `relation_type` (string | null; default: `None`); `target_entity_type` (string | null; default: `None`)
+- Input schema: `entity_id` (string); `relation_type` (string | null; default: `None`); `target_entity_type` (string | null; default: `None`); `limit` (integer; default: `20`); `response_mode` (string; enum: `compact`, `standard`, `full`; default: `compact`); `max_response_chars` (integer; default: `12000`)
 - Output schema: `RelationsResponse`; has_output_schema: `yes`
 
 ## `pubtator_find_related_articles`
@@ -150,7 +150,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"pmids":["12345"],"mode":"similar","limit":20}`
 - Next tools by profile: full: `pubtator_preflight_review_sources`; readonly: `pubtator_preflight_review_sources`
 - Resource links: None
-- Input schema: `pmids` (array); `mode` (string; enum: `similar`, `cited_by`, `references`; default: `similar`); `limit` (integer; default: `20`)
+- Input schema: `pmids` (array | null; default: `None`); `pmid` (string | null; default: `None`); `mode` (string; enum: `similar`, `cited_by`, `references`; default: `similar`); `limit` (integer; default: `20`)
 - Output schema: `RelatedArticlesResponse`; has_output_schema: `yes`
 
 ## `pubtator_find_related_evidence_candidates`
@@ -165,7 +165,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"pmid":"40562663","max_results":25,"prefer_full_text":true}`
 - Next tools by profile: lean: `pubtator_get_publication_passages`; full: `pubtator_get_publication_passages`; readonly: `pubtator_get_publication_passages`
 - Resource links: None
-- Input schema: `pmid` (string); `max_results` (integer; default: `12`); `response_mode` (string; enum: `compact`, `nodes_edges`, `full`; default: `compact`); `prefer_full_text` (boolean; default: `True`); `include_pubtator_search` (boolean; default: `True`); `include_citation_neighbors` (boolean; default: `False`); `publication_types` (array | null; default: `None`); `year_min` (integer | null; default: `None`); `year_max` (integer | null; default: `None`); `citation_graph_timeout_ms` (integer; default: `15000`); `metadata_timeout_ms` (integer; default: `20000`)
+- Input schema: `pmid` (string); `max_results` (integer; default: `12`); `response_mode` (string; enum: `compact`, `nodes_edges`, `full`; default: `compact`); `prefer_full_text` (boolean; default: `True`); `include_pubtator_search` (boolean; default: `True`); `include_citation_neighbors` (boolean; default: `False`); `publication_types` (array | null; default: `None`); `year_min` (integer | null; default: `None`); `year_max` (integer | null; default: `None`); `citation_graph_timeout_ms` (integer; default: `15000`); `metadata_timeout_ms` (integer; default: `20000`); `include_meta` (boolean; default: `True`)
 - Output schema: `RelatedEvidenceCandidatesResponse`; has_output_schema: `yes`
 
 ## `pubtator_get_evidence_certainty`
@@ -225,7 +225,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"pmids":["12345"],"include_citations":"nlm"}`
 - Next tools by profile: lean: `pubtator_get_publication_passages`; full: `pubtator_get_publication_passages`; readonly: `pubtator_get_publication_passages`
 - Resource links: None
-- Input schema: `pmids` (array); `include_mesh` (boolean; default: `True`); `include_publication_types` (boolean; default: `True`); `include_citations` (string; enum: `none`, `nlm`, `bibtex`, `both`; default: `both`); `include_coverage` (boolean; default: `True`)
+- Input schema: `pmids` (array | null; default: `None`); `pmid` (string | null; default: `None`); `include_mesh` (boolean; default: `True`); `include_publication_types` (boolean; default: `True`); `include_citations` (string; enum: `none`, `nlm`, `bibtex`, `both`; default: `both`); `include_coverage` (boolean; default: `True`)
 - Output schema: `PublicationMetadataResponse`; has_output_schema: `yes`
 
 ## `pubtator_get_publication_passages`
@@ -240,7 +240,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"pmids":["12345"],"max_passages_per_pmid":6,"verbosity":"standard"}`
 - Next tools by profile: lean: `pubtator_preflight_review_sources`; full: `pubtator_preflight_review_sources`; readonly: `pubtator_preflight_review_sources`
 - Resource links: None
-- Input schema: `pmids` (array); `sections` (array | null; default: `None`); `mode` (string; enum: `abstracts`, `full_abstract`, `compact_passages`, `section_text`; default: `compact_passages`); `full` (boolean; default: `False`); `max_passages_per_pmid` (integer; default: `6`); `max_chars` (integer; default: `12000`); `include_tables` (boolean; default: `True`); `include_references` (boolean; default: `False`); `dry_run` (boolean; default: `False`); `verbosity` (string; enum: `lean`, `standard`, `full`; default: `standard`)
+- Input schema: `pmids` (array | null; default: `None`); `pmid` (string | null; default: `None`); `sections` (array | null; default: `None`); `mode` (string; enum: `abstracts`, `full_abstract`, `compact_passages`, `section_text`; default: `compact_passages`); `full` (boolean; default: `False`); `max_passages_per_pmid` (integer; default: `6`); `max_chars` (integer; default: `12000`); `include_tables` (boolean; default: `True`); `include_references` (boolean; default: `False`); `dry_run` (boolean; default: `False`); `verbosity` (string; enum: `lean`, `standard`, `full`; default: `standard`)
 - Output schema: `PublicationPassageResponse`; has_output_schema: `yes`
 
 ## `pubtator_get_research_session_status`
@@ -255,7 +255,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"review_id":"demo","session_id":"session-1"}`
 - Next tools by profile: full: `pubtator_index_review_evidence`; readonly: None
 - Resource links: `pubtator://reviews/{review_id}/sessions/{session_id}`
-- Input schema: `review_id` (string); `session_id` (string)
+- Input schema: `session_id` (string); `review_id` (string | null; default: `None`)
 - Output schema: `ResearchSessionStatusResponse`; has_output_schema: `yes`
 
 ## `pubtator_get_review_audit_trail`
@@ -265,12 +265,12 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `audit`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user needs a copy-ready audit block for selected prepared review passage IDs without calling upstream APIs.
+- Description: Use this when a user needs a copy-ready audit block for selected prepared review passage IDs or the latest recorded audit passages without calling upstream APIs.
 - Do not use for: `retrieving full passage context`
 - Example: `{"review_id":"demo","passage_ids":["p1"],"max_chars_per_passage":500}`
 - Next tools by profile: lean: None; full: None; readonly: None
 - Resource links: `pubtator://reviews/{review_id}/audit/{passage_id}`
-- Input schema: `review_id` (string); `passage_ids` (array); `session_id` (string | null; default: `None`); `max_chars_per_passage` (integer; default: `500`)
+- Input schema: `review_id` (string); `passage_ids` (array | null; default: `None`); `session_id` (string | null; default: `None`); `max_chars_per_passage` (integer; default: `500`)
 - Output schema: `ReviewAuditTrailResponse`; has_output_schema: `yes`
 
 ## `pubtator_get_review_index_summary`
@@ -345,7 +345,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"question":"Does colchicine prevent FMF flares?","max_pmids":8}`
 - Next tools by profile: lean: `pubtator_record_review_context`, `pubtator_get_review_audit_trail`; full: `pubtator_record_review_context`, `pubtator_get_review_audit_trail`
 - Resource links: `pubtator://workflow-help`
-- Input schema: `question` (string); `max_pmids` (integer; default: `8`); `review_id` (string | null; default: `None`); `entity_ids` (array | null; default: `None`); `guideline_boost` (boolean; default: `True`); `wait_until_ready` (boolean; default: `True`); `timeout_ms` (integer; default: `30000`); `verbosity` (string; enum: `lean`, `standard`, `full`; default: `lean`); `max_response_chars` (integer | string; default: `auto`)
+- Input schema: `question` (string | null; default: `None`); `query` (string | null; default: `None`); `max_pmids` (integer; default: `8`); `max_results` (integer | null; default: `None`); `review_id` (string | null; default: `None`); `entity_ids` (array | null; default: `None`); `guideline_boost` (boolean; default: `True`); `wait_until_ready` (boolean; default: `True`); `timeout_ms` (integer; default: `30000`); `verbosity` (string; enum: `lean`, `standard`, `full`; default: `lean`); `max_response_chars` (integer | string; default: `auto`)
 - Output schema: `GroundQuestionResponse`; has_output_schema: `yes`
 
 ## `pubtator_index_review_evidence`
@@ -400,12 +400,12 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `review`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user needs staged research sessions for one review ID.
+- Description: Use this when a user needs staged research sessions for orientation or one review ID.
 - Do not use for: `inspecting a specific session in detail`
 - Example: `{"review_id":"demo"}`
 - Next tools by profile: full: `pubtator_get_research_session_status`; readonly: `pubtator_get_research_session_status`
 - Resource links: `pubtator://reviews/{review_id}/sessions`
-- Input schema: `review_id` (string)
+- Input schema: `review_id` (string | null; default: `None`)
 - Output schema: `ListResearchSessionsResponse`; has_output_schema: `yes`
 
 ## `pubtator_list_review_indexes`
@@ -450,7 +450,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"query":"breast cancer","limit":10}`
 - Next tools by profile: full: `pubtator_search_literature`; readonly: `pubtator_search_literature`
 - Resource links: None
-- Input schema: `query` (string); `limit` (integer; default: `10`); `exact` (boolean; default: `False`)
+- Input schema: `query` (string | null; default: `None`); `text` (string | null; default: `None`); `limit` (integer; default: `10`); `exact` (boolean; default: `False`)
 - Output schema: `MeshLookupResponse`; has_output_schema: `yes`
 
 ## `pubtator_lookup_variant_evidence`
@@ -480,7 +480,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"pmids":["12345","67890"]}`
 - Next tools by profile: lean: `pubtator_index_review_evidence`; full: `pubtator_index_review_evidence`; readonly: None
 - Resource links: None
-- Input schema: `pmids` (array)
+- Input schema: `pmids` (array | null; default: `None`); `pmid` (string | null; default: `None`)
 - Output schema: `PreflightReviewSourcesResponse`; has_output_schema: `yes`
 
 ## `pubtator_record_review_context`
@@ -495,7 +495,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"review_id":"demo","event_type":"passage_selected","passage_ids":["p1"],"selected_passage_ids":["p1"],"summary":"used in answer"}`
 - Next tools by profile: lean: `pubtator_get_review_audit_trail`; full: `pubtator_get_review_audit_trail`
 - Resource links: `pubtator://reviews/{review_id}/llm-context/latest`
-- Input schema: `review_id` (string); `event_type` (string; enum: `context_created`, `session_selected`, `pmids_selected`, `pmids_rejected`, `query_succeeded`, `query_failed`, `passage_selected`, `audit_passage_selected`, `question_opened`, `decision_recorded`, `next_commands_recorded`, `context_summarized`); `session_id` (string | null; default: `None`); `summary` (string | null; default: `None`); `pmids` (array | null; default: `None`); `passage_ids` (array | null; default: `None`); `queries` (array | null; default: `None`); `decision` (object | null; default: `None`); `topic` (string | null; default: `None`); `research_question` (string | null; default: `None`); `question_hash` (string | null; default: `None`); `request` (object | null; default: `None`); `response_summary` (object | null; default: `None`); `selected_pmids` (array | null; default: `None`); `rejected_pmids` (array | null; default: `None`); `preferred_entity_ids` (array | null; default: `None`); `selected_passage_ids` (array | null; default: `None`); `audit_passage_ids` (array | null; default: `None`); `active_queries` (array | null; default: `None`); `successful_queries` (array | null; default: `None`); `failed_queries` (array | null; default: `None`); `open_questions` (array | null; default: `None`); `user_decisions` (array | null; default: `None`); `last_next_commands` (array | null; default: `None`); `stable_citation_keys` (object | null; default: `None`); `cache_key` (string | null; default: `None`); `token_estimate` (integer | null; default: `None`); `payload` (object | null; default: `None`); `created_by` (string | null; default: `None`)
+- Input schema: `review_id` (string); `event_type` (string; enum: `context_created`, `session_selected`, `pmids_selected`, `pmids_rejected`, `query_succeeded`, `query_failed`, `passage_selected`, `audit_passage_selected`, `question_opened`, `decision_recorded`, `next_commands_recorded`, `context_summarized`, `note`); `session_id` (string | null; default: `None`); `summary` (string | null; default: `None`); `pmids` (array | null; default: `None`); `passage_ids` (array | null; default: `None`); `queries` (array | null; default: `None`); `decision` (object | null; default: `None`); `topic` (string | null; default: `None`); `research_question` (string | null; default: `None`); `question_hash` (string | null; default: `None`); `request` (object | null; default: `None`); `response_summary` (object | null; default: `None`); `selected_pmids` (array | null; default: `None`); `rejected_pmids` (array | null; default: `None`); `preferred_entity_ids` (array | null; default: `None`); `selected_passage_ids` (array | null; default: `None`); `audit_passage_ids` (array | null; default: `None`); `active_queries` (array | null; default: `None`); `successful_queries` (array | null; default: `None`); `failed_queries` (array | null; default: `None`); `open_questions` (array | null; default: `None`); `user_decisions` (array | null; default: `None`); `last_next_commands` (array | null; default: `None`); `stable_citation_keys` (object | null; default: `None`); `cache_key` (string | null; default: `None`); `token_estimate` (integer | null; default: `None`); `payload` (object | null; default: `None`); `created_by` (string | null; default: `None`)
 - Output schema: `RecordReviewContextResponse`; has_output_schema: `yes`
 
 ## `pubtator_retrieve_review_context`
@@ -505,12 +505,12 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `retrieval`
 - Profiles: `full`, `readonly`
 - Stability: `compat`
-- Description: Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Use a short keyword query, PMID filters for paper-specific evidence, and diagnostics for zero-result debugging. If zero passages are returned, simplify the query, inspect the review index, or fall back to fetch_publication_annotations.
+- Description: Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Provide one of question or query. Use a short keyword query and PMID filters. If zero passages are returned, simplify the query, inspect the review index, or fall back to fetch_publication_annotations.
 - Do not use for: `multiple query variants in one call`
 - Example: `{"review_id":"demo","question":"EGFR resistance","max_passages":8}`
 - Next tools by profile: full: `pubtator_get_review_audit_trail`; readonly: `pubtator_get_review_audit_trail`
 - Resource links: None
-- Input schema: `review_id` (string); `question` (string); `session_id` (string | null; default: `None`); `pmids` (array | null; default: `None`); `entity_ids` (array | null; default: `None`); `sections` (array | null; default: `None`); `max_passages` (integer; default: `8`); `max_chars` (integer; default: `6000`); `include_diagnostics` (boolean; default: `False`); `include_tables` (boolean; default: `False`); `include_references` (boolean; default: `False`); `table_mode` (string; enum: `off`, `preview`, `full`; default: `preview`); `section_policy` (string; enum: `evidence_first`, `original_order`; default: `evidence_first`); `allow_truncated_passages` (boolean; default: `True`); `max_chars_per_passage` (integer; default: `2200`); `include_resolver_trace` (boolean; default: `False`)
+- Input schema: `review_id` (string); `question` (string | null; default: `None`); `query` (string | null; default: `None`); `session_id` (string | null; default: `None`); `pmids` (array | null; default: `None`); `pmid` (string | null; default: `None`); `entity_ids` (array | null; default: `None`); `sections` (array | null; default: `None`); `max_passages` (integer; default: `8`); `max_chars` (integer; default: `6000`); `include_diagnostics` (boolean; default: `False`); `include_tables` (boolean; default: `False`); `include_references` (boolean; default: `False`); `table_mode` (string; enum: `off`, `preview`, `full`; default: `preview`); `section_policy` (string; enum: `evidence_first`, `original_order`; default: `evidence_first`); `allow_truncated_passages` (boolean; default: `True`); `max_chars_per_passage` (integer; default: `2200`); `include_resolver_trace` (boolean; default: `False`); `include_meta` (boolean; default: `True`)
 - Output schema: `RetrieveReviewContextResponse`; has_output_schema: `yes`
 
 ## `pubtator_retrieve_review_context_batch`
@@ -525,7 +525,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"review_id":"demo","queries":["EGFR resistance","osimertinib resistance"]}`
 - Next tools by profile: lean: `pubtator_record_review_context`, `pubtator_get_review_audit_trail`; full: `pubtator_record_review_context`, `pubtator_get_review_audit_trail`; readonly: `pubtator_get_review_audit_trail`
 - Resource links: `pubtator://reviews/{review_id}/llm-context`
-- Input schema: `review_id` (string); `queries` (array); `session_id` (string | null; default: `None`); `pmids` (array | null; default: `None`); `entity_ids` (array | null; default: `None`); `sections` (array | null; default: `None`); `response_mode` (string; enum: `compact`, `merged_only`, `full`, `diagnostics`, `quotes`; default: `compact`); `max_passages_per_query` (integer; default: `8`); `max_total_passages` (integer; default: `20`); `max_chars` (integer | null; default: `None`); `max_response_chars` (integer | string; default: `auto`); `verbosity` (string; enum: `lean`, `standard`, `full`; default: `standard`); `deduplicate_passages` (boolean; default: `True`); `budget_strategy` (string | null; enum: `query_fair`, `source_fair`, `scarcity_first`; default: `query_fair`); `min_passages_per_source` (integer; default: `1`); `min_passages_per_pmid` (integer; default: `0`); `prioritize_pmids` (array | null; default: `None`); `include_diagnostics` (boolean; default: `False`); `include_tables` (boolean; default: `False`); `include_references` (boolean; default: `False`); `table_mode` (string; enum: `off`, `preview`, `full`; default: `preview`); `section_policy` (string; enum: `evidence_first`, `original_order`; default: `evidence_first`); `allow_truncated_passages` (boolean; default: `True`); `max_chars_per_passage` (integer; default: `2200`); `dry_run` (boolean; default: `False`); `include_resolver_trace` (boolean; default: `False`)
+- Input schema: `review_id` (string); `queries` (array); `session_id` (string | null; default: `None`); `pmids` (array | null; default: `None`); `pmid` (string | null; default: `None`); `entity_ids` (array | null; default: `None`); `sections` (array | null; default: `None`); `response_mode` (string; enum: `compact`, `merged_only`, `full`, `diagnostics`, `quotes`; default: `compact`); `max_passages_per_query` (integer; default: `8`); `max_total_passages` (integer; default: `20`); `max_chars` (integer | null; default: `None`); `max_response_chars` (integer | string; default: `auto`); `verbosity` (string; enum: `lean`, `standard`, `full`; default: `standard`); `deduplicate_passages` (boolean; default: `True`); `budget_strategy` (string | null; enum: `query_fair`, `source_fair`, `scarcity_first`; default: `query_fair`); `min_passages_per_source` (integer; default: `1`); `min_passages_per_pmid` (integer; default: `0`); `prioritize_pmids` (array | null; default: `None`); `include_diagnostics` (boolean; default: `False`); `include_tables` (boolean; default: `False`); `include_references` (boolean; default: `False`); `table_mode` (string; enum: `off`, `preview`, `full`; default: `preview`); `section_policy` (string; enum: `evidence_first`, `original_order`; default: `evidence_first`); `allow_truncated_passages` (boolean; default: `True`); `max_chars_per_passage` (integer; default: `2200`); `dry_run` (boolean; default: `False`); `include_resolver_trace` (boolean; default: `False`); `include_meta` (boolean; default: `True`)
 - Output schema: `RetrieveReviewContextBatchResponse`; has_output_schema: `yes`
 
 ## `pubtator_review_quickstart`
@@ -535,12 +535,12 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `review`
 - Profiles: `full`
 - Stability: `advanced`
-- Description: Use this when a user wants one-shot casual review setup: search topic, stage/index up to n_pmids, inspect coverage, and return review_id/session_id for retrieve_review_context_batch.
+- Description: Use this when a user wants one-shot casual review setup: search topic, stage/index up to n_pmids, inspect coverage, and return review_id/session_id for retrieve_review_context_batch. Provide one of topic, query, or question.
 - Do not use for: `readonly deployments`
 - Example: `{"topic":"EGFR resistance in lung cancer","n_pmids":8}`
 - Next tools by profile: full: `pubtator_retrieve_review_context_batch`
 - Resource links: None
-- Input schema: `topic` (string); `n_pmids` (integer; default: `8`); `review_id` (string | null; default: `None`); `session_id` (string | null; default: `None`); `wait_until_ready` (boolean; default: `False`); `timeout_ms` (integer; default: `0`)
+- Input schema: `topic` (string | null; default: `None`); `query` (string | null; default: `None`); `question` (string | null; default: `None`); `n_pmids` (integer; default: `8`); `review_id` (string | null; default: `None`); `session_id` (string | null; default: `None`); `wait_until_ready` (boolean; default: `False`); `timeout_ms` (integer; default: `0`)
 - Output schema: `ReviewQuickstartResponse`; has_output_schema: `yes`
 
 ## `pubtator_search_biomedical_entities`
@@ -555,7 +555,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"query":"TP53","concept":"Gene","limit":10}`
 - Next tools by profile: lean: `pubtator_search_literature`; full: `pubtator_search_literature`; readonly: `pubtator_search_literature`
 - Resource links: `pubtator://bioconcepts`
-- Input schema: `query` (string); `concept` (string | null; enum: `Gene`, `Disease`, `Chemical`, `Species`, `Variant`, `CellLine`, `Phenotype`; default: `None`); `limit` (integer; default: `10`)
+- Input schema: `query` (string | null; default: `None`); `text` (string | null; default: `None`); `concept` (string | null; enum: `Gene`, `Disease`, `Chemical`, `Species`, `Variant`, `CellLine`, `Phenotype`; default: `None`); `limit` (integer; default: `10`)
 - Output schema: `EntityAutocompleteResponse`; has_output_schema: `yes`
 
 ## `pubtator_search_guidelines`
@@ -565,12 +565,12 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `literature`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. This is a convenience wrapper over pubtator_search_literature with guideline/systematic-review publication-type filters and guideline boosting, not an independent guideline database. Defaults to source coverage preflight so abstract-only guideline hits are visible before indexing.
+- Description: Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. Provide one of text or query. Wraps pubtator_search_literature with guideline/systematic-review filters and guideline boosting; not an independent guideline database.
 - Do not use for: `non-guideline exhaustive PubMed search`
 - Example: `{"text":"asthma treatment adults","limit":5}`
 - Next tools by profile: lean: `pubtator_preflight_review_sources`; full: `pubtator_preflight_review_sources`; readonly: `pubtator_preflight_review_sources`
 - Resource links: None
-- Input schema: `text` (string); `page` (integer; default: `1`); `year_min` (integer | null; default: `None`); `year_max` (integer | null; default: `None`); `sections` (array | null; default: `None`); `limit` (integer | null; default: `5`); `entity_ids` (array | null; default: `None`); `coverage` (string; enum: `none`, `preflight`; default: `preflight`)
+- Input schema: `text` (string | null; default: `None`); `query` (string | null; default: `None`); `page` (integer; default: `1`); `year_min` (integer | null; default: `None`); `year_max` (integer | null; default: `None`); `sections` (array | null; default: `None`); `limit` (integer | null; default: `5`); `entity_ids` (array | null; default: `None`); `coverage` (string; enum: `none`, `preflight`; default: `preflight`)
 - Output schema: `SearchResponse`; has_output_schema: `yes`
 
 ## `pubtator_search_literature`
@@ -580,12 +580,12 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `literature`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user needs PubMed literature search through PubTator3. Supports short biomedical queries, flat filters, optional section filters, and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false means continue with results or inspect diagnostics.
+- Description: Use this when a user needs PubMed literature search through PubTator3. Provide one of text or query. Supports flat filters, section filters, and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false means continue with results or inspect diagnostics.
 - Do not use for: `fetching known PMID passage text`
 - Example: `{"text":"BRCA1 ovarian cancer PARP inhibitor","limit":5,"metadata":"basic"}`
 - Next tools by profile: lean: `pubtator_preflight_review_sources`; full: `pubtator_preflight_review_sources`; readonly: `pubtator_preflight_review_sources`
 - Resource links: None
-- Input schema: `text` (string); `page` (integer; default: `1`); `sort` (string | null; default: `None`); `filters` (string | null; default: `None`); `publication_types` (array | null; default: `None`); `year_min` (integer | null; default: `None`); `year_max` (integer | null; default: `None`); `sections` (array | null; default: `None`); `response_mode` (string; enum: `compact`, `standard`, `full`; default: `compact`); `include_citations` (string; enum: `none`, `nlm`, `bibtex`, `both`; default: `none`); `text_hl_format` (string; enum: `none`, `plain`, `annotated`; default: `plain`); `limit` (integer | null; default: `5`); `entity_ids` (array | null; default: `None`); `guideline_boost` (boolean; default: `False`); `coverage` (string; enum: `none`, `preflight`; default: `none`); `metadata` (string; enum: `none`, `basic`, `full`; default: `basic`)
+- Input schema: `text` (string | null; default: `None`); `query` (string | null; default: `None`); `page` (integer; default: `1`); `sort` (string | null; default: `None`); `filters` (string | null; default: `None`); `publication_types` (array | null; default: `None`); `year_min` (integer | null; default: `None`); `year_max` (integer | null; default: `None`); `sections` (array | null; default: `None`); `response_mode` (string; enum: `compact`, `standard`, `full`; default: `compact`); `include_citations` (string; enum: `none`, `nlm`, `bibtex`, `both`; default: `none`); `text_hl_format` (string; enum: `none`, `plain`, `annotated`; default: `plain`); `limit` (integer | null; default: `5`); `entity_ids` (array | null; default: `None`); `guideline_boost` (boolean; default: `False`); `coverage` (string; enum: `none`, `preflight`; default: `none`); `metadata` (string; enum: `none`, `basic`, `with_abstract`, `full`; default: `basic`); `include_meta` (boolean; default: `True`)
 - Output schema: `SearchResponse`; has_output_schema: `yes`
 
 ## `pubtator_stage_research_session`
@@ -600,7 +600,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"review_id":"demo","query":"BRCA1 PARP inhibitor","max_candidates":20}`
 - Next tools by profile: full: `pubtator_get_research_session_status`, `pubtator_index_review_evidence`
 - Resource links: `pubtator://reviews/{review_id}/sessions/{session_id}`
-- Input schema: `review_id` (string); `query` (string | null; default: `None`); `pmids` (array | null; default: `None`); `session_id` (string | null; default: `None`); `page` (integer; default: `1`); `sort` (string | null; default: `None`); `filters` (string | null; default: `None`); `publication_types` (array | null; default: `None`); `year_min` (integer | null; default: `None`); `year_max` (integer | null; default: `None`); `sections` (array | null; default: `None`); `max_candidates` (integer; default: `20`); `stage_full_text` (boolean; default: `True`)
+- Input schema: `review_id` (string); `query` (string | null; default: `None`); `pmids` (array | null; default: `None`); `pmid` (string | null; default: `None`); `session_id` (string | null; default: `None`); `page` (integer; default: `1`); `sort` (string | null; default: `None`); `filters` (string | null; default: `None`); `publication_types` (array | null; default: `None`); `year_min` (integer | null; default: `None`); `year_max` (integer | null; default: `None`); `sections` (array | null; default: `None`); `max_candidates` (integer; default: `20`); `stage_full_text` (boolean; default: `True`); `include_meta` (boolean; default: `True`)
 - Output schema: `StageResearchSessionResponse`; has_output_schema: `yes`
 
 ## `pubtator_submit_text_annotation`
@@ -615,7 +615,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"text":"BRCA1 is associated with breast cancer.","bioconcepts":"Gene,Disease"}`
 - Next tools by profile: full: `pubtator_get_text_annotation_results`
 - Resource links: `pubtator://text-processing`
-- Input schema: `text` (string); `bioconcepts` (string; default: `Gene`)
+- Input schema: `text` (string); `bioconcepts` (string; default: `Gene`); `wait` (boolean; default: `False`); `timeout_ms` (integer; default: `30000`)
 - Output schema: `TextAnnotationSubmitResponse`; has_output_schema: `yes`
 
 ## `pubtator_suggest_corpus`
@@ -625,12 +625,12 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `discovery`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user needs a compact, review-feeding PMID corpus for a research question. Returns candidate PMIDs, roles, coverage hints, metadata, and next commands.
+- Description: Use this when a user needs a compact, review-feeding PMID corpus for a research question. Provide one of question or query. Returns candidate PMIDs, roles, coverage hints, metadata, and next commands.
 - Do not use for: `final evidence retrieval`
 - Example: `{"question":"EGFR resistance in lung cancer","max_pmids":8}`
 - Next tools by profile: full: `pubtator_preflight_review_sources`, `pubtator_index_review_evidence`; readonly: `pubtator_preflight_review_sources`
 - Resource links: None
-- Input schema: `question` (string); `max_pmids` (integer; default: `8`); `entity_ids` (array | null; default: `None`); `must_include_pmids` (array | null; default: `None`); `prefer_guidelines` (boolean; default: `True`); `include_metadata` (boolean; default: `True`)
+- Input schema: `question` (string | null; default: `None`); `query` (string | null; default: `None`); `max_pmids` (integer; default: `8`); `entity_ids` (array | null; default: `None`); `must_include_pmids` (array | null; default: `None`); `prefer_guidelines` (boolean; default: `True`); `include_metadata` (boolean; default: `True`)
 - Output schema: `CorpusSuggestionResponse`; has_output_schema: `yes`
 
 ## `pubtator_workflow_help`

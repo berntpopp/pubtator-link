@@ -19,6 +19,7 @@ async def test_diagnostics_reports_stale_schema_with_recovery() -> None:
         inspect_schema=inspect_schema,
         review_queue_available=lambda: True,
         europe_pmc_enabled=lambda: False,
+        pubtator_api_status=lambda: {"status": "ready"},
     )
 
     response = await service.get_diagnostics()
@@ -26,6 +27,7 @@ async def test_diagnostics_reports_stale_schema_with_recovery() -> None:
     assert response.success is True
     assert response.status == "degraded"
     assert response.subsystems["database"]["schema_current"] is False
+    assert response.subsystems["pubtator_api"]["status"] == "ready"
     assert "make db-migrate" in response.recovery[0]
 
 
@@ -38,7 +40,6 @@ async def test_diagnostics_reports_recent_review_database_tool_error() -> None:
         tool_name="pubtator_index_review_evidence",
         error_code="review_index_unavailable",
         message="Review database operation failed.",
-        raw_message="relation review_sources does not exist",
     )
 
     async def inspect_schema() -> ReviewSchemaDiagnostics:
@@ -54,6 +55,7 @@ async def test_diagnostics_reports_recent_review_database_tool_error() -> None:
         inspect_schema=inspect_schema,
         review_queue_available=lambda: True,
         europe_pmc_enabled=lambda: False,
+        pubtator_api_status=lambda: {"status": "ready"},
     )
 
     response = await service.get_diagnostics()
@@ -65,3 +67,26 @@ async def test_diagnostics_reports_recent_review_database_tool_error() -> None:
         == "review_index_unavailable"
     )
     assert any("pubtator_index_review_evidence" in item for item in response.recovery)
+
+
+@pytest.mark.asyncio
+async def test_diagnostics_reports_pubtator_api_probe_status() -> None:
+    async def inspect_schema() -> ReviewSchemaDiagnostics:
+        return ReviewSchemaDiagnostics(
+            connected=True,
+            current=True,
+            applied_versions=[],
+            missing_tables=[],
+            missing_columns=[],
+        )
+
+    service = DiagnosticsService(
+        inspect_schema=inspect_schema,
+        review_queue_available=lambda: True,
+        europe_pmc_enabled=lambda: True,
+        pubtator_api_status=lambda: {"status": "ready", "probe": "search"},
+    )
+
+    response = await service.get_diagnostics()
+
+    assert response.subsystems["pubtator_api"] == {"status": "ready", "probe": "search"}

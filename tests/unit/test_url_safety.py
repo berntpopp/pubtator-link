@@ -22,6 +22,7 @@ def _config(*, allow_http_urls: bool = False, pdf_max_bytes: int = 32) -> Review
         text_max_bytes=32,
         allow_http_urls=allow_http_urls,
         enable_docling=False,
+        curated_url_host_allowlist=("example.test",),
     )
 
 

@@ -3,7 +3,9 @@ from __future__ import annotations
 import pytest
 
 from pubtator_link.models.review_rerag import IndexReviewEvidenceRequest, PreparationStatus
+from pubtator_link.services import review_indexing
 from pubtator_link.services.review_indexing import ReviewIndexingService
+from pubtator_link.services.url_safety import UrlSafetyError
 
 
 class FakeIndexRepository:
@@ -223,6 +225,37 @@ async def test_index_rejects_bookshelf_url_without_nbk_before_enqueue() -> None:
         await service.index_review_evidence(
             "review-1",
             IndexReviewEvidenceRequest(curated_urls=["https://www.ncbi.nlm.nih.gov/books/"]),
+        )
+
+    assert queue.calls == []
+
+
+@pytest.mark.asyncio
+async def test_dry_run_rejects_disallowed_curated_url_before_estimate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    queue = FakeQueue()
+    service = ReviewIndexingService(repository=FakeIndexRepository(), queue=queue)
+    monkeypatch.setattr(
+        review_indexing,
+        "review_rerag_config",
+        type(
+            "Config",
+            (),
+            {
+                "allow_http_urls": False,
+                "curated_url_host_allowlist": ("ncbi.nlm.nih.gov",),
+            },
+        )(),
+    )
+
+    with pytest.raises(UrlSafetyError, match="not in allowlist"):
+        await service.index_review_evidence(
+            "review-1",
+            IndexReviewEvidenceRequest(
+                curated_urls=["https://evil.example.com/x"],
+                dry_run=True,
+            ),
         )
 
     assert queue.calls == []

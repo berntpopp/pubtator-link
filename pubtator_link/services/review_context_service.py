@@ -23,7 +23,6 @@ from pubtator_link.models.review_rerag import (
     RetrieveReviewContextBatchResponse,
     RetrieveReviewContextRequest,
     RetrieveReviewContextResponse,
-    ReviewAuditTrailItem,
     ReviewAuditTrailResponse,
     ReviewIndexTotals,
     ReviewPassageLookupResponse,
@@ -31,12 +30,15 @@ from pubtator_link.models.review_rerag import (
     ReviewSourceSummary,
     SampleSectionPolicy,
     SourceCoverage,
-    stable_citation_key_for_passage,
 )
 from pubtator_link.services.provenance import corpus_snapshot_date, stable_cache_key
 from pubtator_link.services.publication_metadata import (
     PublicationMetadataLookup,
     lookup_metadata_batched,
+)
+from pubtator_link.services.review_context.audit_trail import (
+    audit_trail_response,
+    latest_audit_passage_ids,
 )
 from pubtator_link.services.review_context.batch_budgeting import merge_batch_context
 from pubtator_link.services.review_context.budgets import (
@@ -846,48 +848,25 @@ class ReviewContextService:
         self,
         *,
         review_id: str,
-        passage_ids: list[str],
+        passage_ids: list[str] | None = None,
         session_id: str | None = None,
         max_chars_per_passage: int = 500,
     ) -> ReviewAuditTrailResponse:
         await self._ensure_session_exists(review_id, session_id)
+        selected_passage_ids = passage_ids or await latest_audit_passage_ids(
+            self.repository, review_id=review_id, session_id=session_id
+        )
         lookup = await self.get_passages_by_id(
             review_id=review_id,
-            passage_ids=passage_ids,
+            passage_ids=selected_passage_ids,
             session_id=session_id,
             max_chars_per_passage=max_chars_per_passage,
         )
-        items: list[ReviewAuditTrailItem] = []
-        lines: list[str] = []
-        for passage in lookup.passages:
-            quote = (
-                passage.quote.text
-                if passage.quote is not None
-                else passage.text[:max_chars_per_passage]
-            )
-            stable_key = passage.stable_citation_key or stable_citation_key_for_passage(
-                passage.passage_id
-            )
-            item = ReviewAuditTrailItem(
-                pmid=passage.pmid,
-                pmcid=passage.pmcid,
-                passage_id=passage.passage_id,
-                stable_citation_key=stable_key,
-                section=passage.section,
-                quote=quote,
-                char_count=len(quote),
-            )
-            items.append(item)
-            pmid_text = f"PMID {passage.pmid}" if passage.pmid else "PMID unavailable"
-            lines.append(
-                f"- {stable_key} {pmid_text} {passage.passage_id} {passage.section}: {quote}"
-            )
-        return ReviewAuditTrailResponse(
+        return audit_trail_response(
             review_id=review_id,
             session_id=session_id,
-            items=items,
-            not_found=lookup.not_found,
-            audit_block="\n".join(lines),
+            lookup=lookup,
+            max_chars_per_passage=max_chars_per_passage,
         )
 
     def _context_passages_from_rows(

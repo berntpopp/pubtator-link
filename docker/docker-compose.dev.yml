@@ -27,7 +27,7 @@ services:
       sh -c "
         cd /home/app/web &&
         pip install -e . &&
-        uvicorn pubtator_link.server_manager:app --host 0.0.0.0 --port 8000 --reload --reload-dir pubtator_link
+        uvicorn pubtator_link.server_manager:create_app --factory --host 0.0.0.0 --port 8000 --reload --reload-dir pubtator_link
       "
 
     # Override user to root for development (to avoid permission issues)

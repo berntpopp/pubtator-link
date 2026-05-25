@@ -45,6 +45,7 @@ def test_article_id_conversion_response_serializes_meta_alias() -> None:
 
     dumped = response.model_dump(by_alias=True)
 
+    assert dumped["success"] is True
     assert dumped["_meta"]["research_use_only"] is True
     assert dumped["_meta"]["next_commands"] == [
         {

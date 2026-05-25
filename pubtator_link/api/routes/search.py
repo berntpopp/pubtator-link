@@ -321,7 +321,7 @@ async def search_publications(
     ] = "none",
     metadata: Annotated[
         SearchMetadataMode,
-        Query(description="Publication metadata enrichment: none, basic, or full"),
+        Query(description=("Publication metadata enrichment: none, basic, with_abstract, or full")),
     ] = "none",
 ) -> SearchResponse:
     """Search biomedical literature with advanced filtering and section targeting.

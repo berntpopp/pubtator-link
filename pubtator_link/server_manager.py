@@ -499,9 +499,16 @@ class UnifiedServerManager:
         self.logger.info("Server shutdown initiated")
 
 
-# Global app instance for WSGI compatibility (used by Gunicorn)
-_manager = UnifiedServerManager()
-app = _manager.create_app(include_mcp=settings.transport == "unified")
+def create_app() -> FastAPI:
+    """ASGI application factory used by Gunicorn/Uvicorn --factory.
+
+    Importing this module has no side effects. The first call constructs
+    a UnifiedServerManager and returns a fully-wired FastAPI app. Subsequent
+    calls return fresh apps; tests must not assume singletonness.
+    """
+
+    manager = UnifiedServerManager()
+    return manager.create_app(include_mcp=settings.transport == "unified")
 
 
 def _schema_diagnostics_payload(value: object) -> dict[str, object] | None:

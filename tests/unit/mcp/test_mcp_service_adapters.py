@@ -33,6 +33,54 @@ class _FakeReviewAuditBundleService:
         )
 
 
+def test_strip_meta_for_repeated_call_removes_diagnostics_and_preserves_answer_content() -> None:
+    from pubtator_link.mcp.meta_budget import strip_meta_for_repeated_call
+
+    payload = {
+        "success": True,
+        "_meta": {"next_commands": ["pubtator_retrieve_review_context_batch"]},
+        "provider_status": [{"provider": "pubmed", "status": "success"}],
+        "results": [
+            {
+                "pmid": "40234174",
+                "title": "Colchicine response in FMF",
+                "citation": "PMID:40234174",
+                "passage_id": "rev:40234174:abstract:0",
+                "text": "Colchicine reduced attacks.",
+                "coverage_hint": "full_text",
+                "unsafe_for_clinical_use": True,
+                "_meta": {"debug": True},
+                "rrf_score": 0.5,
+                "lexical_rank_position": 1,
+                "dense_rank_position": 2,
+                "rank_features": {"guideline_boost": 1.0},
+                "provider_status": [{"provider": "dense", "status": "success"}],
+                "score_explanation": "dense neighbor score",
+                "match_reasons": ["entity_overlap"],
+                "omitted_candidate_preview": [{"pmid": "1"}],
+                "abstract": None,
+                "mesh_headings": [],
+            }
+        ],
+    }
+
+    stripped = strip_meta_for_repeated_call(payload)
+
+    assert "_meta" not in stripped
+    assert "provider_status" not in stripped
+    assert stripped["results"][0] == {
+        "pmid": "40234174",
+        "title": "Colchicine response in FMF",
+        "citation": "PMID:40234174",
+        "passage_id": "rev:40234174:abstract:0",
+        "text": "Colchicine reduced attacks.",
+        "coverage_hint": "full_text",
+        "unsafe_for_clinical_use": True,
+    }
+    assert "_meta" in payload
+    assert "rrf_score" in payload["results"][0]
+
+
 @pytest.mark.asyncio
 async def test_search_entities_adapter_calls_client() -> None:
     from pubtator_link.mcp.service_adapters import search_biomedical_entities_impl
@@ -481,12 +529,43 @@ async def test_export_review_audit_bundle_adapter_returns_bundle() -> None:
     result = await export_review_audit_bundle_impl(
         service=FakeService(),
         review_id="rev_123",
+        response_mode="full",
     )
 
     assert set(result) == {"success", "audit_bundle"}
     assert result["success"] is True
     assert result["audit_bundle"]["review_id"] == "rev_123"
     assert result["audit_bundle"]["index_snapshot_date"] is not None
+
+
+@pytest.mark.asyncio
+async def test_export_review_audit_bundle_adapter_returns_compact_summary() -> None:
+    from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
+
+    result = await export_review_audit_bundle_impl(
+        service=_FakeReviewAuditBundleService(),
+        review_id="rev_123",
+        response_mode="compact",
+    )
+
+    assert result["success"] is True
+    assert "audit_bundle" not in result
+    assert result["audit_bundle_summary"]["review_id"] == "rev_123"
+    assert result["audit_bundle_summary"]["passage_id_count"] >= 0
+    assert "stable_citation_keys" in result["audit_bundle_summary"]["omitted_fields"]
+
+
+@pytest.mark.asyncio
+async def test_export_review_audit_bundle_adapter_defaults_to_compact_summary() -> None:
+    from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
+
+    result = await export_review_audit_bundle_impl(
+        service=_FakeReviewAuditBundleService(),
+        review_id="rev_123",
+    )
+
+    assert "audit_bundle_summary" in result
+    assert "audit_bundle" not in result
 
 
 @pytest.mark.asyncio
@@ -758,6 +837,173 @@ async def test_review_quickstart_adapter_returns_retrieval_handoff() -> None:
     assert result["next_commands"][0] == "pubtator_retrieve_review_context_batch"
 
 
+@pytest.mark.asyncio
+async def test_review_quickstart_adapter_honors_wait_until_ready() -> None:
+    from pubtator_link.mcp.service_adapters import review_quickstart_impl
+    from pubtator_link.models.review_rerag import (
+        InspectReviewIndexResponse,
+        PreparationStatus,
+        ResearchSessionCandidate,
+        ResearchSessionManifest,
+        ReviewIndexTotals,
+        StageResearchSessionResponse,
+    )
+
+    captured: dict[str, object] = {}
+
+    class Queue:
+        repository = object()
+
+    class StageService:
+        queue = Queue()
+
+        async def stage(self, *, review_id, request):
+            return StageResearchSessionResponse(
+                manifest=ResearchSessionManifest(
+                    session_id="session-1",
+                    review_id=review_id,
+                    query=request.query,
+                    candidate_count=1,
+                    candidates=[ResearchSessionCandidate(pmid="24166952", rank=1)],
+                ),
+                meta={},
+            )
+
+    class ContextService:
+        async def inspect_review_index(self, review_id, request):
+            return InspectReviewIndexResponse(
+                review_id=review_id,
+                preparation_status=PreparationStatus(complete=0),
+                sources=[],
+                totals=ReviewIndexTotals(pmid_count=1, source_count=1, passage_count=0),
+                failed_sources=[],
+            )
+
+    class IndexingService:
+        def __init__(self, *, repository, queue):
+            captured["repository"] = repository
+            captured["queue"] = queue
+
+        async def index_review_evidence(self, review_id, request):
+            captured["review_id"] = review_id
+            captured["request"] = request
+
+    result = await review_quickstart_impl(
+        stage_service=StageService(),
+        context_service=ContextService(),
+        topic="MEFV colchicine",
+        wait_until_ready=True,
+        timeout_ms=30_000,
+        review_indexing_service_factory=IndexingService,
+    )
+
+    request = captured["request"]
+    assert request.wait_for_completion is True
+    assert request.wait_for_status == "complete_or_partial"
+    assert request.timeout_ms == 30_000
+    assert request.pmids == ["24166952"]
+    assert "quickstart does not block on indexing" not in result["warnings"]
+
+
+@pytest.mark.asyncio
+async def test_list_research_sessions_adapter_uses_global_path_without_review_id() -> None:
+    from pubtator_link.mcp.service_adapters import list_research_sessions_impl
+    from pubtator_link.models.review_rerag import (
+        ListResearchSessionsResponse,
+        ResearchSessionManifest,
+    )
+
+    class Service:
+        local_calls = 0
+        global_calls = 0
+
+        async def list_sessions(self, *, review_id):
+            self.local_calls += 1
+            raise AssertionError("review-scoped path should not be used")
+
+        async def list_sessions_global(self, *, limit=20):
+            self.global_calls += 1
+            assert limit == 20
+            return ListResearchSessionsResponse(
+                sessions=[
+                    ResearchSessionManifest(
+                        review_id="review-2",
+                        session_id="session-2",
+                        updated_at="2026-05-02T00:00:00Z",
+                    ),
+                ]
+            )
+
+    service = Service()
+
+    result = await list_research_sessions_impl(service=service, review_id=None)
+
+    assert result["success"] is True
+    assert result["sessions"][0]["review_id"] == "review-2"
+    assert service.local_calls == 0
+    assert service.global_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_get_research_session_status_adapter_resolves_session_id_only() -> None:
+    from pubtator_link.mcp.service_adapters import get_research_session_status_impl
+    from pubtator_link.models.review_rerag import (
+        ResearchSessionManifest,
+        ResearchSessionStatusResponse,
+    )
+
+    class Service:
+        async def get_status(self, *, review_id, session_id):
+            raise AssertionError("review-scoped lookup should not be used")
+
+        async def get_status_by_session_id(self, *, session_id):
+            assert session_id == "session-1"
+            return ResearchSessionStatusResponse(
+                manifest=ResearchSessionManifest(
+                    review_id="review-1",
+                    session_id=session_id,
+                )
+            )
+
+    result = await get_research_session_status_impl(
+        service=Service(),
+        review_id=None,
+        session_id="session-1",
+    )
+
+    assert result["success"] is True
+    assert result["manifest"]["review_id"] == "review-1"
+
+
+@pytest.mark.asyncio
+async def test_get_research_session_status_adapter_maps_session_id_only_errors() -> None:
+    from pubtator_link.mcp.service_adapters import get_research_session_status_impl
+
+    class NotFoundService:
+        async def get_status_by_session_id(self, *, session_id):
+            raise LookupError(f"Research session not found: {session_id}")
+
+    class AmbiguousService:
+        async def get_status_by_session_id(self, *, session_id):
+            raise ValueError(f"Research session id is ambiguous: {session_id}")
+
+    not_found = await get_research_session_status_impl(
+        service=NotFoundService(),
+        review_id=None,
+        session_id="missing",
+    )
+    ambiguous = await get_research_session_status_impl(
+        service=AmbiguousService(),
+        review_id=None,
+        session_id="session-1",
+    )
+
+    assert not_found["success"] is False
+    assert not_found["error_code"] == "not_found"
+    assert ambiguous["success"] is False
+    assert ambiguous["error_code"] == "validation_failed"
+
+
 async def _run_ground_question_fixture(service_adapters, **kwargs):
     from pubtator_link.models.review_rerag import (
         ContextPack,
@@ -960,6 +1206,208 @@ async def test_ground_question_adapter_no_pmids_returns_search_recovery() -> Non
 
 
 @pytest.mark.asyncio
+async def test_ground_question_long_natural_language_query_returns_warning() -> None:
+    from pubtator_link.mcp import service_adapters
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {"count": 0, "page": 1, "results": []}
+
+    class FakeQueue:
+        repository = object()
+
+    class FakeContextService:
+        async def inspect_review_index(self, review_id, request):
+            raise AssertionError("inspect should not be called without selected PMIDs")
+
+        async def retrieve_context_batch(self, review_id, request):
+            raise AssertionError("retrieve should not be called without selected PMIDs")
+
+    result = await service_adapters.ground_question_impl(
+        client=FakeClient(),
+        queue=FakeQueue(),
+        context_service=FakeContextService(),
+        question=(
+            "What are the best practices for treating a child with a variant of "
+            "uncertain significance in MEFV when considering colchicine and monitoring?"
+        ),
+        max_pmids=8,
+        review_indexing_service_factory=lambda **kwargs: None,
+    )
+
+    assert result["query_length_warning"] == (
+        "Long natural-language question used for search; consider splitting into 6 or fewer key terms."
+    )
+
+
+@pytest.mark.asyncio
+async def test_ground_question_long_query_attempts_shortened_variant_before_recovery() -> None:
+    from pubtator_link.mcp import service_adapters
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.queries: list[str] = []
+
+        async def search_publications(self, **kwargs):
+            self.queries.append(kwargs["text"])
+            return {"count": 0, "page": 1, "results": []}
+
+    class FakeQueue:
+        repository = object()
+
+    class FakeContextService:
+        async def inspect_review_index(self, review_id, request):
+            raise AssertionError("inspect should not be called without selected PMIDs")
+
+        async def retrieve_context_batch(self, review_id, request):
+            raise AssertionError("retrieve should not be called without selected PMIDs")
+
+    client = FakeClient()
+    question = (
+        "What are the best practices for treating a child with a variant of "
+        "uncertain significance in MEFV when considering colchicine and monitoring?"
+    )
+
+    result = await service_adapters.ground_question_impl(
+        client=client,
+        queue=FakeQueue(),
+        context_service=FakeContextService(),
+        question=question,
+        max_pmids=8,
+        review_indexing_service_factory=lambda **kwargs: None,
+    )
+
+    assert len(client.queries) >= 2
+    assert client.queries[0] == question
+    assert all("What are the best practices" not in query for query in client.queries[1:])
+    assert result["query_variants_attempted"] == client.queries
+    assert result["recovery"] == [
+        "Refine the search query or provide candidate PMIDs explicitly.",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_ground_question_long_query_uses_decomposed_variant_hits() -> None:
+    from pubtator_link.mcp import service_adapters
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.queries: list[str] = []
+
+        async def search_publications(self, **kwargs):
+            self.queries.append(kwargs["text"])
+            if kwargs["text"] == "MEFV colchicine pediatric":
+                return {"count": 1, "page": 1, "results": [{"pmid": "42135612"}]}
+            return {"count": 0, "page": 1, "results": []}
+
+    class FakeQueue:
+        repository = object()
+
+    class FakeContextService:
+        async def inspect_review_index(self, review_id, request):
+            return type(
+                "InspectResponse",
+                (),
+                {
+                    "preparation_status": PreparationStatus(complete=1),
+                    "coverage_summary": {"abstract_only": 1},
+                    "sources": [
+                        type(
+                            "Source",
+                            (),
+                            {"pmid": "42135612", "coverage": "abstract_only", "passage_count": 1},
+                        )()
+                    ],
+                },
+            )()
+
+        async def retrieve_context_batch(self, review_id, request):
+            return None
+
+    class FakeIndexingService:
+        async def index_review_evidence(self, review_id, request):
+            return None
+
+    client = FakeClient()
+    question = (
+        "What are the best practices for treating a child with a variant of "
+        "uncertain significance in MEFV when considering colchicine and monitoring?"
+    )
+
+    result = await service_adapters.ground_question_impl(
+        client=client,
+        queue=FakeQueue(),
+        context_service=FakeContextService(),
+        question=question,
+        max_pmids=8,
+        review_indexing_service_factory=lambda **kwargs: FakeIndexingService(),
+    )
+
+    assert "MEFV colchicine pediatric" in client.queries
+    assert result["selected_pmids"] == ["42135612"]
+    assert result["search_total_results"] == 1
+
+
+@pytest.mark.asyncio
+async def test_ground_question_short_failed_query_uses_anchor_fallback() -> None:
+    from pubtator_link.mcp import service_adapters
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.queries: list[str] = []
+
+        async def search_publications(self, **kwargs):
+            self.queries.append(kwargs["text"])
+            if kwargs["text"] == "MEFV colchicine pediatric":
+                return {"count": 1, "page": 1, "results": [{"pmid": "42135612"}]}
+            return {"count": 0, "page": 1, "results": []}
+
+    class FakeQueue:
+        repository = object()
+
+    class FakeContextService:
+        async def inspect_review_index(self, review_id, request):
+            return type(
+                "InspectResponse",
+                (),
+                {
+                    "preparation_status": PreparationStatus(complete=1),
+                    "coverage_summary": {"abstract_only": 1},
+                    "sources": [
+                        type(
+                            "Source",
+                            (),
+                            {"pmid": "42135612", "coverage": "abstract_only", "passage_count": 1},
+                        )()
+                    ],
+                },
+            )()
+
+        async def retrieve_context_batch(self, review_id, request):
+            return None
+
+    class FakeIndexingService:
+        async def index_review_evidence(self, review_id, request):
+            return None
+
+    client = FakeClient()
+    result = await service_adapters.ground_question_impl(
+        client=client,
+        queue=FakeQueue(),
+        context_service=FakeContextService(),
+        question="Treat child with MEFV VUS using colchicine",
+        max_pmids=8,
+        review_indexing_service_factory=lambda **kwargs: FakeIndexingService(),
+    )
+
+    assert client.queries == [
+        "Treat child with MEFV VUS using colchicine",
+        "MEFV colchicine pediatric",
+    ]
+    assert result["selected_pmids"] == ["42135612"]
+
+
+@pytest.mark.asyncio
 async def test_ground_question_adapter_waits_when_selected_pmids_are_not_ready() -> None:
     from pubtator_link.mcp import service_adapters
     from pubtator_link.models.review_rerag import (
@@ -1027,7 +1475,7 @@ async def test_index_review_evidence_adapter_returns_lifecycle_guidance() -> Non
         async def preparation_job_statuses(self, review_id, source_ids):
             return {
                 "PMID:40234175": "complete",
-                "URL:https://example.org/already-prepared.pdf": "complete",
+                "URL:https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7811395/": "complete",
             }
 
         async def source_coverage_summary(self, review_id, source_ids):
@@ -1055,7 +1503,7 @@ async def test_index_review_evidence_adapter_returns_lifecycle_guidance() -> Non
         queue=FakeQueue(),
         review_id="rev",
         pmids=["40234174", "40234175"],
-        curated_urls=["https://example.org/already-prepared.pdf"],
+        curated_urls=["https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7811395/"],
     )
 
     assert result["queued"] == 1
@@ -1797,6 +2245,31 @@ async def test_search_literature_meta_uses_short_next_tool_hints() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_literature_can_omit_meta_for_repeated_searches() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "results": [{"pmid": "1", "title": "FMF guideline"}],
+                "count": 1,
+                "total_pages": 1,
+                "page_size": 10,
+            }
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="FMF",
+        include_meta=False,
+    )
+
+    assert "_meta" not in result
+    assert "cache_key" not in result
+    assert "corpus_snapshot_date" not in result
+    assert "source_versions" not in result
+
+
+@pytest.mark.asyncio
 async def test_search_literature_default_does_not_require_preflight_service() -> None:
     from pubtator_link.mcp.service_adapters import search_literature_impl
 
@@ -1900,7 +2373,7 @@ async def test_search_literature_impl_enriches_basic_metadata() -> None:
         metadata_service=FakeMetadata(),
     )
 
-    assert result["results"][0]["authors"] == []
+    assert "authors" not in result["results"][0]
     assert result["results"][0]["first_author_et_al"] == "Kavrul Kayaalp GK"
 
 
@@ -2165,6 +2638,62 @@ async def test_search_literature_compact_omits_bibtex_and_plainifies_text_hl() -
     assert first["text_hl"] == "MEFV in FMF"
     assert first["citations"] == {"NLM": "NLM citation"}
     assert "BibTeX" not in first["citations"]
+
+
+@pytest.mark.asyncio
+async def test_search_literature_compact_omits_empty_and_null_optional_fields() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "results": [{"pmid": "1", "title": "FMF guideline"}],
+                "count": 1,
+                "total_pages": 1,
+                "page_size": 10,
+            }
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="FMF",
+        response_mode="compact",
+        metadata="none",
+        metadata_service=None,
+    )
+
+    first = result["results"][0]
+    assert "abstract" not in first
+    assert "annotations" not in first
+    assert "mesh_headings" not in first
+    assert "nlm_citation" not in first
+    assert "bibtex" not in first
+
+
+@pytest.mark.asyncio
+async def test_search_literature_with_abstract_metadata_inlines_bounded_abstract() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    abstract = " ".join(["MEFV variant evidence in children."] * 80)
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "results": [{"pmid": "1", "title": "FMF guideline", "abstract": abstract}],
+                "count": 1,
+                "total_pages": 1,
+                "page_size": 10,
+            }
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="FMF",
+        response_mode="compact",
+        metadata="with_abstract",
+        metadata_service=None,
+    )
+
+    assert result["results"][0]["abstract"].startswith("MEFV variant evidence")
+    assert len(result["results"][0]["abstract"]) <= 650
 
 
 @pytest.mark.asyncio
@@ -2522,6 +3051,31 @@ async def test_publication_passages_adapter_builds_request_from_flat_args() -> N
 
 
 @pytest.mark.asyncio
+async def test_estimate_publication_context_adapter_returns_recommended_max_chars() -> None:
+    from pubtator_link.mcp.service_adapters import estimate_publication_context_impl
+    from pubtator_link.models.publication_passages import PublicationContextEstimateResponse
+
+    class EstimateService:
+        async def estimate_context(self, request):
+            return PublicationContextEstimateResponse(
+                pmids=request.pmids,
+                mode=request.mode,
+                estimated_passages=4,
+                estimated_chars=10_000,
+                sections_by_pmid={"29355051": ["abstract"]},
+                recommended_mode="compact_passages",
+            )
+
+    result = await estimate_publication_context_impl(
+        service=EstimateService(),
+        pmids=["29355051"],
+    )
+
+    assert result["recommended_max_chars"] >= result["estimated_chars"]
+    assert result["recommended_max_chars"] <= 50_000
+
+
+@pytest.mark.asyncio
 async def test_get_publication_passages_adapter_passes_dry_run_and_verbosity() -> None:
     from pubtator_link.mcp.service_adapters import get_publication_passages_impl
     from pubtator_link.models.publication_passages import (
@@ -2585,6 +3139,25 @@ async def test_pmc_adapter_returns_publication_export_shape() -> None:
 
 
 @pytest.mark.asyncio
+async def test_pmc_adapter_reports_empty_document_coverage_reason() -> None:
+    from pubtator_link.mcp.service_adapters import fetch_pmc_annotations_impl
+    from pubtator_link.models.publications import BioCDocument
+
+    class Result:
+        format = "biocjson"
+        documents: ClassVar[list[BioCDocument]] = [BioCDocument(id="PMC11911402")]
+
+    class FakeService:
+        async def export_pmc_publications_list(self, pmcids: list[str], format: str) -> Result:
+            return Result()
+
+    result = await fetch_pmc_annotations_impl(service=FakeService(), pmcids=["PMC11911402"])
+
+    assert result["coverage_by_pmcid"] == {"PMC11911402": "unknown"}
+    assert result["coverage_reason_by_pmcid"] == {"PMC11911402": "no_pmc_full_text_retrievable"}
+
+
+@pytest.mark.asyncio
 async def test_relations_adapter_maps_related_entities() -> None:
     from pubtator_link.mcp.service_adapters import find_entity_relations_impl
 
@@ -2604,6 +3177,40 @@ async def test_relations_adapter_maps_related_entities() -> None:
     assert result["success"] is True
     assert result["primary_entity"] == "@CHEMICAL_remdesivir"
     assert result["related_entities"][0]["entity_id"] == "@DISEASE_COVID-19"
+
+
+@pytest.mark.asyncio
+async def test_relations_adapter_compact_mode_applies_budget_controls() -> None:
+    from pubtator_link.mcp.service_adapters import find_entity_relations_impl
+
+    class FakeClient:
+        async def find_relations(
+            self, e1: str, relation_type: str | None, e2: str | None
+        ) -> list[dict[str, object]]:
+            return [
+                {
+                    "target": f"@DISEASE_{index}",
+                    "type": "associate",
+                    "pmids": [str(1000 + index), str(2000 + index)],
+                    "publications": index,
+                }
+                for index in range(5)
+            ]
+
+    result = await find_entity_relations_impl(
+        client=FakeClient(),
+        entity_id="@GENE_MEFV",
+        limit=2,
+        response_mode="compact",
+        max_response_chars=12000,
+    )
+
+    assert result["success"] is True
+    assert len(result["related_entities"]) == 2
+    assert result["omitted_count"] == 3
+    assert result["response_size_class"] == "compact"
+    assert result["related_entities"][0]["pmids"] == []
+    assert result["related_entities"][0]["publications"] == 0
 
 
 @pytest.mark.asyncio
@@ -2641,6 +3248,78 @@ async def test_submit_text_annotation_adapter_returns_session_metadata() -> None
     assert result["success"] is True
     assert result["session_id"] == "ABC123DEF456"
     assert result["bioconcepts"] == ["Gene"]
+
+
+@pytest.mark.asyncio
+async def test_submit_text_annotation_adapter_waits_for_completed_result() -> None:
+    from pubtator_link.mcp.service_adapters import submit_text_annotation_impl
+
+    class FakeClient:
+        async def submit_text_annotation(self, text: str, bioconcept: str) -> str:
+            return "ABC123DEF456"
+
+        async def retrieve_text_annotation(self, session_id: str) -> dict[str, object]:
+            return {
+                "status": "completed",
+                "original_text": "MEFV and colchicine",
+                "bioconcept": "Gene",
+                "annotations": [
+                    {
+                        "start": 0,
+                        "end": 4,
+                        "text": "MEFV",
+                        "entity_id": "@GENE_4210",
+                        "entity_type": "Gene",
+                    }
+                ],
+            }
+
+        async def retrieve_text_annotation_until_ready(
+            self, session_id: str, timeout_ms: int = 30000
+        ) -> dict[str, object] | None:
+            return await self.retrieve_text_annotation(session_id)
+
+    result = await submit_text_annotation_impl(
+        client=FakeClient(),
+        text="MEFV and colchicine",
+        bioconcepts="Gene",
+        wait=True,
+    )
+
+    assert result["success"] is True
+    assert result["status"] == "completed"
+    assert result["annotations"][0]["entity_id"] == "@GENE_4210"
+
+
+@pytest.mark.asyncio
+async def test_submit_text_annotation_wait_returns_structured_retryable_degraded_result() -> None:
+    from pubtator_link.mcp.service_adapters import submit_text_annotation_impl
+
+    class FakeClient:
+        async def submit_text_annotation(self, text: str, bioconcept: str) -> str:
+            return "ABC123DEF456"
+
+        async def retrieve_text_annotation_until_ready(
+            self, session_id: str, timeout_ms: int = 30000
+        ) -> dict[str, object] | None:
+            return {
+                "status": "upstream_unavailable",
+                "retryable": True,
+                "message": "PubTator text annotation upstream is unavailable.",
+            }
+
+    result = await submit_text_annotation_impl(
+        client=FakeClient(),
+        text="MEFV and colchicine",
+        bioconcepts="Gene",
+        wait=True,
+    )
+
+    assert result["success"] is False
+    assert result["session_id"] == "ABC123DEF456"
+    assert result["status"] == "upstream_unavailable"
+    assert result["retryable"] is True
+    assert result["next_tools"] == ["pubtator_get_text_annotation_results"]
 
 
 @pytest.mark.asyncio

@@ -597,9 +597,20 @@ async def test_cleanup_dependencies_clears_fallback_globals(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client = CloseableClient()
+    for attr in (
+        "_api_client",
+        "_ncbi_discovery_client",
+        "_ncbi_publication_metadata_client",
+        "_openalex_client",
+        "_unpaywall_client",
+        "_review_queue",
+        "_review_pool",
+        "_citation_graph_service",
+        "_crossref_client",
+        "_europe_pmc_literature_client",
+    ):
+        monkeypatch.setattr(dependencies, attr, None)
     monkeypatch.setattr(dependencies, "_api_client", client)
-    monkeypatch.setattr(dependencies, "_review_queue", None)
-    monkeypatch.setattr(dependencies, "_review_pool", None)
 
     await dependencies.cleanup_dependencies()
 
