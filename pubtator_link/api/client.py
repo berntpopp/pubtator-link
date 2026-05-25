@@ -23,6 +23,13 @@ def _retry_metadata_payload(metadata: RetryAttemptMetadata) -> dict[str, Any]:
     }
 
 
+def _text_annotation_session_id(response: dict[str, Any]) -> str:
+    candidate = response.get("id", response.get("content", ""))
+    if isinstance(candidate, bytes):
+        candidate = candidate.decode("utf-8", errors="replace")
+    return str(candidate).strip()
+
+
 class RateLimiter:
     """Token bucket rate limiter for API requests."""
 
@@ -535,8 +542,7 @@ class PubTator3Client:
             retry=False,
         )
 
-        # Extract session ID from response
-        session_id = str(response.get("content", "")).strip()
+        session_id = _text_annotation_session_id(response)
         if not session_id:
             raise PubTatorAPIError("Failed to get session ID")
 
