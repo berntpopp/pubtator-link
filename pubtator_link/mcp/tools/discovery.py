@@ -87,15 +87,17 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def lookup_mesh(
-        query: Annotated[str, Field(min_length=1, max_length=500)],
+        query: Annotated[str | None, Field(min_length=1, max_length=500)] = None,
+        text: Annotated[str | None, Field(min_length=1, max_length=500)] = None,
         limit: Annotated[int, Field(ge=1, le=50)] = 10,
         exact: bool = False,
     ) -> dict[str, Any]:
         """Use this when a user needs MeSH descriptors and candidate PubMed search terms for a biomedical research query."""
 
         async def call() -> dict[str, Any]:
+            selected_query = coalesce_query(query, text)
             service = await get_discovery_service()
-            response = await service.lookup_mesh(query=query, limit=limit, exact=exact)
+            response = await service.lookup_mesh(query=selected_query, limit=limit, exact=exact)
             return response.model_dump(by_alias=True)
 
         return await run_mcp_tool("pubtator_lookup_mesh", call)

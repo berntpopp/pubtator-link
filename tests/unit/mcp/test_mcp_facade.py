@@ -1502,6 +1502,34 @@ async def test_search_biomedical_entities_accepts_text_alias(
     assert result.structured_content["query"] == "MEFV"
 
 
+@pytest.mark.asyncio
+async def test_lookup_mesh_accepts_text_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pubtator_link.mcp.tools.discovery as discovery_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    class FakeService:
+        async def lookup_mesh(self, *, query: str, limit: int, exact: bool):
+            assert query == "familial Mediterranean fever"
+            assert limit == 5
+            assert exact is False
+            return type(
+                "Response",
+                (),
+                {"model_dump": lambda self, by_alias=False: {"success": True, "query": query}},
+            )()
+
+    async def fake_get_discovery_service():
+        return FakeService()
+
+    monkeypatch.setattr(discovery_tools, "get_discovery_service", fake_get_discovery_service)
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_lookup_mesh"]
+
+    result = await tool.run({"text": "familial Mediterranean fever", "limit": 5})
+
+    assert result.structured_content["success"] is True
+    assert result.structured_content["query"] == "familial Mediterranean fever"
+
+
 def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 

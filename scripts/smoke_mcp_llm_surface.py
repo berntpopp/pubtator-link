@@ -13,6 +13,7 @@ CALLS: list[tuple[str, dict[str, Any], dict[str, Any] | None]] = [
     ("pubtator_search_literature", {"query": "MEFV colchicine pediatric", "limit": 3}, None),
     ("pubtator_search_guidelines", {"query": "familial mediterranean fever pediatric"}, None),
     ("pubtator_search_biomedical_entities", {"text": "MEFV", "concept": "Gene"}, None),
+    ("pubtator_lookup_mesh", {"text": "familial Mediterranean fever", "limit": 3}, None),
     ("pubtator_get_publication_passages", {"pmid": "42135612", "mode": "compact_passages"}, None),
     ("pubtator_estimate_publication_context", {"pmid": "42135612"}, None),
     (

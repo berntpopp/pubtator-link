@@ -1349,6 +1349,65 @@ async def test_ground_question_long_query_uses_decomposed_variant_hits() -> None
 
 
 @pytest.mark.asyncio
+async def test_ground_question_short_failed_query_uses_anchor_fallback() -> None:
+    from pubtator_link.mcp import service_adapters
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.queries: list[str] = []
+
+        async def search_publications(self, **kwargs):
+            self.queries.append(kwargs["text"])
+            if kwargs["text"] == "MEFV colchicine pediatric":
+                return {"count": 1, "page": 1, "results": [{"pmid": "42135612"}]}
+            return {"count": 0, "page": 1, "results": []}
+
+    class FakeQueue:
+        repository = object()
+
+    class FakeContextService:
+        async def inspect_review_index(self, review_id, request):
+            return type(
+                "InspectResponse",
+                (),
+                {
+                    "preparation_status": PreparationStatus(complete=1),
+                    "coverage_summary": {"abstract_only": 1},
+                    "sources": [
+                        type(
+                            "Source",
+                            (),
+                            {"pmid": "42135612", "coverage": "abstract_only", "passage_count": 1},
+                        )()
+                    ],
+                },
+            )()
+
+        async def retrieve_context_batch(self, review_id, request):
+            return None
+
+    class FakeIndexingService:
+        async def index_review_evidence(self, review_id, request):
+            return None
+
+    client = FakeClient()
+    result = await service_adapters.ground_question_impl(
+        client=client,
+        queue=FakeQueue(),
+        context_service=FakeContextService(),
+        question="Treat child with MEFV VUS using colchicine",
+        max_pmids=8,
+        review_indexing_service_factory=lambda **kwargs: FakeIndexingService(),
+    )
+
+    assert client.queries == [
+        "Treat child with MEFV VUS using colchicine",
+        "MEFV colchicine pediatric",
+    ]
+    assert result["selected_pmids"] == ["42135612"]
+
+
+@pytest.mark.asyncio
 async def test_ground_question_adapter_waits_when_selected_pmids_are_not_ready() -> None:
     from pubtator_link.mcp import service_adapters
     from pubtator_link.models.review_rerag import (

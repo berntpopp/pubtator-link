@@ -37,14 +37,13 @@ def query_length_warning(query: str) -> str | None:
 def query_variants_for_question(question: str) -> list[str]:
     variants = [question]
     words = re.findall(r"[A-Za-z0-9@_-]+", question)
-    if len(words) <= 18:
-        return variants
-    keywords = [word for word in words if word.lower() not in _QUERY_STOPWORDS and len(word) > 2][
-        :8
-    ]
-    shortened = " ".join(keywords)
-    if shortened and shortened.lower() != question.lower():
-        variants.append(shortened)
+    if len(words) > 18:
+        keywords = [
+            word for word in words if word.lower() not in _QUERY_STOPWORDS and len(word) > 2
+        ][:8]
+        shortened = " ".join(keywords)
+        if shortened and shortened.lower() != question.lower():
+            variants.append(shortened)
     anchors = _biomedical_query_anchors(words)
     if len(anchors) >= 2:
         _append_query_variant(variants, " ".join(anchors[:3]))
@@ -56,7 +55,7 @@ def _biomedical_query_anchors(words: list[str]) -> list[str]:
     lowered = {word.lower() for word in words}
     anchors: list[str] = []
     for word in words:
-        if re.fullmatch(r"@?[A-Z][A-Z0-9_-]{1,15}", word):
+        if word.upper() != "VUS" and re.fullmatch(r"@?[A-Z][A-Z0-9_-]{1,15}", word):
             _append_query_variant(anchors, word)
     if "fmf" in lowered or "familial" in lowered:
         _append_query_variant(anchors, "FMF")

@@ -450,7 +450,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"query":"breast cancer","limit":10}`
 - Next tools by profile: full: `pubtator_search_literature`; readonly: `pubtator_search_literature`
 - Resource links: None
-- Input schema: `query` (string); `limit` (integer; default: `10`); `exact` (boolean; default: `False`)
+- Input schema: `query` (string | null; default: `None`); `text` (string | null; default: `None`); `limit` (integer; default: `10`); `exact` (boolean; default: `False`)
 - Output schema: `MeshLookupResponse`; has_output_schema: `yes`
 
 ## `pubtator_lookup_variant_evidence`
