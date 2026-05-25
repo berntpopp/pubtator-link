@@ -758,6 +758,74 @@ async def test_review_quickstart_adapter_returns_retrieval_handoff() -> None:
     assert result["next_commands"][0] == "pubtator_retrieve_review_context_batch"
 
 
+@pytest.mark.asyncio
+async def test_review_quickstart_adapter_honors_wait_until_ready() -> None:
+    from pubtator_link.mcp.service_adapters import review_quickstart_impl
+    from pubtator_link.models.review_rerag import (
+        InspectReviewIndexResponse,
+        PreparationStatus,
+        ResearchSessionCandidate,
+        ResearchSessionManifest,
+        ReviewIndexTotals,
+        StageResearchSessionResponse,
+    )
+
+    captured: dict[str, object] = {}
+
+    class Queue:
+        repository = object()
+
+    class StageService:
+        queue = Queue()
+
+        async def stage(self, *, review_id, request):
+            return StageResearchSessionResponse(
+                manifest=ResearchSessionManifest(
+                    session_id="session-1",
+                    review_id=review_id,
+                    query=request.query,
+                    candidate_count=1,
+                    candidates=[ResearchSessionCandidate(pmid="24166952", rank=1)],
+                ),
+                meta={},
+            )
+
+    class ContextService:
+        async def inspect_review_index(self, review_id, request):
+            return InspectReviewIndexResponse(
+                review_id=review_id,
+                preparation_status=PreparationStatus(complete=0),
+                sources=[],
+                totals=ReviewIndexTotals(pmid_count=1, source_count=1, passage_count=0),
+                failed_sources=[],
+            )
+
+    class IndexingService:
+        def __init__(self, *, repository, queue):
+            captured["repository"] = repository
+            captured["queue"] = queue
+
+        async def index_review_evidence(self, review_id, request):
+            captured["review_id"] = review_id
+            captured["request"] = request
+
+    result = await review_quickstart_impl(
+        stage_service=StageService(),
+        context_service=ContextService(),
+        topic="MEFV colchicine",
+        wait_until_ready=True,
+        timeout_ms=30_000,
+        review_indexing_service_factory=IndexingService,
+    )
+
+    request = captured["request"]
+    assert request.wait_for_completion is True
+    assert request.wait_for_status == "complete_or_partial"
+    assert request.timeout_ms == 30_000
+    assert request.pmids == ["24166952"]
+    assert "quickstart does not block on indexing" not in result["warnings"]
+
+
 async def _run_ground_question_fixture(service_adapters, **kwargs):
     from pubtator_link.models.review_rerag import (
         ContextPack,

@@ -965,6 +965,7 @@ async def review_quickstart_impl(
     session_id: str | None = None,
     wait_until_ready: bool = False,
     timeout_ms: int = 0,
+    review_indexing_service_factory: Any = ReviewIndexingService,
 ) -> dict[str, Any]:
     normalized_topic = topic.strip()
     selected_review_id = review_id or _quickstart_review_id(normalized_topic)
@@ -978,6 +979,24 @@ async def review_quickstart_impl(
         ),
     )
     manifest = staged.manifest
+    selected_pmids = [candidate.pmid for candidate in manifest.candidates if candidate.pmid]
+    if wait_until_ready and selected_pmids:
+        queue = getattr(stage_service, "queue", None)
+        if queue is not None:
+            indexing_service = _review_indexing_service_from_factory(
+                review_indexing_service_factory,
+                queue,
+            )
+            await indexing_service.index_review_evidence(
+                selected_review_id,
+                IndexReviewEvidenceRequest(
+                    pmids=selected_pmids,
+                    session_id=manifest.session_id,
+                    wait_for_completion=True,
+                    wait_for_status="complete_or_partial",
+                    timeout_ms=timeout_ms,
+                ),
+            )
     inspect_response = await context_service.inspect_review_index(
         selected_review_id,
         InspectReviewIndexRequest(session_id=manifest.session_id),
@@ -993,13 +1012,11 @@ async def review_quickstart_impl(
         warnings.append(
             "quickstart queued sources but no passages are ready yet; poll inspect_review_index"
         )
-    if timeout_ms and not ready_to_retrieve:
-        warnings.append("quickstart does not block on indexing; use inspect_review_index to poll")
     response = ReviewQuickstartResponse(
         review_id=selected_review_id,
         session_id=manifest.session_id,
         topic=normalized_topic,
-        selected_pmids=[candidate.pmid for candidate in manifest.candidates],
+        selected_pmids=selected_pmids,
         coverage_summary=inspect_response.coverage_summary or manifest.coverage_summary,
         preparation_status=preparation_status,
         indexed_totals=inspect_response.totals,
