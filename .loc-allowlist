@@ -11,7 +11,6 @@
 pubtator_link/repositories/review_rerag.py:2393
 pubtator_link/mcp/service_adapters.py:1938
 pubtator_link/services/topic_literature_map.py:1821
-pubtator_link/api/routes/dependencies.py:1282
 pubtator_link/models/review_rerag.py:1253
 pubtator_link/services/citation_graph.py:1244
 pubtator_link/services/review_context_service.py:1160
