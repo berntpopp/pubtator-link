@@ -62,6 +62,9 @@ class NcbiDiscoveryClientProtocol(Protocol):
     async def find_pmid_by_doi(self, doi: str) -> str | None:
         """Resolve a DOI to a PMID via PubMed search."""
 
+    async def find_pmid_by_title(self, title: str) -> str | None:
+        """Resolve an article title to a PMID via PubMed search."""
+
     async def lookup_mesh(self, query: str, limit: int, exact: bool) -> list[MeshDescriptor]:
         """Look up MeSH descriptors for a query."""
 
@@ -220,15 +223,21 @@ class NcbiDiscoveryClient:
             },
         )
         payload = response.json()
-        if not isinstance(payload, dict):
-            return None
-        esearch_result = payload.get("esearchresult")
-        idlist_payload = (
-            esearch_result.get("idlist", []) if isinstance(esearch_result, dict) else []
+        return _first_pubmed_id(payload)
+
+    async def find_pmid_by_title(self, title: str) -> str | None:
+        response = await self._get(
+            "esearch.fcgi",
+            {
+                "db": "pubmed",
+                "term": f'"{title}"[Title]',
+                "retmode": "json",
+                "retmax": "1",
+                "tool": "pubtator-link",
+            },
         )
-        if not isinstance(idlist_payload, list | tuple) or not idlist_payload:
-            return None
-        return str(idlist_payload[0])
+        payload = response.json()
+        return _first_pubmed_id(payload)
 
     async def lookup_mesh(self, query: str, limit: int, exact: bool) -> list[MeshDescriptor]:
         term = f'"{query}"[MeSH Terms]' if exact else query
@@ -508,6 +517,7 @@ class DiscoveryService:
             for original, record in zip(citations, records, strict=False)
         ]
         records = await self._resolve_doi_citation_fallbacks(citations, records)
+        records = await self._resolve_title_citation_fallbacks(citations, records)
         nbk_ids = extract_nbk_ids(citations)
         nbk_conversion_records: list[ArticleIdConversionRecord] = []
         if nbk_ids:
@@ -564,6 +574,35 @@ class DiscoveryService:
             )
         return resolved
 
+    async def _resolve_title_citation_fallbacks(
+        self,
+        citations: Sequence[str],
+        records: list[CitationLookupRecord],
+    ) -> list[CitationLookupRecord]:
+        resolved: list[CitationLookupRecord] = []
+        for citation, record in zip(citations, records, strict=False):
+            if record.status == "matched":
+                resolved.append(record)
+                continue
+            title = _extract_reference_title(citation)
+            if title is None:
+                resolved.append(record)
+                continue
+            pmid = await self.client.find_pmid_by_title(title)
+            if pmid is None:
+                resolved.append(record)
+                continue
+            resolved.append(
+                CitationLookupRecord(
+                    citation=citation,
+                    status="matched",
+                    pmid=pmid,
+                    doi=record.doi,
+                    title=title,
+                )
+            )
+        return resolved
+
     async def find_related_articles(
         self,
         pmids: Sequence[str],
@@ -594,6 +633,16 @@ def _dedupe(values: Iterable[str]) -> list[str]:
     return deduped
 
 
+def _first_pubmed_id(payload: object) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    esearch_result = payload.get("esearchresult")
+    idlist_payload = esearch_result.get("idlist", []) if isinstance(esearch_result, dict) else []
+    if not isinstance(idlist_payload, list | tuple) or not idlist_payload:
+        return None
+    return str(idlist_payload[0])
+
+
 def _citation_lookup_values(citations: Sequence[str]) -> list[str]:
     return [_citation_lookup_value(citation, index) for index, citation in enumerate(citations)]
 
@@ -603,6 +652,16 @@ def _citation_lookup_value(citation: str, index: int) -> str:
     if _is_bookshelf_url(citation) and nbk_ids:
         return _nbk_lookup_hint(nbk_ids[0])
     return _ecitmatch_value_from_prose(citation, index) or citation
+
+
+def _extract_reference_title(citation: str) -> str | None:
+    parts = [part.strip() for part in citation.split(".") if part.strip()]
+    if len(parts) < 2:
+        return None
+    title = parts[1]
+    if re.search(r"\b(?:et al|19\d{2}|20\d{2})\b", title, flags=re.IGNORECASE):
+        return None
+    return title or None
 
 
 def _ecitmatch_value_from_prose(citation: str, index: int) -> str | None:

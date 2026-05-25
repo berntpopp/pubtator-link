@@ -78,6 +78,9 @@ class FakeDiscoveryClient:
     async def find_pmid_by_doi(self, doi: str) -> str | None:
         return None
 
+    async def find_pmid_by_title(self, title: str) -> str | None:
+        return None
+
     async def lookup_mesh(self, query: str, limit: int, exact: bool) -> list[MeshDescriptor]:
         return [
             MeshDescriptor(
@@ -155,6 +158,42 @@ async def test_lookup_citation_extracts_nbk_and_adds_recovery_hint() -> None:
     assert response.records[0].reason in {"nbk_not_mapped", "not_found"}
     assert response.meta.next_commands
     assert "NBK1139" in str(response.meta.next_commands)
+
+
+@pytest.mark.asyncio
+async def test_lookup_citation_falls_back_to_title_search_for_prose_reference() -> None:
+    class Client(FakeDiscoveryClient):
+        title_queries: list[str] = []
+
+        async def lookup_citations(self, citations):
+            return [
+                CitationLookupRecord(
+                    citation=citations[0],
+                    status="not_found",
+                    reason="not_found",
+                )
+            ]
+
+        async def find_pmid_by_title(self, title: str) -> str | None:
+            self.title_queries.append(title)
+            return "42135612"
+
+    client = Client()
+    service = DiscoveryService(client)
+
+    response = await service.lookup_citation(
+        [
+            (
+                "Ozen S. MEFV variants of uncertain significance in children. "
+                "Rheumatology. 2026;65:100-110."
+            )
+        ]
+    )
+
+    assert response.records[0].status == "matched"
+    assert response.records[0].pmid == "42135612"
+    assert response.records[0].title == "MEFV variants of uncertain significance in children"
+    assert client.title_queries == ["MEFV variants of uncertain significance in children"]
 
 
 @pytest.mark.asyncio
