@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import sys
 from dataclasses import dataclass
 from importlib import resources
@@ -11,6 +12,12 @@ import asyncpg
 from pubtator_link.config import review_rerag_config
 
 MIGRATIONS_PACKAGE = "pubtator_link.db.migrations"
+_NON_TX_SENTINEL = "-- pragma: non-transactional"
+_MIGRATION_ADVISORY_LOCK_KEY = int.from_bytes(
+    hashlib.sha1(b"pubtator_link.migrate", usedforsecurity=False).digest()[:4],
+    "big",
+    signed=True,
+)
 
 
 @dataclass(frozen=True)
@@ -146,6 +153,17 @@ def schema_repair_statements() -> list[str]:
     ]
 
 
+def _is_non_transactional_migration(sql: str) -> bool:
+    """Return True if the migration file opts out of the auto-transaction wrapper.
+
+    Migrations that include CREATE INDEX CONCURRENTLY (or other non-tx-safe
+    DDL) must include the sentinel '-- pragma: non-transactional' on a line
+    by itself in the first 8 lines of the file.
+    """
+    head = "\n".join(sql.splitlines()[:8])
+    return _NON_TX_SENTINEL in head
+
+
 async def apply_migrations(database_url: str | None = None) -> list[str]:
     """Apply unapplied review-storage migrations and return applied versions."""
     dsn = database_url or review_rerag_config.database_url
@@ -153,7 +171,10 @@ async def apply_migrations(database_url: str | None = None) -> list[str]:
         return []
 
     connection = await asyncpg.connect(dsn)
+    lock_acquired = False
     try:
+        await connection.execute("select pg_advisory_lock($1)", _MIGRATION_ADVISORY_LOCK_KEY)
+        lock_acquired = True
         await connection.execute(
             """
             create table if not exists schema_migrations (
@@ -168,6 +189,14 @@ async def apply_migrations(database_url: str | None = None) -> list[str]:
         for version, sql in migration_files():
             if version in applied:
                 continue
+            if _is_non_transactional_migration(sql):
+                await connection.execute(sql)
+                await connection.execute(
+                    "insert into schema_migrations(version) values($1)",
+                    version,
+                )
+                newly_applied.append(version)
+                continue
             async with connection.transaction():
                 await connection.execute(sql)
                 await connection.execute(
@@ -177,7 +206,14 @@ async def apply_migrations(database_url: str | None = None) -> list[str]:
             newly_applied.append(version)
         return newly_applied
     finally:
-        await connection.close()
+        try:
+            if lock_acquired:
+                await connection.execute(
+                    "select pg_advisory_unlock($1)",
+                    _MIGRATION_ADVISORY_LOCK_KEY,
+                )
+        finally:
+            await connection.close()
 
 
 async def inspect_review_schema(database_url: str | None = None) -> ReviewSchemaDiagnostics:
