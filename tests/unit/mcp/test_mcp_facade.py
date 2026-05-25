@@ -1602,6 +1602,20 @@ def test_high_use_mcp_tools_expose_specific_output_schemas() -> None:
         _assert_specific_object_schema(_tool_output_schema(tools[name]), required)
 
 
+def test_submit_text_annotation_output_schema_documents_wait_result() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_submit_text_annotation"
+    ]
+    schema = _tool_output_schema(tool)
+    properties = schema.get("properties")
+    assert isinstance(properties, dict)
+    assert "annotations" in properties
+    assert "original_text" in properties
+    assert "session_id" in properties
+
+
 def test_batch_output_schema_allows_omitted_empty_results() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 

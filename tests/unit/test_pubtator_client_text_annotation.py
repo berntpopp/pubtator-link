@@ -112,3 +112,30 @@ async def test_retrieve_text_annotation_retries_transient_upstream_failure(monke
 
     assert result["status"] == "completed"
     assert attempts == RetryPolicy().max_attempts - 1
+
+
+@pytest.mark.asyncio
+async def test_wait_for_text_annotation_respects_timeout_during_retries(monkeypatch) -> None:
+    async def no_sleep(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr("pubtator_link.api.retry.asyncio.sleep", no_sleep)
+
+    client = _client_with_text_transport(
+        httpx.MockTransport(
+            lambda request: httpx.Response(
+                503,
+                request=request,
+                text="try later",
+                headers={"retry-after": "5"},
+            )
+        )
+    )
+    try:
+        result = await client.retrieve_text_annotation_until_ready(
+            "632A7A61D4B815989FB2", timeout_ms=1000
+        )
+    finally:
+        await client.close()
+
+    assert result is None

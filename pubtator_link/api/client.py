@@ -11,6 +11,10 @@ from structlog.typing import FilteringBoundLogger
 from ..config import APIConfig, TextProcessingConfig, api_config, text_processing_config
 from ..logging_config import log_api_request, log_rate_limit_event
 from .retry import RetryAttemptMetadata, RetryPolicy, call_with_retries
+from .text_annotation_polling import (
+    TRANSIENT_TEXT_ANNOTATION_STATUS_CODES,
+    poll_text_annotation_until_ready,
+)
 
 
 def _retry_metadata_payload(metadata: RetryAttemptMetadata) -> dict[str, Any]:
@@ -572,21 +576,15 @@ class PubTator3Client:
         self, session_id: str, timeout_ms: int = 30000
     ) -> dict[str, Any] | None:
         """Poll text annotation results until ready or timeout."""
-        deadline = asyncio.get_running_loop().time() + (timeout_ms / 1000)
-        delay = 0.25
-        while True:
-            result = await self.retrieve_text_annotation(session_id)
-            if str(result.get("status", "")).lower() not in {
-                "submitted",
-                "processing",
-                "pending",
-                "queued",
-            }:
-                return result
-            if asyncio.get_running_loop().time() + delay > deadline:
-                return None
-            await asyncio.sleep(delay)
-            delay = min(delay * 2, 2.0)
+        return await poll_text_annotation_until_ready(
+            self.retrieve_text_annotation,
+            session_id=session_id,
+            timeout_ms=timeout_ms,
+            is_transient_error=lambda exc: (
+                isinstance(exc, PubTatorAPIError)
+                and exc.status_code in TRANSIENT_TEXT_ANNOTATION_STATUS_CODES
+            ),
+        )
 
     async def get_annotation_results(self, session_id: str) -> dict[str, Any]:
         """Alias for retrieve_text_annotation to match test expectations.
