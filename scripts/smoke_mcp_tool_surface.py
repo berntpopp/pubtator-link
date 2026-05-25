@@ -45,7 +45,7 @@ CALLS: list[tuple[str, dict[str, Any], int]] = [
     ),
     (
         "pubtator_export_review_audit_bundle",
-        {"review_id": "mefv-vus-smoke", "fallback_inline": True},
+        {"review_id": "mefv-vus-smoke", "fallback_inline": True, "response_mode": "compact"},
         20_000,
     ),
 ]

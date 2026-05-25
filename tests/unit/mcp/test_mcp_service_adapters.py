@@ -490,6 +490,23 @@ async def test_export_review_audit_bundle_adapter_returns_bundle() -> None:
 
 
 @pytest.mark.asyncio
+async def test_export_review_audit_bundle_adapter_returns_compact_summary() -> None:
+    from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
+
+    result = await export_review_audit_bundle_impl(
+        service=_FakeReviewAuditBundleService(),
+        review_id="rev_123",
+        response_mode="compact",
+    )
+
+    assert result["success"] is True
+    assert "audit_bundle" not in result
+    assert result["audit_bundle_summary"]["review_id"] == "rev_123"
+    assert result["audit_bundle_summary"]["passage_id_count"] >= 0
+    assert "stable_citation_keys" in result["audit_bundle_summary"]["omitted_fields"]
+
+
+@pytest.mark.asyncio
 async def test_export_review_audit_bundle_adapter_writes_new_file(tmp_path) -> None:
     from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
 

@@ -90,7 +90,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"review_id":"demo","fallback_inline":true}`
 - Next tools by profile: full: `pubtator_get_review_audit_trail`
 - Resource links: `pubtator://reviews/{review_id}/audit`
-- Input schema: `review_id` (string); `session_id` (string | null; default: `None`); `export_path` (string | null; default: `None`); `fallback_inline` (boolean; default: `False`)
+- Input schema: `review_id` (string); `session_id` (string | null; default: `None`); `export_path` (string | null; default: `None`); `fallback_inline` (boolean; default: `False`); `response_mode` (string; enum: `full`, `compact`; default: `full`)
 - Output schema: `McpReviewAuditBundleResponse`; has_output_schema: `yes`
 
 ## `pubtator_fetch_pmc_annotations`

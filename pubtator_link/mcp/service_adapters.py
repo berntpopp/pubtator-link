@@ -9,6 +9,7 @@ from typing import Any, Literal, cast
 from pubtator_link.api.client import PubTator3Client, PubTatorAPIError
 from pubtator_link.api.search_filters import merge_search_filters
 from pubtator_link.config import text_processing_config
+from pubtator_link.mcp.audit_export import compact_audit_bundle_summary
 from pubtator_link.mcp.errors import mcp_field_validation_error
 from pubtator_link.mcp.input_normalization import (
     attach_normalization_meta,
@@ -1591,10 +1592,15 @@ async def export_review_audit_bundle_impl(
     session_id: str | None = None,
     export_path: str | None = None,
     fallback_inline: bool = False,
+    response_mode: Literal["full", "compact"] = "full",
 ) -> dict[str, Any]:
     bundle = await service.export_bundle(review_id, session_id=session_id)
     bundle_json = bundle.model_dump(mode="json")
     if export_path is None:
+        if response_mode == "compact":
+            return McpReviewAuditBundleResponse(
+                audit_bundle_summary=compact_audit_bundle_summary(bundle_json)
+            ).model_dump(mode="json", exclude_none=True)
         return McpReviewAuditBundleResponse(audit_bundle=bundle).model_dump(
             mode="json",
             exclude_none=True,

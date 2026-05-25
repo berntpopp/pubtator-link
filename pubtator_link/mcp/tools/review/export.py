@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastmcp import FastMCP
 
@@ -27,6 +27,7 @@ def register_export_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         session_id: str | None = None,
         export_path: str | None = None,
         fallback_inline: bool = False,
+        response_mode: Literal["full", "compact"] = "full",
     ) -> dict[str, Any]:
         """Use this when a user needs to export review preparation status, source coverage, resolver attempts, retrieval runs, passage IDs, and stable citation keys for scientific auditability."""
 
@@ -38,6 +39,7 @@ def register_export_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 session_id=session_id,
                 export_path=export_path,
                 fallback_inline=fallback_inline,
+                response_mode=response_mode,
             )
 
         return await run_mcp_tool("pubtator_export_review_audit_bundle", call)

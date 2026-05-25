@@ -44,6 +44,7 @@ class ArticleIdConversionResponse(BaseModel):
 
     model_config = ConfigDict(serialize_by_alias=True, validate_by_name=True)
 
+    success: bool = True
     records: list[ArticleIdConversionRecord]
     candidate_pmids: list[str] = Field(default_factory=list)
     unresolved: list[str] = Field(default_factory=list)

@@ -1002,6 +1002,7 @@ class McpReviewAuditBundleResponse(BaseModel):
 
     success: bool = True
     audit_bundle: ReviewAuditBundle | None = None
+    audit_bundle_summary: dict[str, Any] | None = None
     inline_bundle: dict[str, Any] | None = None
     export_path: str | None = None
     error: dict[str, Any] | None = None
