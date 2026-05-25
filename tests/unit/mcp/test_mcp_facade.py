@@ -1482,7 +1482,7 @@ def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
         "pubtator_preflight_review_sources": ("pmids",),
         "pubtator_index_review_evidence": ("review_id",),
         "pubtator_get_review_passages_by_id": ("review_id", "passage_ids"),
-        "pubtator_get_review_audit_trail": ("review_id", "passage_ids"),
+        "pubtator_get_review_audit_trail": ("review_id",),
         "pubtator_get_neighboring_review_passages": ("review_id", "passage_id"),
         "pubtator_export_review_audit_bundle": ("review_id",),
         "pubtator_convert_article_ids": ("ids",),
@@ -1495,6 +1495,9 @@ def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
         assert "request" not in properties
         for property_name in expected_properties:
             assert property_name in properties
+    assert "passage_ids" not in tools["pubtator_get_review_audit_trail"].parameters.get(
+        "required", []
+    )
 
 
 def test_export_review_audit_bundle_exposes_export_options() -> None:

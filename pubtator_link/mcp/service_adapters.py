@@ -1552,7 +1552,7 @@ async def get_review_audit_trail_impl(
     *,
     service: ReviewContextService,
     review_id: str,
-    passage_ids: list[str],
+    passage_ids: list[str] | None = None,
     session_id: str | None = None,
     max_chars_per_passage: int = 500,
 ) -> dict[str, Any]:

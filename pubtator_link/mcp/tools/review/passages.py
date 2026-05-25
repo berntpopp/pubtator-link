@@ -54,11 +54,11 @@ def register_passages_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
     )
     async def get_review_audit_trail(
         review_id: str,
-        passage_ids: list[str],
+        passage_ids: list[str] | None = None,
         session_id: str | None = None,
         max_chars_per_passage: int = 500,
     ) -> dict[str, Any]:
-        """Use this when a user needs a copy-ready audit block for selected prepared review passage IDs without calling upstream APIs."""
+        """Use this when a user needs a copy-ready audit block for selected prepared review passage IDs or the latest recorded audit passages without calling upstream APIs."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_review_context_service()
