@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastmcp import FastMCP
 
-from pubtator_link.api.routes.dependencies import (  # noqa: F401
+from pubtator_link.api.routes.dependencies import (
     get_api_client,
     get_llm_review_context_service,
     get_research_session_service,
@@ -14,7 +14,7 @@ from pubtator_link.api.routes.dependencies import (  # noqa: F401
     get_source_preflight_service,
 )
 from pubtator_link.mcp.profiles import MCPToolProfile
-from pubtator_link.mcp.service_adapters import (  # noqa: F401
+from pubtator_link.mcp.service_adapters import (
     add_evidence_certainty_impl,
     export_review_audit_bundle_impl,
     get_evidence_certainty_impl,
