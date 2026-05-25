@@ -1028,6 +1028,41 @@ async def test_ground_question_adapter_no_pmids_returns_search_recovery() -> Non
 
 
 @pytest.mark.asyncio
+async def test_ground_question_long_natural_language_query_returns_warning() -> None:
+    from pubtator_link.mcp import service_adapters
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {"count": 0, "page": 1, "results": []}
+
+    class FakeQueue:
+        repository = object()
+
+    class FakeContextService:
+        async def inspect_review_index(self, review_id, request):
+            raise AssertionError("inspect should not be called without selected PMIDs")
+
+        async def retrieve_context_batch(self, review_id, request):
+            raise AssertionError("retrieve should not be called without selected PMIDs")
+
+    result = await service_adapters.ground_question_impl(
+        client=FakeClient(),
+        queue=FakeQueue(),
+        context_service=FakeContextService(),
+        question=(
+            "What are the best practices for treating a child with a variant of "
+            "uncertain significance in MEFV when considering colchicine and monitoring?"
+        ),
+        max_pmids=8,
+        review_indexing_service_factory=lambda **kwargs: None,
+    )
+
+    assert result["query_length_warning"] == (
+        "Long natural-language question used for search; consider splitting into 6 or fewer key terms."
+    )
+
+
+@pytest.mark.asyncio
 async def test_ground_question_adapter_waits_when_selected_pmids_are_not_ready() -> None:
     from pubtator_link.mcp import service_adapters
     from pubtator_link.models.review_rerag import (
@@ -1968,7 +2003,7 @@ async def test_search_literature_impl_enriches_basic_metadata() -> None:
         metadata_service=FakeMetadata(),
     )
 
-    assert result["results"][0]["authors"] == []
+    assert "authors" not in result["results"][0]
     assert result["results"][0]["first_author_et_al"] == "Kavrul Kayaalp GK"
 
 
@@ -2233,6 +2268,62 @@ async def test_search_literature_compact_omits_bibtex_and_plainifies_text_hl() -
     assert first["text_hl"] == "MEFV in FMF"
     assert first["citations"] == {"NLM": "NLM citation"}
     assert "BibTeX" not in first["citations"]
+
+
+@pytest.mark.asyncio
+async def test_search_literature_compact_omits_empty_and_null_optional_fields() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "results": [{"pmid": "1", "title": "FMF guideline"}],
+                "count": 1,
+                "total_pages": 1,
+                "page_size": 10,
+            }
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="FMF",
+        response_mode="compact",
+        metadata="none",
+        metadata_service=None,
+    )
+
+    first = result["results"][0]
+    assert "abstract" not in first
+    assert "annotations" not in first
+    assert "mesh_headings" not in first
+    assert "nlm_citation" not in first
+    assert "bibtex" not in first
+
+
+@pytest.mark.asyncio
+async def test_search_literature_with_abstract_metadata_inlines_bounded_abstract() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    abstract = " ".join(["MEFV variant evidence in children."] * 80)
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "results": [{"pmid": "1", "title": "FMF guideline", "abstract": abstract}],
+                "count": 1,
+                "total_pages": 1,
+                "page_size": 10,
+            }
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="FMF",
+        response_mode="compact",
+        metadata="with_abstract",
+        metadata_service=None,
+    )
+
+    assert result["results"][0]["abstract"].startswith("MEFV variant evidence")
+    assert len(result["results"][0]["abstract"]) <= 650
 
 
 @pytest.mark.asyncio

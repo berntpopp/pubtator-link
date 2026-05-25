@@ -329,6 +329,7 @@ class GroundQuestionResponse(BaseModel):
 
     success: bool = True
     question: str
+    query_length_warning: str | None = None
     review_id: str
     selected_pmids: list[str] = Field(default_factory=list)
     search_total_results: int = 0

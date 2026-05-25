@@ -446,7 +446,12 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
     assert "pubtator_workflow_help" in capabilities["tool_groups"]["workflow"]
     assert "pubtator_get_publication_metadata" in capabilities["tools"]
     assert "pubtator_suggest_corpus" in capabilities["tool_groups"]["discovery"]
-    assert capabilities["search_defaults"]["metadata_modes"] == ["none", "basic", "full"]
+    assert capabilities["search_defaults"]["metadata_modes"] == [
+        "none",
+        "basic",
+        "with_abstract",
+        "full",
+    ]
     assert sample_calls["pubtator_search_literature"]["metadata"] == "basic"
     assert any(
         fallback["tool_name"] == "pubtator_lookup_citation"

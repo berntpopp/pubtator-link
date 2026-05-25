@@ -10,7 +10,8 @@ from pubtator_link.services.provenance import corpus_snapshot_date, stable_cache
 SearchResponseMode = Literal["compact", "standard", "full"]
 IncludeCitations = Literal["none", "nlm", "bibtex", "both"]
 TextHighlightFormat = Literal["none", "plain", "annotated"]
-SearchMetadataMode = Literal["none", "basic", "full"]
+SearchMetadataMode = Literal["none", "basic", "with_abstract", "full"]
+INLINE_ABSTRACT_MAX_CHARS = 640
 
 GUIDELINE_TERMS = ("recommendation", "guideline", "consensus", "eular", "pres", "share")
 GUIDELINE_TYPES = (
@@ -106,7 +107,9 @@ def shaped_search_result(
     shaped = SearchResult(
         pmid=item.get("pmid", ""),
         title=item.get("title", ""),
-        abstract=item.get("abstract") if response_mode in {"standard", "full"} else None,
+        abstract=_inline_abstract(item.get("abstract"))
+        if response_mode in {"standard", "full"} or metadata == "with_abstract"
+        else None,
         authors=raw_authors if include_author_array else [],
         first_author_et_al=_author_summary(raw_authors),
         journal=item.get("journal"),
@@ -167,6 +170,17 @@ def _merge_metadata_fields(
 
 def _has_metadata_value(value: Any) -> bool:
     return value not in (None, "", [], {})
+
+
+def _inline_abstract(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = " ".join(value.split())
+    if not normalized:
+        return None
+    if len(normalized) <= INLINE_ABSTRACT_MAX_CHARS:
+        return normalized
+    return f"{normalized[: INLINE_ABSTRACT_MAX_CHARS - 1].rstrip()}..."
 
 
 def _shape_authors(authors: Any) -> list[PublicationAuthor]:
