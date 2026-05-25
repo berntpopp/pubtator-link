@@ -109,6 +109,7 @@ class CitationLookupResponse(BaseModel):
 
     records: list[CitationLookupRecord]
     candidate_pmids: list[str] = Field(default_factory=list)
+    metadata_status: RelatedMetadataStatus = "unavailable"
     meta: DiscoveryMeta = Field(default_factory=DiscoveryMeta, alias="_meta")
 
 

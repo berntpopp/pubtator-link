@@ -208,3 +208,55 @@ async def test_corpus_suggestion_discloses_relevance_and_omits_weak_candidates()
     assert "guideline" in guideline.matched_intents
     assert "mefv" in cohort.matched_terms
     assert "cohort" in cohort.matched_intents
+
+
+@pytest.mark.asyncio
+async def test_corpus_suggestion_relevance_ignores_stopword_only_overlap() -> None:
+    class FakeSearch:
+        async def search(self, query: str, *, limit: int, sort: str | None):
+            return {
+                "results": [
+                    {"pmid": "26802180", "title": "EULAR recommendations for FMF"},
+                    {"pmid": "888", "title": "Children with nutrition from school programs"},
+                ]
+            }
+
+    class FakeMetadata:
+        async def get_metadata(self, request):
+            raise AssertionError("metadata should not be fetched")
+
+    class FakePreflight:
+        async def preflight_pmids(self, pmids: list[str]) -> list[SourceCoverageHint]:
+            return []
+
+    service = CorpusSuggestionService(
+        search_client=FakeSearch(),
+        metadata_service=FakeMetadata(),
+        source_preflight_service=FakePreflight(),
+    )
+
+    response = await service.suggest(
+        CorpusSuggestionRequest(
+            question="children with FMF from MEFV guideline",
+            max_pmids=3,
+            include_metadata=False,
+        )
+    )
+
+    assert response.candidate_pmids == ["26802180"]
+
+    required_response = await service.suggest(
+        CorpusSuggestionRequest(
+            question="children with FMF from MEFV guideline",
+            max_pmids=3,
+            must_include_pmids=["888"],
+            include_metadata=False,
+        )
+    )
+
+    assert required_response.candidate_pmids == ["888", "26802180"]
+    required = next(
+        candidate for candidate in required_response.candidates if candidate.pmid == "888"
+    )
+    assert required.matched_terms == []
+    assert required.matched_intents == ["must_include"]

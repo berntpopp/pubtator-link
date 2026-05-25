@@ -26,17 +26,28 @@ class DiscoveryMetadataLookup(Protocol):
 async def enrich_citation_records(
     records: Sequence[CitationLookupRecord],
     metadata_service: DiscoveryMetadataLookup | None,
-) -> list[CitationLookupRecord]:
+) -> tuple[list[CitationLookupRecord], RelatedMetadataStatus]:
+    expected_pmids = {
+        record.pmid for record in records if record.status == "matched" and record.pmid
+    }
+    if not expected_pmids:
+        return list(records), "success"
+    if metadata_service is None:
+        return list(records), "unavailable"
     metadata_by_pmid = await _metadata_by_pmid(
-        [record.pmid for record in records if record.status == "matched" and record.pmid],
+        list(expected_pmids),
         metadata_service,
     )
     if not metadata_by_pmid:
-        return list(records)
-    return [
+        return list(records), "unavailable"
+    enriched = [
         _enriched_citation_record(record, metadata_by_pmid.get(record.pmid or ""))
         for record in records
     ]
+    status: RelatedMetadataStatus = (
+        "success" if expected_pmids.issubset(metadata_by_pmid) else "partial"
+    )
+    return enriched, status
 
 
 async def enrich_related_article_records(
@@ -65,6 +76,21 @@ async def enrich_related_article_records(
 
 
 def add_related_metadata_next_command(
+    meta: DiscoveryMeta,
+    candidate_pmids: list[str],
+    metadata_status: RelatedMetadataStatus,
+) -> DiscoveryMeta:
+    if candidate_pmids and metadata_status in {"partial", "unavailable"}:
+        meta.next_commands.append(
+            {
+                "tool": "pubtator_get_publication_metadata",
+                "arguments": {"pmids": candidate_pmids},
+            }
+        )
+    return meta
+
+
+def add_citation_metadata_next_command(
     meta: DiscoveryMeta,
     candidate_pmids: list[str],
     metadata_status: RelatedMetadataStatus,

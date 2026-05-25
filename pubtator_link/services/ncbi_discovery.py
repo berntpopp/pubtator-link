@@ -25,6 +25,7 @@ from pubtator_link.models.discovery import (
 )
 from pubtator_link.services.discovery_metadata import (
     DiscoveryMetadataLookup,
+    add_citation_metadata_next_command,
     add_related_metadata_next_command,
     enrich_citation_records,
     enrich_related_article_records,
@@ -439,11 +440,16 @@ class DiscoveryService:
                 },
                 *meta.next_commands,
             ]
-        records = await enrich_citation_records(records, self.metadata_service)
+        records, metadata_status = await enrich_citation_records(records, self.metadata_service)
         return CitationLookupResponse(
             records=records,
             candidate_pmids=candidate_pmids,
-            _meta=meta,
+            metadata_status=metadata_status,
+            _meta=add_citation_metadata_next_command(
+                meta,
+                candidate_pmids,
+                metadata_status,
+            ),
         )
 
     async def _resolve_doi_citation_fallbacks(

@@ -261,7 +261,13 @@ async def test_lookup_citation_preserves_match_when_metadata_enrichment_fails() 
     assert response.records[0].status == "matched"
     assert response.records[0].pmid == "26802180"
     assert response.records[0].title is None
+    assert response.metadata_status == "unavailable"
     assert response.meta.next_commands[0]["arguments"] == {"pmids": ["26802180"]}
+    assert any(
+        command["tool"] == "pubtator_get_publication_metadata"
+        and command["arguments"] == {"pmids": ["26802180"]}
+        for command in response.meta.next_commands
+    )
 
 
 @pytest.mark.asyncio

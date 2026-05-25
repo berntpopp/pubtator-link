@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Protocol
 
 from pubtator_link.models.corpus_suggestion import (
@@ -15,6 +16,17 @@ from pubtator_link.models.publication_metadata import (
     PublicationMetadataResponse,
 )
 from pubtator_link.models.review_rerag import SourceCoverageHint
+
+COMMON_RELEVANCE_STOPWORDS = {
+    "and",
+    "are",
+    "child",
+    "children",
+    "for",
+    "from",
+    "the",
+    "with",
+}
 
 
 class CorpusSearchClient(Protocol):
@@ -277,7 +289,7 @@ def _matched_question_terms(request: CorpusSuggestionRequest, title_lower: str) 
             "".join(character for character in word.lower() if character.isalnum())
             for word in request.question.split()
         )
-        if len(token) >= 3
+        if len(token) >= 3 and token not in COMMON_RELEVANCE_STOPWORDS
     ]
     entity_terms = [
         token.lower().removeprefix("@gene_")
@@ -287,11 +299,15 @@ def _matched_question_terms(request: CorpusSuggestionRequest, title_lower: str) 
     for term in [*question_terms, *entity_terms]:
         if term == "fmf" and "familial mediterranean fever" in title_lower:
             terms.append("familial mediterranean fever")
-        elif term in title_lower:
+        elif _contains_term(title_lower, term):
             terms.append(term)
     if any(term in title_lower for term in ("guideline", "recommendation", "consensus", "eular")):
         terms.append("guideline")
     return terms
+
+
+def _contains_term(text: str, term: str) -> bool:
+    return re.search(rf"\b{re.escape(term)}\b", text) is not None
 
 
 def _rationale_for(role: CorpusCandidateRole) -> str:
