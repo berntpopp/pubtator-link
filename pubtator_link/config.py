@@ -208,6 +208,8 @@ class APIConfig:
     base_url: str
     timeout: int
     rate_limit_per_second: float
+    text_max_bytes: int = 5 * 1024 * 1024
+    pdf_max_bytes: int = 20 * 1024 * 1024
 
     # Supported formats
     export_formats: list[str] = field(default_factory=lambda: ["pubtator", "biocxml", "biocjson"])
@@ -358,6 +360,8 @@ api_config = APIConfig(
     base_url=settings.api_base_url,
     timeout=settings.api_timeout,
     rate_limit_per_second=settings.rate_limit_per_second,
+    text_max_bytes=settings.review_prep_text_max_bytes,
+    pdf_max_bytes=settings.review_prep_pdf_max_bytes,
 )
 
 text_processing_config = TextProcessingConfig(

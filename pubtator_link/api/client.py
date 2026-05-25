@@ -1,6 +1,7 @@
 """PubTator3 API client with rate limiting and error handling."""
 
 import asyncio
+import json
 import time
 from typing import Any
 
@@ -70,6 +71,7 @@ class PubTatorAPIError(Exception):
         status_code: int | None = None,
         response_data: dict[str, Any] | None = None,
         retry_metadata: dict[str, Any] | None = None,
+        terminal_reason: str | None = None,
     ):
         """Initialize PubTator API error.
 
@@ -77,11 +79,14 @@ class PubTatorAPIError(Exception):
             message: Error message
             status_code: HTTP status code
             response_data: Response data from API
+            retry_metadata: Retry metadata sidecar
+            terminal_reason: Stable terminal failure reason, when available
         """
         super().__init__(message)
         self.status_code = status_code
         self.response_data = response_data
         self.retry_metadata = retry_metadata or {}
+        self.terminal_reason = terminal_reason
 
 
 class PubTator3Client:
@@ -176,6 +181,11 @@ class PubTator3Client:
         )
         return response_data
 
+    def _cap_for_content_type(self, content_type: str) -> int:
+        if "application/pdf" in content_type.lower():
+            return self.config.pdf_max_bytes
+        return self.config.text_max_bytes
+
     async def _make_request_with_metadata(
         self,
         method: str,
@@ -200,10 +210,58 @@ class PubTator3Client:
             if method_upper not in {"GET", "POST"}:
                 raise ValueError(f"Unsupported HTTP method: {method}")
 
+            def raise_payload_too_large(
+                response: httpx.Response,
+                max_bytes: int,
+            ) -> None:
+                nonlocal retry_metadata
+                retry_metadata = RetryAttemptMetadata(
+                    attempt_count=retry_metadata.attempt_count,
+                    last_status_code=response.status_code,
+                    retry_after_ms=retry_metadata.retry_after_ms,
+                    backoff_ms=retry_metadata.backoff_ms,
+                    terminal_reason="payload_too_large",
+                )
+                payload = _retry_metadata_payload(retry_metadata)
+                raise PubTatorAPIError(
+                    f"Response body exceeds {max_bytes} byte limit",
+                    status_code=response.status_code,
+                    response_data={"retry_metadata": payload},
+                    retry_metadata=payload,
+                    terminal_reason="payload_too_large",
+                )
+
             async def send() -> httpx.Response:
-                if method_upper == "GET":
-                    return await client.get(url, params=params)
-                return await client.post(url, params=params, data=data)
+                stream_kwargs: dict[str, Any] = {"params": params}
+                if method_upper == "POST":
+                    stream_kwargs["data"] = data
+
+                async with client.stream(method_upper, url, **stream_kwargs) as response:
+                    content_type = response.headers.get("content-type", "").lower()
+                    max_bytes = self._cap_for_content_type(content_type)
+                    content_length = response.headers.get("content-length")
+                    if content_length is not None:
+                        try:
+                            if int(content_length) > max_bytes:
+                                raise_payload_too_large(response, max_bytes)
+                        except ValueError:
+                            pass
+
+                    body_parts: list[bytes] = []
+                    total = 0
+                    async for chunk in response.aiter_bytes():
+                        total += len(chunk)
+                        if total > max_bytes:
+                            raise_payload_too_large(response, max_bytes)
+                        body_parts.append(chunk)
+
+                    return httpx.Response(
+                        response.status_code,
+                        headers=response.headers,
+                        content=b"".join(body_parts),
+                        request=response.request,
+                        extensions=response.extensions,
+                    )
 
             if retry and method_upper == "GET":
                 policy = RetryPolicy()
@@ -255,15 +313,19 @@ class PubTator3Client:
 
             # Handle different response types
             content_type = response.headers.get("content-type", "").lower()
+            body = response.content
             if "application/json" in content_type:
-                return response.json(), retry_metadata
+                return json.loads(body.decode("utf-8")), retry_metadata
             elif (
                 "text/plain" in content_type
                 or "text/html" in content_type
                 or "application/xml" in content_type
             ):
                 return (
-                    {"content": response.text, "content_type": content_type},
+                    {
+                        "content": body.decode(response.encoding or "utf-8", errors="replace"),
+                        "content_type": content_type,
+                    },
                     retry_metadata,
                 )
             else:
