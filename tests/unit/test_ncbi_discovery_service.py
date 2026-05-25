@@ -244,6 +244,27 @@ async def test_lookup_citation_enriches_matched_metadata_fields() -> None:
 
 
 @pytest.mark.asyncio
+async def test_lookup_citation_preserves_match_when_metadata_enrichment_fails() -> None:
+    class Client(FakeDiscoveryClient):
+        async def lookup_citations(self, citations):
+            return [CitationLookupRecord(citation=citations[0], status="matched", pmid="26802180")]
+
+    class Metadata:
+        async def get_metadata(self, request):
+            raise RuntimeError("metadata upstream unavailable")
+
+    service = DiscoveryService(Client(), metadata_service=Metadata())
+
+    response = await service.lookup_citation(["Ozen S. EULAR recommendations. Ann Rheum Dis."])
+
+    assert response.candidate_pmids == ["26802180"]
+    assert response.records[0].status == "matched"
+    assert response.records[0].pmid == "26802180"
+    assert response.records[0].title is None
+    assert response.meta.next_commands[0]["arguments"] == {"pmids": ["26802180"]}
+
+
+@pytest.mark.asyncio
 async def test_ncbi_client_parses_id_conversion_json() -> None:
     transport = MockTransport(
         {
@@ -690,6 +711,34 @@ async def test_find_related_articles_reports_partial_metadata_enrichment() -> No
     assert any(
         command["tool"] == "pubtator_get_publication_metadata"
         and command["arguments"] == {"pmids": ["456", "789"]}
+        for command in response.meta.next_commands
+    )
+
+
+@pytest.mark.asyncio
+async def test_find_related_articles_reports_unavailable_when_metadata_enrichment_fails() -> None:
+    class Client(FakeDiscoveryClient):
+        async def find_related_articles(self, pmids, mode, limit):
+            return [RelatedArticleRecord(source_pmid="123", pmid="456", relation=mode)]
+
+    class Metadata:
+        async def get_metadata(self, request):
+            raise RuntimeError("metadata upstream unavailable")
+
+    service = DiscoveryService(Client(), metadata_service=Metadata())
+
+    response = await service.find_related_articles(["123"])
+
+    assert response.candidate_pmids == ["456"]
+    assert response.metadata_status == "unavailable"
+    assert response.related_articles[0] == RelatedArticleRecord(
+        source_pmid="123",
+        pmid="456",
+        relation="similar",
+    )
+    assert any(
+        command["tool"] == "pubtator_get_publication_metadata"
+        and command["arguments"] == {"pmids": ["456"]}
         for command in response.meta.next_commands
     )
 

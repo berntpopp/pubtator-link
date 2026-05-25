@@ -86,15 +86,18 @@ async def _metadata_by_pmid(
     selected_pmids = [pmid for pmid in dict.fromkeys(pmids) if pmid]
     if not selected_pmids or metadata_service is None:
         return {}
-    response = await metadata_service.get_metadata(
-        PublicationMetadataRequest(
-            pmids=selected_pmids,
-            include_mesh=False,
-            include_publication_types=False,
-            include_citations="none",
-            include_coverage=False,
+    try:
+        response = await metadata_service.get_metadata(
+            PublicationMetadataRequest(
+                pmids=selected_pmids,
+                include_mesh=False,
+                include_publication_types=False,
+                include_citations="none",
+                include_coverage=False,
+            )
         )
-    )
+    except Exception:
+        return {}
     return {item.pmid: item for item in response.metadata}
 
 
