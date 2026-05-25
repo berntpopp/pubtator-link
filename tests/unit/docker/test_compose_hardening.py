@@ -7,12 +7,21 @@ PROD = Path("docker/docker-compose.prod.yml").read_text()
 NPM = Path("docker/docker-compose.npm.yml").read_text()
 NPM_ENV = Path("docker/.env.npm.example").read_text()
 DOCKER_ENV = Path(".env.docker.example")
+DOCKERFILE = Path("docker/Dockerfile").read_text()
 
 
 def test_base_compose_runs_unified_server_with_mcp() -> None:
     assert "PUBTATOR_LINK_TRANSPORT: unified" in BASE
     assert "--factory" in BASE
     assert "pubtator_link.server_manager:create_app" in BASE
+
+
+def test_production_gunicorn_commands_use_callable_factory_entrypoint() -> None:
+    expected = '"pubtator_link.server_manager:create_app()"'
+
+    for source in (DOCKERFILE, PROD, NPM):
+        assert '"--factory"' not in source
+        assert expected in source
 
 
 def test_prod_compose_has_security_controls() -> None:
