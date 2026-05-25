@@ -14,6 +14,7 @@ from pubtator_link.mcp.errors import (
     run_mcp_tool,
     sanitize_error_message,
 )
+from pubtator_link.mcp.validation_errors import extract_validation_details
 from pubtator_link.services.errors import (
     ReviewIndexUnavailableError,
     ReviewSchemaStaleError,
@@ -26,6 +27,30 @@ def test_sanitize_error_message_removes_database_details() -> None:
     message = 'column "updated_at" of relation "reviews" does not exist'
 
     assert sanitize_error_message(message) == "Review database schema is not current."
+
+
+def test_extract_validation_details_finds_direct_and_anyof_enum_values() -> None:
+    details = extract_validation_details(
+        {
+            "type": "object",
+            "properties": {
+                "response_mode": {"enum": ["compact", "standard", "full"]},
+                "concept": {
+                    "anyOf": [
+                        {"enum": ["Gene", "Disease"]},
+                        {"type": "null"},
+                    ]
+                },
+                "query": {"type": "string"},
+            },
+        }
+    )
+
+    assert details["valid_params"] == ["concept", "query", "response_mode"]
+    assert details["valid_values_for"] == {
+        "concept": ["Gene", "Disease"],
+        "response_mode": ["compact", "standard", "full"],
+    }
 
 
 def test_mcp_tool_error_serializes_recovery_envelope() -> None:

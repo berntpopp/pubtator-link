@@ -11,9 +11,11 @@ from typing import Any
 import asyncpg
 import httpx
 from fastmcp.exceptions import ToolError
+from pydantic import ValidationError as PydanticValidationError
 
 from pubtator_link.api.client import PubTatorAPIError
 from pubtator_link.mcp.input_normalization import InputNormalizationError
+from pubtator_link.mcp.validation_errors import extract_validation_details
 from pubtator_link.observability.metrics import record_mcp_tool_call
 from pubtator_link.services.degradation import DegradedMode
 from pubtator_link.services.errors import (
@@ -260,6 +262,67 @@ def _tool_error_details(exc: ToolError) -> tuple[str, str]:
         error_code if isinstance(error_code, str) else "tool_error",
         message if isinstance(message, str) else sanitize_error_message(str(exc)),
     )
+
+
+def mcp_validation_tool_error(
+    *,
+    tool_name: str,
+    parameters: dict[str, Any],
+    exc: PydanticValidationError,
+) -> ToolError:
+    """Build a sanitized validation failure raised before tool execution starts."""
+    payload: dict[str, Any] = {
+        "success": False,
+        "error_code": "validation_failed",
+        "message": "Invalid MCP arguments.",
+        "retryable": False,
+        "fallback_tool": None,
+        "fallback_args": None,
+        "recovery": _recovery_text_for_context(
+            McpErrorContext(tool_name=tool_name),
+            fallback_tool=None,
+            error_code="validation_failed",
+        ),
+        "_meta": {
+            "next_commands": [{"tool": "pubtator_diagnostics", "arguments": {}}],
+            "unsafe_for_clinical_use": True,
+        },
+    }
+    payload.update(extract_validation_details(parameters, exc.errors()))
+    record_mcp_error(
+        tool_name=tool_name,
+        error_code="validation_failed",
+        message=payload["message"],
+    )
+    return ToolError(json.dumps(payload, separators=(",", ":"), sort_keys=True))
+
+
+def install_validation_error_handler(mcp_server: Any) -> None:
+    """Wrap registered tools so FastMCP argument validation returns our envelope."""
+    tool_manager = getattr(mcp_server, "_tool_manager", None)
+    tools = getattr(tool_manager, "_tools", {})
+    for tool in tools.values():
+        if getattr(tool, "_pubtator_validation_wrapped", False):
+            continue
+        original_run = tool.run
+
+        async def wrapped_run(
+            arguments: dict[str, Any],
+            *,
+            _original_run: Callable[[dict[str, Any]], Awaitable[Any]] = original_run,
+            _tool: Any = tool,
+        ) -> Any:
+            try:
+                return await _original_run(arguments)
+            except PydanticValidationError as exc:
+                raise mcp_validation_tool_error(
+                    tool_name=str(_tool.name),
+                    parameters=dict(_tool.parameters),
+                    exc=exc,
+                ) from None
+
+        object.__setattr__(tool, "run", wrapped_run)
+        object.__setattr__(tool, "_pubtator_validation_wrapped", True)
 
 
 def mcp_tool_error(exc: Exception, context: McpErrorContext) -> ToolError:

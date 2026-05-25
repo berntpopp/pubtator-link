@@ -962,6 +962,48 @@ async def test_query_alias_missing_all_returns_validation_failed_tool_error() ->
 
 
 @pytest.mark.asyncio
+async def test_tool_validation_unknown_argument_reports_valid_and_unexpected_params() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_literature"]
+
+    with pytest.raises(ToolError) as exc_info:
+        await tool.run({"query": "familial mediterranean fever", "bogus": "x"})
+
+    payload = _tool_error_payload(exc_info.value)
+    assert payload["success"] is False
+    assert payload["error_code"] == "validation_failed"
+    assert "query" in payload["valid_params"]
+    assert "text" in payload["valid_params"]
+    assert payload["unexpected_params"] == ["bogus"]
+    assert payload["_meta"]["next_commands"] == [{"tool": "pubtator_diagnostics", "arguments": {}}]
+
+
+@pytest.mark.asyncio
+async def test_tool_validation_bad_enum_reports_valid_values() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_literature"]
+
+    with pytest.raises(ToolError) as exc_info:
+        await tool.run(
+            {
+                "query": "familial mediterranean fever",
+                "response_mode": "tiny",
+            }
+        )
+
+    payload = _tool_error_payload(exc_info.value)
+    assert payload["success"] is False
+    assert payload["error_code"] == "validation_failed"
+    assert payload["valid_values_for"]["response_mode"] == [
+        "compact",
+        "standard",
+        "full",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_query_alias_conflict_returns_validation_failed_tool_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
