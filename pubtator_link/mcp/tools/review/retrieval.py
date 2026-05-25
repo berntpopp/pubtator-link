@@ -11,6 +11,7 @@ from pubtator_link.mcp.annotations import (
 )
 from pubtator_link.mcp.argument_aliases import coalesce_query, merge_pmids
 from pubtator_link.mcp.errors import run_mcp_tool
+from pubtator_link.mcp.meta_budget import strip_meta_for_repeated_call
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.tools import review as review_tools
 from pubtator_link.mcp.tools.review._helpers import _warn_if_degraded, make_mcp_tool_for
@@ -58,6 +59,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         allow_truncated_passages: bool = True,
         max_chars_per_passage: int = 2200,
         include_resolver_trace: bool = False,
+        include_meta: bool = True,
         ctx: Context | None = None,
     ) -> dict[str, Any]:
         """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Provide one of question or query. Use a short keyword query and PMID filters. If zero passages are returned, simplify the query, inspect the review index, or fall back to fetch_publication_annotations."""
@@ -92,7 +94,8 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             tool_pmids = merge_pmids(pmids, pmid, max_items=100)
         except ValueError:
             tool_pmids = None
-        return await run_mcp_tool("pubtator_retrieve_review_context", call, pmids=tool_pmids)
+        result = await run_mcp_tool("pubtator_retrieve_review_context", call, pmids=tool_pmids)
+        return result if include_meta else strip_meta_for_repeated_call(result)
 
     @mcp_tool_for(
         "lean",
@@ -131,6 +134,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         max_chars_per_passage: int = 2200,
         dry_run: bool = False,
         include_resolver_trace: bool = False,
+        include_meta: bool = True,
         ctx: Context | None = None,
     ) -> dict[str, Any]:
         """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode uses query_fair budgeting, merged passages, per-query summaries, and next_steps for zero-result queries. Use response_mode="quotes" for short citable snippets or dry_run for diagnostics without passage text."""
@@ -174,11 +178,12 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             tool_pmids = merge_pmids(pmids, pmid, max_items=100)
         except ValueError:
             tool_pmids = None
-        return await run_mcp_tool(
+        result = await run_mcp_tool(
             "pubtator_retrieve_review_context_batch",
             call,
             pmids=tool_pmids,
         )
+        return result if include_meta else strip_meta_for_repeated_call(result)
 
     @mcp_tool_for(
         "lean",

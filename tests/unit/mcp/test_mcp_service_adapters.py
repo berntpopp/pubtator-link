@@ -33,6 +33,49 @@ class _FakeReviewAuditBundleService:
         )
 
 
+def test_strip_meta_for_repeated_call_removes_diagnostics_and_preserves_answer_content() -> None:
+    from pubtator_link.mcp.meta_budget import strip_meta_for_repeated_call
+
+    payload = {
+        "success": True,
+        "_meta": {"next_commands": ["pubtator_retrieve_review_context_batch"]},
+        "provider_status": [{"provider": "pubmed", "status": "success"}],
+        "results": [
+            {
+                "pmid": "40234174",
+                "title": "Colchicine response in FMF",
+                "citation": "PMID:40234174",
+                "passage_id": "rev:40234174:abstract:0",
+                "text": "Colchicine reduced attacks.",
+                "coverage_hint": "full_text",
+                "unsafe_for_clinical_use": True,
+                "_meta": {"debug": True},
+                "rrf_score": 0.5,
+                "lexical_rank_position": 1,
+                "dense_rank_position": 2,
+                "rank_features": {"guideline_boost": 1.0},
+                "provider_status": [{"provider": "dense", "status": "success"}],
+            }
+        ],
+    }
+
+    stripped = strip_meta_for_repeated_call(payload)
+
+    assert "_meta" not in stripped
+    assert "provider_status" not in stripped
+    assert stripped["results"][0] == {
+        "pmid": "40234174",
+        "title": "Colchicine response in FMF",
+        "citation": "PMID:40234174",
+        "passage_id": "rev:40234174:abstract:0",
+        "text": "Colchicine reduced attacks.",
+        "coverage_hint": "full_text",
+        "unsafe_for_clinical_use": True,
+    }
+    assert "_meta" in payload
+    assert "rrf_score" in payload["results"][0]
+
+
 @pytest.mark.asyncio
 async def test_search_entities_adapter_calls_client() -> None:
     from pubtator_link.mcp.service_adapters import search_biomedical_entities_impl

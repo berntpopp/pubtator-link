@@ -888,6 +888,91 @@ def test_review_context_schema_defaults_are_stable() -> None:
     assert batch_schema["table_mode"]["default"] == "preview"
 
 
+def test_repeated_call_tools_expose_include_meta_default_true() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    tools = create_pubtator_mcp(profile="full")._tool_manager._tools
+
+    for tool_name in (
+        "pubtator_stage_research_session",
+        "pubtator_retrieve_review_context",
+        "pubtator_retrieve_review_context_batch",
+        "pubtator_find_related_evidence_candidates",
+        "pubtator_build_topic_literature_map",
+    ):
+        properties = tools[tool_name].parameters["properties"]
+        assert properties["include_meta"]["default"] is True
+
+
+@pytest.mark.asyncio
+async def test_retrieve_review_context_batch_tool_include_meta_false_strips_meta(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.tools.review as review_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async def fake_get_review_context_service() -> object:
+        return object()
+
+    async def fake_retrieve_review_context_batch_impl(**kwargs):
+        return {
+            "success": True,
+            "review_id": kwargs["review_id"],
+            "_meta": {"normalized_arguments": {"queries": kwargs["queries"]}},
+            "provider_status": [{"provider": "embedding", "status": "success"}],
+            "results": [
+                {
+                    "review_id": kwargs["review_id"],
+                    "context_pack": {
+                        "question": kwargs["queries"][0],
+                        "passages": [
+                            {
+                                "passage_id": "rev:40234174:abstract:0",
+                                "pmid": "40234174",
+                                "title": "FMF colchicine",
+                                "text": "Colchicine reduced attacks.",
+                                "rrf_score": 0.75,
+                                "rank_features": {"dense": 0.8},
+                            }
+                        ],
+                        "citation_map": {"40234174": "PMID:40234174"},
+                    },
+                    "provider_status": [{"provider": "lexical", "status": "success"}],
+                }
+            ],
+        }
+
+    monkeypatch.setattr(
+        review_tools,
+        "get_review_context_service",
+        fake_get_review_context_service,
+    )
+    monkeypatch.setattr(
+        review_tools,
+        "retrieve_review_context_batch_impl",
+        fake_retrieve_review_context_batch_impl,
+    )
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
+        "pubtator_retrieve_review_context_batch"
+    ]
+
+    result = await tool.run(
+        {"review_id": "rev_123", "queries": ["colchicine"], "include_meta": False}
+    )
+
+    payload = result.structured_content
+    passage = payload["results"][0]["context_pack"]["passages"][0]
+    assert "_meta" not in payload
+    assert "provider_status" not in payload
+    assert "provider_status" not in payload["results"][0]
+    assert "rrf_score" not in passage
+    assert "rank_features" not in passage
+    assert passage["passage_id"] == "rev:40234174:abstract:0"
+    assert passage["pmid"] == "40234174"
+    assert passage["title"] == "FMF colchicine"
+    assert passage["text"] == "Colchicine reduced attacks."
+
+
 @pytest.mark.asyncio
 async def test_search_literature_accepts_query_alias(monkeypatch: pytest.MonkeyPatch) -> None:
     import pubtator_link.mcp.tools.literature as literature_tools

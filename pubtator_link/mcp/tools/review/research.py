@@ -12,6 +12,7 @@ from pubtator_link.mcp.annotations import (
 )
 from pubtator_link.mcp.argument_aliases import coalesce_query, merge_pmids
 from pubtator_link.mcp.errors import run_mcp_tool
+from pubtator_link.mcp.meta_budget import strip_meta_for_repeated_call
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.tools import review as review_tools
 from pubtator_link.mcp.tools.review._helpers import make_mcp_tool_for
@@ -87,6 +88,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         sections: list[str] | None = None,
         max_candidates: Annotated[int, Field(ge=1, le=100)] = 20,
         stage_full_text: bool = True,
+        include_meta: bool = True,
     ) -> dict[str, Any]:
         """Use this when a user needs to stage candidate PMIDs with coverage hints and queued review preparation after search planning."""
 
@@ -114,11 +116,12 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             tool_pmids = merge_pmids(pmids, pmid, max_items=100)
         except ValueError:
             tool_pmids = None
-        return await run_mcp_tool(
+        result = await run_mcp_tool(
             "pubtator_stage_research_session",
             call,
             pmids=tool_pmids or [],
         )
+        return result if include_meta else strip_meta_for_repeated_call(result)
 
     @mcp_tool_for(
         "lean",

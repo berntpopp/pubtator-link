@@ -16,6 +16,7 @@ from pubtator_link.api.routes.dependencies import (
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from pubtator_link.mcp.argument_aliases import coalesce_query, merge_pmids
 from pubtator_link.mcp.errors import run_mcp_tool
+from pubtator_link.mcp.meta_budget import strip_meta_for_repeated_call
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.service_adapters import (
     build_topic_literature_map_impl,
@@ -124,6 +125,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             citation_graph_timeout_ms: Annotated[int | None, Field(ge=1, le=120_000)] = 15_000,
             related_evidence_timeout_ms: Annotated[int | None, Field(ge=1, le=120_000)] = 20_000,
             metadata_backfill_timeout_ms: Annotated[int | None, Field(ge=1, le=120_000)] = 10_000,
+            include_meta: bool = True,
         ) -> dict[str, Any]:
             """Use this when a user needs a bounded topic-level literature map from a query or seed PMIDs. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: pubtator_get_publication_passages."""
 
@@ -169,11 +171,12 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 tool_pmids = merge_pmids(pmids or seed_pmids, pmid, max_items=100)
             except ValueError:
                 tool_pmids = None
-            return await run_mcp_tool(
+            result = await run_mcp_tool(
                 "pubtator_build_topic_literature_map",
                 call,
                 pmids=tool_pmids,
             )
+            return result if include_meta else strip_meta_for_repeated_call(result)
 
     @mcp.tool(
         name="pubtator_get_publication_passages",
@@ -315,6 +318,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         year_max: int | None = None,
         citation_graph_timeout_ms: Annotated[int, Field(ge=1, le=120_000)] = 15_000,
         metadata_timeout_ms: Annotated[int, Field(ge=1, le=120_000)] = 20_000,
+        include_meta: bool = True,
     ) -> dict[str, Any]:
         """Use this when a user has one PMID and needs related full-text-preferred candidates. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: pubtator_get_publication_passages."""
 
@@ -335,11 +339,12 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 metadata_timeout_ms=metadata_timeout_ms,
             )
 
-        return await run_mcp_tool(
+        result = await run_mcp_tool(
             "pubtator_find_related_evidence_candidates",
             call,
             pmids=[pmid],
         )
+        return result if include_meta else strip_meta_for_repeated_call(result)
 
     if profile != "lean":
 
