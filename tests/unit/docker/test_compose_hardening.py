@@ -11,7 +11,8 @@ DOCKER_ENV = Path(".env.docker.example")
 
 def test_base_compose_runs_unified_server_with_mcp() -> None:
     assert "PUBTATOR_LINK_TRANSPORT: unified" in BASE
-    assert "pubtator_link.server_manager:app" in BASE
+    assert "--factory" in BASE
+    assert "pubtator_link.server_manager:create_app" in BASE
 
 
 def test_prod_compose_has_security_controls() -> None:
