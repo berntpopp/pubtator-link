@@ -1,7 +1,11 @@
 import pytest
 
 from pubtator_link.models.responses import SearchResponse, SearchResult
-from pubtator_link.models.review_rerag import PreparationStatus, SourceCoverageHint
+from pubtator_link.models.review_rerag import (
+    PreparationStatus,
+    ReviewSourceSummary,
+    SourceCoverageHint,
+)
 from pubtator_link.services.research_session import ResearchSessionService
 
 
@@ -61,6 +65,9 @@ class FakeRepository:
             if session_review_id == review_id:
                 manifests.append(await self.get_research_session(review_id, session_id))
         return manifests
+
+    async def list_review_sources(self, review_id, pmids=None, **kwargs):
+        return []
 
 
 class FakeSearch:
@@ -279,3 +286,35 @@ async def test_list_sessions_attaches_preparation_status() -> None:
     response = await service.list_sessions(review_id="review-1")
 
     assert response.sessions[0].preparation_status == PreparationStatus(queued=1)
+
+
+async def test_get_status_reconciles_candidate_status_from_review_index() -> None:
+    class SourceRepository(FakeRepository):
+        async def list_review_sources(self, review_id, pmids=None, **kwargs):
+            return [
+                ReviewSourceSummary(
+                    source_id="PMID:1",
+                    pmid="1",
+                    source_kind="pubtator_abstract",
+                    job_status="complete",
+                    coverage="abstract_only",
+                    passage_count=2,
+                )
+            ]
+
+    repository = SourceRepository()
+    service = ResearchSessionService(
+        repository=repository,
+        search_provider=FakeSearch(),
+        preflight_service=FakePreflight(),
+        queue=FakeQueue(accepted_pmids={"1"}),
+    )
+    staged = await service.stage(
+        review_id="review-1",
+        request={"query": "FMF", "session_id": "session-1", "max_candidates": 1},
+    )
+    assert staged.manifest.candidates[0].status == "queued"
+
+    response = await service.get_status(review_id="review-1", session_id="session-1")
+
+    assert response.manifest.candidates[0].status == "abstract_ready"

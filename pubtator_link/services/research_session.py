@@ -157,6 +157,7 @@ class ResearchSessionService:
         if manifest is None:
             raise LookupError(f"Research session not found: {session_id}")
         manifest.preparation_status = await self.queue.repository.preparation_status(review_id)
+        await self._reconcile_candidate_statuses(review_id, manifest)
         return ResearchSessionStatusResponse(manifest=manifest)
 
     async def list_sessions(self, *, review_id: str) -> ListResearchSessionsResponse:
@@ -164,7 +165,39 @@ class ResearchSessionService:
         preparation_status = await self.queue.repository.preparation_status(review_id)
         for session in sessions:
             session.preparation_status = preparation_status
+            await self._reconcile_candidate_statuses(review_id, session)
         return ListResearchSessionsResponse(sessions=sessions)
+
+    async def _reconcile_candidate_statuses(self, review_id: str, manifest: Any) -> None:
+        list_review_sources = getattr(self.queue.repository, "list_review_sources", None)
+        if list_review_sources is None:
+            list_review_sources = getattr(self.repository, "list_review_sources", None)
+        if list_review_sources is None:
+            return
+        pmids = [candidate.pmid for candidate in manifest.candidates if candidate.pmid]
+        if not pmids:
+            return
+        sources = await list_review_sources(
+            review_id,
+            pmids=pmids,
+            include_passage_samples=False,
+            sample_per_pmid=0,
+            session_id=manifest.session_id,
+        )
+        by_pmid = {str(getattr(source, "pmid", "") or ""): source for source in sources}
+        for candidate in manifest.candidates:
+            source = by_pmid.get(candidate.pmid)
+            if source is None:
+                continue
+            job_status = str(getattr(source, "job_status", "") or "")
+            passage_count = int(getattr(source, "passage_count", 0) or 0)
+            coverage = str(getattr(source, "coverage", "") or "")
+            if job_status != "complete" and passage_count <= 0:
+                continue
+            if coverage == "full_text":
+                candidate.status = "full_text_ready"
+            elif coverage == "abstract_only" or passage_count > 0:
+                candidate.status = "abstract_ready"
 
     async def _candidate_pmids(
         self, request: StageResearchSessionRequest
