@@ -8,8 +8,57 @@ See docs/superpowers/plans/2026-05-26-phase-1-hosted-mcp-ship-blockers.md.
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
+from contextvars import ContextVar, Token
+from dataclasses import dataclass
 from types import ModuleType as _ModuleType
-from typing import Any
+from typing import Annotated, Any
+
+from fastapi import Depends, HTTPException, Request
+from structlog.typing import FilteringBoundLogger
+
+from pubtator_link.api.search_filters import merge_search_filters
+from pubtator_link.config import settings
+from pubtator_link.db.migrate import ReviewSchemaDiagnostics
+from pubtator_link.logging_config import configure_logging
+from pubtator_link.models.responses import SearchResponse, SearchResult
+from pubtator_link.models.review_rerag import CoverageReason, CoverageTier
+from pubtator_link.models.review_rerag import (
+    StageResearchSessionRequest as StageResearchSessionRequest,
+)
+from pubtator_link.services.citation_graph import CitationGraphService
+from pubtator_link.services.clinvar import ClinVarService
+from pubtator_link.services.corpus_suggestion import CorpusSuggestionService
+from pubtator_link.services.diagnostics import DiagnosticsService
+from pubtator_link.services.errors import ReviewSchemaStaleError
+from pubtator_link.services.europe_pmc import EuropePmcClient
+from pubtator_link.services.literature_providers import (
+    CrossrefClient,
+    EuropePmcLiteratureClient,
+    OpenAlexClient,
+    UnpaywallClient,
+)
+from pubtator_link.services.llm_review_context import LlmReviewContextService
+from pubtator_link.services.ncbi_discovery import DiscoveryService, NcbiDiscoveryClient
+from pubtator_link.services.publication_metadata import (
+    NcbiPublicationMetadataClient,
+    PublicationMetadataService,
+)
+from pubtator_link.services.related_evidence import RelatedEvidenceService
+from pubtator_link.services.research_session import (
+    ResearchSessionSearchProvider,
+    ResearchSessionService,
+)
+from pubtator_link.services.review_audit import ReviewAuditService
+from pubtator_link.services.review_context.embeddings import (
+    EmbeddingProvider,
+    EmbeddingProviderUnavailableError,
+)
+from pubtator_link.services.review_evidence_certainty import ReviewEvidenceCertaintyService
+from pubtator_link.services.review_index_lifecycle import ReviewIndexLifecycleService
+from pubtator_link.services.source_preflight import SourcePreflightService
+from pubtator_link.services.topic_literature_map import TopicLiteratureMapService
+from pubtator_link.services.variant_evidence import VariantEvidenceService
 
 from . import core_api as _core_api
 from . import discovery as _discovery
@@ -206,13 +255,55 @@ sys.modules[__name__].__class__ = _DependenciesModule
 
 
 __all__ = [
+    "Annotated",
     "AppResources",
+    "Callable",
+    "CitationGraphService",
+    "ClinVarService",
+    "ContextVar",
+    "CorpusSuggestionService",
+    "CoverageReason",
+    "CoverageTier",
+    "CrossrefClient",
+    "Depends",
+    "DiagnosticsService",
+    "DiscoveryService",
+    "EmbeddingProvider",
+    "EmbeddingProviderUnavailableError",
+    "EuropePmcClient",
+    "EuropePmcLiteratureClient",
+    "FilteringBoundLogger",
+    "HTTPException",
+    "LlmReviewContextService",
+    "NcbiDiscoveryClient",
+    "NcbiPublicationMetadataClient",
+    "OpenAlexClient",
+    "PublicationMetadataService",
+    "RelatedEvidenceService",
+    "Request",
+    "ResearchSessionSearchProvider",
+    "ResearchSessionService",
+    "ReviewAuditService",
+    "ReviewEvidenceCertaintyService",
+    "ReviewIndexLifecycleService",
+    "ReviewSchemaDiagnostics",
+    "ReviewSchemaStaleError",
+    "SearchResponse",
+    "SearchResult",
+    "SourcePreflightService",
+    "StageResearchSessionRequest",
+    "Token",
+    "TopicLiteratureMapService",
+    "UnpaywallClient",
+    "VariantEvidenceService",
     "bind_app_resources",
     "cleanup_dependencies",
     "close_app_resources",
+    "configure_logging",
     "create_app_resources",
     "create_error_response",
     "current_app_resources",
+    "dataclass",
     "get_api_client",
     "get_citation_graph_service",
     "get_clinvar_service",
@@ -237,9 +328,11 @@ __all__ = [
     "get_topic_literature_map_service",
     "get_variant_evidence_service",
     "handle_api_errors",
+    "merge_search_filters",
     "reset_app_resources",
     "resources_from_request",
     "review_pool_kwargs",
+    "settings",
     "validate_entity_id",
     "validate_limit",
     "validate_page_number",

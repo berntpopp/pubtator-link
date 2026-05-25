@@ -122,10 +122,45 @@ TOLERATED_LEGACY_CALLABLES = {
     "merge_search_filters",
 }
 
+LEGACY_PUBLIC_IMPORTS = TOLERATED_LEGACY_CALLABLES | {
+    "CrossrefClient",
+    "EuropePmcLiteratureClient",
+    "OpenAlexClient",
+    "UnpaywallClient",
+    "NcbiDiscoveryClient",
+    "NcbiPublicationMetadataClient",
+    "PublicationMetadataService",
+    "DiscoveryService",
+    "CitationGraphService",
+    "ReviewSchemaDiagnostics",
+    "ReviewSchemaStaleError",
+    "settings",
+    "configure_logging",
+    "merge_search_filters",
+    "SearchResponse",
+    "SearchResult",
+    "StageResearchSessionRequest",
+    "CoverageReason",
+    "CoverageTier",
+    "EuropePmcClient",
+    "EmbeddingProvider",
+    "EmbeddingProviderUnavailableError",
+    "ResearchSessionSearchProvider",
+    "ClinVarService",
+    "DiagnosticsService",
+    "CorpusSuggestionService",
+    "VariantEvidenceService",
+}
+
 
 def test_every_expected_name_is_importable_from_root() -> None:
     missing = sorted(name for name in EXPECTED if not hasattr(deps, name))
     assert not missing, f"missing re-exports: {missing}"
+
+
+def test_legacy_public_imports_still_resolve_from_root() -> None:
+    missing = sorted(name for name in LEGACY_PUBLIC_IMPORTS if not hasattr(deps, name))
+    assert not missing, f"missing legacy imports after split: {missing}"
 
 
 def test_no_unexpected_public_callables_were_added() -> None:

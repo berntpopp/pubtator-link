@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from fastmcp import FastMCP
+from collections.abc import Callable
+from typing import Annotated, Any, Literal, cast
+
+from fastmcp import Context, FastMCP
+from pydantic import Field
 
 from pubtator_link.api.routes.dependencies import (
     get_api_client,
@@ -13,6 +17,13 @@ from pubtator_link.api.routes.dependencies import (
     get_review_queue,
     get_source_preflight_service,
 )
+from pubtator_link.mcp.annotations import (
+    FILE_EXPORT_ANNOTATIONS,
+    IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
+    NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
+    READ_ONLY_OPEN_WORLD,
+)
+from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.service_adapters import (
     add_evidence_certainty_impl,
@@ -42,9 +53,76 @@ from pubtator_link.mcp.tools.review.indexes import register_indexes_tools
 from pubtator_link.mcp.tools.review.passages import register_passages_tools
 from pubtator_link.mcp.tools.review.research import register_research_tools
 from pubtator_link.mcp.tools.review.retrieval import register_retrieval_tools
+from pubtator_link.models.review_rerag import (
+    BudgetStrategy,
+    EvidenceCertaintyLabel,
+    EvidenceCertaintyResponse,
+    GroundQuestionResponse,
+    IndexReviewEvidenceResponse,
+    InspectReviewIndexResponse,
+    ListEvidenceCertaintyResponse,
+    ListResearchSessionsResponse,
+    ListReviewIndexesResponse,
+    MaxResponseChars,
+    McpReviewAuditBundleResponse,
+    PreflightReviewSourcesResponse,
+    RecordReviewContextResponse,
+    ResearchSessionStatusResponse,
+    RetrieveReviewContextBatchResponse,
+    RetrieveReviewContextResponse,
+    ReviewAuditTrailResponse,
+    ReviewBatchResponseMode,
+    ReviewIndexSummaryResponse,
+    ReviewLlmContextEventType,
+    ReviewPassageLookupResponse,
+    ReviewQuickstartResponse,
+    ReviewResponseVerbosity,
+    ReviewTableMode,
+    SampleSectionPolicy,
+    StageResearchSessionResponse,
+)
 
 __all__ = [
+    "FILE_EXPORT_ANNOTATIONS",
+    "IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS",
+    "NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS",
+    "READ_ONLY_OPEN_WORLD",
+    "Annotated",
+    "Any",
+    "BudgetStrategy",
+    "Callable",
+    "Context",
+    "EvidenceCertaintyLabel",
+    "EvidenceCertaintyResponse",
+    "FastMCP",
+    "Field",
+    "GroundQuestionResponse",
+    "IndexReviewEvidenceResponse",
+    "InspectReviewIndexResponse",
+    "ListEvidenceCertaintyResponse",
+    "ListResearchSessionsResponse",
+    "ListReviewIndexesResponse",
+    "Literal",
+    "MCPToolProfile",
+    "MaxResponseChars",
+    "McpReviewAuditBundleResponse",
+    "PreflightReviewSourcesResponse",
+    "RecordReviewContextResponse",
+    "ResearchSessionStatusResponse",
+    "RetrieveReviewContextBatchResponse",
+    "RetrieveReviewContextResponse",
+    "ReviewAuditTrailResponse",
+    "ReviewBatchResponseMode",
+    "ReviewIndexSummaryResponse",
+    "ReviewLlmContextEventType",
+    "ReviewPassageLookupResponse",
+    "ReviewQuickstartResponse",
+    "ReviewResponseVerbosity",
+    "ReviewTableMode",
+    "SampleSectionPolicy",
+    "StageResearchSessionResponse",
     "add_evidence_certainty_impl",
+    "cast",
     "export_review_audit_bundle_impl",
     "get_api_client",
     "get_evidence_certainty_impl",
@@ -73,6 +151,7 @@ __all__ = [
     "retrieve_review_context_batch_impl",
     "retrieve_review_context_impl",
     "review_quickstart_impl",
+    "run_mcp_tool",
     "stage_research_session_impl",
 ]
 

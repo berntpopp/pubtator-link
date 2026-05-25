@@ -8,6 +8,49 @@ from pubtator_link.mcp.compat import install_inspection_managers
 from pubtator_link.mcp.profiles import FULL_ONLY_TOOLS, LEAN_TOOLS
 from pubtator_link.mcp.tools.review import register_review_tools
 
+LEGACY_PUBLIC_IMPORTS = {
+    "Annotated",
+    "Any",
+    "BudgetStrategy",
+    "Callable",
+    "Context",
+    "EvidenceCertaintyResponse",
+    "EvidenceCertaintyLabel",
+    "FILE_EXPORT_ANNOTATIONS",
+    "FastMCP",
+    "Field",
+    "GroundQuestionResponse",
+    "IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS",
+    "IndexReviewEvidenceResponse",
+    "InspectReviewIndexResponse",
+    "ListEvidenceCertaintyResponse",
+    "ListResearchSessionsResponse",
+    "ListReviewIndexesResponse",
+    "Literal",
+    "MCPToolProfile",
+    "MaxResponseChars",
+    "McpReviewAuditBundleResponse",
+    "NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS",
+    "PreflightReviewSourcesResponse",
+    "READ_ONLY_OPEN_WORLD",
+    "RecordReviewContextResponse",
+    "ResearchSessionStatusResponse",
+    "RetrieveReviewContextBatchResponse",
+    "RetrieveReviewContextResponse",
+    "ReviewAuditTrailResponse",
+    "ReviewBatchResponseMode",
+    "ReviewIndexSummaryResponse",
+    "ReviewLlmContextEventType",
+    "ReviewPassageLookupResponse",
+    "ReviewQuickstartResponse",
+    "ReviewResponseVerbosity",
+    "ReviewTableMode",
+    "SampleSectionPolicy",
+    "StageResearchSessionResponse",
+    "cast",
+    "run_mcp_tool",
+}
+
 REVIEW_TOOLS_IN_LEAN = frozenset(
     {
         "pubtator_preflight_review_sources",
@@ -64,3 +107,10 @@ def test_full_profile_registers_lean_plus_full_only() -> None:
 def test_inventory_constants_match_canonical_profile_tuples() -> None:
     assert set(LEAN_TOOLS) >= REVIEW_TOOLS_IN_LEAN
     assert set(FULL_ONLY_TOOLS) >= REVIEW_TOOLS_IN_FULL_ONLY
+
+
+def test_legacy_public_imports_still_resolve_from_review_root() -> None:
+    import pubtator_link.mcp.tools.review as review
+
+    missing = sorted(name for name in LEGACY_PUBLIC_IMPORTS if not hasattr(review, name))
+    assert not missing, f"missing legacy review imports after split: {missing}"
