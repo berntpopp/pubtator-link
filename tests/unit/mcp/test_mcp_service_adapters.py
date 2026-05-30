@@ -2785,6 +2785,39 @@ async def test_search_literature_adapter_merges_flat_filters() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_literature_adapter_ignores_malformed_filters_with_warning() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class RecordingClient:
+        filters = "not-called"
+
+        async def search_publications(
+            self,
+            text: str,
+            page: int,
+            sort: str | None,
+            filters: str | None,
+            sections: str | None,
+        ) -> dict[str, object]:
+            self.filters = filters
+            return {"results": [], "count": 0, "total_pages": 0, "page_size": 10}
+
+    client = RecordingClient()
+
+    result = await search_literature_impl(
+        client=client,
+        text="guideline",
+        filters="not json",
+    )
+
+    assert client.filters is None
+    assert result["warnings"] == [
+        "Ignored malformed filters value for MCP search: Invalid filters JSON format: "
+        "Expecting value: line 1 column 1 (char 0)"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_search_literature_retries_unfiltered_when_pubtator_filters_unavailable() -> None:
     from pubtator_link.api.client import PubTatorAPIError
     from pubtator_link.mcp.service_adapters import search_literature_impl

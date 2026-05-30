@@ -36,6 +36,8 @@ def _timeout_config() -> ReviewReragConfig:
 class RecordingRepository:
     def __init__(self) -> None:
         self.enqueued: list[tuple[str, str, str]] = []
+        self.queued_jobs: list[tuple[str, str, str]] = []
+        self.list_status_calls: list[str] = []
         self.repaired_jobs = 0
         self.repair_calls = 0
         self.next_enqueue_result = "newly_queued"
@@ -52,6 +54,10 @@ class RecordingRepository:
     async def mark_running_jobs_failed_on_startup(self) -> int:
         self.repair_calls += 1
         return self.repaired_jobs
+
+    async def list_preparation_jobs_by_status(self, status: str) -> list[tuple[str, str, str]]:
+        self.list_status_calls.append(status)
+        return self.queued_jobs
 
 
 class SlowRecordingRepository(RecordingRepository):
@@ -258,6 +264,60 @@ async def test_start_repairs_startup_jobs_only_before_workers_are_started() -> N
     await queue.stop()
 
     assert repository.repair_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_start_reloads_queued_jobs_from_repository() -> None:
+    repository = WorkerRepository()
+    repository.claim_results = [True, True]
+    repository.queued_jobs = [
+        ("review-1", "PMID:40234174", "pubtator_full_bioc"),
+        ("review-1", "URL:https://example.test/paper.pdf", "curated_pdf"),
+    ]
+    preparation = RecordingPreparation()
+    queue = ReviewPreparationQueue(
+        config=_config(),
+        repository=repository,
+        preparation=preparation,
+    )
+
+    await queue.start()
+    try:
+        await asyncio.wait_for(queue._queue.join(), timeout=2)
+    finally:
+        await queue.stop()
+
+    assert repository.list_status_calls == ["queued"]
+    assert sorted(preparation.calls) == [
+        ("pmid", "review-1", "40234174"),
+        ("url", "review-1", "https://example.test/paper.pdf"),
+    ]
+    assert sorted(repository.finished) == [
+        ("review-1", "PMID:40234174", "complete", None),
+        ("review-1", "URL:https://example.test/paper.pdf", "complete", None),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_start_skips_queued_jobs_with_unknown_source_kind() -> None:
+    repository = WorkerRepository()
+    repository.queued_jobs = [("review-1", "PMID:40234174", "pubtator_abstract")]
+    preparation = RecordingPreparation()
+    queue = ReviewPreparationQueue(
+        config=_config(),
+        repository=repository,
+        preparation=preparation,
+    )
+
+    await queue.start()
+    try:
+        await asyncio.wait_for(queue._queue.join(), timeout=2)
+    finally:
+        await queue.stop()
+
+    assert repository.claims == []
+    assert preparation.calls == []
+    assert repository.finished == []
 
 
 @pytest.mark.asyncio

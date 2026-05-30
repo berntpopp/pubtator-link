@@ -45,6 +45,11 @@ class ReviewPreparationQueue:
                     name=f"review-preparation-worker-{index}",
                 )
             )
+        try:
+            await self._reload_queued_jobs()
+        except Exception:
+            await self.stop()
+            raise
 
     async def stop(self) -> None:
         """Cancel all background workers."""
@@ -57,6 +62,32 @@ class ReviewPreparationQueue:
     async def repair_startup_jobs(self) -> int:
         """Mark jobs left running by a previous process as failed."""
         return await self.repository.mark_running_jobs_failed_on_startup()
+
+    async def _reload_queued_jobs(self) -> int:
+        """Restore durable queued jobs into the in-memory worker queue."""
+        reloaded = 0
+        jobs = await self.repository.list_preparation_jobs_by_status("queued")
+        for review_id, source_id, source_kind in jobs:
+            source_value = _source_value_from_job(source_id=source_id, source_kind=source_kind)
+            if source_value is None:
+                self.logger.warning(
+                    "Queued review preparation job skipped during startup reload",
+                    extra={
+                        "review_id": review_id,
+                        "source_id": source_id,
+                        "source_kind": source_kind,
+                    },
+                )
+                continue
+
+            key = (review_id, source_id)
+            async with self._queued_lock:
+                if key in self._queued:
+                    continue
+                self._queued.add(key)
+            await self._queue.put((review_id, source_id, source_kind, source_value))
+            reloaded += 1
+        return reloaded
 
     async def enqueue_pmid(self, review_id: str, pmid: str) -> PreparationEnqueueResult:
         """Queue preparation for a PubTator PMID source."""
@@ -254,3 +285,11 @@ def _error_message(exc: Exception) -> str:
     if message:
         return message[:500]
     return type(exc).__name__[:500]
+
+
+def _source_value_from_job(*, source_id: str, source_kind: str) -> str | None:
+    if source_kind == "pubtator_full_bioc" and source_id.startswith("PMID:"):
+        return source_id.removeprefix("PMID:") or None
+    if source_kind == "curated_pdf" and source_id.startswith("URL:"):
+        return source_id.removeprefix("URL:") or None
+    return None

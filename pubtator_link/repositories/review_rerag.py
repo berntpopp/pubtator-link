@@ -175,6 +175,9 @@ class ReviewReragRepository(Protocol):
     async def mark_running_jobs_failed_on_startup(self) -> int:
         """Mark orphaned running jobs as failed and return the affected count."""
 
+    async def list_preparation_jobs_by_status(self, status: str) -> list[tuple[str, str, str]]:
+        """List durable preparation jobs as review_id, source_id, source_kind tuples."""
+
     async def preparation_status(
         self, review_id: str, *, session_id: str | None = None
     ) -> PreparationStatus:
@@ -582,6 +585,21 @@ class PostgresReviewReragRepository:
                 """
             )
         return _parse_execute_count(result)
+
+    async def list_preparation_jobs_by_status(self, status: str) -> list[tuple[str, str, str]]:
+        async with self._acquire() as connection:
+            rows = await connection.fetch(
+                """
+                select review_id, source_id, source_kind
+                from review_preparation_jobs
+                where status = $1
+                order by queued_at, job_id
+                """,
+                status,
+            )
+        return [
+            (str(row["review_id"]), str(row["source_id"]), str(row["source_kind"])) for row in rows
+        ]
 
     async def preparation_status(
         self, review_id: str, *, session_id: str | None = None

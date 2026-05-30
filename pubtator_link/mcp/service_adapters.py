@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from pubtator_link.api.client import PubTator3Client, PubTatorAPIError
-from pubtator_link.api.search_filters import merge_search_filters
+from pubtator_link.api.search_filters import merge_search_filters_lenient
 from pubtator_link.config import text_processing_config
 from pubtator_link.mcp.audit_export import compact_audit_bundle_summary
 from pubtator_link.mcp.errors import mcp_field_validation_error
@@ -490,7 +490,7 @@ async def search_literature_impl(
     include_meta: bool = True,
 ) -> dict[str, Any]:
     normalized_text = combined_search_text(text, entity_ids)
-    merged_filters = merge_search_filters(
+    merged_filters, filter_warning = merge_search_filters_lenient(
         filters=filters,
         publication_types=publication_types,
         year_min=year_min,
@@ -553,7 +553,7 @@ async def search_literature_impl(
     else:
         for field in ("cache_key", "corpus_snapshot_date", "source_versions"):
             dumped.pop(field, None)
-    return dumped
+    return dumped | ({"warnings": [filter_warning]} if filter_warning else {})
 
 
 async def _search_publications_with_filter_fallback(

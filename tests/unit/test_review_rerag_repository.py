@@ -151,6 +151,35 @@ async def test_enqueue_preparation_job_requeues_failed_job() -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_preparation_jobs_by_status_returns_durable_jobs() -> None:
+    connection = FakeConnection()
+    connection.fetched_rows = [
+        {
+            "review_id": "review-1",
+            "source_id": "PMID:40234174",
+            "source_kind": "pubtator_full_bioc",
+        },
+        {
+            "review_id": "review-2",
+            "source_id": "URL:https://example.test/paper.pdf",
+            "source_kind": "curated_pdf",
+        },
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    jobs = await repository.list_preparation_jobs_by_status("queued")
+
+    assert jobs == [
+        ("review-1", "PMID:40234174", "pubtator_full_bioc"),
+        ("review-2", "URL:https://example.test/paper.pdf", "curated_pdf"),
+    ]
+    sql, args = connection.executed[0]
+    assert "from review_preparation_jobs" in sql.lower()
+    assert "where status = $1" in sql.lower()
+    assert args == ("queued",)
+
+
+@pytest.mark.asyncio
 async def test_repository_round_trips_research_session() -> None:
     connection = FakeConnection()
     connection.fetchrow_rows = [
