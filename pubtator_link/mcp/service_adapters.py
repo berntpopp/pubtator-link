@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -25,6 +24,12 @@ from pubtator_link.mcp.quickstart import (
     wait_for_quickstart_index,
 )
 from pubtator_link.mcp.relations import shape_entity_relations
+from pubtator_link.mcp.search_fallback import (
+    apply_local_search_filters,
+    filters_have_year,
+    normalize_search_sort,
+    pubtator_filtered_search_unavailable,
+)
 from pubtator_link.mcp.session_orientation import (
     research_session_status_payload,
     research_sessions_payload,
@@ -490,6 +495,7 @@ async def search_literature_impl(
     include_meta: bool = True,
 ) -> dict[str, Any]:
     normalized_text = combined_search_text(text, entity_ids)
+    normalized_sort, sort_warning = normalize_search_sort(sort)
     merged_filters, filter_warning = merge_search_filters_lenient(
         filters=filters,
         publication_types=publication_types,
@@ -500,7 +506,7 @@ async def search_literature_impl(
         client=client,
         text=normalized_text,
         page=page,
-        sort=sort,
+        sort=normalized_sort,
         filters=merged_filters,
         sections=",".join(sections) if sections else None,
     )
@@ -519,7 +525,7 @@ async def search_literature_impl(
         raw=result,
         query=normalized_text,
         page=page,
-        sort=sort,
+        sort=normalized_sort,
         filters=merged_filters,
         sections=sections,
         response_mode=response_mode,
@@ -553,7 +559,8 @@ async def search_literature_impl(
     else:
         for field in ("cache_key", "corpus_snapshot_date", "source_versions"):
             dumped.pop(field, None)
-    return dumped | ({"warnings": [filter_warning]} if filter_warning else {})
+    warnings = [warning for warning in (filter_warning, sort_warning) if warning]
+    return dumped | ({"warnings": warnings} if warnings else {})
 
 
 async def _search_publications_with_filter_fallback(
@@ -575,17 +582,23 @@ async def _search_publications_with_filter_fallback(
         )
         return result, False
     except PubTatorAPIError as exc:
-        if filters is None or not _pubtator_filtered_search_unavailable(exc):
+        if filters is None or not pubtator_filtered_search_unavailable(exc):
             raise
 
+    # The filtered endpoint is down. Local filtering only sees one page, so when a
+    # year bound is active and the caller did not pick a sort, fetch newest-first
+    # to avoid undercounting recent literature behind relevance-ranked older hits.
+    fallback_sort = sort
+    if fallback_sort is None and filters_have_year(filters):
+        fallback_sort = "date desc"
     fallback = await client.search_publications(
         text=text,
         page=page,
-        sort=sort,
+        sort=fallback_sort,
         filters=None,
         sections=sections,
     )
-    filtered_results = _apply_local_search_filters(list(fallback.get("results", [])), filters)
+    filtered_results = apply_local_search_filters(list(fallback.get("results", [])), filters)
     return (
         {
             **fallback,
@@ -596,71 +609,6 @@ async def _search_publications_with_filter_fallback(
         },
         True,
     )
-
-
-def _pubtator_filtered_search_unavailable(exc: PubTatorAPIError) -> bool:
-    message = str(exc).lower()
-    return "currently updating the database" in message or "please try again later" in message
-
-
-def _apply_local_search_filters(
-    items: list[dict[str, Any]],
-    filters: str | None,
-) -> list[dict[str, Any]]:
-    if not filters:
-        return items
-    try:
-        parsed = json.loads(filters)
-    except json.JSONDecodeError:
-        return items
-    if not isinstance(parsed, dict):
-        return items
-    selected = items
-    year_filter = parsed.get("year")
-    if isinstance(year_filter, dict):
-        year_min = year_filter.get("min")
-        year_max = year_filter.get("max")
-        selected = [
-            item
-            for item in selected
-            if _item_matches_year_bounds(item, year_min=year_min, year_max=year_max)
-        ]
-    type_filter = parsed.get("type")
-    if isinstance(type_filter, list | tuple) and type_filter:
-        allowed = {str(value).lower() for value in type_filter}
-        selected = [
-            item
-            for item in selected
-            if allowed.intersection(
-                {str(value).lower() for value in item.get("publication_types", [])}
-            )
-        ]
-    return selected
-
-
-def _item_matches_year_bounds(
-    item: dict[str, Any],
-    *,
-    year_min: object,
-    year_max: object,
-) -> bool:
-    year = _item_publication_year(item)
-    if year is None:
-        return False
-    if isinstance(year_min, int) and year < year_min:
-        return False
-    return not (isinstance(year_max, int) and year > year_max)
-
-
-def _item_publication_year(item: dict[str, Any]) -> int | None:
-    for key in ("pub_year", "pub_date", "meta_date_publication", "date"):
-        value = item.get(key)
-        if value is None:
-            continue
-        match = re.search(r"\b(18\d{2}|19\d{2}|20\d{2})\b", str(value))
-        if match is not None:
-            return int(match.group(1))
-    return None
 
 
 def _selected_search_items(

@@ -47,7 +47,16 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         text: str | None = None,
         query: str | None = None,
         page: int = 1,
-        sort: str | None = None,
+        sort: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Sort order. Accepts 'date desc' (newest first), 'score desc' "
+                    "(relevance, default), or '_id desc'. Synonyms such as 'date' or "
+                    "'relevance' are normalized; PubTator3 sorts descending only."
+                ),
+            ),
+        ] = None,
         filters: str | None = None,
         publication_types: list[str] | None = None,
         year_min: int | None = None,
