@@ -460,7 +460,8 @@ class PubTator3Client:
         Args:
             text: Search query (free text, entity ID, or relation)
             page: Page number for pagination
-            sort: Sort order ("date desc", "date asc", "score desc", "score asc")
+            sort: Sort order. PubTator3 accepts only "score desc", "date desc",
+                or "_id desc" (descending only); other values return HTTP 400.
             filters: JSON string with advanced filters (type, journal, author, year)
             sections: Comma-separated list of sections to search within
 

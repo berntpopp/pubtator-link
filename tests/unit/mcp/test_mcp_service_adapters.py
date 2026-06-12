@@ -3405,3 +3405,146 @@ async def test_citation_graph_adapter_accepts_compact_response_mode() -> None:
     )
 
     assert result["response_mode"] == "compact"
+
+
+# --- Search sort normalization and filtered-search fallback (PubTator3 contract) ---
+
+
+def test_normalize_search_sort_accepts_canonical_and_synonyms() -> None:
+    from pubtator_link.mcp.search_fallback import normalize_search_sort
+
+    assert normalize_search_sort(None) == (None, None)
+    assert normalize_search_sort("   ") == (None, None)
+    assert normalize_search_sort("date desc")[0] == "date desc"
+    assert normalize_search_sort("score desc")[0] == "score desc"
+    assert normalize_search_sort("_id desc")[0] == "_id desc"
+    # Bare and synonym forms normalize to the canonical descending value.
+    assert normalize_search_sort("date")[0] == "date desc"
+    assert normalize_search_sort("DATE")[0] == "date desc"
+    assert normalize_search_sort("newest")[0] == "date desc"
+    assert normalize_search_sort("score")[0] == "score desc"
+    assert normalize_search_sort("relevance")[0] == "score desc"
+
+
+def test_normalize_search_sort_emits_warning_only_when_changed() -> None:
+    from pubtator_link.mcp.search_fallback import normalize_search_sort
+
+    canonical, warning = normalize_search_sort("date desc")
+    assert canonical == "date desc"
+    assert warning is None
+
+    canonical, warning = normalize_search_sort("date")
+    assert canonical == "date desc"
+    assert warning is not None and "date desc" in warning
+
+
+def test_normalize_search_sort_rejects_unknown_value() -> None:
+    from pubtator_link.mcp.input_normalization import InputNormalizationError
+    from pubtator_link.mcp.search_fallback import normalize_search_sort
+
+    with pytest.raises(InputNormalizationError) as excinfo:
+        normalize_search_sort("popularity")
+    field_errors = excinfo.value.field_errors
+    assert field_errors and field_errors[0]["field"] == "sort"
+    assert "date desc" in field_errors[0]["message"]
+
+
+def test_normalize_search_sort_rejects_unsupported_ascending() -> None:
+    from pubtator_link.mcp.input_normalization import InputNormalizationError
+    from pubtator_link.mcp.search_fallback import normalize_search_sort
+
+    # PubTator3 only sorts descending; ascending must not silently flip order.
+    with pytest.raises(InputNormalizationError):
+        normalize_search_sort("date asc")
+    with pytest.raises(InputNormalizationError):
+        normalize_search_sort("score asc")
+
+
+@pytest.mark.asyncio
+async def test_search_literature_normalizes_bare_date_sort_end_to_end() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class FakeClient:
+        seen_sort: ClassVar[object] = "UNSET"
+
+        async def search_publications(self, *, text, page, sort, filters, sections):
+            type(self).seen_sort = sort
+            return {"count": 0, "page": page, "results": []}
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="Rett syndrome MECP2",
+        sort="date",
+        metadata="none",
+        include_meta=False,
+    )
+
+    assert FakeClient.seen_sort == "date desc"
+    assert any("date desc" in warning for warning in result.get("warnings", []))
+
+
+@pytest.mark.asyncio
+async def test_filter_fallback_uses_date_desc_when_year_filter_present() -> None:
+    from pubtator_link.api.client import PubTatorAPIError
+    from pubtator_link.mcp.service_adapters import _search_publications_with_filter_fallback
+
+    class FakeClient:
+        calls: ClassVar[list[dict[str, object]]] = []
+
+        async def search_publications(self, *, text, page, sort, filters, sections):
+            type(self).calls.append({"sort": sort, "filters": filters})
+            if filters is not None:
+                raise PubTatorAPIError(
+                    "HTTP 400: We are currently updating the Database. Please try again later",
+                    status_code=400,
+                )
+            return {
+                "count": 2,
+                "page": page,
+                "results": [
+                    {"pmid": "1", "title": "Recent", "date": "2025-01-01"},
+                    {"pmid": "2", "title": "Old", "date": "2010-01-01"},
+                ],
+            }
+
+    result, fallback_used = await _search_publications_with_filter_fallback(
+        client=FakeClient(),
+        text="Rett syndrome",
+        page=1,
+        sort=None,
+        filters='{"year":{"min":2020}}',
+        sections=None,
+    )
+
+    assert fallback_used is True
+    assert FakeClient.calls[0]["filters"] == '{"year":{"min":2020}}'
+    assert FakeClient.calls[0]["sort"] is None
+    assert FakeClient.calls[1]["filters"] is None
+    assert FakeClient.calls[1]["sort"] == "date desc"
+    assert [item["pmid"] for item in result["results"]] == ["1"]
+
+
+@pytest.mark.asyncio
+async def test_filter_fallback_respects_explicit_sort() -> None:
+    from pubtator_link.api.client import PubTatorAPIError
+    from pubtator_link.mcp.service_adapters import _search_publications_with_filter_fallback
+
+    class FakeClient:
+        calls: ClassVar[list[dict[str, object]]] = []
+
+        async def search_publications(self, *, text, page, sort, filters, sections):
+            type(self).calls.append({"sort": sort, "filters": filters})
+            if filters is not None:
+                raise PubTatorAPIError("HTTP 400: Please try again later", status_code=400)
+            return {"count": 0, "page": page, "results": []}
+
+    await _search_publications_with_filter_fallback(
+        client=FakeClient(),
+        text="x",
+        page=1,
+        sort="score desc",
+        filters='{"year":{"min":2020}}',
+        sections=None,
+    )
+
+    assert FakeClient.calls[1]["sort"] == "score desc"
