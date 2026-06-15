@@ -51,7 +51,7 @@ dependencies = [
 embeddings = [
     "sentence-transformers>=5.5.1,<6.0.0",
     "torch>=2.5.0",
-    "numpy>=2.0.0,<3.0.0",
+    "numpy>=2.4.6,<3.0.0",
 ]
 
 [dependency-groups]
