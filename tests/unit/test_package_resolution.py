@@ -20,6 +20,6 @@ def test_modern_mcp_dependencies_are_declared() -> None:
     metadata = _project_metadata()
     dependencies = "\n".join(metadata["dependencies"])
 
-    assert "mcp[cli]>=1.27.1,<2.0.0" in dependencies
+    assert "mcp[cli]>=1.27.2,<2.0.0" in dependencies
     assert "fastmcp>=3.2.0,<4.0.0" in dependencies
     assert "fastapi>=0.115.0,<1.0.0" in dependencies
