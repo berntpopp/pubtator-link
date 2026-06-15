@@ -499,13 +499,13 @@ Recommended initial enum:
 The best PubMed MCPs make several adjacent tools feel table-stakes. PubTator-Link
 should add them only where they feed the review workflow:
 
-- `pubtator_convert_article_ids`: PMID, PMCID, DOI mapping.
-- `pubtator_lookup_mesh`: true MeSH vocabulary lookup.
-- `pubtator_lookup_citation`: ECitMatch-style citation to PMID resolver.
-- `pubtator_find_related_articles`: `similar`, `cited_by`, `references`.
+- `convert_article_ids`: PMID, PMCID, DOI mapping.
+- `get_mesh`: true MeSH vocabulary lookup.
+- `get_citation`: ECitMatch-style citation to PMID resolver.
+- `find_related_articles`: `similar`, `cited_by`, `references`.
 
 Design rule: every result should include PMIDs ready to pass into
-`pubtator_index_review_evidence`.
+`index_review_evidence`.
 
 ### 4. Keep Typed Flat Tools, But Reduce Surface Confusion
 

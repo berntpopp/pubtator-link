@@ -57,7 +57,7 @@ async def test_stage_research_session_route_calls_service_and_serializes_meta() 
     )
     service.stage.return_value = StageResearchSessionResponse(
         manifest=manifest,
-        _meta={"next_commands": ["pubtator_get_research_session_status"]},
+        _meta={"next_commands": ["get_research_session_status"]},
     )
     app.dependency_overrides[get_research_session_service] = lambda: service
 
@@ -71,7 +71,7 @@ async def test_stage_research_session_route_calls_service_and_serializes_meta() 
     data = response.json()
     assert data["manifest"]["session_id"] == "session-1"
     assert data["manifest"]["preparation_status"]["queued"] == 1
-    assert data["_meta"]["next_commands"] == ["pubtator_get_research_session_status"]
+    assert data["_meta"]["next_commands"] == ["get_research_session_status"]
     service.stage.assert_awaited_once()
     call_kwargs = service.stage.await_args.kwargs
     assert call_kwargs["review_id"] == "review-1"

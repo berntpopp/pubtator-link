@@ -24,7 +24,7 @@ def register_evidence_certainty_tools(mcp: FastMCP, profile: MCPToolProfile) -> 
 
     @mcp_tool_for(
         "full",
-        name="pubtator_add_evidence_certainty",
+        name="add_evidence_certainty",
         title="Add Evidence Certainty",
         output_schema=EvidenceCertaintyResponse.model_json_schema(),
         annotations=NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
@@ -67,12 +67,12 @@ def register_evidence_certainty_tools(mcp: FastMCP, profile: MCPToolProfile) -> 
                 validate_passages=validate_passages,
             )
 
-        return await run_mcp_tool("pubtator_add_evidence_certainty", call)
+        return await run_mcp_tool("add_evidence_certainty", call)
 
     @mcp_tool_for(
         "full",
         "readonly",
-        name="pubtator_list_evidence_certainty",
+        name="list_evidence_certainty",
         title="List Evidence Certainty",
         output_schema=ListEvidenceCertaintyResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -86,12 +86,12 @@ def register_evidence_certainty_tools(mcp: FastMCP, profile: MCPToolProfile) -> 
                 service=service, review_id=review_id
             )
 
-        return await run_mcp_tool("pubtator_list_evidence_certainty", call)
+        return await run_mcp_tool("list_evidence_certainty", call)
 
     @mcp_tool_for(
         "full",
         "readonly",
-        name="pubtator_get_evidence_certainty",
+        name="get_evidence_certainty",
         title="Get Evidence Certainty",
         output_schema=EvidenceCertaintyResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -107,4 +107,4 @@ def register_evidence_certainty_tools(mcp: FastMCP, profile: MCPToolProfile) -> 
                 certainty_id=certainty_id,
             )
 
-        return await run_mcp_tool("pubtator_get_evidence_certainty", call)
+        return await run_mcp_tool("get_evidence_certainty", call)

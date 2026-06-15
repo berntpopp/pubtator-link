@@ -23,7 +23,7 @@ The reliability/ergonomics follow-up is also complete in source:
 - Search and entity discovery return better guideline ranking reasons and bounded synonyms.
 - MCP capabilities now expose tool categories and a diagnostics-first recovery workflow.
 - Search coverage preflight failures expose `preflight_error.retryable`; `coverage_preflight_internal_error` is non-retryable, so models should continue with returned PMIDs or narrow preflight instead of retrying the same broad search.
-- `pubtator_review_quickstart(topic, n_pmids=8)` is the low-coordination entry point for casual sessions: it searches, stages/indexes, inspects coverage, and returns `review_id`/`session_id` for batch retrieval.
+- `review_quickstart(topic, n_pmids=8)` is the low-coordination entry point for casual sessions: it searches, stages/indexes, inspects coverage, and returns `review_id`/`session_id` for batch retrieval.
 
 Latest verification:
 
@@ -452,7 +452,7 @@ These should be **promoted into `tests/integration/test_concurrency.py`** as pro
 
 ## 6. What this looks like to an LLM agent
 
-Today, when Claude does `pubtator_search_literature(...) ∥ pubtator_search_biomedical_entities(...) ∥ pubtator_preflight_review_sources(...) ∥ pubtator_lookup_mesh(...)` in one turn (4 tool calls):
+Today, when Claude does `search_literature(...) ∥ search_biomedical_entities(...) ∥ preflight_review_sources(...) ∥ get_mesh(...)` in one turn (4 tool calls):
 
 - 4 `PubTator3Client` instances created (4× httpx clients, 4× DNS lookups, 4× rate limiters).
 - All 4 acquire upstream tokens immediately (each fresh limiter has burst=1).

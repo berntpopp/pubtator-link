@@ -139,9 +139,9 @@ def test_literature_graph_mcp_schemas_default_to_compact() -> None:
 
     tools = create_pubtator_mcp(profile="full")._tool_manager._tools
     for name in (
-        "pubtator_get_publication_citation_graph",
-        "pubtator_find_related_evidence_candidates",
-        "pubtator_build_topic_literature_map",
+        "get_publication_citation_graph",
+        "find_related_evidence_candidates",
+        "build_topic_literature_map",
     ):
         response_mode = tools[name].parameters["properties"]["response_mode"]
         assert response_mode["default"] == "compact"
@@ -201,7 +201,7 @@ Update each graph tool docstring so the catalog tests have matching runtime-faci
 ```python
 """Use this when a user needs reference or cited-by neighbors for one publication.
 response_mode='compact' is the MCP default for LLM candidate selection; full can be
-large and is for explicit debug graph inspection. Next: pubtator_get_publication_passages."""
+large and is for explicit debug graph inspection. Next: get_publication_passages."""
 ```
 
 Use the same wording pattern for `build_topic_literature_map` and `find_related_evidence_candidates`, preserving each tool's existing purpose sentence and existing `Next:` guidance.
@@ -255,12 +255,12 @@ def test_graph_request_signature_metadata_is_deterministic_for_request() -> None
     request = PublicationCitationGraphRequest(pmid="123", response_mode="compact")
 
     first = graph_request_metadata(
-        tool_name="pubtator_get_publication_citation_graph",
+        tool_name="get_publication_citation_graph",
         request=request,
         source_versions={"pubmed": "live"},
     )
     second = graph_request_metadata(
-        tool_name="pubtator_get_publication_citation_graph",
+        tool_name="get_publication_citation_graph",
         request=request,
         source_versions={"pubmed": "live"},
     )
@@ -284,12 +284,12 @@ def test_graph_detail_next_commands_preserve_request_args() -> None:
     request = PublicationCitationGraphRequest(pmid="123", response_mode="compact")
 
     commands = graph_detail_next_commands(
-        tool_name="pubtator_get_publication_citation_graph",
+        tool_name="get_publication_citation_graph",
         request=request,
         modes=("full", "nodes_edges"),
     )
 
-    assert commands[0]["tool"] == "pubtator_get_publication_citation_graph"
+    assert commands[0]["tool"] == "get_publication_citation_graph"
     assert commands[0]["arguments"]["pmid"] == "123"
     assert commands[0]["arguments"]["response_mode"] == "full"
     assert commands[1]["arguments"]["response_mode"] == "nodes_edges"
@@ -557,7 +557,7 @@ Before building `PublicationCitationGraphResponse`, create metadata:
 
 ```python
 meta = graph_request_metadata(
-    tool_name="pubtator_get_publication_citation_graph",
+    tool_name="get_publication_citation_graph",
     request=request,
     source_versions=_citation_source_versions(request, self),
 ).model_copy(
@@ -566,7 +566,7 @@ meta = graph_request_metadata(
         "next_commands": [
             *_next_commands(candidate_pmids),
             *graph_detail_next_commands(
-                tool_name="pubtator_get_publication_citation_graph",
+                tool_name="get_publication_citation_graph",
                 request=request,
                 modes=("full", "nodes_edges"),
             ),
@@ -972,7 +972,7 @@ Build response `_meta` from `graph_request_metadata()`:
 
 ```python
 meta = graph_request_metadata(
-    tool_name="pubtator_build_topic_literature_map",
+    tool_name="build_topic_literature_map",
     request=request,
     source_versions={
         "pubtator_search": "live",
@@ -989,7 +989,7 @@ meta = graph_request_metadata(
         "next_commands": [
             *hints,
             *graph_detail_next_commands(
-                tool_name="pubtator_build_topic_literature_map",
+                tool_name="build_topic_literature_map",
                 request=request,
                 modes=("full", "nodes_edges"),
             ),
@@ -1102,7 +1102,7 @@ Build `_meta` with cache fields:
 
 ```python
 meta = graph_request_metadata(
-    tool_name="pubtator_find_related_evidence_candidates",
+    tool_name="find_related_evidence_candidates",
     request=request,
     source_versions={
         "pubmed": "live",
@@ -1115,7 +1115,7 @@ meta = graph_request_metadata(
         "next_commands": [
             *_next_commands(ordered_pmids),
             *graph_detail_next_commands(
-                tool_name="pubtator_find_related_evidence_candidates",
+                tool_name="find_related_evidence_candidates",
                 request=request,
                 modes=("full",),
             ),
@@ -1736,7 +1736,7 @@ async def test_inspect_review_index_adapter_wires_limit_cursor_and_next_command(
     assert service.request.limit == 1
     assert service.request.cursor == "cursor-1"
     assert result["next_cursor"] == "cursor-2"
-    assert result["_meta"]["next_commands"][0]["tool"] == "pubtator_inspect_review_index"
+    assert result["_meta"]["next_commands"][0]["tool"] == "inspect_review_index"
     assert result["_meta"]["next_commands"][0]["arguments"]["cursor"] == "cursor-2"
 ```
 
@@ -1747,7 +1747,7 @@ Add to `tests/unit/mcp/test_review_rerag_mcp.py`:
 ```python
 def test_inspect_review_index_schema_exposes_pagination_args() -> None:
     mcp = create_pubtator_mcp()
-    schema = mcp._tool_manager._tools["pubtator_inspect_review_index"].parameters
+    schema = mcp._tool_manager._tools["inspect_review_index"].parameters
 
     assert schema["properties"]["limit"]["default"] == 50
     assert "cursor" in schema["properties"]
@@ -1821,7 +1821,7 @@ result = response.model_dump()
 if response.next_cursor:
     result.setdefault("_meta", {})["next_commands"] = [
         {
-            "tool": "pubtator_inspect_review_index",
+            "tool": "inspect_review_index",
             "arguments": {
                 "review_id": review_id,
                 "session_id": session_id,
@@ -2193,7 +2193,7 @@ In `tests/unit/mcp/test_review_rerag_mcp.py`, add:
 ```python
 def test_retrieve_batch_schema_exposes_verbosity_and_auto_response_budget() -> None:
     mcp = create_pubtator_mcp()
-    schema = mcp._tool_manager._tools["pubtator_retrieve_review_context_batch"].parameters
+    schema = mcp._tool_manager._tools["get_review_context_batch"].parameters
 
     assert schema["properties"]["verbosity"]["default"] == "standard"
     assert set(schema["properties"]["verbosity"]["enum"]) == {"lean", "standard", "full"}
@@ -2204,7 +2204,7 @@ In `tests/unit/mcp/test_mcp_facade.py`, add:
 
 ```python
 def test_ground_question_schema_exposes_verbosity_and_auto_budget() -> None:
-    tool = create_pubtator_mcp()._tool_manager._tools["pubtator_ground_question"]
+    tool = create_pubtator_mcp()._tool_manager._tools["ground_question"]
     properties = tool.parameters["properties"]
 
     assert properties["verbosity"]["default"] == "lean"

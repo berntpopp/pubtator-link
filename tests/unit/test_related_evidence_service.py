@@ -662,7 +662,7 @@ async def test_related_evidence_citation_stage_timeout_returns_degraded_candidat
     assert statuses[("citation_graph", "candidate_neighbors")].retryable is True
     assert "timed out" in statuses[("citation_graph", "candidate_neighbors")].message
     assert any(
-        command["tool"] == "pubtator_find_related_evidence_candidates"
+        command["tool"] == "find_related_evidence_candidates"
         and command["arguments"]["include_citation_neighbors"] is False
         for command in response.meta.next_commands
     )

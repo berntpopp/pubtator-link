@@ -253,7 +253,7 @@ class UnifiedServerManager:
         app = FastAPI(
             title="PubTator-Link",
             description="A unified server for the PubTator3 biomedical literature API",
-            version="1.0.0",
+            version="2.0.0",
             lifespan=combined_lifespan,
             docs_url="/docs" if settings.enable_docs else None,
             redoc_url="/redoc" if settings.enable_docs else None,
@@ -290,7 +290,7 @@ class UnifiedServerManager:
             """Root endpoint."""
             return {
                 "name": "PubTator-Link",
-                "version": "1.0.0",
+                "version": "2.0.0",
                 "description": "A unified server for the PubTator3 biomedical literature API",
                 "transport": settings.transport,
             }
@@ -300,7 +300,7 @@ class UnifiedServerManager:
             """Health check endpoint."""
             return {
                 "status": "healthy",
-                "version": "1.0.0",
+                "version": "2.0.0",
                 "transport": settings.transport,
             }
 
@@ -347,7 +347,7 @@ class UnifiedServerManager:
                 )
             return {
                 "status": status,
-                "version": "1.0.0",
+                "version": "2.0.0",
                 "transport": settings.transport,
                 "dependencies": {"database": database_dependency},
             }

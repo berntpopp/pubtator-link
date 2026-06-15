@@ -388,7 +388,7 @@ class DiscoveryService:
         descriptors = await self.client.lookup_mesh(query, limit, exact)
         next_commands: list[dict[str, object]] = [
             {
-                "tool": "pubtator_search_literature",
+                "tool": "search_literature",
                 "arguments": {
                     "text": descriptor.search_terms[0]
                     if descriptor.search_terms
@@ -435,7 +435,7 @@ class DiscoveryService:
         if nbk_ids:
             meta.next_commands = [
                 {
-                    "tool": "pubtator_lookup_citation",
+                    "tool": "get_citation",
                     "arguments": {"citations": [_nbk_lookup_hint(nbk_id) for nbk_id in nbk_ids]},
                 },
                 *meta.next_commands,
@@ -637,11 +637,11 @@ def _candidate_meta(candidate_pmids: list[str]) -> DiscoveryMeta:
     if candidate_pmids:
         next_commands = [
             {
-                "tool": "pubtator_stage_research_session",
+                "tool": "stage_research_session",
                 "arguments": {"pmids": candidate_pmids},
             },
             {
-                "tool": "pubtator_index_review_evidence",
+                "tool": "index_review_evidence",
                 "arguments": {"pmids": candidate_pmids},
             },
         ]

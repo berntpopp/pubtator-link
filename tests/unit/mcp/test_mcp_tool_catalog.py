@@ -56,13 +56,13 @@ def test_rendered_catalog_shows_profile_specific_next_tools() -> None:
     rendered = render_tool_catalog_markdown()
 
     assert (
-        "- Next tools by profile: lean: `pubtator_index_review_evidence`; "
-        "full: `pubtator_index_review_evidence`; readonly: None"
+        "- Next tools by profile: lean: `index_review_evidence`; "
+        "full: `index_review_evidence`; readonly: None"
     ) in rendered
     assert (
-        "- Next tools by profile: lean: `pubtator_record_review_context`, "
-        "`pubtator_get_review_audit_trail`; full: `pubtator_record_review_context`, "
-        "`pubtator_get_review_audit_trail`; readonly: `pubtator_get_review_audit_trail`"
+        "- Next tools by profile: lean: `record_review_context`, "
+        "`get_review_audit_trail`; full: `record_review_context`, "
+        "`get_review_audit_trail`; readonly: `get_review_audit_trail`"
     ) in rendered
 
 
@@ -72,9 +72,9 @@ def test_literature_graph_tools_expose_response_mode_and_size_guidance() -> None
 
     catalog = build_tool_catalog(create_pubtator_mcp(profile="full"), profile="full")
     for name in (
-        "pubtator_get_publication_citation_graph",
-        "pubtator_find_related_evidence_candidates",
-        "pubtator_build_topic_literature_map",
+        "get_publication_citation_graph",
+        "find_related_evidence_candidates",
+        "build_topic_literature_map",
     ):
         tool = catalog[name]
         assert "response_mode" in tool.input_schema["properties"]
@@ -88,7 +88,7 @@ def test_workflow_help_task_schema_accepts_free_form_aliases() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
     catalog = build_tool_catalog(create_pubtator_mcp(profile="full"), profile="full")
-    task_schema = catalog["pubtator_workflow_help"].input_schema["properties"]["task"]
+    task_schema = catalog["workflow_help"].input_schema["properties"]["task"]
 
     assert task_schema["type"] == "string"
     assert "enum" not in task_schema

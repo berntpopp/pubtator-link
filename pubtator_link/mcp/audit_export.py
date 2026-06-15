@@ -32,6 +32,6 @@ def compact_audit_bundle_summary(bundle_json: dict[str, Any]) -> dict[str, Any]:
             "passage_ids",
             "stable_citation_keys",
         ],
-        "next_tools": ["pubtator_export_review_audit_bundle"],
+        "next_tools": ["export_review_audit_bundle"],
         "recovery": ["Pass export_path to write the full audit bundle without inline token cost."],
     }

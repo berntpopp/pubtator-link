@@ -50,24 +50,24 @@ class ToolCatalogSupplement:
 
 
 TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
-    "pubtator_add_evidence_certainty": ToolCatalogSupplement(
+    "add_evidence_certainty": ToolCatalogSupplement(
         category="review",
         profiles=("full",),
         stability="advanced",
         do_not_use_for=("automated certainty grading", "clinical decision support"),
         example='{"review_id":"demo","outcome":"overall survival","overall_certainty":"low"}',
-        next_tools=("pubtator_list_evidence_certainty",),
+        next_tools=("list_evidence_certainty",),
         resource_links=("pubtator://reviews/{review_id}/audit",),
     ),
-    "pubtator_convert_article_ids": ToolCatalogSupplement(
+    "convert_article_ids": ToolCatalogSupplement(
         category="discovery",
         profiles=("full", "readonly"),
         stability="advanced",
         do_not_use_for=("article text retrieval",),
         example='{"ids":["PMC123456","10.1000/example"],"source":"auto"}',
-        next_tools=("pubtator_get_publication_metadata",),
+        next_tools=("get_publication_metadata",),
     ),
-    "pubtator_build_topic_literature_map": ToolCatalogSupplement(
+    "build_topic_literature_map": ToolCatalogSupplement(
         category="publication",
         profiles=("full",),
         stability="advanced",
@@ -79,68 +79,68 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         do_not_use_for=("claim-level evidence support", "substitute evidence selection"),
         example='{"query":"familial Mediterranean fever colchicine","max_seed_papers":10}',
         next_tools=(
-            "pubtator_get_publication_passages",
-            "pubtator_index_review_evidence",
+            "get_publication_passages",
+            "index_review_evidence",
         ),
     ),
-    "pubtator_diagnostics": ToolCatalogSupplement(
+    "diagnostics": ToolCatalogSupplement(
         category="diagnostics",
         profiles=("lean", "full", "readonly"),
         stability="lean",
         do_not_use_for=("biomedical literature search",),
         example="{}",
-        next_tools=("pubtator_get_server_capabilities",),
+        next_tools=("get_server_capabilities",),
     ),
-    "pubtator_estimate_publication_context": ToolCatalogSupplement(
+    "estimate_publication_context": ToolCatalogSupplement(
         category="publication",
         profiles=("full", "readonly"),
         stability="advanced",
         do_not_use_for=("returning passage text",),
         example='{"pmids":["12345"],"max_passages_per_pmid":6}',
-        next_tools=("pubtator_get_publication_passages",),
+        next_tools=("get_publication_passages",),
     ),
-    "pubtator_export_review_audit_bundle": ToolCatalogSupplement(
+    "export_review_audit_bundle": ToolCatalogSupplement(
         category="audit",
         profiles=("full",),
         stability="compat",
         do_not_use_for=("routine context retrieval",),
         example='{"review_id":"demo","fallback_inline":true}',
-        next_tools=("pubtator_get_review_audit_trail",),
+        next_tools=("get_review_audit_trail",),
         resource_links=("pubtator://reviews/{review_id}/audit",),
     ),
-    "pubtator_fetch_pmc_annotations": ToolCatalogSupplement(
+    "get_pmc_annotations": ToolCatalogSupplement(
         category="annotation",
         profiles=("full",),
         stability="advanced",
         do_not_use_for=("compact grounded answers",),
         example='{"pmcids":["PMC123456"],"format":"biocjson"}',
-        next_tools=("pubtator_get_publication_passages",),
+        next_tools=("get_publication_passages",),
     ),
-    "pubtator_fetch_publication_annotations": ToolCatalogSupplement(
+    "get_publication_annotations": ToolCatalogSupplement(
         category="annotation",
         profiles=("full",),
         stability="advanced",
         do_not_use_for=("compact grounded answers",),
         example='{"pmids":["12345"],"format":"biocjson","full":false}',
-        next_tools=("pubtator_get_publication_passages",),
+        next_tools=("get_publication_passages",),
     ),
-    "pubtator_find_entity_relations": ToolCatalogSupplement(
+    "find_entity_relations": ToolCatalogSupplement(
         category="discovery",
         profiles=("full", "readonly"),
         stability="advanced",
         do_not_use_for=("canonical entity lookup",),
         example='{"entity_id":"@CHEMICAL_remdesivir"}',
-        next_tools=("pubtator_search_literature",),
+        next_tools=("search_literature",),
     ),
-    "pubtator_find_related_articles": ToolCatalogSupplement(
+    "find_related_articles": ToolCatalogSupplement(
         category="discovery",
         profiles=("full", "readonly"),
         stability="advanced",
         do_not_use_for=("initial topic search without seed PMIDs",),
         example='{"pmids":["12345"],"mode":"similar","limit":20}',
-        next_tools=("pubtator_preflight_review_sources",),
+        next_tools=("preflight_review_sources",),
     ),
-    "pubtator_find_related_evidence_candidates": ToolCatalogSupplement(
+    "find_related_evidence_candidates": ToolCatalogSupplement(
         category="publication",
         profiles=("lean", "full", "readonly"),
         stability="lean",
@@ -151,34 +151,34 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         ),
         do_not_use_for=("claim-level evidence support", "substitute evidence selection"),
         example='{"pmid":"40562663","max_results":25,"prefer_full_text":true}',
-        next_tools=("pubtator_get_publication_passages",),
+        next_tools=("get_publication_passages",),
     ),
-    "pubtator_get_evidence_certainty": ToolCatalogSupplement(
+    "get_evidence_certainty": ToolCatalogSupplement(
         category="review",
         profiles=("full", "readonly"),
         stability="advanced",
         do_not_use_for=("listing all judgments",),
         example='{"review_id":"demo","certainty_id":"certainty-1"}',
-        next_tools=("pubtator_list_evidence_certainty",),
+        next_tools=("list_evidence_certainty",),
     ),
-    "pubtator_get_neighboring_review_passages": ToolCatalogSupplement(
+    "get_neighboring_review_passages": ToolCatalogSupplement(
         category="retrieval",
         profiles=("full", "readonly"),
         stability="compat",
         do_not_use_for=("new semantic retrieval",),
         example='{"review_id":"demo","passage_id":"p1","before":1,"after":1}',
-        next_tools=("pubtator_retrieve_review_context_batch",),
+        next_tools=("get_review_context_batch",),
         resource_links=("pubtator://reviews/{review_id}/passages/{passage_id}",),
     ),
-    "pubtator_get_publication_metadata": ToolCatalogSupplement(
+    "get_publication_metadata": ToolCatalogSupplement(
         category="publication",
         profiles=("lean", "full", "readonly"),
         stability="lean",
         do_not_use_for=("article passage text",),
         example='{"pmids":["12345"],"include_citations":"nlm"}',
-        next_tools=("pubtator_get_publication_passages",),
+        next_tools=("get_publication_passages",),
     ),
-    "pubtator_get_publication_citation_graph": ToolCatalogSupplement(
+    "get_publication_citation_graph": ToolCatalogSupplement(
         category="publication",
         profiles=("lean", "full", "readonly"),
         stability="lean",
@@ -190,28 +190,28 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         do_not_use_for=("claim-level evidence support", "publisher full-text retrieval"),
         example='{"pmid":"40562663","direction":"both","max_results":50}',
         next_tools=(
-            "pubtator_find_related_evidence_candidates",
-            "pubtator_get_publication_passages",
+            "find_related_evidence_candidates",
+            "get_publication_passages",
         ),
     ),
-    "pubtator_get_publication_passages": ToolCatalogSupplement(
+    "get_publication_passages": ToolCatalogSupplement(
         category="publication",
         profiles=("lean", "full", "readonly"),
         stability="lean",
         do_not_use_for=("prepared review RAG retrieval",),
         example='{"pmids":["12345"],"max_passages_per_pmid":6,"verbosity":"standard"}',
-        next_tools=("pubtator_preflight_review_sources",),
+        next_tools=("preflight_review_sources",),
     ),
-    "pubtator_get_research_session_status": ToolCatalogSupplement(
+    "get_research_session_status": ToolCatalogSupplement(
         category="review",
         profiles=("full", "readonly"),
         stability="advanced",
         do_not_use_for=("creating or modifying sessions",),
         example='{"review_id":"demo","session_id":"session-1"}',
-        next_tools=("pubtator_index_review_evidence",),
+        next_tools=("index_review_evidence",),
         resource_links=("pubtator://reviews/{review_id}/sessions/{session_id}",),
     ),
-    "pubtator_get_review_audit_trail": ToolCatalogSupplement(
+    "get_review_audit_trail": ToolCatalogSupplement(
         category="audit",
         profiles=("lean", "full", "readonly"),
         stability="lean",
@@ -219,34 +219,34 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         example='{"review_id":"demo","passage_ids":["p1"],"max_chars_per_passage":500}',
         resource_links=("pubtator://reviews/{review_id}/audit/{passage_id}",),
     ),
-    "pubtator_get_review_index_summary": ToolCatalogSupplement(
+    "get_review_index_summary": ToolCatalogSupplement(
         category="review",
         profiles=("full", "readonly"),
         stability="admin",
         do_not_use_for=("loading passage samples",),
         example='{"review_id":"demo"}',
-        next_tools=("pubtator_inspect_review_index",),
+        next_tools=("inspect_review_index",),
         resource_links=("pubtator://reviews/{review_id}",),
     ),
-    "pubtator_get_review_passages_by_id": ToolCatalogSupplement(
+    "get_review_passages_by_id": ToolCatalogSupplement(
         category="retrieval",
         profiles=("full", "readonly"),
         stability="compat",
         do_not_use_for=("searching unknown relevant passages",),
         example='{"review_id":"demo","passage_ids":["p1"]}',
-        next_tools=("pubtator_get_review_audit_trail",),
+        next_tools=("get_review_audit_trail",),
         resource_links=("pubtator://reviews/{review_id}/passages/{passage_id}",),
     ),
-    "pubtator_get_server_capabilities": ToolCatalogSupplement(
+    "get_server_capabilities": ToolCatalogSupplement(
         category="metadata",
         profiles=("lean", "full", "readonly"),
         stability="lean",
         do_not_use_for=("task-specific workflow steps",),
         example='{"details":["tools","workflow_help"]}',
-        next_tools=("pubtator_workflow_help",),
+        next_tools=("workflow_help",),
         resource_links=("pubtator://capabilities",),
     ),
-    "pubtator_ground_question": ToolCatalogSupplement(
+    "ground_question": ToolCatalogSupplement(
         category="review",
         profiles=("lean", "full"),
         stability="lean",
@@ -257,184 +257,184 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         ),
         do_not_use_for=("clinical decision support", "uncited answer generation"),
         example='{"question":"Does colchicine prevent FMF flares?","max_pmids":8}',
-        next_tools=("pubtator_record_review_context", "pubtator_get_review_audit_trail"),
+        next_tools=("record_review_context", "get_review_audit_trail"),
         resource_links=("pubtator://workflow-help",),
     ),
-    "pubtator_get_text_annotation_results": ToolCatalogSupplement(
+    "get_text_annotation_results": ToolCatalogSupplement(
         category="annotation",
         profiles=("full", "readonly"),
         stability="advanced",
         do_not_use_for=("submitting new text",),
         example='{"session_id":"session-12345678"}',
-        next_tools=("pubtator_search_biomedical_entities",),
+        next_tools=("search_biomedical_entities",),
     ),
-    "pubtator_index_review_evidence": ToolCatalogSupplement(
+    "index_review_evidence": ToolCatalogSupplement(
         category="review",
         profiles=("lean", "full"),
         stability="lean",
         do_not_use_for=("ad hoc passage retrieval without a review_id",),
         example='{"review_id":"demo","pmids":["12345"],"wait_until_ready":true}',
-        next_tools=("pubtator_inspect_review_index", "pubtator_retrieve_review_context_batch"),
+        next_tools=("inspect_review_index", "get_review_context_batch"),
         resource_links=("pubtator://reviews/{review_id}",),
     ),
-    "pubtator_inspect_review_index": ToolCatalogSupplement(
+    "inspect_review_index": ToolCatalogSupplement(
         category="review",
         profiles=("lean", "full", "readonly"),
         stability="lean",
         do_not_use_for=("retrieving final answer context",),
         example='{"review_id":"demo","include_passage_samples":true}',
-        next_tools=("pubtator_retrieve_review_context_batch",),
+        next_tools=("get_review_context_batch",),
         resource_links=("pubtator://reviews/{review_id}",),
     ),
-    "pubtator_list_evidence_certainty": ToolCatalogSupplement(
+    "list_evidence_certainty": ToolCatalogSupplement(
         category="review",
         profiles=("full", "readonly"),
         stability="advanced",
         do_not_use_for=("creating certainty judgments",),
         example='{"review_id":"demo"}',
-        next_tools=("pubtator_get_evidence_certainty",),
+        next_tools=("get_evidence_certainty",),
     ),
-    "pubtator_list_research_sessions": ToolCatalogSupplement(
+    "list_research_sessions": ToolCatalogSupplement(
         category="review",
         profiles=("full", "readonly"),
         stability="advanced",
         do_not_use_for=("inspecting a specific session in detail",),
         example='{"review_id":"demo"}',
-        next_tools=("pubtator_get_research_session_status",),
+        next_tools=("get_research_session_status",),
         resource_links=("pubtator://reviews/{review_id}/sessions",),
     ),
-    "pubtator_list_review_indexes": ToolCatalogSupplement(
+    "list_review_indexes": ToolCatalogSupplement(
         category="review",
         profiles=("full", "readonly"),
         stability="admin",
         do_not_use_for=("retrieving review passages",),
         example='{"limit":20,"offset":0}',
-        next_tools=("pubtator_get_review_index_summary",),
+        next_tools=("get_review_index_summary",),
     ),
-    "pubtator_lookup_citation": ToolCatalogSupplement(
+    "get_citation": ToolCatalogSupplement(
         category="discovery",
         profiles=("full", "readonly"),
         stability="advanced",
         do_not_use_for=("citation formatting",),
         example='{"citations":["Smith J. Example disease study. 2024."]}',
-        next_tools=("pubtator_get_publication_metadata",),
+        next_tools=("get_publication_metadata",),
     ),
-    "pubtator_lookup_mesh": ToolCatalogSupplement(
+    "get_mesh": ToolCatalogSupplement(
         category="discovery",
         profiles=("full", "readonly"),
         stability="advanced",
         do_not_use_for=("article retrieval",),
         example='{"query":"breast cancer","limit":10}',
-        next_tools=("pubtator_search_literature",),
+        next_tools=("search_literature",),
     ),
-    "pubtator_lookup_variant_evidence": ToolCatalogSupplement(
+    "get_variant_evidence": ToolCatalogSupplement(
         category="literature",
         profiles=("lean", "full", "readonly"),
         stability="lean",
         do_not_use_for=("clinical classification",),
         example='{"gene":"BRCA1","variant":"c.68_69delAG"}',
-        next_tools=("pubtator_search_literature",),
+        next_tools=("search_literature",),
     ),
-    "pubtator_preflight_review_sources": ToolCatalogSupplement(
+    "preflight_review_sources": ToolCatalogSupplement(
         category="review",
         profiles=("lean", "full", "readonly"),
         stability="lean",
         do_not_use_for=("indexing or retrieving passages",),
         example='{"pmids":["12345","67890"]}',
-        next_tools=("pubtator_index_review_evidence",),
+        next_tools=("index_review_evidence",),
     ),
-    "pubtator_record_review_context": ToolCatalogSupplement(
+    "record_review_context": ToolCatalogSupplement(
         category="audit",
         profiles=("lean", "full"),
         stability="lean",
         do_not_use_for=("retrieving passages",),
         example='{"review_id":"demo","event_type":"passage_selected","passage_ids":["p1"],"selected_passage_ids":["p1"],"summary":"used in answer"}',
-        next_tools=("pubtator_get_review_audit_trail",),
+        next_tools=("get_review_audit_trail",),
         resource_links=("pubtator://reviews/{review_id}/llm-context/latest",),
     ),
-    "pubtator_retrieve_review_context": ToolCatalogSupplement(
+    "get_review_context": ToolCatalogSupplement(
         category="retrieval",
         profiles=("full", "readonly"),
         stability="compat",
         do_not_use_for=("multiple query variants in one call",),
         example='{"review_id":"demo","question":"EGFR resistance","max_passages":8}',
-        next_tools=("pubtator_get_review_audit_trail",),
+        next_tools=("get_review_audit_trail",),
     ),
-    "pubtator_retrieve_review_context_batch": ToolCatalogSupplement(
+    "get_review_context_batch": ToolCatalogSupplement(
         category="retrieval",
         profiles=("lean", "full", "readonly"),
         stability="lean",
         do_not_use_for=("unindexed PubMed-only article fetching",),
         example='{"review_id":"demo","queries":["EGFR resistance","osimertinib resistance"]}',
-        next_tools=("pubtator_record_review_context", "pubtator_get_review_audit_trail"),
+        next_tools=("record_review_context", "get_review_audit_trail"),
         resource_links=("pubtator://reviews/{review_id}/llm-context",),
     ),
-    "pubtator_review_quickstart": ToolCatalogSupplement(
+    "review_quickstart": ToolCatalogSupplement(
         category="review",
         profiles=("full",),
         stability="advanced",
         do_not_use_for=("readonly deployments",),
         example='{"topic":"EGFR resistance in lung cancer","n_pmids":8}',
-        next_tools=("pubtator_retrieve_review_context_batch",),
+        next_tools=("get_review_context_batch",),
     ),
-    "pubtator_search_biomedical_entities": ToolCatalogSupplement(
+    "search_biomedical_entities": ToolCatalogSupplement(
         category="discovery",
         profiles=("lean", "full", "readonly"),
         stability="lean",
         do_not_use_for=("literature search by article topic",),
         example='{"query":"TP53","concept":"Gene","limit":10}',
-        next_tools=("pubtator_search_literature",),
+        next_tools=("search_literature",),
         resource_links=("pubtator://bioconcepts",),
     ),
-    "pubtator_search_guidelines": ToolCatalogSupplement(
+    "search_guidelines": ToolCatalogSupplement(
         category="literature",
         profiles=("lean", "full", "readonly"),
         stability="lean",
         do_not_use_for=("non-guideline exhaustive PubMed search",),
         example='{"text":"asthma treatment adults","limit":5}',
-        next_tools=("pubtator_preflight_review_sources",),
+        next_tools=("preflight_review_sources",),
     ),
-    "pubtator_search_literature": ToolCatalogSupplement(
+    "search_literature": ToolCatalogSupplement(
         category="literature",
         profiles=("lean", "full", "readonly"),
         stability="lean",
         do_not_use_for=("fetching known PMID passage text",),
         example='{"text":"BRCA1 ovarian cancer PARP inhibitor","limit":5,"metadata":"basic"}',
-        next_tools=("pubtator_preflight_review_sources",),
+        next_tools=("preflight_review_sources",),
     ),
-    "pubtator_stage_research_session": ToolCatalogSupplement(
+    "stage_research_session": ToolCatalogSupplement(
         category="review",
         profiles=("full",),
         stability="advanced",
         do_not_use_for=("readonly deployments",),
         example='{"review_id":"demo","query":"BRCA1 PARP inhibitor","max_candidates":20}',
-        next_tools=("pubtator_get_research_session_status", "pubtator_index_review_evidence"),
+        next_tools=("get_research_session_status", "index_review_evidence"),
         resource_links=("pubtator://reviews/{review_id}/sessions/{session_id}",),
     ),
-    "pubtator_submit_text_annotation": ToolCatalogSupplement(
+    "submit_text_annotation": ToolCatalogSupplement(
         category="annotation",
         profiles=("full",),
         stability="advanced",
         do_not_use_for=("PubMed or PMC ID annotation export",),
         example='{"text":"BRCA1 is associated with breast cancer.","bioconcepts":"Gene,Disease"}',
-        next_tools=("pubtator_get_text_annotation_results",),
+        next_tools=("get_text_annotation_results",),
         resource_links=("pubtator://text-processing",),
     ),
-    "pubtator_suggest_corpus": ToolCatalogSupplement(
+    "suggest_corpus": ToolCatalogSupplement(
         category="discovery",
         profiles=("full", "readonly"),
         stability="advanced",
         do_not_use_for=("final evidence retrieval",),
         example='{"question":"EGFR resistance in lung cancer","max_pmids":8}',
-        next_tools=("pubtator_preflight_review_sources", "pubtator_index_review_evidence"),
+        next_tools=("preflight_review_sources", "index_review_evidence"),
     ),
-    "pubtator_workflow_help": ToolCatalogSupplement(
+    "workflow_help": ToolCatalogSupplement(
         category="metadata",
         profiles=("lean", "full", "readonly"),
         stability="lean",
         do_not_use_for=("server capability inventory",),
         example='{"task":"clinical_genetics_review"}',
-        next_tools=("pubtator_search_literature",),
+        next_tools=("search_literature",),
         resource_links=("pubtator://workflow-help",),
     ),
 }

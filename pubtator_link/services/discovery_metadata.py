@@ -83,7 +83,7 @@ def add_related_metadata_next_command(
     if candidate_pmids and metadata_status in {"partial", "unavailable"}:
         meta.next_commands.append(
             {
-                "tool": "pubtator_get_publication_metadata",
+                "tool": "get_publication_metadata",
                 "arguments": {"pmids": candidate_pmids},
             }
         )
@@ -98,7 +98,7 @@ def add_citation_metadata_next_command(
     if candidate_pmids and metadata_status in {"partial", "unavailable"}:
         meta.next_commands.append(
             {
-                "tool": "pubtator_get_publication_metadata",
+                "tool": "get_publication_metadata",
                 "arguments": {"pmids": candidate_pmids},
             }
         )

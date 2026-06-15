@@ -21,7 +21,7 @@ def actionable_output_validation_error(
     """Return and record an actionable MCP output-schema validation failure."""
     error_field = _output_validation_field(message)
     fallback_response_mode = _fallback_response_mode(tool_name, arguments)
-    suggested_action = "Call pubtator_diagnostics, then retry with corrected arguments."
+    suggested_action = "Call diagnostics, then retry with corrected arguments."
     if fallback_response_mode is not None:
         suggested_action = (
             f"Retry {tool_name} with response_mode='{fallback_response_mode}' while "
@@ -36,7 +36,7 @@ def actionable_output_validation_error(
         "fallback_response_mode": fallback_response_mode,
         "_meta": {
             "next_commands": [
-                {"tool": "pubtator_diagnostics", "arguments": {}},
+                {"tool": "diagnostics", "arguments": {}},
             ],
             "unsafe_for_clinical_use": True,
         },
@@ -103,7 +103,7 @@ def _output_validation_field(message: str) -> str | None:
 
 def _fallback_response_mode(tool_name: str, arguments: dict[str, Any]) -> str | None:
     if (
-        tool_name == "pubtator_retrieve_review_context_batch"
+        tool_name == "get_review_context_batch"
         and str(arguments.get("response_mode", "compact")).lower() == "compact"
     ):
         return "quotes"

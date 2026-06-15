@@ -8,7 +8,7 @@ def test_url_safety_error_maps_to_structured_mcp_error() -> None:
     exc = UrlSafetyError("Host 'evil.example.com' not in allowlist for curated_urls")
     error = mcp_tool_error(
         exc,
-        McpErrorContext(tool_name="pubtator_index_review_evidence"),
+        McpErrorContext(tool_name="index_review_evidence"),
     )
     payload = json.loads(str(error))
     assert payload["error_code"] == "curated_url_rejected"

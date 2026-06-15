@@ -11,21 +11,21 @@ LLM-native payload discipline to raw upstream tools.
 Live local MCP checks on `http://127.0.0.1:8011/mcp` reproduced the critical
 report findings:
 
-- `pubtator_convert_article_ids` fails with `internal_error` when a batch mixes
+- `convert_article_ids` fails with `internal_error` when a batch mixes
   PMID, PMCID, and DOI. Logs show the NCBI ID Converter returning HTTP 400 for
   the mixed `ids=` request.
-- `pubtator_preflight_review_sources` fails when a PMCID exists but PubTator PMC
+- `preflight_review_sources` fails when a PMCID exists but PubTator PMC
   BioC export returns HTTP 400. The tool now has a useful publication-passages
   fallback, but the canonical preflight path still aborts instead of falling
   back to abstract coverage.
-- `pubtator_submit_text_annotation` fails because the upstream text annotation
+- `submit_text_annotation` fails because the upstream text annotation
   endpoint returns JSON like `{"id":"..."}` while the client only reads a
   `content` field.
-- `pubtator_find_entity_relations` succeeds for `@GENE_MEFV` but returns about
+- `find_entity_relations` succeeds for `@GENE_MEFV` but returns about
   128 KB with no `limit`, `response_mode`, or summary controls.
-- `pubtator_export_review_audit_bundle` fails when an audit event has a
+- `export_review_audit_bundle` fails when an audit event has a
   non-mapping `payload`; `dict(event.get("payload") or {})` raises `ValueError`.
-- `pubtator_review_quickstart` accepts `wait_until_ready=true` and
+- `review_quickstart` accepts `wait_until_ready=true` and
   `timeout_ms=30000`, but still returns
   `quickstart does not block on indexing`.
 

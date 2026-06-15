@@ -38,7 +38,7 @@ from pubtator_link.services.search_shaping import (
 
 def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
     @mcp.tool(
-        name="pubtator_search_literature",
+        name="search_literature",
         title="Search Biomedical Literature",
         output_schema=SearchResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -106,10 +106,10 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 include_meta=include_meta,
             )
 
-        return await run_mcp_tool("pubtator_search_literature", call)
+        return await run_mcp_tool("search_literature", call)
 
     @mcp.tool(
-        name="pubtator_search_guidelines",
+        name="search_guidelines",
         title="Search Biomedical Guidelines",
         output_schema=SearchResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -125,7 +125,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         entity_ids: list[str] | None = None,
         coverage: SearchCoverageMode = "preflight",
     ) -> dict[str, Any]:
-        """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. Provide one of text or query. Wraps pubtator_search_literature with guideline/systematic-review filters and guideline boosting; not an independent guideline database."""
+        """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. Provide one of text or query. Wraps search_literature with guideline/systematic-review filters and guideline boosting; not an independent guideline database."""
 
         async def call() -> dict[str, Any]:
             search_text = coalesce_query(text, query)
@@ -152,10 +152,10 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 preflight_service=preflight_service,
             )
 
-        return await run_mcp_tool("pubtator_search_guidelines", call)
+        return await run_mcp_tool("search_guidelines", call)
 
     @mcp.tool(
-        name="pubtator_search_biomedical_entities",
+        name="search_biomedical_entities",
         title="Search Biomedical Entities",
         output_schema=EntityAutocompleteResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -180,12 +180,12 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 limit=limit,
             )
 
-        return await run_mcp_tool("pubtator_search_biomedical_entities", call)
+        return await run_mcp_tool("search_biomedical_entities", call)
 
     if profile != "lean":
 
         @mcp.tool(
-            name="pubtator_find_entity_relations",
+            name="find_entity_relations",
             title="Find Entity Relations",
             output_schema=RelationsResponse.model_json_schema(),
             annotations=READ_ONLY_OPEN_WORLD,
@@ -204,7 +204,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             response_mode: Literal["compact", "standard", "full"] = "compact",
             max_response_chars: Annotated[int, Field(ge=1000, le=50000)] = 12_000,
         ) -> dict[str, Any]:
-            """Use this when a user has a PubTator entity ID and needs literature-derived related entities to expand a corpus. Do not use this for canonical entity lookup; use pubtator_search_biomedical_entities. Next: pubtator_search_literature."""
+            """Use this when a user has a PubTator entity ID and needs literature-derived related entities to expand a corpus. Do not use this for canonical entity lookup; use search_biomedical_entities. Next: search_literature."""
 
             async def call() -> dict[str, Any]:
                 client = await get_api_client()
@@ -218,10 +218,10 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                     max_response_chars=max_response_chars,
                 )
 
-            return await run_mcp_tool("pubtator_find_entity_relations", call)
+            return await run_mcp_tool("find_entity_relations", call)
 
     @mcp.tool(
-        name="pubtator_lookup_variant_evidence",
+        name="get_variant_evidence",
         title="Lookup Variant Evidence",
         output_schema=VariantEvidenceResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -250,4 +250,4 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 include_citations=include_citations,
             )
 
-        return await run_mcp_tool("pubtator_lookup_variant_evidence", call)
+        return await run_mcp_tool("get_variant_evidence", call)

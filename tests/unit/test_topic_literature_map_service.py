@@ -474,7 +474,7 @@ async def test_build_map_from_query_returns_seed_author_edges_and_hints() -> Non
     }
     assert response.summary.central_papers[0].pmid == "111"
     assert response.summary.recommended_next_pmids
-    assert response.candidate_retrieval_hints[0]["tool"] == "pubtator_get_publication_passages"
+    assert response.candidate_retrieval_hints[0]["tool"] == "get_publication_passages"
     assert "entity" in {node.node_type for node in response.nodes}
     assert "mentions_entity" in {edge.edge_type for edge in response.edges}
 
@@ -870,7 +870,7 @@ async def test_build_map_returns_partial_response_when_citation_stage_times_out(
     assert citation_status.message is not None
     assert "timed out" in citation_status.message
     assert any(
-        command["tool"] == "pubtator_build_topic_literature_map"
+        command["tool"] == "build_topic_literature_map"
         and command["arguments"]["include_citations"] is False
         and command["arguments"]["timeout_ms"] == 50
         for command in response.meta.next_commands

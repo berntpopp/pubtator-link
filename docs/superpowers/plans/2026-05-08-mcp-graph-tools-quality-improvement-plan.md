@@ -296,7 +296,7 @@ References:
 **Outcome:** The tool catalog feels smaller without removing power-user tools.
 
 - [ ] **Step 1: Add tests**
-  - Assert `pubtator_workflow_help` recommends:
+  - Assert `workflow_help` recommends:
     - `search_literature` for unknown topics
     - `find_related_evidence_candidates` when a seed PMID exists
     - `get_publication_citation_graph` for citation expansion

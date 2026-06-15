@@ -13,49 +13,49 @@ from pubtator_link.mcp.profiles import LEAN_TOOLS
 ANTHROPIC_TOOL_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 EXPECTED_PUBLIC_TOOL_NAMES = {
-    "pubtator_workflow_help",
-    "pubtator_get_server_capabilities",
-    "pubtator_search_literature",
-    "pubtator_review_quickstart",
-    "pubtator_convert_article_ids",
-    "pubtator_lookup_mesh",
-    "pubtator_lookup_citation",
-    "pubtator_find_related_articles",
-    "pubtator_suggest_corpus",
-    "pubtator_build_topic_literature_map",
-    "pubtator_diagnostics",
-    "pubtator_search_guidelines",
-    "pubtator_fetch_publication_annotations",
-    "pubtator_get_publication_metadata",
-    "pubtator_get_publication_passages",
-    "pubtator_get_publication_citation_graph",
-    "pubtator_find_related_evidence_candidates",
-    "pubtator_estimate_publication_context",
-    "pubtator_fetch_pmc_annotations",
-    "pubtator_search_biomedical_entities",
-    "pubtator_find_entity_relations",
-    "pubtator_lookup_variant_evidence",
-    "pubtator_submit_text_annotation",
-    "pubtator_get_text_annotation_results",
-    "pubtator_preflight_review_sources",
-    "pubtator_index_review_evidence",
-    "pubtator_inspect_review_index",
-    "pubtator_ground_question",
-    "pubtator_retrieve_review_context",
-    "pubtator_retrieve_review_context_batch",
-    "pubtator_get_review_passages_by_id",
-    "pubtator_get_review_audit_trail",
-    "pubtator_get_neighboring_review_passages",
-    "pubtator_export_review_audit_bundle",
-    "pubtator_record_review_context",
-    "pubtator_list_review_indexes",
-    "pubtator_get_review_index_summary",
-    "pubtator_add_evidence_certainty",
-    "pubtator_list_evidence_certainty",
-    "pubtator_get_evidence_certainty",
-    "pubtator_stage_research_session",
-    "pubtator_get_research_session_status",
-    "pubtator_list_research_sessions",
+    "workflow_help",
+    "get_server_capabilities",
+    "search_literature",
+    "review_quickstart",
+    "convert_article_ids",
+    "get_mesh",
+    "get_citation",
+    "find_related_articles",
+    "suggest_corpus",
+    "build_topic_literature_map",
+    "diagnostics",
+    "search_guidelines",
+    "get_publication_annotations",
+    "get_publication_metadata",
+    "get_publication_passages",
+    "get_publication_citation_graph",
+    "find_related_evidence_candidates",
+    "estimate_publication_context",
+    "get_pmc_annotations",
+    "search_biomedical_entities",
+    "find_entity_relations",
+    "get_variant_evidence",
+    "submit_text_annotation",
+    "get_text_annotation_results",
+    "preflight_review_sources",
+    "index_review_evidence",
+    "inspect_review_index",
+    "ground_question",
+    "get_review_context",
+    "get_review_context_batch",
+    "get_review_passages_by_id",
+    "get_review_audit_trail",
+    "get_neighboring_review_passages",
+    "export_review_audit_bundle",
+    "record_review_context",
+    "list_review_indexes",
+    "get_review_index_summary",
+    "add_evidence_certainty",
+    "list_evidence_certainty",
+    "get_evidence_certainty",
+    "stage_research_session",
+    "get_research_session_status",
+    "list_research_sessions",
 }
 
 EXPECTED_RESOURCE_URIS = {
@@ -146,20 +146,17 @@ def test_capability_filter_does_not_treat_package_name_as_tool() -> None:
 
 def test_capability_filter_handles_trailing_punctuation_around_tool_names() -> None:
     # The matcher must not slurp adjacent punctuation into the captured name,
-    # otherwise a sentence like "...call pubtator_search_literature." would be
-    # treated as referencing an unknown tool because "pubtator_search_literature."
+    # otherwise a sentence like "...call search_literature." would be
+    # treated as referencing an unknown tool because "search_literature."
     # is not in the allowed set.
     from pubtator_link.mcp.resources import _string_references_unavailable_tool
 
-    allowed = {"pubtator_search_literature"}
-    assert (
-        _string_references_unavailable_tool("First call pubtator_search_literature.", allowed)
-        is False
-    )
+    allowed = {"search_literature"}
+    assert _string_references_unavailable_tool("First call search_literature.", allowed) is False
     assert (
         _string_references_unavailable_tool(
-            "Use pubtator_search_literature, then pubtator_get_publication_passages.",
-            allowed | {"pubtator_get_publication_passages"},
+            "Use search_literature, then get_publication_passages.",
+            allowed | {"get_publication_passages"},
         )
         is False
     )
@@ -177,7 +174,7 @@ def test_server_instructions_are_tool_search_friendly() -> None:
         "review-scoped RAG context, find entity relations, and submit/get text annotations."
     )
     assert len(instructions.encode("utf-8")) < 2048
-    assert "pubtator_get_server_capabilities" in instructions
+    assert "get_server_capabilities" in instructions
     assert "search -> preflight -> index -> inspect -> retrieve" in instructions
     assert "raw full BioC can be large" in instructions
     assert "not for diagnosis" in instructions
@@ -203,9 +200,7 @@ def test_mcp_masks_unhandled_error_details() -> None:
 def test_get_publication_passages_schema_exposes_dry_run_and_verbosity() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_get_publication_passages"
-    ]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["get_publication_passages"]
     schema = tool.parameters
 
     assert schema["properties"]["dry_run"]["default"] is False
@@ -216,7 +211,7 @@ def test_citation_graph_tool_schema_is_flat() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
     tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_get_publication_citation_graph"
+        "get_publication_citation_graph"
     ]
     properties = tool.parameters["properties"]
 
@@ -230,7 +225,7 @@ def test_related_evidence_tool_schema_is_flat() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
     tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_find_related_evidence_candidates"
+        "find_related_evidence_candidates"
     ]
     properties = tool.parameters["properties"]
 
@@ -249,9 +244,7 @@ def test_related_evidence_tool_schema_is_flat() -> None:
 def test_topic_literature_map_tool_schema_is_flat() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_build_topic_literature_map"
-    ]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["build_topic_literature_map"]
     properties = tool.parameters["properties"]
 
     assert "query" in properties
@@ -277,9 +270,9 @@ def test_literature_graph_mcp_schemas_default_to_compact() -> None:
 
     tools = create_pubtator_mcp(profile="full")._tool_manager._tools
     for name in (
-        "pubtator_get_publication_citation_graph",
-        "pubtator_find_related_evidence_candidates",
-        "pubtator_build_topic_literature_map",
+        "get_publication_citation_graph",
+        "find_related_evidence_candidates",
+        "build_topic_literature_map",
     ):
         response_mode = tools[name].parameters["properties"]["response_mode"]
         assert response_mode["default"] == "compact"
@@ -312,9 +305,7 @@ async def test_topic_literature_map_accepts_topic_and_seed_aliases(
         "get_topic_literature_map_service",
         fake_get_topic_literature_map_service,
     )
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_build_topic_literature_map"
-    ]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["build_topic_literature_map"]
 
     result = await tool.run({"topic": "MEFV VUS", "seed_pmids": ["24166952"]})
 
@@ -324,9 +315,7 @@ async def test_topic_literature_map_accepts_topic_and_seed_aliases(
 def test_review_retrieval_schema_hides_resolver_trace_by_default() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_retrieve_review_context_batch"
-    ]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["get_review_context_batch"]
     schema = tool.parameters
 
     assert schema["properties"]["include_resolver_trace"]["default"] is False
@@ -335,7 +324,7 @@ def test_review_retrieval_schema_hides_resolver_trace_by_default() -> None:
 def test_search_literature_schema_defaults_to_no_citations_for_compact_metadata() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_literature"]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["search_literature"]
     schema = tool.parameters
 
     assert schema["properties"]["metadata"]["default"] == "basic"
@@ -349,9 +338,7 @@ def test_search_literature_schema_defaults_to_no_citations_for_compact_metadata(
 def test_find_entity_relations_schema_exposes_budget_controls() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_find_entity_relations"
-    ]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["find_entity_relations"]
     properties = tool.parameters["properties"]
 
     assert properties["limit"]["default"] == 20
@@ -368,7 +355,7 @@ def test_find_entity_relations_schema_exposes_budget_controls() -> None:
 def test_review_quickstart_schema_is_flat_and_returns_retrieval_handoff() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_review_quickstart"]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["review_quickstart"]
     schema = tool.parameters
     output_schema = _tool_output_schema(tool)
 
@@ -408,7 +395,7 @@ async def test_review_quickstart_accepts_question_alias(
     monkeypatch.setattr(review_tools, "review_quickstart_impl", fake_review_quickstart_impl)
     monkeypatch.setattr(review_tools, "get_research_session_service", fake_dependency)
     monkeypatch.setattr(review_tools, "get_review_context_service", fake_dependency)
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_review_quickstart"]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["review_quickstart"]
 
     result = await tool.run({"question": "Does colchicine prevent FMF flares?"})
 
@@ -418,7 +405,7 @@ async def test_review_quickstart_accepts_question_alias(
 def test_ground_question_schema_exposes_one_call_arguments() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp()._tool_manager._tools["pubtator_ground_question"]
+    tool = create_pubtator_mcp()._tool_manager._tools["ground_question"]
     properties = tool.parameters["properties"]
 
     assert "question" in properties
@@ -432,7 +419,7 @@ def test_ground_question_schema_exposes_one_call_arguments() -> None:
 def test_ground_question_schema_exposes_verbosity_and_auto_budget() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp()._tool_manager._tools["pubtator_ground_question"]
+    tool = create_pubtator_mcp()._tool_manager._tools["ground_question"]
     properties = tool.parameters["properties"]
 
     assert properties["verbosity"]["default"] == "lean"
@@ -443,8 +430,8 @@ def test_research_session_tools_allow_orientation_without_review_id() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
     tools = create_pubtator_mcp(profile="full")._tool_manager._tools
-    list_schema = tools["pubtator_list_research_sessions"].parameters
-    status_schema = tools["pubtator_get_research_session_status"].parameters
+    list_schema = tools["list_research_sessions"].parameters
+    status_schema = tools["get_research_session_status"].parameters
 
     assert "review_id" not in list_schema.get("required", [])
     assert "review_id" not in status_schema.get("required", [])
@@ -454,9 +441,7 @@ def test_research_session_tools_allow_orientation_without_review_id() -> None:
 def test_record_review_context_schema_accepts_note_event_type() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_record_review_context"
-    ]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["record_review_context"]
     event_type_schema = tool.parameters["properties"]["event_type"]
 
     assert "note" in _schema_enum_values(event_type_schema)
@@ -465,9 +450,7 @@ def test_record_review_context_schema_accepts_note_event_type() -> None:
 def test_index_review_evidence_schema_does_not_expose_prepare_mode() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_index_review_evidence"
-    ]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["index_review_evidence"]
     schema = tool.parameters
 
     assert "prepare_mode" not in schema["properties"]
@@ -476,9 +459,7 @@ def test_index_review_evidence_schema_does_not_expose_prepare_mode() -> None:
 def test_index_review_evidence_schema_exposes_wait_until_ready_alias() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_index_review_evidence"
-    ]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["index_review_evidence"]
     schema = tool.parameters
 
     assert schema["properties"]["wait_until_ready"]["default"] is False
@@ -488,9 +469,7 @@ def test_index_review_evidence_schema_exposes_wait_until_ready_alias() -> None:
 def test_get_server_capabilities_accepts_details_argument() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_get_server_capabilities"
-    ]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["get_server_capabilities"]
     properties = tool.parameters["properties"]
 
     assert "details" in properties
@@ -503,10 +482,10 @@ def test_capabilities_expose_tool_categories_and_diagnostics_workflow() -> None:
     capabilities = get_capabilities_resource()
 
     assert capabilities["tool_categories"]["discovery"]
-    assert "pubtator_search_literature" in capabilities["tool_categories"]["discovery"]
-    assert "pubtator_index_review_evidence" in capabilities["tool_categories"]["review"]
-    assert "pubtator_retrieve_review_context_batch" in capabilities["tool_categories"]["retrieval"]
-    assert "pubtator_diagnostics" in capabilities["core_workflow_tools"]
+    assert "search_literature" in capabilities["tool_categories"]["discovery"]
+    assert "index_review_evidence" in capabilities["tool_categories"]["review"]
+    assert "get_review_context_batch" in capabilities["tool_categories"]["retrieval"]
+    assert "diagnostics" in capabilities["core_workflow_tools"]
 
 
 def test_capabilities_resource_advertises_grounding_workflows() -> None:
@@ -542,38 +521,36 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
         "search -> preflight -> index -> inspect -> retrieve" in workflow
         for workflow in capabilities["recommended_workflows"]
     )
-    assert (
-        "pubtator_get_publication_passages" in capabilities["tool_groups"]["publication_grounding"]
-    )
-    assert "pubtator_inspect_review_index" in capabilities["tool_groups"]["review_grounding"]
-    assert "pubtator_lookup_mesh" in capabilities["tool_groups"]["discovery"]
+    assert "get_publication_passages" in capabilities["tool_groups"]["publication_grounding"]
+    assert "inspect_review_index" in capabilities["tool_groups"]["review_grounding"]
+    assert "get_mesh" in capabilities["tool_groups"]["discovery"]
     assert capabilities["output_cheatsheet"]["discovery_candidate_pmids"] == "candidate_pmids"
     assert capabilities["output_cheatsheet"]["handoff_next_commands"] == "_meta.next_commands"
-    assert "pubtator_workflow_help" in capabilities["tools"]
-    assert "pubtator_workflow_help" in capabilities["tool_groups"]["workflow"]
-    assert "pubtator_get_publication_metadata" in capabilities["tools"]
-    assert "pubtator_suggest_corpus" in capabilities["tool_groups"]["discovery"]
+    assert "workflow_help" in capabilities["tools"]
+    assert "workflow_help" in capabilities["tool_groups"]["workflow"]
+    assert "get_publication_metadata" in capabilities["tools"]
+    assert "suggest_corpus" in capabilities["tool_groups"]["discovery"]
     assert capabilities["search_defaults"]["metadata_modes"] == [
         "none",
         "basic",
         "with_abstract",
         "full",
     ]
-    assert sample_calls["pubtator_search_literature"]["metadata"] == "basic"
+    assert sample_calls["search_literature"]["metadata"] == "basic"
     assert any(
-        fallback["tool_name"] == "pubtator_lookup_citation"
+        fallback["tool_name"] == "get_citation"
         and "GeneReviews/NBK" in fallback["condition"]
         and "NBK ID" in fallback["action"]
         for fallback in capabilities["workflow_help"]["fallbacks"]
     )
-    assert "limit" in sample_calls["pubtator_lookup_mesh"]
-    assert "max_results" not in sample_calls["pubtator_lookup_mesh"]
-    assert "limit" in sample_calls["pubtator_find_related_articles"]
-    assert "max_results" not in sample_calls["pubtator_find_related_articles"]
-    MeshLookupRequest(**sample_calls["pubtator_lookup_mesh"])
-    RelatedArticlesRequest(**sample_calls["pubtator_find_related_articles"])
-    CorpusSuggestionRequest(**sample_calls["pubtator_suggest_corpus"])
-    PublicationMetadataRequest(**sample_calls["pubtator_get_publication_metadata"])
+    assert "limit" in sample_calls["get_mesh"]
+    assert "max_results" not in sample_calls["get_mesh"]
+    assert "limit" in sample_calls["find_related_articles"]
+    assert "max_results" not in sample_calls["find_related_articles"]
+    MeshLookupRequest(**sample_calls["get_mesh"])
+    RelatedArticlesRequest(**sample_calls["find_related_articles"])
+    CorpusSuggestionRequest(**sample_calls["suggest_corpus"])
+    PublicationMetadataRequest(**sample_calls["get_publication_metadata"])
 
 
 def test_capabilities_document_new_budget_and_stable_citation_fields() -> None:
@@ -619,12 +596,12 @@ def test_capabilities_expose_literature_graph_workflow_bundle() -> None:
 
     bundle = payload["workflow_bundles"]["literature_graph"]
     assert bundle["tools"] == [
-        "pubtator_search_literature",
-        "pubtator_build_topic_literature_map",
-        "pubtator_get_publication_citation_graph",
-        "pubtator_find_related_evidence_candidates",
-        "pubtator_index_review_evidence",
-        "pubtator_retrieve_review_context_batch",
+        "search_literature",
+        "build_topic_literature_map",
+        "get_publication_citation_graph",
+        "find_related_evidence_candidates",
+        "index_review_evidence",
+        "get_review_context_batch",
     ]
     assert "host" in bundle["boundary_note"].casefold()
 
@@ -653,7 +630,7 @@ def test_server_instructions_include_schema_failure_fallback() -> None:
 
     assert "if index_review_evidence is unavailable" in instructions
     assert "get_publication_passages" in instructions
-    assert "pubtator_diagnostics" in instructions
+    assert "diagnostics" in instructions
 
 
 def test_curated_facade_registers_pubtator_tools() -> None:
@@ -673,13 +650,13 @@ def test_diagnostics_tool_is_registered() -> None:
 
     mcp = create_pubtator_mcp(profile="full")
 
-    assert "pubtator_diagnostics" in mcp._tool_manager._tools
+    assert "diagnostics" in mcp._tool_manager._tools
 
 
 def test_diagnostics_schema_exposes_minimum_workflow() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp()._tool_manager._tools["pubtator_diagnostics"]
+    tool = create_pubtator_mcp()._tool_manager._tools["diagnostics"]
     schema = tool.output_schema
 
     assert "minimum_workflow" in schema["properties"]
@@ -709,11 +686,11 @@ async def test_diagnostics_response_includes_minimum_workflow() -> None:
     result = await service.get_diagnostics()
 
     assert result.minimum_workflow["grounded_review"] == [
-        "pubtator_search_literature",
-        "pubtator_preflight_review_sources",
-        "pubtator_index_review_evidence",
-        "pubtator_inspect_review_index",
-        "pubtator_retrieve_review_context_batch",
+        "search_literature",
+        "preflight_review_sources",
+        "index_review_evidence",
+        "inspect_review_index",
+        "get_review_context_batch",
     ]
     assert result.minimum_workflow["workflow_resource"] == "pubtator://workflow-help"
 
@@ -731,14 +708,14 @@ async def test_readonly_diagnostics_minimum_workflow_only_advertises_registered_
                 status="ready",
                 minimum_workflow={
                     "grounded_review": [
-                        "pubtator_search_literature",
-                        "pubtator_preflight_review_sources",
-                        "pubtator_index_review_evidence",
-                        "pubtator_inspect_review_index",
-                        "pubtator_retrieve_review_context_batch",
+                        "search_literature",
+                        "preflight_review_sources",
+                        "index_review_evidence",
+                        "inspect_review_index",
+                        "get_review_context_batch",
                     ],
                     "workflow_resource": "pubtator://workflow-help",
-                    "one_call": "pubtator_ground_question",
+                    "one_call": "ground_question",
                 },
             )
 
@@ -746,18 +723,18 @@ async def test_readonly_diagnostics_minimum_workflow_only_advertises_registered_
 
     readonly_tools = tool_names_for_profile("readonly")
     assert set(result["minimum_workflow"]["grounded_review"]) <= readonly_tools
-    assert "pubtator_index_review_evidence" not in result["minimum_workflow"]["grounded_review"]
+    assert "index_review_evidence" not in result["minimum_workflow"]["grounded_review"]
     assert "one_call" not in result["minimum_workflow"]
 
 
 def test_research_session_tools_are_registered(mcp_tool_names) -> None:
-    assert "pubtator_stage_research_session" in mcp_tool_names
-    assert "pubtator_get_research_session_status" in mcp_tool_names
-    assert "pubtator_list_research_sessions" in mcp_tool_names
+    assert "stage_research_session" in mcp_tool_names
+    assert "get_research_session_status" in mcp_tool_names
+    assert "list_research_sessions" in mcp_tool_names
 
 
 def test_variant_evidence_tool_is_registered(mcp_tool_names) -> None:
-    assert "pubtator_lookup_variant_evidence" in mcp_tool_names
+    assert "get_variant_evidence" in mcp_tool_names
 
 
 def test_full_profile_all_tools_have_output_schemas() -> None:
@@ -779,7 +756,7 @@ def test_research_session_tool_schema_and_annotations_are_stable() -> None:
 
     mcp = create_pubtator_mcp(profile="full")
     tools = mcp._tool_manager._tools
-    stage_tool = tools["pubtator_stage_research_session"]
+    stage_tool = tools["stage_research_session"]
     stage_properties = stage_tool.parameters["properties"]
 
     for property_name in (
@@ -810,8 +787,8 @@ def test_research_session_tool_schema_and_annotations_are_stable() -> None:
     assert stage_tool.annotations.openWorldHint is True
 
     for name in (
-        "pubtator_get_research_session_status",
-        "pubtator_list_research_sessions",
+        "get_research_session_status",
+        "list_research_sessions",
     ):
         tool = tools[name]
         assert "research session" in tool.description
@@ -827,10 +804,10 @@ def test_discovery_tools_are_registered_with_specific_schemas() -> None:
     tools = mcp._tool_manager._tools
 
     expected = {
-        "pubtator_convert_article_ids": {"records", "candidate_pmids", "unresolved", "_meta"},
-        "pubtator_lookup_mesh": {"query", "descriptors", "candidate_pmids", "_meta"},
-        "pubtator_lookup_citation": {"records", "candidate_pmids", "_meta"},
-        "pubtator_find_related_articles": {
+        "convert_article_ids": {"records", "candidate_pmids", "unresolved", "_meta"},
+        "get_mesh": {"query", "descriptors", "candidate_pmids", "_meta"},
+        "get_citation": {"records", "candidate_pmids", "_meta"},
+        "find_related_articles": {
             "source_pmids",
             "mode",
             "related_articles",
@@ -882,16 +859,16 @@ def test_common_mcp_tools_are_flat_and_unversioned() -> None:
     assert not any(name.endswith(removed_suffix) for name in tool_names)
 
     canonical_flat_tools = {
-        "pubtator_search_literature": ("text",),
-        "pubtator_search_biomedical_entities": ("query",),
-        "pubtator_get_publication_passages": ("pmids",),
-        "pubtator_convert_article_ids": ("ids",),
-        "pubtator_lookup_mesh": ("query",),
-        "pubtator_lookup_citation": ("citations",),
-        "pubtator_find_related_articles": ("pmids",),
-        "pubtator_inspect_review_index": ("review_id",),
-        "pubtator_retrieve_review_context": ("review_id", "question"),
-        "pubtator_retrieve_review_context_batch": ("review_id", "queries"),
+        "search_literature": ("text",),
+        "search_biomedical_entities": ("query",),
+        "get_publication_passages": ("pmids",),
+        "convert_article_ids": ("ids",),
+        "get_mesh": ("query",),
+        "get_citation": ("citations",),
+        "find_related_articles": ("pmids",),
+        "inspect_review_index": ("review_id",),
+        "get_review_context": ("review_id", "question"),
+        "get_review_context_batch": ("review_id", "queries"),
     }
 
     for name, required_properties in canonical_flat_tools.items():
@@ -901,12 +878,12 @@ def test_common_mcp_tools_are_flat_and_unversioned() -> None:
         for property_name in required_properties:
             assert property_name in properties
 
-    batch_schema = tools["pubtator_retrieve_review_context_batch"].parameters
+    batch_schema = tools["get_review_context_batch"].parameters
     assert batch_schema["properties"]["response_mode"]["default"] == "compact"
     assert batch_schema["properties"]["budget_strategy"]["default"] == "query_fair"
     assert "scarcity_first" in batch_schema["properties"]["budget_strategy"]["anyOf"][0]["enum"]
     assert "min_passages_per_source" in batch_schema["properties"]
-    search_schema = tools["pubtator_search_literature"].parameters
+    search_schema = tools["search_literature"].parameters
     assert "publication_types" in search_schema["properties"]
     assert "year_min" in search_schema["properties"]
     assert "year_max" in search_schema["properties"]
@@ -922,10 +899,10 @@ def test_common_mcp_tools_are_flat_and_unversioned() -> None:
     assert "query" in search_schema["properties"]
     assert search_schema["properties"]["include_meta"]["default"] is True
 
-    passages_schema = tools["pubtator_get_publication_passages"].parameters
+    passages_schema = tools["get_publication_passages"].parameters
     assert "pmid" in passages_schema["properties"]
 
-    ground_schema = tools["pubtator_ground_question"].parameters
+    ground_schema = tools["ground_question"].parameters
     assert "max_results" in ground_schema["properties"]
 
 
@@ -935,13 +912,13 @@ def test_review_context_schema_defaults_are_stable() -> None:
     mcp = create_pubtator_mcp(profile="full")
     tools = mcp._tool_manager._tools
 
-    single_schema = tools["pubtator_retrieve_review_context"].parameters["properties"]
+    single_schema = tools["get_review_context"].parameters["properties"]
     assert single_schema["max_passages"]["default"] == 8
     assert single_schema["max_chars"]["default"] == 6000
     assert single_schema["include_diagnostics"]["default"] is False
     assert single_schema["table_mode"]["default"] == "preview"
 
-    batch_schema = tools["pubtator_retrieve_review_context_batch"].parameters["properties"]
+    batch_schema = tools["get_review_context_batch"].parameters["properties"]
     assert batch_schema["response_mode"]["default"] == "compact"
     assert batch_schema["budget_strategy"]["default"] == "query_fair"
     assert batch_schema["include_diagnostics"]["default"] is False
@@ -954,11 +931,11 @@ def test_repeated_call_tools_expose_include_meta_default_true() -> None:
     tools = create_pubtator_mcp(profile="full")._tool_manager._tools
 
     for tool_name in (
-        "pubtator_stage_research_session",
-        "pubtator_retrieve_review_context",
-        "pubtator_retrieve_review_context_batch",
-        "pubtator_find_related_evidence_candidates",
-        "pubtator_build_topic_literature_map",
+        "stage_research_session",
+        "get_review_context",
+        "get_review_context_batch",
+        "find_related_evidence_candidates",
+        "build_topic_literature_map",
     ):
         properties = tools[tool_name].parameters["properties"]
         assert properties["include_meta"]["default"] is True
@@ -1012,9 +989,7 @@ async def test_retrieve_review_context_batch_tool_include_meta_false_strips_meta
         "retrieve_review_context_batch_impl",
         fake_retrieve_review_context_batch_impl,
     )
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_retrieve_review_context_batch"
-    ]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["get_review_context_batch"]
 
     result = await tool.run(
         {"review_id": "rev_123", "queries": ["colchicine"], "include_meta": False}
@@ -1047,7 +1022,7 @@ async def test_search_literature_accepts_query_alias(monkeypatch: pytest.MonkeyP
         return FakeClient()
 
     monkeypatch.setattr(literature_tools, "get_api_client", fake_get_api_client)
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_literature"]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["search_literature"]
 
     result = await tool.run({"query": "MEFV"})
 
@@ -1085,7 +1060,7 @@ async def test_search_guidelines_accepts_query_alias(
         fake_get_source_preflight_service,
     )
     monkeypatch.setattr(literature_tools, "search_literature_impl", fake_search_literature_impl)
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_guidelines"]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["search_guidelines"]
 
     result = await tool.run({"query": " familial mediterranean fever guidelines "})
 
@@ -1133,9 +1108,7 @@ async def test_find_related_articles_uses_dependency_injected_metadata(
         fake_get_publication_metadata_service,
         raising=False,
     )
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_find_related_articles"
-    ]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["find_related_articles"]
 
     result = await tool.run({"pmid": "123"})
 
@@ -1146,7 +1119,7 @@ async def test_find_related_articles_uses_dependency_injected_metadata(
 async def test_query_alias_missing_all_returns_validation_failed_tool_error() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_guidelines"]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["search_guidelines"]
 
     with pytest.raises(ToolError) as exc_info:
         await tool.run({})
@@ -1160,7 +1133,7 @@ async def test_query_alias_missing_all_returns_validation_failed_tool_error() ->
 async def test_tool_validation_unknown_argument_reports_valid_and_unexpected_params() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_literature"]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["search_literature"]
 
     with pytest.raises(ToolError) as exc_info:
         await tool.run({"query": "familial mediterranean fever", "bogus": "x"})
@@ -1171,14 +1144,14 @@ async def test_tool_validation_unknown_argument_reports_valid_and_unexpected_par
     assert "query" in payload["valid_params"]
     assert "text" in payload["valid_params"]
     assert payload["unexpected_params"] == ["bogus"]
-    assert payload["_meta"]["next_commands"] == [{"tool": "pubtator_diagnostics", "arguments": {}}]
+    assert payload["_meta"]["next_commands"] == [{"tool": "diagnostics", "arguments": {}}]
 
 
 @pytest.mark.asyncio
 async def test_tool_validation_bad_enum_reports_valid_values() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_literature"]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["search_literature"]
 
     with pytest.raises(ToolError) as exc_info:
         await tool.run(
@@ -1203,7 +1176,7 @@ async def test_tool_validation_failure_records_failure_metrics() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
     from pubtator_link.observability.metrics import metrics_payload
 
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_literature"]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["search_literature"]
 
     with pytest.raises(ToolError):
         await tool.run({"query": "familial mediterranean fever", "response_mode": "tiny"})
@@ -1211,7 +1184,7 @@ async def test_tool_validation_failure_records_failure_metrics() -> None:
     metrics = metrics_payload().decode()
     assert (
         'mcp_tool_calls_total{error_code="validation_failed",'
-        'outcome="failure",tool_name="pubtator_search_literature"}'
+        'outcome="failure",tool_name="search_literature"}'
     ) in metrics
 
 
@@ -1222,7 +1195,7 @@ async def test_validation_error_handler_is_idempotent() -> None:
 
     mcp = create_pubtator_mcp(profile="full")
     install_validation_error_handler(mcp)
-    tool = mcp._tool_manager._tools["pubtator_search_literature"]
+    tool = mcp._tool_manager._tools["search_literature"]
 
     with pytest.raises(ToolError) as exc_info:
         await tool.run({"query": "familial mediterranean fever", "response_mode": "tiny"})
@@ -1264,7 +1237,7 @@ async def test_query_alias_conflict_returns_validation_failed_tool_error(
         fake_get_source_preflight_service,
     )
     monkeypatch.setattr(literature_tools, "search_literature_impl", fake_search_literature_impl)
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_guidelines"]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["search_guidelines"]
 
     with pytest.raises(ToolError) as exc_info:
         await tool.run({"text": "MEFV guideline", "query": "colchicine guideline"})
@@ -1279,12 +1252,12 @@ def test_query_alias_tool_descriptions_document_required_alias_groups() -> None:
 
     tools = create_pubtator_mcp(profile="full")._tool_manager._tools
     expected_fragments = {
-        "pubtator_search_literature": "Provide one of text or query.",
-        "pubtator_search_guidelines": "Provide one of text or query.",
-        "pubtator_suggest_corpus": "Provide one of question or query.",
-        "pubtator_ground_question": "Provide one of question or query.",
-        "pubtator_review_quickstart": "Provide one of topic, query, or question.",
-        "pubtator_retrieve_review_context": "Provide one of question or query.",
+        "search_literature": "Provide one of text or query.",
+        "search_guidelines": "Provide one of text or query.",
+        "suggest_corpus": "Provide one of question or query.",
+        "ground_question": "Provide one of question or query.",
+        "review_quickstart": "Provide one of topic, query, or question.",
+        "get_review_context": "Provide one of question or query.",
     }
 
     for tool_name, fragment in expected_fragments.items():
@@ -1325,9 +1298,7 @@ async def test_get_publication_passages_accepts_scalar_pmid(
         "get_publication_passage_service",
         fake_get_publication_passage_service,
     )
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_get_publication_passages"
-    ]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["get_publication_passages"]
 
     result = await tool.run({"pmid": "33454820"})
 
@@ -1340,10 +1311,10 @@ def test_pmid_list_tools_expose_scalar_pmid_alias() -> None:
 
     tools = create_pubtator_mcp(profile="full")._tool_manager._tools
     for tool_name in (
-        "pubtator_preflight_review_sources",
-        "pubtator_get_publication_metadata",
-        "pubtator_estimate_publication_context",
-        "pubtator_find_related_articles",
+        "preflight_review_sources",
+        "get_publication_metadata",
+        "estimate_publication_context",
+        "find_related_articles",
     ):
         properties = tools[tool_name].parameters["properties"]
         assert "pmids" in properties
@@ -1379,9 +1350,7 @@ async def test_get_publication_metadata_accepts_pmid_alias(
         "get_publication_metadata_impl",
         fake_get_publication_metadata_impl,
     )
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_get_publication_metadata"
-    ]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["get_publication_metadata"]
 
     result = await tool.run({"pmid": " 33454820 "})
 
@@ -1417,9 +1386,7 @@ async def test_pmid_limit_rejects_combined_list_and_scalar_alias(
         "get_publication_metadata_impl",
         fake_get_publication_metadata_impl,
     )
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_get_publication_metadata"
-    ]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["get_publication_metadata"]
     pmids = [str(10_000_000 + index) for index in range(100)]
 
     with pytest.raises(ToolError) as exc_info:
@@ -1459,7 +1426,7 @@ async def test_ground_question_accepts_max_results_alias(
     monkeypatch.setattr(review_tools, "get_api_client", fake_dependency)
     monkeypatch.setattr(review_tools, "get_review_queue", fake_dependency)
     monkeypatch.setattr(review_tools, "get_review_context_service", fake_dependency)
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_ground_question"]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["ground_question"]
 
     result = await tool.run({"question": "MEFV treatment", "max_results": 3})
 
@@ -1492,9 +1459,7 @@ async def test_search_biomedical_entities_accepts_text_alias(
         fake_search_biomedical_entities_impl,
     )
     monkeypatch.setattr(literature_tools, "get_api_client", fake_dependency)
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_search_biomedical_entities"
-    ]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["search_biomedical_entities"]
 
     result = await tool.run({"text": "MEFV", "concept": "Gene"})
 
@@ -1522,7 +1487,7 @@ async def test_lookup_mesh_accepts_text_alias(monkeypatch: pytest.MonkeyPatch) -
         return FakeService()
 
     monkeypatch.setattr(discovery_tools, "get_discovery_service", fake_get_discovery_service)
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_lookup_mesh"]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["get_mesh"]
 
     result = await tool.run({"text": "familial Mediterranean fever", "limit": 5})
 
@@ -1537,31 +1502,29 @@ def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
     tools = mcp._tool_manager._tools
 
     required_properties = {
-        "pubtator_fetch_publication_annotations": ("pmids",),
-        "pubtator_estimate_publication_context": ("pmids",),
-        "pubtator_fetch_pmc_annotations": ("pmcids",),
-        "pubtator_find_entity_relations": ("entity_id",),
-        "pubtator_submit_text_annotation": ("text",),
-        "pubtator_get_text_annotation_results": ("session_id",),
-        "pubtator_preflight_review_sources": ("pmids",),
-        "pubtator_index_review_evidence": ("review_id",),
-        "pubtator_get_review_passages_by_id": ("review_id", "passage_ids"),
-        "pubtator_get_review_audit_trail": ("review_id",),
-        "pubtator_get_neighboring_review_passages": ("review_id", "passage_id"),
-        "pubtator_export_review_audit_bundle": ("review_id",),
-        "pubtator_convert_article_ids": ("ids",),
-        "pubtator_lookup_mesh": ("query",),
-        "pubtator_lookup_citation": ("citations",),
-        "pubtator_find_related_articles": ("pmids",),
+        "get_publication_annotations": ("pmids",),
+        "estimate_publication_context": ("pmids",),
+        "get_pmc_annotations": ("pmcids",),
+        "find_entity_relations": ("entity_id",),
+        "submit_text_annotation": ("text",),
+        "get_text_annotation_results": ("session_id",),
+        "preflight_review_sources": ("pmids",),
+        "index_review_evidence": ("review_id",),
+        "get_review_passages_by_id": ("review_id", "passage_ids"),
+        "get_review_audit_trail": ("review_id",),
+        "get_neighboring_review_passages": ("review_id", "passage_id"),
+        "export_review_audit_bundle": ("review_id",),
+        "convert_article_ids": ("ids",),
+        "get_mesh": ("query",),
+        "get_citation": ("citations",),
+        "find_related_articles": ("pmids",),
     }
     for name, expected_properties in required_properties.items():
         properties = tools[name].parameters["properties"]
         assert "request" not in properties
         for property_name in expected_properties:
             assert property_name in properties
-    assert "passage_ids" not in tools["pubtator_get_review_audit_trail"].parameters.get(
-        "required", []
-    )
+    assert "passage_ids" not in tools["get_review_audit_trail"].parameters.get("required", [])
 
 
 @pytest.mark.asyncio
@@ -1598,9 +1561,7 @@ async def test_submit_text_annotation_tool_waits_for_result(monkeypatch) -> None
         return FakeClient()
 
     monkeypatch.setattr(annotation_tools, "get_api_client", fake_get_api_client)
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_submit_text_annotation"
-    ]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["submit_text_annotation"]
 
     result = await tool.run({"text": "MEFV and colchicine", "wait": True})
 
@@ -1613,7 +1574,7 @@ def test_export_review_audit_bundle_exposes_export_options() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
     mcp = create_pubtator_mcp(profile="full")
-    tool = mcp._tool_manager._tools["pubtator_export_review_audit_bundle"]
+    tool = mcp._tool_manager._tools["export_review_audit_bundle"]
     properties = tool.parameters["properties"]
     required = set(tool.parameters.get("required", []))
 
@@ -1631,12 +1592,12 @@ def test_high_use_mcp_tools_expose_specific_output_schemas() -> None:
     tools = mcp._tool_manager._tools
 
     expected = {
-        "pubtator_search_literature": {"success", "results"},
-        "pubtator_workflow_help": {"task", "steps", "fallbacks", "tool_sequence", "_meta"},
-        "pubtator_convert_article_ids": {"records", "candidate_pmids", "unresolved", "_meta"},
-        "pubtator_lookup_mesh": {"query", "descriptors", "candidate_pmids", "_meta"},
-        "pubtator_lookup_citation": {"records", "candidate_pmids", "_meta"},
-        "pubtator_find_related_articles": {
+        "search_literature": {"success", "results"},
+        "workflow_help": {"task", "steps", "fallbacks", "tool_sequence", "_meta"},
+        "convert_article_ids": {"records", "candidate_pmids", "unresolved", "_meta"},
+        "get_mesh": {"query", "descriptors", "candidate_pmids", "_meta"},
+        "get_citation": {"records", "candidate_pmids", "_meta"},
+        "find_related_articles": {
             "source_pmids",
             "mode",
             "related_articles",
@@ -1644,22 +1605,22 @@ def test_high_use_mcp_tools_expose_specific_output_schemas() -> None:
             "unresolved",
             "_meta",
         },
-        "pubtator_suggest_corpus": {"candidate_pmids", "candidates", "searches", "_meta"},
-        "pubtator_preflight_review_sources": {"success", "coverage_hints"},
-        "pubtator_index_review_evidence": {"success", "review_id", "preparation_status"},
-        "pubtator_inspect_review_index": {"success", "review_id", "sources", "totals"},
-        "pubtator_retrieve_review_context": {"success", "review_id", "context_pack"},
-        "pubtator_retrieve_review_context_batch": {
+        "suggest_corpus": {"candidate_pmids", "candidates", "searches", "_meta"},
+        "preflight_review_sources": {"success", "coverage_hints"},
+        "index_review_evidence": {"success", "review_id", "preparation_status"},
+        "inspect_review_index": {"success", "review_id", "sources", "totals"},
+        "get_review_context": {"success", "review_id", "context_pack"},
+        "get_review_context_batch": {
             "success",
             "review_id",
             "merged_context_pack",
             "query_summaries",
         },
-        "pubtator_get_review_passages_by_id": {"success", "review_id", "passages"},
-        "pubtator_get_review_audit_trail": {"success", "review_id", "items", "audit_block"},
-        "pubtator_get_neighboring_review_passages": {"success", "review_id", "passages"},
-        "pubtator_export_review_audit_bundle": {"success", "audit_bundle"},
-        "pubtator_record_review_context": {"success", "context", "event"},
+        "get_review_passages_by_id": {"success", "review_id", "passages"},
+        "get_review_audit_trail": {"success", "review_id", "items", "audit_block"},
+        "get_neighboring_review_passages": {"success", "review_id", "passages"},
+        "export_review_audit_bundle": {"success", "audit_bundle"},
+        "record_review_context": {"success", "context", "event"},
     }
 
     for name, required in expected.items():
@@ -1669,9 +1630,7 @@ def test_high_use_mcp_tools_expose_specific_output_schemas() -> None:
 def test_submit_text_annotation_output_schema_documents_wait_result() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_submit_text_annotation"
-    ]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["submit_text_annotation"]
     schema = _tool_output_schema(tool)
     properties = schema.get("properties")
     assert isinstance(properties, dict)
@@ -1685,9 +1644,7 @@ def test_submit_text_annotation_output_schema_documents_wait_result() -> None:
 def test_batch_output_schema_allows_omitted_empty_results() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools[
-        "pubtator_retrieve_review_context_batch"
-    ]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["get_review_context_batch"]
     schema = _tool_output_schema(tool)
 
     assert "results" not in schema.get("required", [])
@@ -1703,10 +1660,10 @@ def test_capabilities_expose_llm_driver_contract_for_core_workflow() -> None:
 
     assert contract["version"] == "2026-05-02"
     assert contract["discovery_policy"]["strategy"] == "progressive_discovery"
-    assert "pubtator_retrieve_review_context_batch" in contract["core_workflow_tools"]
-    assert "pubtator_get_review_audit_trail" in contract["core_workflow_tools"]
+    assert "get_review_context_batch" in contract["core_workflow_tools"]
+    assert "get_review_audit_trail" in contract["core_workflow_tools"]
     assert "schemas" in contract["detail_levels"]
-    assert "pubtator_index_review_evidence" in contract["schema_bundle"]
+    assert "index_review_evidence" in contract["schema_bundle"]
     assert "recovery" in contract["response_contracts"]
 
 
@@ -1774,15 +1731,15 @@ def test_public_hosted_tools_have_expected_annotations() -> None:
     tools = mcp._tool_manager._tools
 
     for name in (
-        "pubtator_search_literature",
-        "pubtator_fetch_publication_annotations",
-        "pubtator_search_biomedical_entities",
-        "pubtator_find_entity_relations",
-        "pubtator_get_server_capabilities",
-        "pubtator_convert_article_ids",
-        "pubtator_lookup_mesh",
-        "pubtator_lookup_citation",
-        "pubtator_find_related_articles",
+        "search_literature",
+        "get_publication_annotations",
+        "search_biomedical_entities",
+        "find_entity_relations",
+        "get_server_capabilities",
+        "convert_article_ids",
+        "get_mesh",
+        "get_citation",
+        "find_related_articles",
     ):
         tool = tools[name]
         assert "Use this when" in tool.description
@@ -1796,19 +1753,19 @@ def test_write_capable_mcp_tools_have_precise_annotations() -> None:
     mcp = create_pubtator_mcp(profile="full")
     tools = mcp._tool_manager._tools
 
-    annotation_submit = tools["pubtator_submit_text_annotation"].annotations
+    annotation_submit = tools["submit_text_annotation"].annotations
     assert annotation_submit.readOnlyHint is False
     assert annotation_submit.destructiveHint is False
     assert annotation_submit.idempotentHint is False
     assert annotation_submit.openWorldHint is True
 
     expected_review_writes = {
-        "pubtator_add_evidence_certainty": False,
-        "pubtator_stage_research_session": False,
-        "pubtator_review_quickstart": False,
-        "pubtator_record_review_context": False,
-        "pubtator_index_review_evidence": True,
-        "pubtator_ground_question": True,
+        "add_evidence_certainty": False,
+        "stage_research_session": False,
+        "review_quickstart": False,
+        "record_review_context": False,
+        "index_review_evidence": True,
+        "ground_question": True,
     }
     for name, expected_idempotent in expected_review_writes.items():
         annotations = tools[name].annotations
@@ -1817,7 +1774,7 @@ def test_write_capable_mcp_tools_have_precise_annotations() -> None:
         assert annotations.idempotentHint is expected_idempotent, name
         assert annotations.openWorldHint is True, name
 
-    audit_export = tools["pubtator_export_review_audit_bundle"].annotations
+    audit_export = tools["export_review_audit_bundle"].annotations
     assert audit_export.readOnlyHint is False
     assert audit_export.destructiveHint is False
     assert audit_export.idempotentHint is False
@@ -1828,7 +1785,7 @@ def test_open_world_tools_are_marked_open_world() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
     mcp = create_pubtator_mcp(profile="full")
-    tool = mcp._tool_manager._tools["pubtator_search_literature"]
+    tool = mcp._tool_manager._tools["search_literature"]
 
     assert tool.annotations.openWorldHint is True
 
@@ -1926,9 +1883,9 @@ def test_capabilities_include_context_management_cheatsheet() -> None:
     assert capabilities["budgeting_defaults"]["batch_response_mode"] == "compact"
     removed_suffix = "_v" + "2"
     assert removed_suffix not in repr(capabilities)
-    assert "pubtator_search_literature" in capabilities["tools"]
-    assert "pubtator_retrieve_review_context_batch" in capabilities["sample_calls"]
-    assert capabilities["large_output_guidance"]["prefer"] == "pubtator_get_publication_passages"
+    assert "search_literature" in capabilities["tools"]
+    assert "get_review_context_batch" in capabilities["sample_calls"]
+    assert capabilities["large_output_guidance"]["prefer"] == "get_publication_passages"
     assert capabilities["output_cheatsheet"]["batch_merged_passages"] == (
         "merged_context_pack.passages[]"
     )

@@ -10,7 +10,7 @@ import httpx
 
 CALLS: list[tuple[str, dict[str, Any], int]] = [
     (
-        "pubtator_convert_article_ids",
+        "convert_article_ids",
         {
             "ids": ["24166952", "PMC12758588", "10.1038/s41431-022-01127-3"],
             "source": "auto",
@@ -18,12 +18,12 @@ CALLS: list[tuple[str, dict[str, Any], int]] = [
         12_000,
     ),
     (
-        "pubtator_preflight_review_sources",
+        "preflight_review_sources",
         {"pmids": ["24166952", "42135612"]},
         12_000,
     ),
     (
-        "pubtator_submit_text_annotation",
+        "submit_text_annotation",
         {
             "text": (
                 "Familial Mediterranean fever is associated with MEFV variants "
@@ -34,7 +34,7 @@ CALLS: list[tuple[str, dict[str, Any], int]] = [
         12_000,
     ),
     (
-        "pubtator_find_entity_relations",
+        "find_entity_relations",
         {
             "entity_id": "@GENE_MEFV",
             "limit": 10,
@@ -44,7 +44,7 @@ CALLS: list[tuple[str, dict[str, Any], int]] = [
         12_000,
     ),
     (
-        "pubtator_export_review_audit_bundle",
+        "export_review_audit_bundle",
         {"review_id": "mefv-vus-smoke", "fallback_inline": True, "response_mode": "compact"},
         20_000,
     ),

@@ -53,31 +53,31 @@ LEGACY_PUBLIC_IMPORTS = {
 
 REVIEW_TOOLS_IN_LEAN = frozenset(
     {
-        "pubtator_preflight_review_sources",
-        "pubtator_index_review_evidence",
-        "pubtator_inspect_review_index",
-        "pubtator_ground_question",
-        "pubtator_retrieve_review_context_batch",
-        "pubtator_get_review_audit_trail",
-        "pubtator_record_review_context",
+        "preflight_review_sources",
+        "index_review_evidence",
+        "inspect_review_index",
+        "ground_question",
+        "get_review_context_batch",
+        "get_review_audit_trail",
+        "record_review_context",
     }
 )
 
 REVIEW_TOOLS_IN_FULL_ONLY = frozenset(
     {
-        "pubtator_review_quickstart",
-        "pubtator_retrieve_review_context",
-        "pubtator_get_review_passages_by_id",
-        "pubtator_get_neighboring_review_passages",
-        "pubtator_export_review_audit_bundle",
-        "pubtator_list_review_indexes",
-        "pubtator_get_review_index_summary",
-        "pubtator_add_evidence_certainty",
-        "pubtator_list_evidence_certainty",
-        "pubtator_get_evidence_certainty",
-        "pubtator_stage_research_session",
-        "pubtator_get_research_session_status",
-        "pubtator_list_research_sessions",
+        "review_quickstart",
+        "get_review_context",
+        "get_review_passages_by_id",
+        "get_neighboring_review_passages",
+        "export_review_audit_bundle",
+        "list_review_indexes",
+        "get_review_index_summary",
+        "add_evidence_certainty",
+        "list_evidence_certainty",
+        "get_evidence_certainty",
+        "stage_research_session",
+        "get_research_session_status",
+        "list_research_sessions",
     }
 )
 

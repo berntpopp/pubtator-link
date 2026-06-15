@@ -35,7 +35,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
     @mcp_tool_for(
         "full",
         "readonly",
-        name="pubtator_retrieve_review_context",
+        name="get_review_context",
         title="Retrieve Review Context",
         output_schema=RetrieveReviewContextResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -62,7 +62,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         include_meta: bool = True,
         ctx: Context | None = None,
     ) -> dict[str, Any]:
-        """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Provide one of question or query. Use a short keyword query and PMID filters. If zero passages are returned, simplify the query, inspect the review index, or fall back to fetch_publication_annotations."""
+        """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Provide one of question or query. Use a short keyword query and PMID filters. If zero passages are returned, simplify the query, inspect the review index, or fall back to get_publication_annotations."""
 
         async def call() -> dict[str, Any]:
             selected_question = coalesce_query(question, query)
@@ -94,14 +94,14 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             tool_pmids = merge_pmids(pmids, pmid, max_items=100)
         except ValueError:
             tool_pmids = None
-        result = await run_mcp_tool("pubtator_retrieve_review_context", call, pmids=tool_pmids)
+        result = await run_mcp_tool("get_review_context", call, pmids=tool_pmids)
         return result if include_meta else strip_meta_for_repeated_call(result)
 
     @mcp_tool_for(
         "lean",
         "full",
         "readonly",
-        name="pubtator_retrieve_review_context_batch",
+        name="get_review_context_batch",
         title="Retrieve Review Context Batch",
         output_schema=RetrieveReviewContextBatchResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -179,7 +179,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         except ValueError:
             tool_pmids = None
         result = await run_mcp_tool(
-            "pubtator_retrieve_review_context_batch",
+            "get_review_context_batch",
             call,
             pmids=tool_pmids,
         )
@@ -188,7 +188,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
     @mcp_tool_for(
         "lean",
         "full",
-        name="pubtator_record_review_context",
+        name="record_review_context",
         title="Record Review Context",
         output_schema=RecordReviewContextResponse.model_json_schema(),
         annotations=NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
@@ -261,4 +261,4 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 created_by=created_by,
             )
 
-        return await run_mcp_tool("pubtator_record_review_context", call)
+        return await run_mcp_tool("record_review_context", call)

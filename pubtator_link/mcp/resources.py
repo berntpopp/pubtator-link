@@ -19,13 +19,13 @@ RESEARCH_USE_NOTICE = (
     "treatment, triage, patient management, or clinical decision support. Do not "
     "submit identifiable patient data to public demo instances."
 )
-GROUND_QUESTION_TOOL = "pubtator_ground_question"
+GROUND_QUESTION_TOOL = "ground_question"
 
 
 def _core_workflow_tools() -> list[str]:
     tools = list(CORE_WORKFLOW_TOOLS)
     if GROUND_QUESTION_TOOL not in tools:
-        tools.insert(tools.index("pubtator_retrieve_review_context_batch"), GROUND_QUESTION_TOOL)
+        tools.insert(tools.index("get_review_context_batch"), GROUND_QUESTION_TOOL)
     return tools
 
 
@@ -41,12 +41,12 @@ def _workflow_bundles() -> dict[str, Any]:
     return {
         "literature_graph": {
             "tools": [
-                "pubtator_search_literature",
-                "pubtator_build_topic_literature_map",
-                "pubtator_get_publication_citation_graph",
-                "pubtator_find_related_evidence_candidates",
-                "pubtator_index_review_evidence",
-                "pubtator_retrieve_review_context_batch",
+                "search_literature",
+                "build_topic_literature_map",
+                "get_publication_citation_graph",
+                "find_related_evidence_candidates",
+                "index_review_evidence",
+                "get_review_context_batch",
             ],
             "compact_mode_contract": (
                 "Graph compact mode returns candidate lanes, bounded summary papers, "
@@ -91,20 +91,20 @@ def _filter_tool_names(values: list[Any], allowed_tools: set[str]) -> list[Any]:
 
 
 def _filter_tool_mapping(values: dict[str, Any], allowed_tools: set[str]) -> dict[str, Any]:
+    # Tool names are unprefixed (Tool-Naming Standard v1; the gateway adds the
+    # namespace). Drop a key only when it names a known tool unavailable here.
+    known_tools = tool_names_for_profile("full")
     return {
         key: value
         for key, value in values.items()
-        if not key.startswith("pubtator_") or _tool_key_name(key) in allowed_tools
+        if _tool_key_name(key) not in known_tools or _tool_key_name(key) in allowed_tools
     }
 
 
 def _string_references_unavailable_tool(value: str, allowed_tools: set[str]) -> bool:
-    # Match a name-shaped substring, then confirm it's actually a known tool
-    # before deciding it's unavailable. Substrings like the package name
-    # `pubtator_link` match the shape but are not tools, so they must not
-    # cause the surrounding sentence to be filtered out.
+    # Flag a sentence only when a name-shaped token is a known tool missing here.
     known_tools = tool_names_for_profile("full")
-    for match in re.finditer(r"pubtator_[a-z][a-z0-9_]*", value):
+    for match in re.finditer(r"[a-z][a-z0-9_]*", value):
         name = _tool_key_name(match.group(0))
         if name in known_tools and name not in allowed_tools:
             return True
@@ -153,35 +153,35 @@ def _filter_capabilities_for_profile(value: Any, allowed_tools: set[str]) -> Any
 def get_llm_driver_contract() -> dict[str, Any]:
     return {
         "version": "2026-05-02",
-        "recommended_entrypoint": "pubtator_workflow_help",
+        "recommended_entrypoint": "workflow_help",
         "discovery_policy": {
             "strategy": "progressive_discovery",
             "rationale": "Full tool schemas are large; inspect core workflow tools as needed.",
         },
         "core_workflow_tools": [
-            "pubtator_search_biomedical_entities",
-            "pubtator_search_literature",
-            "pubtator_preflight_review_sources",
-            "pubtator_index_review_evidence",
-            "pubtator_inspect_review_index",
-            "pubtator_ground_question",
-            "pubtator_retrieve_review_context_batch",
-            "pubtator_retrieve_review_context",
-            "pubtator_get_review_passages_by_id",
-            "pubtator_get_review_audit_trail",
+            "search_biomedical_entities",
+            "search_literature",
+            "preflight_review_sources",
+            "index_review_evidence",
+            "inspect_review_index",
+            "ground_question",
+            "get_review_context_batch",
+            "get_review_context",
+            "get_review_passages_by_id",
+            "get_review_audit_trail",
         ],
         "detail_levels": ["catalog", "schemas", "examples"],
         "schema_bundle": {
-            "pubtator_index_review_evidence": {
-                "input_schema": "tools/list.parameters.pubtator_index_review_evidence",
+            "index_review_evidence": {
+                "input_schema": "tools/list.parameters.index_review_evidence",
                 "output_schema": "IndexReviewEvidenceResponse",
             },
-            "pubtator_retrieve_review_context_batch": {
-                "input_schema": "tools/list.parameters.pubtator_retrieve_review_context_batch",
+            "get_review_context_batch": {
+                "input_schema": "tools/list.parameters.get_review_context_batch",
                 "output_schema": "RetrieveReviewContextBatchResponse",
             },
-            "pubtator_get_review_audit_trail": {
-                "input_schema": "tools/list.parameters.pubtator_get_review_audit_trail",
+            "get_review_audit_trail": {
+                "input_schema": "tools/list.parameters.get_review_audit_trail",
                 "output_schema": "ReviewAuditTrailResponse",
             },
         },
@@ -204,151 +204,151 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
         "endpoint": "/mcp",
         "llm_driver_contract": get_llm_driver_contract(),
         "tools": [
-            "pubtator_workflow_help",
-            "pubtator_review_quickstart",
-            "pubtator_search_literature",
-            "pubtator_search_guidelines",
-            "pubtator_convert_article_ids",
-            "pubtator_lookup_mesh",
-            "pubtator_lookup_citation",
-            "pubtator_find_related_articles",
-            "pubtator_suggest_corpus",
-            "pubtator_diagnostics",
-            "pubtator_get_publication_metadata",
-            "pubtator_get_publication_passages",
-            "pubtator_estimate_publication_context",
-            "pubtator_fetch_publication_annotations",
-            "pubtator_fetch_pmc_annotations",
-            "pubtator_search_biomedical_entities",
-            "pubtator_find_entity_relations",
-            "pubtator_lookup_variant_evidence",
-            "pubtator_submit_text_annotation",
-            "pubtator_get_text_annotation_results",
-            "pubtator_preflight_review_sources",
-            "pubtator_stage_research_session",
-            "pubtator_get_research_session_status",
-            "pubtator_list_research_sessions",
-            "pubtator_index_review_evidence",
-            "pubtator_inspect_review_index",
-            "pubtator_ground_question",
-            "pubtator_retrieve_review_context",
-            "pubtator_retrieve_review_context_batch",
-            "pubtator_get_review_passages_by_id",
-            "pubtator_get_review_audit_trail",
-            "pubtator_get_neighboring_review_passages",
-            "pubtator_export_review_audit_bundle",
-            "pubtator_list_review_indexes",
-            "pubtator_get_review_index_summary",
-            "pubtator_add_evidence_certainty",
-            "pubtator_list_evidence_certainty",
-            "pubtator_get_evidence_certainty",
-            "pubtator_get_server_capabilities",
+            "workflow_help",
+            "review_quickstart",
+            "search_literature",
+            "search_guidelines",
+            "convert_article_ids",
+            "get_mesh",
+            "get_citation",
+            "find_related_articles",
+            "suggest_corpus",
+            "diagnostics",
+            "get_publication_metadata",
+            "get_publication_passages",
+            "estimate_publication_context",
+            "get_publication_annotations",
+            "get_pmc_annotations",
+            "search_biomedical_entities",
+            "find_entity_relations",
+            "get_variant_evidence",
+            "submit_text_annotation",
+            "get_text_annotation_results",
+            "preflight_review_sources",
+            "stage_research_session",
+            "get_research_session_status",
+            "list_research_sessions",
+            "index_review_evidence",
+            "inspect_review_index",
+            "ground_question",
+            "get_review_context",
+            "get_review_context_batch",
+            "get_review_passages_by_id",
+            "get_review_audit_trail",
+            "get_neighboring_review_passages",
+            "export_review_audit_bundle",
+            "list_review_indexes",
+            "get_review_index_summary",
+            "add_evidence_certainty",
+            "list_evidence_certainty",
+            "get_evidence_certainty",
+            "get_server_capabilities",
         ],
         "tool_categories": {
             "discovery": [
-                "pubtator_search_literature",
-                "pubtator_search_guidelines",
-                "pubtator_search_biomedical_entities",
-                "pubtator_find_entity_relations",
-                "pubtator_lookup_variant_evidence",
+                "search_literature",
+                "search_guidelines",
+                "search_biomedical_entities",
+                "find_entity_relations",
+                "get_variant_evidence",
             ],
             "indexing": [
-                "pubtator_preflight_review_sources",
-                "pubtator_review_quickstart",
-                "pubtator_stage_research_session",
-                "pubtator_index_review_evidence",
-                "pubtator_inspect_review_index",
-                "pubtator_ground_question",
+                "preflight_review_sources",
+                "review_quickstart",
+                "stage_research_session",
+                "index_review_evidence",
+                "inspect_review_index",
+                "ground_question",
             ],
             "retrieval": [
-                "pubtator_retrieve_review_context",
-                "pubtator_retrieve_review_context_batch",
-                "pubtator_get_review_passages_by_id",
-                "pubtator_get_review_audit_trail",
-                "pubtator_get_neighboring_review_passages",
+                "get_review_context",
+                "get_review_context_batch",
+                "get_review_passages_by_id",
+                "get_review_audit_trail",
+                "get_neighboring_review_passages",
             ],
             "metadata": [
-                "pubtator_get_publication_metadata",
-                "pubtator_get_publication_passages",
-                "pubtator_estimate_publication_context",
-                "pubtator_diagnostics",
+                "get_publication_metadata",
+                "get_publication_passages",
+                "estimate_publication_context",
+                "diagnostics",
             ],
         },
         "workflow": {
             "recommended_tools": [
-                "pubtator_search_literature",
-                "pubtator_preflight_review_sources",
-                "pubtator_index_review_evidence",
-                "pubtator_inspect_review_index",
-                "pubtator_ground_question",
-                "pubtator_diagnostics",
-                "pubtator_retrieve_review_context_batch",
+                "search_literature",
+                "preflight_review_sources",
+                "index_review_evidence",
+                "inspect_review_index",
+                "ground_question",
+                "diagnostics",
+                "get_review_context_batch",
             ],
         },
         "recommended_workflows": [
-            "Call pubtator_workflow_help for the canonical task-specific sequence.",
-            "For one-call grounded evidence use pubtator_ground_question.",
+            "Call workflow_help for the canonical task-specific sequence.",
+            "For one-call grounded evidence use ground_question.",
             "search -> preflight -> index -> inspect -> retrieve for review-grounded answers",
-            "Use pubtator_get_publication_metadata when citation-grade PMID metadata is needed.",
-            "After entity grounding, use pubtator_find_entity_relations to inspect relation evidence "
+            "Use get_publication_metadata when citation-grade PMID metadata is needed.",
+            "After entity grounding, use find_entity_relations to inspect relation evidence "
             "before choosing search terms or candidate PMIDs.",
-            "Use pubtator_lookup_variant_evidence for source-attributed ClinVar and literature "
+            "Use get_variant_evidence for source-attributed ClinVar and literature "
             "evidence about a gene and variant; it does not compute clinical classification.",
-            "If review indexing is unavailable, call pubtator_diagnostics and fall back "
-            "to pubtator_get_publication_passages with the same PMIDs.",
+            "If review indexing is unavailable, call diagnostics and fall back "
+            "to get_publication_passages with the same PMIDs.",
             "Discovery tools can normalize MeSH terms, resolve citations or article IDs, "
             "and expand seed PMIDs before staging or indexing candidate PMIDs.",
-            "Use pubtator_suggest_corpus to turn a research question into a compact candidate PMID corpus.",
+            "Use suggest_corpus to turn a research question into a compact candidate PMID corpus.",
             "Use search_literature(metadata='basic') for compact citation fields during candidate screening.",
             "Review index responses expose index_snapshot_date for stable audit provenance.",
-            "For live research sessions, call `pubtator_stage_research_session` with a "
+            "For live research sessions, call `stage_research_session` with a "
             "review ID and query or PMID list, then poll "
-            "`pubtator_get_research_session_status` before retrieving review context.",
+            "`get_research_session_status` before retrieving review context.",
             "publication passages -> context estimate -> compact passage retrieval before raw BioC",
         ],
         "discovery_workflow": [
-            "Use pubtator_lookup_mesh to normalize biomedical vocabulary before search.",
-            "Use pubtator_lookup_citation when a user provides formatted references.",
-            "Use pubtator_convert_article_ids when a user provides DOI, PMCID, or mixed article IDs.",
-            "Use pubtator_find_related_articles to expand from seed PMIDs.",
-            "Use pubtator_find_entity_relations to explore relation evidence for grounded entities.",
-            "Use pubtator_suggest_corpus to build a small role-labeled candidate corpus.",
-            "Pass discovery candidate_pmids as pmids to pubtator_stage_research_session "
+            "Use get_mesh to normalize biomedical vocabulary before search.",
+            "Use get_citation when a user provides formatted references.",
+            "Use convert_article_ids when a user provides DOI, PMCID, or mixed article IDs.",
+            "Use find_related_articles to expand from seed PMIDs.",
+            "Use find_entity_relations to explore relation evidence for grounded entities.",
+            "Use suggest_corpus to build a small role-labeled candidate corpus.",
+            "Pass discovery candidate_pmids as pmids to stage_research_session "
             "before indexing large corpora.",
         ],
         "core_tools": [
-            "pubtator_workflow_help",
-            "pubtator_search_literature",
-            "pubtator_search_guidelines",
-            "pubtator_search_biomedical_entities",
-            "pubtator_get_publication_passages",
-            "pubtator_preflight_review_sources",
-            "pubtator_stage_research_session",
-            "pubtator_index_review_evidence",
-            "pubtator_inspect_review_index",
-            "pubtator_ground_question",
-            "pubtator_retrieve_review_context_batch",
-            "pubtator_review_quickstart",
-            "pubtator_diagnostics",
+            "workflow_help",
+            "search_literature",
+            "search_guidelines",
+            "search_biomedical_entities",
+            "get_publication_passages",
+            "preflight_review_sources",
+            "stage_research_session",
+            "index_review_evidence",
+            "inspect_review_index",
+            "ground_question",
+            "get_review_context_batch",
+            "review_quickstart",
+            "diagnostics",
         ],
         "advanced_tools": [
-            "pubtator_fetch_publication_annotations",
-            "pubtator_fetch_pmc_annotations",
-            "pubtator_submit_text_annotation",
-            "pubtator_get_text_annotation_results",
-            "pubtator_export_review_audit_bundle",
-            "pubtator_add_evidence_certainty",
-            "pubtator_list_evidence_certainty",
-            "pubtator_get_evidence_certainty",
+            "get_publication_annotations",
+            "get_pmc_annotations",
+            "submit_text_annotation",
+            "get_text_annotation_results",
+            "export_review_audit_bundle",
+            "add_evidence_certainty",
+            "list_evidence_certainty",
+            "get_evidence_certainty",
         ],
         "recovery_flow": {
             "index_unavailable": [
-                "call pubtator_diagnostics",
+                "call diagnostics",
                 "run make db-migrate for self-hosted review databases",
-                "fall back to pubtator_get_publication_passages with the same PMIDs",
+                "fall back to get_publication_passages with the same PMIDs",
             ],
-            "fallback_tool": "pubtator_get_publication_passages",
-            "diagnostics_tool": "pubtator_diagnostics",
+            "fallback_tool": "get_publication_passages",
+            "diagnostics_tool": "diagnostics",
             "migration_command": "make db-migrate",
         },
         "search_defaults": {
@@ -358,7 +358,7 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
             "coverage": "preflight",
             "metadata": "none",
             "metadata_modes": ["none", "basic", "with_abstract", "full"],
-            "guideline_tool": "pubtator_search_guidelines",
+            "guideline_tool": "search_guidelines",
             "coverage_preflight_errors": {
                 "coverage_preflight_timeout": {"retryable": True},
                 "coverage_preflight_upstream_unavailable": {"retryable": True},
@@ -373,66 +373,66 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
         },
         "tool_groups": {
             "literature_search": [
-                "pubtator_search_literature",
-                "pubtator_search_guidelines",
+                "search_literature",
+                "search_guidelines",
             ],
             "discovery": [
-                "pubtator_convert_article_ids",
-                "pubtator_lookup_mesh",
-                "pubtator_lookup_citation",
-                "pubtator_find_related_articles",
-                "pubtator_find_entity_relations",
-                "pubtator_suggest_corpus",
+                "convert_article_ids",
+                "get_mesh",
+                "get_citation",
+                "find_related_articles",
+                "find_entity_relations",
+                "suggest_corpus",
             ],
             "diagnostics": [
-                "pubtator_diagnostics",
+                "diagnostics",
             ],
             "workflow": [
-                "pubtator_workflow_help",
+                "workflow_help",
             ],
             "publication_grounding": [
-                "pubtator_get_publication_metadata",
-                "pubtator_get_publication_passages",
-                "pubtator_estimate_publication_context",
-                "pubtator_fetch_publication_annotations",
-                "pubtator_fetch_pmc_annotations",
+                "get_publication_metadata",
+                "get_publication_passages",
+                "estimate_publication_context",
+                "get_publication_annotations",
+                "get_pmc_annotations",
             ],
             "review_grounding": [
-                "pubtator_preflight_review_sources",
-                "pubtator_review_quickstart",
-                "pubtator_stage_research_session",
-                "pubtator_get_research_session_status",
-                "pubtator_list_research_sessions",
-                "pubtator_index_review_evidence",
-                "pubtator_inspect_review_index",
-                "pubtator_ground_question",
-                "pubtator_retrieve_review_context",
-                "pubtator_retrieve_review_context_batch",
-                "pubtator_get_review_passages_by_id",
-                "pubtator_get_review_audit_trail",
-                "pubtator_get_neighboring_review_passages",
-                "pubtator_export_review_audit_bundle",
-                "pubtator_list_review_indexes",
-                "pubtator_get_review_index_summary",
-                "pubtator_add_evidence_certainty",
-                "pubtator_list_evidence_certainty",
-                "pubtator_get_evidence_certainty",
+                "preflight_review_sources",
+                "review_quickstart",
+                "stage_research_session",
+                "get_research_session_status",
+                "list_research_sessions",
+                "index_review_evidence",
+                "inspect_review_index",
+                "ground_question",
+                "get_review_context",
+                "get_review_context_batch",
+                "get_review_passages_by_id",
+                "get_review_audit_trail",
+                "get_neighboring_review_passages",
+                "export_review_audit_bundle",
+                "list_review_indexes",
+                "get_review_index_summary",
+                "add_evidence_certainty",
+                "list_evidence_certainty",
+                "get_evidence_certainty",
             ],
             "entities_relations": [
-                "pubtator_search_biomedical_entities",
-                "pubtator_find_entity_relations",
+                "search_biomedical_entities",
+                "find_entity_relations",
             ],
             "variant_evidence": [
-                "pubtator_lookup_variant_evidence",
+                "get_variant_evidence",
             ],
             "text_annotation": [
-                "pubtator_submit_text_annotation",
-                "pubtator_get_text_annotation_results",
+                "submit_text_annotation",
+                "get_text_annotation_results",
             ],
         },
         "large_output_guidance": {
-            "prefer": "pubtator_get_publication_passages",
-            "avoid_by_default": "pubtator_fetch_publication_annotations full=true",
+            "prefer": "get_publication_passages",
+            "avoid_by_default": "get_publication_annotations full=true",
             "reason": "raw full BioC can be multi-megabyte; compact tools return citable passages",
         },
         "prompt_injection": {
@@ -449,7 +449,7 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
             "do_not_use": {"request": {"review_id": "..."}},
         },
         "sample_calls": {
-            "pubtator_search_literature": {
+            "search_literature": {
                 "text": "MEFV colchicine familial Mediterranean fever guideline",
                 "sort": "score desc",
                 "response_mode": "compact",
@@ -458,52 +458,52 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
                 "coverage": "preflight",
                 "metadata": "basic",
             },
-            "pubtator_search_guidelines": {
+            "search_guidelines": {
                 "text": "MEFV familial Mediterranean fever EULAR recommendations",
                 "entity_ids": ["@GENE_MEFV"],
             },
-            "pubtator_lookup_mesh": {
+            "get_mesh": {
                 "query": "familial Mediterranean fever",
                 "limit": 5,
             },
-            "pubtator_lookup_citation": {
+            "get_citation": {
                 "citations": ["Biochem Med (Zagreb). 2024;34(1):010501"],
             },
-            "pubtator_convert_article_ids": {
+            "convert_article_ids": {
                 "ids": ["10.1186/s13023-024-03102-5", "PMC11000000"],
             },
-            "pubtator_find_related_articles": {
+            "find_related_articles": {
                 "pmids": ["40234174"],
                 "mode": "similar",
                 "limit": 20,
             },
-            "pubtator_find_entity_relations": {
+            "find_entity_relations": {
                 "entity_id": "@GENE_MEFV",
                 "relation_type": "associate",
                 "target_entity_type": "Disease",
             },
-            "pubtator_lookup_variant_evidence": {
+            "get_variant_evidence": {
                 "gene": "MEFV",
                 "variant": "c.2177T>C",
                 "condition": "familial Mediterranean fever",
                 "max_literature_pmids": 10,
             },
-            "pubtator_suggest_corpus": {
+            "suggest_corpus": {
                 "question": "FMF MEFV VUS colchicine",
                 "max_pmids": 8,
             },
-            "pubtator_diagnostics": {},
-            "pubtator_get_publication_metadata": {
+            "diagnostics": {},
+            "get_publication_metadata": {
                 "pmids": ["40234174", "26802180"],
                 "include_citations": "none",
                 "include_coverage": True,
             },
-            "pubtator_get_publication_passages": {
+            "get_publication_passages": {
                 "pmids": ["40234174"],
                 "mode": "compact_passages",
                 "max_chars": 12000,
             },
-            "pubtator_retrieve_review_context_batch": {
+            "get_review_context_batch": {
                 "review_id": "fmf-colchicine-guidelines",
                 "queries": [
                     "MEFV colchicine",
@@ -512,53 +512,53 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
                 ],
                 "response_mode": "compact",
             },
-            "pubtator_ground_question": {
+            "ground_question": {
                 "question": "Does colchicine prevent FMF flares?",
                 "max_pmids": 8,
             },
-            "pubtator_workflow_help": {
+            "workflow_help": {
                 "task": "clinical_genetics_review",
             },
-            "pubtator_review_quickstart": {
+            "review_quickstart": {
                 "topic": "MEFV colchicine familial Mediterranean fever guideline",
                 "n_pmids": 8,
             },
-            "pubtator_preflight_review_sources": {
+            "preflight_review_sources": {
                 "pmids": ["40234174"],
             },
-            "pubtator_stage_research_session": {
+            "stage_research_session": {
                 "review_id": "fmf-colchicine-guidelines",
                 "query": "MEFV colchicine familial Mediterranean fever guideline",
                 "max_candidates": 20,
             },
-            "pubtator_get_review_passages_by_id": {
+            "get_review_passages_by_id": {
                 "review_id": "fmf-colchicine-guidelines",
                 "passage_ids": ["PMID:40234174:abstract:0"],
             },
-            "pubtator_get_review_audit_trail": {
+            "get_review_audit_trail": {
                 "review_id": "fmf-colchicine-guidelines",
                 "passage_ids": ["PMID:40234174:abstract:0"],
             },
-            "pubtator_get_neighboring_review_passages": {
+            "get_neighboring_review_passages": {
                 "review_id": "fmf-colchicine-guidelines",
                 "passage_id": "PMID:40234174:abstract:0",
                 "before": 1,
                 "after": 1,
             },
-            "pubtator_export_review_audit_bundle": {
+            "export_review_audit_bundle": {
                 "review_id": "fmf-colchicine-guidelines",
             },
-            "pubtator_list_review_indexes": {
+            "list_review_indexes": {
                 "limit": 20,
                 "offset": 0,
             },
-            "pubtator_add_evidence_certainty": {
+            "add_evidence_certainty": {
                 "review_id": "fmf-colchicine-guidelines",
                 "outcome": "FMF attack recurrence",
                 "overall_certainty": "moderate",
                 "passage_ids": ["PMID:40234174:abstract:0"],
             },
-            "pubtator_retrieve_review_context_batch:diagnostics": {
+            "get_review_context_batch:diagnostics": {
                 "review_id": "fmf-colchicine-guidelines",
                 "queries": ["MEFV colchicine", "FMF guideline"],
                 "response_mode": "diagnostics",
@@ -647,25 +647,25 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
                 "scope": "open_access_records_only",
             },
             "tools": [
-                "pubtator_index_review_evidence",
-                "pubtator_ground_question",
-                "pubtator_review_quickstart",
-                "pubtator_stage_research_session",
-                "pubtator_get_research_session_status",
-                "pubtator_list_research_sessions",
-                "pubtator_preflight_review_sources",
-                "pubtator_inspect_review_index",
-                "pubtator_retrieve_review_context",
-                "pubtator_retrieve_review_context_batch",
-                "pubtator_get_review_passages_by_id",
-                "pubtator_get_review_audit_trail",
-                "pubtator_get_neighboring_review_passages",
-                "pubtator_export_review_audit_bundle",
-                "pubtator_list_review_indexes",
-                "pubtator_get_review_index_summary",
-                "pubtator_add_evidence_certainty",
-                "pubtator_list_evidence_certainty",
-                "pubtator_get_evidence_certainty",
+                "index_review_evidence",
+                "ground_question",
+                "review_quickstart",
+                "stage_research_session",
+                "get_research_session_status",
+                "list_research_sessions",
+                "preflight_review_sources",
+                "inspect_review_index",
+                "get_review_context",
+                "get_review_context_batch",
+                "get_review_passages_by_id",
+                "get_review_audit_trail",
+                "get_neighboring_review_passages",
+                "export_review_audit_bundle",
+                "list_review_indexes",
+                "get_review_index_summary",
+                "add_evidence_certainty",
+                "list_evidence_certainty",
+                "get_evidence_certainty",
             ],
             "prompt": "review_rerag_workflow",
             "scope": "research-use review-scoped evidence preparation and retrieval",
@@ -692,7 +692,7 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
                 "list review indexes to manage long-running review work",
                 "store supplied GRADE-style certainty judgments without backend inference",
                 "use query_summaries[].next_steps when a query returns no passages",
-                "fall back to fetch_publication_annotations full=true when retrieval returns no passages",
+                "fall back to get_publication_annotations full=true when retrieval returns no passages",
             ],
             "limitations": [
                 "single-tenant trusted POC",
@@ -718,7 +718,7 @@ def get_capabilities_resource(
         "core_workflow_tools": _core_workflow_tools(),
         "tool_categories": _tool_categories(),
         "workflow_bundles": _workflow_bundles(),
-        "next_tool": "pubtator_workflow_help",
+        "next_tool": "workflow_help",
     }
     allowed_tools = tool_names_for_profile(profile) if profile is not None else None
     if allowed_tools is not None:

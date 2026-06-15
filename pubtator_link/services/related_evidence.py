@@ -216,7 +216,7 @@ class RelatedEvidenceService:
         _attach_normalized_scores(candidates)
         ordered_pmids = [candidate.paper.pmid for candidate in candidates if candidate.paper.pmid]
         meta = graph_request_metadata(
-            tool_name="pubtator_find_related_evidence_candidates",
+            tool_name="find_related_evidence_candidates",
             request=request,
             source_versions={
                 "pubmed": "live",
@@ -228,7 +228,7 @@ class RelatedEvidenceService:
                 "warnings": coalesced_provider_warnings(warnings),
                 "next_commands": [
                     *graph_detail_next_commands(
-                        tool_name="pubtator_find_related_evidence_candidates",
+                        tool_name="find_related_evidence_candidates",
                         request=request,
                         modes=("full",),
                     ),
@@ -613,7 +613,7 @@ def _next_commands(candidate_pmids: list[str]) -> list[dict[str, Any]]:
         return []
     return [
         {
-            "tool": "pubtator_get_publication_passages",
+            "tool": "get_publication_passages",
             "arguments": {"pmids": candidate_pmids},
         }
     ]
@@ -632,7 +632,7 @@ def _recovery_commands(
         return []
     return [
         {
-            "tool": "pubtator_find_related_evidence_candidates",
+            "tool": "find_related_evidence_candidates",
             "arguments": {
                 **request.model_dump(mode="json", exclude_none=True),
                 "include_citation_neighbors": False,

@@ -29,7 +29,7 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
     @mcp_tool_for(
         "full",
         "readonly",
-        name="pubtator_list_review_indexes",
+        name="list_review_indexes",
         title="List Review Indexes",
         output_schema=ListReviewIndexesResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -46,12 +46,12 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 service=service, limit=limit, offset=offset
             )
 
-        return await run_mcp_tool("pubtator_list_review_indexes", call)
+        return await run_mcp_tool("list_review_indexes", call)
 
     @mcp_tool_for(
         "full",
         "readonly",
-        name="pubtator_get_review_index_summary",
+        name="get_review_index_summary",
         title="Get Review Index Summary",
         output_schema=ReviewIndexSummaryResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -65,12 +65,12 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 service=service, review_id=review_id
             )
 
-        return await run_mcp_tool("pubtator_get_review_index_summary", call)
+        return await run_mcp_tool("get_review_index_summary", call)
 
     @mcp_tool_for(
         "lean",
         "full",
-        name="pubtator_index_review_evidence",
+        name="index_review_evidence",
         title="Index Review Evidence",
         output_schema=IndexReviewEvidenceResponse.model_json_schema(),
         annotations=IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
@@ -88,7 +88,7 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         dry_run: bool = False,
         ctx: Context | None = None,
     ) -> dict[str, Any]:
-        """Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs. Call this before retrieve_review_context_batch, use session_id to scope staged research sessions, set wait_until_ready for small corpora, and inspect preparation_status before retrieval."""
+        """Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs. Call this before get_review_context_batch, use session_id to scope staged research sessions, set wait_until_ready for small corpora, and inspect preparation_status before retrieval."""
 
         async def call() -> dict[str, Any]:
             queue = await review_tools.get_review_queue()
@@ -124,7 +124,7 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             return result
 
         return await run_mcp_tool(
-            "pubtator_index_review_evidence",
+            "index_review_evidence",
             call,
             pmids=pmids or [],
         )
@@ -133,7 +133,7 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         "lean",
         "full",
         "readonly",
-        name="pubtator_inspect_review_index",
+        name="inspect_review_index",
         title="Inspect Review Index",
         output_schema=InspectReviewIndexResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -172,4 +172,4 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 cursor=cursor,
             )
 
-        return await run_mcp_tool("pubtator_inspect_review_index", call, pmids=pmids)
+        return await run_mcp_tool("inspect_review_index", call, pmids=pmids)

@@ -96,19 +96,19 @@ The design has four layers.
   20% on a representative 10-call local smoke script while preserving required
   answer fields.
 - The following tools have focused regression tests and move to the target
-  shape described by the punch list: `pubtator_search_guidelines`,
-  `pubtator_lookup_citation`, `pubtator_suggest_corpus`,
-  `pubtator_estimate_publication_context`,
-  `pubtator_get_publication_citation_graph`,
-  `pubtator_find_related_articles`,
-  `pubtator_find_related_evidence_candidates`,
-  `pubtator_ground_question`, `pubtator_review_quickstart`,
-  `pubtator_list_research_sessions`,
-  `pubtator_get_research_session_status`,
-  `pubtator_record_review_context`,
-  `pubtator_get_review_audit_trail`,
-  `pubtator_submit_text_annotation`, and
-  `pubtator_get_text_annotation_results`.
+  shape described by the punch list: `search_guidelines`,
+  `get_citation`, `suggest_corpus`,
+  `estimate_publication_context`,
+  `get_publication_citation_graph`,
+  `find_related_articles`,
+  `find_related_evidence_candidates`,
+  `ground_question`, `review_quickstart`,
+  `list_research_sessions`,
+  `get_research_session_status`,
+  `record_review_context`,
+  `get_review_audit_trail`,
+  `submit_text_annotation`, and
+  `get_text_annotation_results`.
 - `make ci-local` passes.
 - Runtime-facing docs and generated MCP catalog describe the aliases and
   compact controls.

@@ -6,7 +6,7 @@ The earlier 51-case no-MCP baseline was invalid for measuring PubTator-Link MCP
 value because the live provider runner injected `case_metadata.abstract_context`
 into all prompts. That meant the no-MCP arm received the article abstract
 directly, while the MCP arm retrieved the same abstract through
-`pubtator_get_publication_passages`.
+`get_publication_passages`.
 
 That comparison measured pasted abstract context versus MCP-retrieved abstract
 context. It did not measure model-native capability versus PubTator-Link MCP.
