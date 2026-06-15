@@ -17,7 +17,7 @@ class DiagnosticsService(Protocol):
 
 def register_diagnostics_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
     @mcp.tool(
-        name="pubtator_diagnostics",
+        name="diagnostics",
         title="PubTator-Link Diagnostics",
         output_schema=DiagnosticsResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -26,7 +26,7 @@ def register_diagnostics_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         """Use this when a client needs PubTator-Link subsystem status and recovery commands."""
         service = await get_diagnostics_service()
         return await run_mcp_tool(
-            "pubtator_diagnostics",
+            "diagnostics",
             lambda: _diagnostics_impl(service, profile=profile),
         )
 

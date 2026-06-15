@@ -35,7 +35,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         "lean",
         "full",
         "readonly",
-        name="pubtator_preflight_review_sources",
+        name="preflight_review_sources",
         title="Preflight Review Sources",
         output_schema=PreflightReviewSourcesResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -59,16 +59,16 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         except ValueError:
             tool_pmids = None
         return await run_mcp_tool(
-            "pubtator_preflight_review_sources",
+            "preflight_review_sources",
             call,
             pmids=tool_pmids,
-            fallback_tool="pubtator_get_publication_passages" if tool_pmids else None,
+            fallback_tool="get_publication_passages" if tool_pmids else None,
             fallback_args={"pmids": tool_pmids, "mode": "full_abstract"} if tool_pmids else None,
         )
 
     @mcp_tool_for(
         "full",
-        name="pubtator_stage_research_session",
+        name="stage_research_session",
         title="Stage Research Session",
         output_schema=StageResearchSessionResponse.model_json_schema(),
         annotations=NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
@@ -117,7 +117,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         except ValueError:
             tool_pmids = None
         result = await run_mcp_tool(
-            "pubtator_stage_research_session",
+            "stage_research_session",
             call,
             pmids=tool_pmids or [],
         )
@@ -126,7 +126,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
     @mcp_tool_for(
         "lean",
         "full",
-        name="pubtator_ground_question",
+        name="ground_question",
         title="Ground Question",
         output_schema=GroundQuestionResponse.model_json_schema(),
         annotations=IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
@@ -166,11 +166,11 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 max_response_chars=max_response_chars,
             )
 
-        return await run_mcp_tool("pubtator_ground_question", call)
+        return await run_mcp_tool("ground_question", call)
 
     @mcp_tool_for(
         "full",
-        name="pubtator_review_quickstart",
+        name="review_quickstart",
         title="Review Quickstart",
         output_schema=ReviewQuickstartResponse.model_json_schema(),
         annotations=NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
@@ -185,7 +185,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         wait_until_ready: bool = False,
         timeout_ms: Annotated[int, Field(ge=0, le=120_000)] = 0,
     ) -> dict[str, Any]:
-        """Use this when a user wants one-shot casual review setup: search topic, stage/index up to n_pmids, inspect coverage, and return review_id/session_id for retrieve_review_context_batch. Provide one of topic, query, or question."""
+        """Use this when a user wants one-shot casual review setup: search topic, stage/index up to n_pmids, inspect coverage, and return review_id/session_id for get_review_context_batch. Provide one of topic, query, or question."""
 
         async def call() -> dict[str, Any]:
             selected_topic = coalesce_query(topic, query, question)
@@ -202,12 +202,12 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 timeout_ms=timeout_ms,
             )
 
-        return await run_mcp_tool("pubtator_review_quickstart", call)
+        return await run_mcp_tool("review_quickstart", call)
 
     @mcp_tool_for(
         "full",
         "readonly",
-        name="pubtator_get_research_session_status",
+        name="get_research_session_status",
         title="Get Research Session Status",
         output_schema=ResearchSessionStatusResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -226,12 +226,12 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 session_id=session_id,
             )
 
-        return await run_mcp_tool("pubtator_get_research_session_status", call)
+        return await run_mcp_tool("get_research_session_status", call)
 
     @mcp_tool_for(
         "full",
         "readonly",
-        name="pubtator_list_research_sessions",
+        name="list_research_sessions",
         title="List Research Sessions",
         output_schema=ListResearchSessionsResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -247,4 +247,4 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 service=service, review_id=review_id
             )
 
-        return await run_mcp_tool("pubtator_list_research_sessions", call)
+        return await run_mcp_tool("list_research_sessions", call)

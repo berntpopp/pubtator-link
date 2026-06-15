@@ -5,7 +5,7 @@ def test_smoke_surface_summary_tracks_retry_success_and_payload_size() -> None:
     from scripts.smoke_mcp_llm_surface import summarize_call
 
     summary = summarize_call(
-        tool="pubtator_search_literature",
+        tool="search_literature",
         payload={"success": True, "results": [{"pmid": "42135612"}]},
         response_chars=2048,
         elapsed_ms=123,
@@ -15,7 +15,7 @@ def test_smoke_surface_summary_tracks_retry_success_and_payload_size() -> None:
     )
 
     assert summary == {
-        "tool": "pubtator_search_literature",
+        "tool": "search_literature",
         "success": True,
         "error_code": None,
         "first_call_success": True,
@@ -31,7 +31,7 @@ def test_smoke_surface_summary_treats_absent_success_without_error_as_success() 
     from scripts.smoke_mcp_llm_surface import summarize_call
 
     summary = summarize_call(
-        tool="pubtator_lookup_mesh",
+        tool="get_mesh",
         payload={"query": "familial Mediterranean fever", "descriptors": []},
         response_chars=2048,
         elapsed_ms=123,

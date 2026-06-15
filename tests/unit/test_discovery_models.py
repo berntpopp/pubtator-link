@@ -36,7 +36,7 @@ def test_article_id_conversion_response_serializes_meta_alias() -> None:
             source_urls=["https://example.test/idconv"],
             next_commands=[
                 {
-                    "tool": "pubtator_stage_research_session",
+                    "tool": "stage_research_session",
                     "arguments": {"pmids": ["123"]},
                 }
             ],
@@ -49,7 +49,7 @@ def test_article_id_conversion_response_serializes_meta_alias() -> None:
     assert dumped["_meta"]["research_use_only"] is True
     assert dumped["_meta"]["next_commands"] == [
         {
-            "tool": "pubtator_stage_research_session",
+            "tool": "stage_research_session",
             "arguments": {"pmids": ["123"]},
         }
     ]

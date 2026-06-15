@@ -123,10 +123,10 @@ async def test_convert_article_ids_adds_candidates_and_next_commands() -> None:
 
     assert response.candidate_pmids == ["123"]
     assert response.unresolved == ["bad"]
-    assert response.meta.next_commands[0]["tool"] == "pubtator_stage_research_session"
+    assert response.meta.next_commands[0]["tool"] == "stage_research_session"
     assert response.meta.next_commands[0]["arguments"] == {"pmids": ["123"]}
     assert response.meta.next_commands[1] == {
-        "tool": "pubtator_index_review_evidence",
+        "tool": "index_review_evidence",
         "arguments": {"pmids": ["123"]},
     }
     assert_no_prepare_mode(response.meta.next_commands)
@@ -264,7 +264,7 @@ async def test_lookup_citation_preserves_match_when_metadata_enrichment_fails() 
     assert response.metadata_status == "unavailable"
     assert response.meta.next_commands[0]["arguments"] == {"pmids": ["26802180"]}
     assert any(
-        command["tool"] == "pubtator_get_publication_metadata"
+        command["tool"] == "get_publication_metadata"
         and command["arguments"] == {"pmids": ["26802180"]}
         for command in response.meta.next_commands
     )
@@ -391,7 +391,7 @@ async def test_lookup_mesh_returns_search_next_command() -> None:
     response = await service.lookup_mesh("familial mediterranean fever")
 
     assert response.descriptors[0].ui == "D010505"
-    assert response.meta.next_commands[0]["tool"] == "pubtator_search_literature"
+    assert response.meta.next_commands[0]["tool"] == "search_literature"
 
 
 @pytest.mark.asyncio
@@ -641,8 +641,7 @@ async def test_find_related_articles_deduplicates_candidates() -> None:
     assert response.unresolved == ["999"]
     assert response.metadata_status == "unavailable"
     assert any(
-        command["tool"] == "pubtator_get_publication_metadata"
-        for command in response.meta.next_commands
+        command["tool"] == "get_publication_metadata" for command in response.meta.next_commands
     )
 
 
@@ -715,7 +714,7 @@ async def test_find_related_articles_reports_partial_metadata_enrichment() -> No
     assert response.related_articles[0].title == "Related FMF cohort"
     assert response.related_articles[1].title is None
     assert any(
-        command["tool"] == "pubtator_get_publication_metadata"
+        command["tool"] == "get_publication_metadata"
         and command["arguments"] == {"pmids": ["456", "789"]}
         for command in response.meta.next_commands
     )
@@ -743,8 +742,7 @@ async def test_find_related_articles_reports_unavailable_when_metadata_enrichmen
         relation="similar",
     )
     assert any(
-        command["tool"] == "pubtator_get_publication_metadata"
-        and command["arguments"] == {"pmids": ["456"]}
+        command["tool"] == "get_publication_metadata" and command["arguments"] == {"pmids": ["456"]}
         for command in response.meta.next_commands
     )
 

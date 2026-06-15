@@ -175,21 +175,21 @@ def error_code_for_exception(exc: Exception) -> str:
 def _fallback_for_context(context: McpErrorContext) -> tuple[str | None, dict[str, Any] | None]:
     if context.fallback_tool is not None:
         return context.fallback_tool, context.fallback_args or {}
-    if context.tool_name == "pubtator_preflight_review_sources" and context.pmids:
+    if context.tool_name == "preflight_review_sources" and context.pmids:
         return (
-            "pubtator_get_publication_passages",
+            "get_publication_passages",
             {"pmids": context.pmids, "mode": "full_abstract"},
         )
     if (
         context.tool_name
         in {
-            "pubtator_index_review_evidence",
-            "pubtator_stage_research_session",
+            "index_review_evidence",
+            "stage_research_session",
         }
         and context.pmids
     ):
         return (
-            "pubtator_get_publication_passages",
+            "get_publication_passages",
             {"pmids": context.pmids, "mode": "compact_passages"},
         )
     return None, None
@@ -202,41 +202,40 @@ def _recovery_text_for_context(
 ) -> str:
     if error_code == "review_schema_not_current":
         return (
-            "Run pubtator_diagnostics. If the review schema is stale, apply database "
-            "migrations and retry."
+            "Run diagnostics. If the review schema is stale, apply database migrations and retry."
         )
-    if context.tool_name == "pubtator_preflight_review_sources" and fallback_tool:
+    if context.tool_name == "preflight_review_sources" and fallback_tool:
         return (
-            "Call pubtator_get_publication_passages with the same PMIDs. "
+            "Call get_publication_passages with the same PMIDs. "
             "Use mode='full_abstract' for article-local answering; run diagnostics only if "
             "passage retrieval also fails."
         )
     if error_code == "upstream_unavailable":
-        if context.tool_name == "pubtator_search_literature":
+        if context.tool_name == "search_literature":
             return (
                 "Retry later. If optional filters caused the upstream failure, retry without "
                 "filters and post-filter the returned results client-side."
             )
-        return "Retry later or run pubtator_diagnostics if the upstream failure persists."
+        return "Retry later or run diagnostics if the upstream failure persists."
     if error_code == "curated_url_rejected":
         return "Use curated URLs from the configured public literature source allowlist."
-    if context.tool_name == "pubtator_convert_article_ids":
+    if context.tool_name == "convert_article_ids":
         return (
             "Retry with one identifier at a time. If only DOI conversion fails, search "
-            "the DOI or title with pubtator_search_literature."
+            "the DOI or title with search_literature."
         )
-    if context.tool_name == "pubtator_submit_text_annotation":
+    if context.tool_name == "submit_text_annotation":
         return (
             "Retry with a shorter text or fewer bioconcepts. If submission still fails, "
-            "use pubtator_search_biomedical_entities for entity lookup."
+            "use search_biomedical_entities for entity lookup."
         )
-    if context.tool_name == "pubtator_export_review_audit_bundle":
+    if context.tool_name == "export_review_audit_bundle":
         return (
             "Use fallback_inline=True or choose a writable export_path. Inspect "
-            "pubtator_get_review_audit_trail if bundle export still fails."
+            "get_review_audit_trail if bundle export still fails."
         )
     return (
-        "Inspect recent_mcp_errors in pubtator_diagnostics and retry with the documented "
+        "Inspect recent_mcp_errors in diagnostics and retry with the documented "
         "fallback if available."
     )
 
@@ -284,7 +283,7 @@ def mcp_validation_tool_error(
             error_code="validation_failed",
         ),
         "_meta": {
-            "next_commands": [{"tool": "pubtator_diagnostics", "arguments": {}}],
+            "next_commands": [{"tool": "diagnostics", "arguments": {}}],
             "unsafe_for_clinical_use": True,
         },
     }
@@ -340,17 +339,13 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> ToolError:
     )
     fallback_tool, fallback_args = _fallback_for_context(context)
     exception_pmids = _pmids_for_exception(exc)
-    if (
-        fallback_tool is None
-        and context.tool_name == "pubtator_ground_question"
-        and exception_pmids
-    ):
-        fallback_tool = "pubtator_get_publication_passages"
+    if fallback_tool is None and context.tool_name == "ground_question" and exception_pmids:
+        fallback_tool = "get_publication_passages"
         fallback_args = {"pmids": exception_pmids, "mode": "compact_passages"}
     next_commands: list[dict[str, Any]] = []
     if fallback_tool and fallback_args is not None:
         next_commands.append({"tool": fallback_tool, "arguments": fallback_args})
-    next_commands.append({"tool": "pubtator_diagnostics", "arguments": {}})
+    next_commands.append({"tool": "diagnostics", "arguments": {}})
     error_code = error_code_for_exception(exc)
     payload = {
         "success": False,

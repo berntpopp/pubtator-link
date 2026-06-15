@@ -18,5 +18,5 @@ def text_annotation_degraded_payload(
         "processing_time": None,
         "retryable": True,
         "message": message or "PubTator text annotation upstream is unavailable.",
-        "next_tools": ["pubtator_get_text_annotation_results"],
+        "next_tools": ["get_text_annotation_results"],
     }

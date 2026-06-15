@@ -9,10 +9,10 @@ def test_review_rerag_tools_are_exposed_with_expected_names() -> None:
     mcp = create_pubtator_mcp(profile="full")
     tool_names = set(mcp._tool_manager._tools)
 
-    assert "pubtator_index_review_evidence" in tool_names
-    assert "pubtator_inspect_review_index" in tool_names
-    assert "pubtator_retrieve_review_context" in tool_names
-    assert "pubtator_retrieve_review_context_batch" in tool_names
+    assert "index_review_evidence" in tool_names
+    assert "inspect_review_index" in tool_names
+    assert "get_review_context" in tool_names
+    assert "get_review_context_batch" in tool_names
 
 
 def test_review_tools_are_registered_with_flat_canonical_schemas() -> None:
@@ -21,13 +21,13 @@ def test_review_tools_are_registered_with_flat_canonical_schemas() -> None:
 
     removed_suffix = "_v" + "2"
     for removed_name in (
-        f"pubtator_inspect_review_index{removed_suffix}",
-        f"pubtator_retrieve_review_context{removed_suffix}",
-        f"pubtator_retrieve_review_context_batch{removed_suffix}",
+        f"inspect_review_index{removed_suffix}",
+        f"get_review_context{removed_suffix}",
+        f"get_review_context_batch{removed_suffix}",
     ):
         assert removed_name not in tools
 
-    schema = tools["pubtator_retrieve_review_context_batch"].parameters
+    schema = tools["get_review_context_batch"].parameters
     properties = schema["properties"]
     assert "review_id" in properties
     assert "queries" in properties
@@ -37,21 +37,21 @@ def test_review_tools_are_registered_with_flat_canonical_schemas() -> None:
     assert properties["min_passages_per_pmid"]["default"] == 0
     assert properties["include_diagnostics"]["default"] is False
     assert "prioritize_pmids" in properties
-    inspect_properties = tools["pubtator_inspect_review_index"].parameters["properties"]
+    inspect_properties = tools["inspect_review_index"].parameters["properties"]
     assert inspect_properties["include_metadata"]["default"] is False
     assert inspect_properties["metadata"]["default"] == "basic"
 
 
 def test_batch_response_mode_schema_includes_quotes() -> None:
     mcp = create_pubtator_mcp()
-    schema = mcp._tool_manager._tools["pubtator_retrieve_review_context_batch"].parameters
+    schema = mcp._tool_manager._tools["get_review_context_batch"].parameters
 
     assert "quotes" in schema["properties"]["response_mode"]["enum"]
 
 
 def test_inspect_review_index_schema_exposes_pagination_args() -> None:
     mcp = create_pubtator_mcp()
-    schema = mcp._tool_manager._tools["pubtator_inspect_review_index"].parameters
+    schema = mcp._tool_manager._tools["inspect_review_index"].parameters
 
     assert schema["properties"]["limit"]["default"] == 50
     assert "cursor" in schema["properties"]
@@ -59,7 +59,7 @@ def test_inspect_review_index_schema_exposes_pagination_args() -> None:
 
 def test_retrieve_review_context_batch_schema_uses_auto_fit_budget_defaults() -> None:
     mcp = create_pubtator_mcp()
-    schema = mcp._tool_manager._tools["pubtator_retrieve_review_context_batch"].parameters
+    schema = mcp._tool_manager._tools["get_review_context_batch"].parameters
 
     assert "max_chars" not in schema.get("required", [])
     assert "max_response_chars" not in schema.get("required", [])
@@ -75,7 +75,7 @@ def test_retrieve_review_context_batch_schema_uses_auto_fit_budget_defaults() ->
 
 def test_retrieve_batch_schema_exposes_verbosity_and_auto_response_budget() -> None:
     mcp = create_pubtator_mcp()
-    schema = mcp._tool_manager._tools["pubtator_retrieve_review_context_batch"].parameters
+    schema = mcp._tool_manager._tools["get_review_context_batch"].parameters
 
     assert schema["properties"]["verbosity"]["default"] == "standard"
     assert set(schema["properties"]["verbosity"]["enum"]) == {"lean", "standard", "full"}
@@ -84,7 +84,7 @@ def test_retrieve_batch_schema_exposes_verbosity_and_auto_response_budget() -> N
 
 def test_review_tools_accept_context_without_exposing_ctx_parameter() -> None:
     mcp = create_pubtator_mcp()
-    tool = mcp._tool_manager._tools["pubtator_retrieve_review_context_batch"]
+    tool = mcp._tool_manager._tools["get_review_context_batch"]
     schema = tool.parameters
 
     assert "ctx" not in schema["properties"]
@@ -94,25 +94,25 @@ def test_review_rerag_tool_descriptions_explain_workflow_and_query_style() -> No
     mcp = create_pubtator_mcp(profile="full")
     tools = mcp._tool_manager._tools
 
-    index_description = tools["pubtator_index_review_evidence"].description
-    inspect_description = tools["pubtator_inspect_review_index"].description
-    retrieve_description = tools["pubtator_retrieve_review_context"].description
-    batch_description = tools["pubtator_retrieve_review_context_batch"].description
+    index_description = tools["index_review_evidence"].description
+    inspect_description = tools["inspect_review_index"].description
+    retrieve_description = tools["get_review_context"].description
+    batch_description = tools["get_review_context_batch"].description
 
-    assert "Call this before retrieve_review_context" in index_description
+    assert "Call this before get_review_context_batch" in index_description
     assert "preparation_status" in index_description
     assert inspect_description.startswith("Use this when")
     assert "PMIDs, sections, passage counts, and failures" in inspect_description
     assert "short keyword query" in retrieve_description
     assert "If zero passages are returned" in retrieve_description
-    assert "fetch_publication_annotations" in retrieve_description
+    assert "get_publication_annotations" in retrieve_description
     assert batch_description.startswith("Use this when")
     assert "multiple short review retrieval query variants" in batch_description
 
     for name in (
-        "pubtator_fetch_publication_annotations",
-        "pubtator_retrieve_review_context",
-        "pubtator_index_review_evidence",
+        "get_publication_annotations",
+        "get_review_context",
+        "index_review_evidence",
     ):
         assert tools[name].description.startswith("Use this when")
 
@@ -135,7 +135,7 @@ def test_index_review_evidence_mcp_request_rejects_unknown_prepare_mode() -> Non
 
 def test_index_review_evidence_mcp_schema_does_not_advertise_candidate_fast() -> None:
     mcp = create_pubtator_mcp()
-    schema = mcp._tool_manager._tools["pubtator_index_review_evidence"].parameters
+    schema = mcp._tool_manager._tools["index_review_evidence"].parameters
 
     assert "prepare_mode" not in schema["properties"]
     assert "candidate_fast" not in str(schema)
@@ -177,7 +177,7 @@ async def test_index_review_evidence_accepts_legacy_prepare_mode_without_schema_
 
     monkeypatch.setattr(review_tools, "get_review_queue", fake_get_review_queue)
     mcp = create_pubtator_mcp()
-    tool = mcp._tool_manager._tools["pubtator_index_review_evidence"]
+    tool = mcp._tool_manager._tools["index_review_evidence"]
 
     result = await tool.run(
         {
@@ -210,7 +210,7 @@ async def test_record_review_context_propagates_service_errors(
         "get_llm_review_context_service",
         fake_get_llm_review_context_service,
     )
-    tool = create_pubtator_mcp()._tool_manager._tools["pubtator_record_review_context"]
+    tool = create_pubtator_mcp()._tool_manager._tools["record_review_context"]
 
     with pytest.raises(ToolError):
         await tool.run(
@@ -240,7 +240,7 @@ async def test_record_review_context_rejects_empty_passage_ids(
         "get_llm_review_context_service",
         fake_get_llm_review_context_service,
     )
-    tool = create_pubtator_mcp()._tool_manager._tools["pubtator_record_review_context"]
+    tool = create_pubtator_mcp()._tool_manager._tools["record_review_context"]
 
     with pytest.raises(ToolError):
         await tool.run({"review_id": "review-1", "event_type": "passage_selected"})
@@ -284,7 +284,7 @@ async def test_record_review_context_records_audit_event(
         "get_llm_review_context_service",
         fake_get_llm_review_context_service,
     )
-    tool = create_pubtator_mcp()._tool_manager._tools["pubtator_record_review_context"]
+    tool = create_pubtator_mcp()._tool_manager._tools["record_review_context"]
 
     result = await tool.run(
         {
@@ -338,7 +338,7 @@ async def test_index_review_evidence_reports_progress_when_waiting(monkeypatch) 
     monkeypatch.setattr("pubtator_link.mcp.tools.review.index_review_evidence_impl", fake_impl)
     monkeypatch.setattr("pubtator_link.mcp.tools.review.get_review_queue", fake_get_review_queue)
 
-    tool = create_pubtator_mcp()._tool_manager._tools["pubtator_index_review_evidence"]
+    tool = create_pubtator_mcp()._tool_manager._tools["index_review_evidence"]
     await tool.fn(
         review_id="rev-1",
         pmids=["40234174"],

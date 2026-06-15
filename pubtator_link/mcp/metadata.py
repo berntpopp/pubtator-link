@@ -61,21 +61,21 @@ class ServerCapabilitiesResponse(BaseModel):
 
 def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
     @mcp.tool(
-        name="pubtator_get_server_capabilities",
+        name="get_server_capabilities",
         title="Get PubTator-Link Capabilities",
         output_schema=ServerCapabilitiesResponse.model_json_schema(),
         annotations=READ_ONLY_CLOSED_WORLD,
     )
     async def get_server_capabilities(details: list[str] | None = None) -> dict[str, Any]:
-        """Use this when a client needs supported tools, transports, formats, and limitations. Do not use this for task-specific workflow guidance; use pubtator_workflow_help. Next: pubtator_workflow_help."""
+        """Use this when a client needs supported tools, transports, formats, and limitations. Do not use this for task-specific workflow guidance; use workflow_help. Next: workflow_help."""
 
         async def call() -> dict[str, Any]:
             return get_capabilities_resource(details=details, profile=profile)
 
-        return await run_mcp_tool("pubtator_get_server_capabilities", call)
+        return await run_mcp_tool("get_server_capabilities", call)
 
     @mcp.tool(
-        name="pubtator_workflow_help",
+        name="workflow_help",
         title="Workflow Help",
         output_schema=WorkflowHelpResponse.model_json_schema(),
         annotations=READ_ONLY_CLOSED_WORLD,
@@ -88,7 +88,7 @@ def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
         async def call() -> dict[str, Any]:
             return WorkflowHelpService(profile=profile).get_help(task).model_dump(by_alias=True)
 
-        return await run_mcp_tool("pubtator_workflow_help", call)
+        return await run_mcp_tool("workflow_help", call)
 
     @mcp.resource("pubtator://capabilities")
     def capabilities() -> dict[str, Any]:

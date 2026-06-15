@@ -227,7 +227,7 @@ async def test_suggest_corpus_route_returns_candidate_pmids() -> None:
         candidate_pmids=["26802180", "33726481"],
         candidates=[],
         searches=[],
-        _meta={"next_commands": ["pubtator_index_review_evidence"]},
+        _meta={"next_commands": ["index_review_evidence"]},
     )
     app.dependency_overrides[get_corpus_suggestion_service] = lambda: service
 

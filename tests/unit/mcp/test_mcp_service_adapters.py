@@ -38,7 +38,7 @@ def test_strip_meta_for_repeated_call_removes_diagnostics_and_preserves_answer_c
 
     payload = {
         "success": True,
-        "_meta": {"next_commands": ["pubtator_retrieve_review_context_batch"]},
+        "_meta": {"next_commands": ["get_review_context_batch"]},
         "provider_status": [{"provider": "pubmed", "status": "success"}],
         "results": [
             {
@@ -405,7 +405,7 @@ async def test_inspect_review_index_adapter_wires_limit_cursor_and_next_command(
     assert service.request.limit == 1
     assert service.request.cursor == "cursor-1"
     assert result["next_cursor"] == "cursor-2"
-    assert result["_meta"]["next_commands"][0]["tool"] == "pubtator_inspect_review_index"
+    assert result["_meta"]["next_commands"][0]["tool"] == "inspect_review_index"
     assert result["_meta"]["next_commands"][0]["arguments"]["cursor"] == "cursor-2"
 
 
@@ -744,7 +744,7 @@ async def test_suggest_corpus_impl_returns_candidate_pmids() -> None:
                 candidate_pmids=["26802180"],
                 candidates=[],
                 searches=[],
-                _meta={"next_commands": ["pubtator_index_review_evidence"]},
+                _meta={"next_commands": ["index_review_evidence"]},
             )
 
     result = await service_adapters.suggest_corpus_impl(
@@ -758,7 +758,7 @@ async def test_suggest_corpus_impl_returns_candidate_pmids() -> None:
     )
 
     assert result["candidate_pmids"] == ["26802180"]
-    assert result["_meta"]["next_commands"] == ["pubtator_index_review_evidence"]
+    assert result["_meta"]["next_commands"] == ["index_review_evidence"]
 
 
 async def test_stage_research_session_impl_serializes_meta_alias() -> None:
@@ -808,7 +808,7 @@ async def test_review_quickstart_adapter_returns_retrieval_handoff() -> None:
                     coverage_summary={"abstract_only": 1},
                     preparation_status=PreparationStatus(complete=1),
                 ),
-                meta={"next_commands": ["pubtator_retrieve_review_context_batch"]},
+                meta={"next_commands": ["get_review_context_batch"]},
             )
 
     class ContextService:
@@ -834,7 +834,7 @@ async def test_review_quickstart_adapter_returns_retrieval_handoff() -> None:
     assert result["review_id"].startswith("quickstart-")
     assert result["session_id"] == "session-1"
     assert result["coverage_summary"] == {"abstract_only": 1}
-    assert result["next_commands"][0] == "pubtator_retrieve_review_context_batch"
+    assert result["next_commands"][0] == "get_review_context_batch"
 
 
 @pytest.mark.asyncio
@@ -1123,8 +1123,8 @@ async def test_ground_question_adapter_chains_search_index_inspect_retrieve() ->
     assert result["ready_to_retrieve"] is True
     assert result["coverage_summary"] == {"full_text": 2}
     assert result["next_tools"] == [
-        "pubtator_record_review_context",
-        "pubtator_get_review_audit_trail",
+        "record_review_context",
+        "get_review_audit_trail",
     ]
     assert "_meta" not in result
 
@@ -1198,7 +1198,7 @@ async def test_ground_question_adapter_no_pmids_returns_search_recovery() -> Non
     assert result["selected_pmids"] == []
     assert result["ready_to_retrieve"] is False
     assert result["context"] is None
-    assert result["next_tools"] == ["pubtator_search_literature"]
+    assert result["next_tools"] == ["search_literature"]
     assert result["recovery"] == [
         "Refine the search query or provide candidate PMIDs explicitly.",
     ]
@@ -1461,8 +1461,8 @@ async def test_ground_question_adapter_waits_when_selected_pmids_are_not_ready()
     assert result["ready_to_retrieve"] is False
     assert result["context"] is None
     assert result["next_tools"] == [
-        "pubtator_inspect_review_index",
-        "pubtator_retrieve_review_context_batch",
+        "inspect_review_index",
+        "get_review_context_batch",
     ]
 
 
@@ -2236,8 +2236,8 @@ async def test_search_literature_meta_uses_short_next_tool_hints() -> None:
 
     meta = result["_meta"]
     assert meta["next_tools"] == [
-        "pubtator_preflight_review_sources",
-        "pubtator_index_review_evidence",
+        "preflight_review_sources",
+        "index_review_evidence",
     ]
     assert meta["workflow"] == "search -> preflight -> index -> inspect -> retrieve"
     assert meta["details_resource"] == "pubtator://workflow-help"
@@ -2295,8 +2295,8 @@ async def test_search_literature_default_does_not_require_preflight_service() ->
     assert "review database unavailable" not in str(result).lower()
     assert result["_meta"]["coverage_note"].startswith("Search is read-only metadata discovery.")
     assert result["_meta"]["next_tools"] == [
-        "pubtator_preflight_review_sources",
-        "pubtator_index_review_evidence",
+        "preflight_review_sources",
+        "index_review_evidence",
     ]
     assert "next_commands" not in result["_meta"]
 
@@ -3352,7 +3352,7 @@ async def test_submit_text_annotation_wait_returns_structured_retryable_degraded
     assert result["session_id"] == "ABC123DEF456"
     assert result["status"] == "upstream_unavailable"
     assert result["retryable"] is True
-    assert result["next_tools"] == ["pubtator_get_text_annotation_results"]
+    assert result["next_tools"] == ["get_text_annotation_results"]
 
 
 @pytest.mark.asyncio

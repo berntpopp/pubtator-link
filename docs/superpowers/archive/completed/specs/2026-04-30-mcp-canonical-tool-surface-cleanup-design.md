@@ -46,7 +46,7 @@ In scope:
 Out of scope:
 
 - Adding new retrieval algorithms, ranking formulas, or metadata enrichment.
-- Adding `pubtator_list_review_indexes`.
+- Adding `list_review_indexes`.
 - Adding citation style formatting.
 - Changing REST route paths or request bodies.
 - Preserving `_v2` aliases for backward compatibility.

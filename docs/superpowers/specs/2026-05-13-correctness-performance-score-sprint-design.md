@@ -182,8 +182,8 @@ Replace callback-under-lock with short repository operations:
 ### Problem
 
 `REVIEW_WRITE_ANNOTATIONS` declares `idempotentHint=True` for all review writes.
-Some tools are not idempotent. `pubtator_add_evidence_certainty` creates a new
-UUID when no certainty ID is supplied. `pubtator_record_review_context` appends
+Some tools are not idempotent. `add_evidence_certainty` creates a new
+UUID when no certainty ID is supplied. `record_review_context` appends
 new context and event records. Six tools currently use this annotation and must
 be classified.
 
@@ -197,17 +197,17 @@ be classified.
 - Use non-idempotent annotations for append/create operations where retrying can
   create additional records.
 - Classify the current tools as:
-  - `pubtator_add_evidence_certainty`: non-idempotent because it creates a new
+  - `add_evidence_certainty`: non-idempotent because it creates a new
     certainty UUID when the caller does not supply one.
-  - `pubtator_stage_research_session`: non-idempotent because it generates a new
+  - `stage_research_session`: non-idempotent because it generates a new
     session ID when omitted and writes session/candidate rows.
-  - `pubtator_review_quickstart`: non-idempotent because it stages a research
+  - `review_quickstart`: non-idempotent because it stages a research
     session and may generate a session ID through the stage service.
-  - `pubtator_record_review_context`: non-idempotent because it appends context
+  - `record_review_context`: non-idempotent because it appends context
     and event records.
-  - `pubtator_index_review_evidence`: idempotent because review/source queueing
+  - `index_review_evidence`: idempotent because review/source queueing
     and repository state deduplicate by `review_id` and source ID.
-  - `pubtator_ground_question`: idempotent for MCP retry purposes because the
+  - `ground_question`: idempotent for MCP retry purposes because the
     default review ID is deterministic from the question, indexing deduplicates
     selected sources, and the tool does not append research sessions or LLM
     context records.
@@ -216,17 +216,17 @@ be classified.
 
 ### Acceptance Tests
 
-- `pubtator_add_evidence_certainty` has `readOnlyHint=False` and
+- `add_evidence_certainty` has `readOnlyHint=False` and
   `idempotentHint=False`.
-- `pubtator_stage_research_session` has `readOnlyHint=False` and
+- `stage_research_session` has `readOnlyHint=False` and
   `idempotentHint=False`.
-- `pubtator_review_quickstart` has `readOnlyHint=False` and
+- `review_quickstart` has `readOnlyHint=False` and
   `idempotentHint=False`.
-- `pubtator_record_review_context` has `readOnlyHint=False` and
+- `record_review_context` has `readOnlyHint=False` and
   `idempotentHint=False`.
-- `pubtator_index_review_evidence` keeps its existing write annotation semantics
+- `index_review_evidence` keeps its existing write annotation semantics
   because queue and repository behavior deduplicate by review/source IDs.
-- `pubtator_ground_question` keeps idempotent write annotation semantics and has
+- `ground_question` keeps idempotent write annotation semantics and has
   a unit test documenting the rationale.
 
 ## Workstream 4: Retry Metadata Integrity

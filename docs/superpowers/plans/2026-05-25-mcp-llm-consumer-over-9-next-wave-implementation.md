@@ -89,7 +89,7 @@ async def test_search_guidelines_accepts_query_alias(monkeypatch: pytest.MonkeyP
         return {"success": True, "query": kwargs["text"], "results": []}
 
     monkeypatch.setattr(literature_tools, "search_literature_impl", fake_impl)
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["pubtator_search_guidelines"]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["search_guidelines"]
     await tool.run({"query": "familial mediterranean fever pediatric"})
     assert captured["text"] == "familial mediterranean fever pediatric"
 
@@ -97,10 +97,10 @@ async def test_search_guidelines_accepts_query_alias(monkeypatch: pytest.MonkeyP
 def test_pmid_list_tools_expose_scalar_pmid_alias() -> None:
     tools = create_pubtator_mcp(profile="full")._tool_manager._tools
     for name in (
-        "pubtator_preflight_review_sources",
-        "pubtator_get_publication_metadata",
-        "pubtator_estimate_publication_context",
-        "pubtator_find_related_articles",
+        "preflight_review_sources",
+        "get_publication_metadata",
+        "estimate_publication_context",
+        "find_related_articles",
     ):
         assert "pmid" in tools[name].parameters["properties"]
 ```
@@ -547,7 +547,7 @@ Expected: FAIL because submit does not support wait mode and result polling is f
 
 - [ ] **Step 3: Implement wait mode**
 
-Add `wait: bool = False` and `timeout_ms: int = 30000` to `pubtator_submit_text_annotation`. When `wait=true`, submit the job, poll `get_text_annotation_results` server-side with bounded backoff, and return either the final annotation result or a pending envelope with retry instructions.
+Add `wait: bool = False` and `timeout_ms: int = 30000` to `submit_text_annotation`. When `wait=true`, submit the job, poll `get_text_annotation_results` server-side with bounded backoff, and return either the final annotation result or a pending envelope with retry instructions.
 
 - [ ] **Step 4: Verify**
 

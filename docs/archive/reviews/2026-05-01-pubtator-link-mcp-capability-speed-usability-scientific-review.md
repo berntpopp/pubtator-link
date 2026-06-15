@@ -233,10 +233,10 @@ LLM consumers often need a targeted follow-up after retrieval:
 
 Recommended tools:
 
-- `pubtator_get_review_passages_by_id`
+- `get_review_passages_by_id`
   - Inputs: `review_id`, `passage_ids`, `max_chars_per_passage`, `include_metadata`
   - Output: exact passages or not-found diagnostics.
-- `pubtator_get_neighboring_review_passages`
+- `get_neighboring_review_passages`
   - Inputs: `review_id`, `passage_id`, `before`, `after`, `same_section`
   - Output: ordered local context around the passage.
 - `pubtator.expand_review_passage`
@@ -253,10 +253,10 @@ for long-running work.
 
 Recommended lifecycle tools:
 
-- `pubtator_list_review_indexes`
+- `list_review_indexes`
   - Include review ID, creation time, updated time, source counts, passage counts,
     preparation status, and approximate bytes.
-- `pubtator_get_review_index_summary`
+- `get_review_index_summary`
   - Similar to inspect, but optimized for high-level inventory.
 - `pubtator.delete_review_index`
   - Expose only for local/private deployments, or guard behind config.
@@ -406,7 +406,7 @@ Deliverables:
 
 Suggested public surface:
 
-- `pubtator_preflight_review_sources`
+- `preflight_review_sources`
 - Add optional `include_coverage_hints=true` to `search_literature`
 - Add coverage summary to `index_review_evidence` response when cheap.
 
@@ -446,8 +446,8 @@ Deliverables:
   - `get_passages_by_id`
   - `neighboring_passages`
 - MCP tools:
-  - `pubtator_get_review_passages_by_id`
-  - `pubtator_get_neighboring_review_passages`
+  - `get_review_passages_by_id`
+  - `get_neighboring_review_passages`
 - REST route equivalents if desired.
 - Tests for not-found passage IDs, section boundaries, ordering, and char budgets.
 
@@ -565,7 +565,7 @@ search-candidate endpoint with measurable selection and latency semantics.
 
 The `mcp__pubtator-link__...` prefix observed by consumers is mostly a client
 harness display issue. The server public tool names are already reasonably
-compact (`pubtator_retrieve_review_context_batch`). The server can help by:
+compact (`get_review_context_batch`). The server can help by:
 
 - keeping public tool names stable and canonical,
 - avoiding duplicate aliases,

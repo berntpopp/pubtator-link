@@ -84,6 +84,23 @@ def _case_prompt(case: BenchmarkCase, mode: BenchmarkMode, prompt_template: str 
     )
 
 
+def _prompt_references_pubtator_mcp(prompt: str) -> bool:
+    """Detect whether a prompt asks the model to use the PubTator-Link MCP surface.
+
+    Tool names are unprefixed under the GeneFoundry Tool-Naming Standard v1, so we
+    match the gateway/client namespace token (``mcp__pubtator-link``) or any known
+    registered tool name as a whole word. Plain mentions like "PubTator-Link MCP"
+    in a *negative* instruction must not trigger MCP access.
+    """
+    from pubtator_link.mcp.profiles import tool_names_for_profile
+
+    if "mcp__pubtator-link" in prompt:
+        return True
+    known_tools = tool_names_for_profile("full")
+    tokens = set(re.findall(r"[a-z][a-z0-9_]*", prompt))
+    return bool(tokens & known_tools)
+
+
 def _provider_command(provider: str, model: str, prompt: str) -> list[str]:
     if provider == "claude":
         command = [
@@ -98,7 +115,7 @@ def _provider_command(provider: str, model: str, prompt: str) -> list[str]:
             model,
             prompt,
         ]
-        if "pubtator_" in prompt:
+        if _prompt_references_pubtator_mcp(prompt):
             command[2:2] = ["--allowedTools", "mcp__pubtator-link"]
         else:
             command[2:2] = ["--tools", "WebSearch,WebFetch"]

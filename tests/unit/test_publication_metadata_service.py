@@ -271,8 +271,8 @@ async def test_publication_metadata_service_parses_esummary_and_mesh() -> None:
     assert response.success is True
     assert response.failed_pmids == {}
     assert response.meta["next_commands"] == [
-        "Use pubtator_get_publication_passages for citable passage text.",
-        "Use pubtator_index_review_evidence after selecting the final PMID corpus.",
+        "Use get_publication_passages for citable passage text.",
+        "Use index_review_evidence after selecting the final PMID corpus.",
     ]
     assert metadata.authors[0].display_name == "Kavrul Kayaalp G"
     assert metadata.journal == JOURNAL

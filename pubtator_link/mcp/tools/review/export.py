@@ -17,7 +17,7 @@ def register_export_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
 
     @mcp_tool_for(
         "full",
-        name="pubtator_export_review_audit_bundle",
+        name="export_review_audit_bundle",
         title="Export Review Audit Bundle",
         output_schema=McpReviewAuditBundleResponse.model_json_schema(),
         annotations=FILE_EXPORT_ANNOTATIONS,
@@ -42,4 +42,4 @@ def register_export_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 response_mode=response_mode,
             )
 
-        return await run_mcp_tool("pubtator_export_review_audit_bundle", call)
+        return await run_mcp_tool("export_review_audit_bundle", call)

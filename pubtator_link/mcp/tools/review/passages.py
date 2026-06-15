@@ -18,7 +18,7 @@ def register_passages_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
     @mcp_tool_for(
         "full",
         "readonly",
-        name="pubtator_get_review_passages_by_id",
+        name="get_review_passages_by_id",
         title="Get Review Passages By ID",
         output_schema=ReviewPassageLookupResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -41,13 +41,13 @@ def register_passages_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 max_chars_per_passage=max_chars_per_passage,
             )
 
-        return await run_mcp_tool("pubtator_get_review_passages_by_id", call)
+        return await run_mcp_tool("get_review_passages_by_id", call)
 
     @mcp_tool_for(
         "lean",
         "full",
         "readonly",
-        name="pubtator_get_review_audit_trail",
+        name="get_review_audit_trail",
         title="Get Review Audit Trail",
         output_schema=ReviewAuditTrailResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -70,12 +70,12 @@ def register_passages_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 max_chars_per_passage=max_chars_per_passage,
             )
 
-        return await run_mcp_tool("pubtator_get_review_audit_trail", call)
+        return await run_mcp_tool("get_review_audit_trail", call)
 
     @mcp_tool_for(
         "full",
         "readonly",
-        name="pubtator_get_neighboring_review_passages",
+        name="get_neighboring_review_passages",
         title="Get Neighboring Review Passages",
         output_schema=ReviewPassageLookupResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
@@ -104,4 +104,4 @@ def register_passages_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 max_chars_per_passage=max_chars_per_passage,
             )
 
-        return await run_mcp_tool("pubtator_get_neighboring_review_passages", call)
+        return await run_mcp_tool("get_neighboring_review_passages", call)

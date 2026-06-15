@@ -53,10 +53,10 @@ class DiagnosticsService:
             "recent_mcp_errors": {"count": len(recent_errors), "latest": recent_errors},
         }
         review_error_prefixes = (
-            "pubtator_index_review",
-            "pubtator_stage_research_session",
-            "pubtator_retrieve_review_context",
-            "pubtator_export_review_audit_bundle",
+            "index_review",
+            "stage_research_session",
+            "get_review_context",
+            "export_review_audit_bundle",
         )
         recent_review_errors = [
             error
@@ -76,13 +76,13 @@ class DiagnosticsService:
 
         minimum_workflow: dict[str, Any] = {
             "grounded_review": [
-                "pubtator_search_literature",
-                "pubtator_preflight_review_sources",
-                "pubtator_index_review_evidence",
-                "pubtator_inspect_review_index",
-                "pubtator_retrieve_review_context_batch",
+                "search_literature",
+                "preflight_review_sources",
+                "index_review_evidence",
+                "inspect_review_index",
+                "get_review_context_batch",
             ],
-            "one_call": "pubtator_ground_question",
+            "one_call": "ground_question",
             "workflow_resource": "pubtator://workflow-help",
         }
 

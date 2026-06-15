@@ -37,7 +37,7 @@
   - Honor quickstart `wait_until_ready`.
   - Add natural-language search query extraction warning for `ground_question`.
 - Modify: `pubtator_link/mcp/tools/literature.py`
-  - Add `limit`, `response_mode`, and `max_response_chars` to `pubtator_find_entity_relations`.
+  - Add `limit`, `response_mode`, and `max_response_chars` to `find_entity_relations`.
 - Modify: `pubtator_link/models/responses.py`
   - Add optional relation response budget metadata.
 - Modify: `pubtator_link/services/review_audit.py`
@@ -76,8 +76,8 @@ def test_live_surface_smoke_script_exists() -> None:
     script = Path("scripts/smoke_mcp_tool_surface.py")
     assert script.exists()
     text = script.read_text(encoding="utf-8")
-    assert "pubtator_convert_article_ids" in text
-    assert "pubtator_find_entity_relations" in text
+    assert "convert_article_ids" in text
+    assert "find_entity_relations" in text
     assert "max_response_chars" in text
 ```
 
@@ -104,13 +104,13 @@ import httpx
 
 CALLS: list[tuple[str, dict[str, Any], int]] = [
     (
-        "pubtator_convert_article_ids",
+        "convert_article_ids",
         {"ids": ["24166952", "PMC12758588", "10.1038/s41431-022-01127-3"], "source": "auto"},
         12000,
     ),
-    ("pubtator_preflight_review_sources", {"pmids": ["24166952", "42135612"]}, 12000),
+    ("preflight_review_sources", {"pmids": ["24166952", "42135612"]}, 12000),
     (
-        "pubtator_submit_text_annotation",
+        "submit_text_annotation",
         {
             "text": "Familial Mediterranean fever is associated with MEFV variants and colchicine.",
             "bioconcepts": "Gene,Disease,Chemical",
@@ -118,11 +118,11 @@ CALLS: list[tuple[str, dict[str, Any], int]] = [
         12000,
     ),
     (
-        "pubtator_find_entity_relations",
+        "find_entity_relations",
         {"entity_id": "@GENE_MEFV", "limit": 10, "response_mode": "compact", "max_response_chars": 12000},
         12000,
     ),
-    ("pubtator_export_review_audit_bundle", {"review_id": "mefv-vus-smoke", "fallback_inline": True}, 20000),
+    ("export_review_audit_bundle", {"review_id": "mefv-vus-smoke", "fallback_inline": True}, 20000),
 ]
 
 
@@ -404,7 +404,7 @@ git commit -m "fix(audit): tolerate malformed recorded event payloads"
 
 - [ ] **Step 1: Write failing schema and adapter tests**
 
-Assert `pubtator_find_entity_relations` exposes:
+Assert `find_entity_relations` exposes:
 
 - `limit` with default 20 and max 100
 - `response_mode` enum `compact|standard|full`
@@ -470,8 +470,8 @@ git commit -m "fix(mcp): add budget controls to entity relations"
 
 Add tests proving generic `RuntimeError` no longer says "review schema is
 stale", while `ReviewSchemaStaleError` still does. Add tool-specific recovery
-for `pubtator_convert_article_ids`, `pubtator_submit_text_annotation`, and
-`pubtator_export_review_audit_bundle`.
+for `convert_article_ids`, `submit_text_annotation`, and
+`export_review_audit_bundle`.
 
 - [ ] **Step 2: Run failing tests**
 
@@ -485,7 +485,7 @@ Keep stale-schema recovery only for `review_schema_not_current`. For unknown
 internal errors use:
 
 ```text
-Inspect recent_mcp_errors in pubtator_diagnostics and retry with the documented fallback if available.
+Inspect recent_mcp_errors in diagnostics and retry with the documented fallback if available.
 ```
 
 For discovery/text/audit tools, include direct retry/fallback guidance.

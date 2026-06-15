@@ -166,7 +166,7 @@ Acceptance criteria:
 - `ReviewContextService.inspect_review_index()` loads all sources and failed sources through repository methods.
 - `PostgresReviewReragRepository.list_review_sources()` and `list_review_failed_sources()` order by `source_id` and return all matching rows.
 - REST `GET /api/reviews/{review_id}/index` defaults `response_mode="full"`.
-- MCP `pubtator_inspect_review_index` defaults `response_mode="compact"`.
+- MCP `inspect_review_index` defaults `response_mode="compact"`.
 
 ### Retrieval Budgets
 
@@ -196,9 +196,9 @@ Change all graph request defaults to compact. This maximizes LLM friendliness bu
 
 MCP tool signatures change from nullable response mode to compact defaults:
 
-- `pubtator_get_publication_citation_graph(response_mode="compact")`
-- `pubtator_find_related_evidence_candidates(response_mode="compact")`
-- `pubtator_build_topic_literature_map(response_mode="compact")`
+- `get_publication_citation_graph(response_mode="compact")`
+- `find_related_evidence_candidates(response_mode="compact")`
+- `build_topic_literature_map(response_mode="compact")`
 
 Explicit `response_mode="full"` and `response_mode="nodes_edges"` remain available.
 
@@ -228,7 +228,7 @@ omitted_counts: dict[str, int] = Field(default_factory=dict)
 
 MCP exposes flat `limit` and `cursor` arguments. MCP compact mode should default `limit=50` when omitted. REST exposes optional `limit` and `cursor` query parameters, but REST full mode remains unpaginated when `limit` is omitted.
 
-When `next_cursor` is present, the MCP adapter adds `_meta.next_commands` with the next `pubtator_inspect_review_index` call.
+When `next_cursor` is present, the MCP adapter adds `_meta.next_commands` with the next `inspect_review_index` call.
 
 Pagination is best-effort under concurrent writes. The offset cursor is deterministic for a stable review index, but a source inserted or deleted while a client is paging can cause skipped or repeated rows. Clients that need monotonic inspection should restart pagination from the first page after indexing has settled.
 
@@ -245,8 +245,8 @@ Add request/model or MCP fields:
 
 - `RetrieveReviewContextBatchRequest.verbosity: ReviewResponseVerbosity = "standard"`
 - `RetrieveReviewContextBatchRequest.max_response_chars: int | Literal["auto"] = 48000`
-- `pubtator_retrieve_review_context_batch(verbosity="standard", max_response_chars="auto")`
-- `pubtator_ground_question(verbosity="lean", max_response_chars="auto")`
+- `get_review_context_batch(verbosity="standard", max_response_chars="auto")`
+- `ground_question(verbosity="lean", max_response_chars="auto")`
 
 `response_mode` controls shape; `verbosity` controls budget. For example, `response_mode="compact"` with `verbosity="full"` still returns the compact-shaped response, but the auto response budget resolves to 60000 characters. This lets clients ask for a compact schema with fewer budget drops without switching to full per-query payloads.
 

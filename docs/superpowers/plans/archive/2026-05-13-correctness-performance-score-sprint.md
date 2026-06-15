@@ -853,19 +853,19 @@ def test_write_capable_mcp_tools_have_precise_annotations() -> None:
     mcp = create_pubtator_mcp(profile="full")
     tools = mcp._tool_manager._tools
 
-    annotation_submit = tools["pubtator_submit_text_annotation"].annotations
+    annotation_submit = tools["submit_text_annotation"].annotations
     assert annotation_submit.readOnlyHint is False
     assert annotation_submit.destructiveHint is False
     assert annotation_submit.idempotentHint is False
     assert annotation_submit.openWorldHint is True
 
     expected_review_writes = {
-        "pubtator_add_evidence_certainty": False,
-        "pubtator_stage_research_session": False,
-        "pubtator_review_quickstart": False,
-        "pubtator_record_review_context": False,
-        "pubtator_index_review_evidence": True,
-        "pubtator_ground_question": True,
+        "add_evidence_certainty": False,
+        "stage_research_session": False,
+        "review_quickstart": False,
+        "record_review_context": False,
+        "index_review_evidence": True,
+        "ground_question": True,
     }
     for name, expected_idempotent in expected_review_writes.items():
         annotations = tools[name].annotations
@@ -874,7 +874,7 @@ def test_write_capable_mcp_tools_have_precise_annotations() -> None:
         assert annotations.idempotentHint is expected_idempotent, name
         assert annotations.openWorldHint is True, name
 
-    audit_export = tools["pubtator_export_review_audit_bundle"].annotations
+    audit_export = tools["export_review_audit_bundle"].annotations
     assert audit_export.readOnlyHint is False
     assert audit_export.destructiveHint is False
     assert audit_export.idempotentHint is False
@@ -921,17 +921,17 @@ from pubtator_link.mcp.annotations import (
 Use `NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS` for:
 
 ```python
-pubtator_add_evidence_certainty
-pubtator_stage_research_session
-pubtator_review_quickstart
-pubtator_record_review_context
+add_evidence_certainty
+stage_research_session
+review_quickstart
+record_review_context
 ```
 
 Use `IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS` for:
 
 ```python
-pubtator_index_review_evidence
-pubtator_ground_question
+index_review_evidence
+ground_question
 ```
 
 Do not add dynamic per-argument annotations.
@@ -1494,7 +1494,7 @@ git commit -m "docs: document correctness sprint behavior changes"
 - `PubTator3Client.export_publications_with_metadata()` returns the payload and the retry metadata for the same request.
 - Retry-exhausted PubTator export errors attach `response_data["retry_metadata"]["terminal_reason"] == "retry_exhausted"`.
 - `FullTextPreparationService.prepare_pmid()` records retry metadata from the sidecar path when available and still supports older fake clients through `_last_retry_metadata()`.
-- MCP annotations are exact for all six review write tools: four append/create tools are non-idempotent, and `pubtator_index_review_evidence` plus `pubtator_ground_question` remain idempotent.
+- MCP annotations are exact for all six review write tools: four append/create tools are non-idempotent, and `index_review_evidence` plus `ground_question` remain idempotent.
 - Review preparation workers call `claim_preparation_job()` once per dequeued item and skip upstream work if the claim returns false.
 - PostgreSQL job claim uses a short transaction, transaction-scoped advisory lock, and an atomic `status = 'queued'` update returning `job_id`.
 - Slow fake preparation jobs run concurrently when `prep_concurrency=2`.

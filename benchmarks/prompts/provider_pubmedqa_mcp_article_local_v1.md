@@ -4,9 +4,9 @@ Use the PubTator-Link MCP to answer as well as possible from biomedical evidence
 
 Recommended workflow:
 1. Use target_pmids from the case as the article-local evidence set.
-2. Call pubtator_preflight_review_sources for those PMIDs when available.
-3. If preflight fails, call pubtator_get_publication_passages with the same PMIDs.
-4. For article-local answering, call pubtator_get_publication_passages with mode='full_abstract'. Prefer full text when available; otherwise use the complete title/abstract evidence.
+2. Call preflight_review_sources for those PMIDs when available.
+3. If preflight fails, call get_publication_passages with the same PMIDs.
+4. For article-local answering, call get_publication_passages with mode='full_abstract'. Prefer full text when available; otherwise use the complete title/abstract evidence.
 5. Decide only from MCP-returned evidence. Do not use outside biomedical knowledge.
 6. Do not convert conditional, underpowered, mixed, or method-limited evidence into yes/no. Use "maybe" when evidence supports a nuanced or context-dependent answer.
 

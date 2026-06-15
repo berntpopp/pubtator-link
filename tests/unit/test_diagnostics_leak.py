@@ -1,4 +1,4 @@
-"""Public pubtator_diagnostics must never leak raw upstream/DB exception text."""
+"""Public diagnostics must never leak raw upstream/DB exception text."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ SENSITIVE_FRAGMENTS = (
 async def test_get_diagnostics_does_not_leak_raw_exception_text() -> None:
     clear_recent_mcp_errors()
     record_mcp_error(
-        tool_name="pubtator_index_review_evidence",
+        tool_name="index_review_evidence",
         error_code="review_index_unavailable",
         message="Review database operation failed.",
         raw_message=(
@@ -60,7 +60,7 @@ def test_get_recent_mcp_errors_does_not_expose_raw_message() -> None:
 
     clear_recent_mcp_errors()
     record_mcp_error(
-        tool_name="pubtator_search_literature",
+        tool_name="search_literature",
         error_code="upstream_unavailable",
         message="The upstream service timed out.",
         raw_message="ConnectError: [Errno 111] Connection refused to 10.0.0.5:5432",

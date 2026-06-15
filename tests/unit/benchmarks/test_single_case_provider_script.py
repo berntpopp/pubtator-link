@@ -112,7 +112,7 @@ def test_claude_mcp_command_allows_pubtator_mcp() -> None:
     command = _provider_command(
         provider="claude",
         model="sonnet",
-        prompt="Call pubtator_get_publication_passages.",
+        prompt="Call get_publication_passages.",
     )
 
     assert "--allowedTools" in command

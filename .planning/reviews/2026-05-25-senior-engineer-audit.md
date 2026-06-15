@@ -35,14 +35,14 @@ Goal: make the hosted public MCP safe to expose at scale. Do these first. None r
 ### 1.2 [BLOCKER] Stop leaking raw exception text via public diagnostics — VERIFIED
 
 - File: `pubtator_link/services/diagnostics.py:64` (raw appended into `recovery[]`) and `pubtator_link/mcp/errors.py:124` (raw stored in `recent_mcp_errors.latest[*].raw_message`).
-- `pubtator_diagnostics` is on the **lean (public) profile**. Anything in an asyncpg traceback, httpx URL, or DB error string becomes scrapeable from the hosted server.
+- `diagnostics` is on the **lean (public) profile**. Anything in an asyncpg traceback, httpx URL, or DB error string becomes scrapeable from the hosted server.
 - Fix: in `DiagnosticsService.get_diagnostics`, drop `raw_message` from public output or run `sanitize_error_message` over it before returning; never concatenate raw exception text into `recovery`.
 - Acceptance: integration test that injects a synthetic DB error and asserts the diagnostics payload contains neither the raw `asyncpg` class name nor the connection URL.
 
 ### 1.3 [BLOCKER] Allowlist destinations for `curated_urls`
 
 - File: `pubtator_link/mcp/tools/review.py:432` + `pubtator_link/services/url_safety.py`
-- `pubtator_index_review_evidence` accepts arbitrary public URLs on the lean profile. `SafeUrlFetcher` blocks private/loopback IPs but does not restrict scheme or hostname. Open egress proxy and DDoS amplifier.
+- `index_review_evidence` accepts arbitrary public URLs on the lean profile. `SafeUrlFetcher` blocks private/loopback IPs but does not restrict scheme or hostname. Open egress proxy and DDoS amplifier.
 - Fix: configurable hostname allowlist (e.g., `ncbi.nlm.nih.gov`, `europepmc.org`, major publisher domains). Checked in `_validate_url`. Bookshelf is already rejected — extend to a positive allowlist.
 - Acceptance: requests to `example.com` rejected with a structured `error_code` mappable in the MCP envelope.
 
@@ -71,7 +71,7 @@ Goal: make the hosted public MCP safe to expose at scale. Do these first. None r
 
 - `make ci-local`
 - `make test-integration` against a fresh Postgres
-- Manual smoke: `curl` to `/health` and `mcp/initialize`; trigger a deliberate upstream error and inspect public `pubtator_diagnostics` for raw text leakage.
+- Manual smoke: `curl` to `/health` and `mcp/initialize`; trigger a deliberate upstream error and inspect public `diagnostics` for raw text leakage.
 
 ---
 
@@ -242,14 +242,14 @@ Goal: materially improve LLM-agent success rate on the canonical workflows (sear
 
 ### 4.5 [HIGH] Cap full-text BioC tools
 
-- Files: `mcp/tools/publications.py:63-79` (`pubtator_fetch_publication_annotations` with `full=True`) and `mcp/tools/publications.py:347-361` (`pubtator_fetch_pmc_annotations`).
+- Files: `mcp/tools/publications.py:63-79` (`get_publication_annotations` with `full=True`) and `mcp/tools/publications.py:347-361` (`get_pmc_annotations`).
 - Today: 50 PMIDs × full BioC × no cap = many MB into the LLM context.
 - Fix: when `full=True`, enforce `max_length=10` on `pmids` and return a `truncated` / `response_size_class` marker. For PMC, cap to 5 and require `confirm_large=True` above 1.
 
 ### 4.6 [MED] Make `get_server_capabilities` dynamic
 
 - File: `pubtator_link/mcp/resources.py:206-246`
-- Hand-maintained list — already missing 4 registered tools (`pubtator_get_publication_citation_graph`, `pubtator_build_topic_literature_map`, `pubtator_find_related_evidence_candidates`, `pubtator_record_review_context`). LLMs discovering via capabilities cannot see them.
+- Hand-maintained list — already missing 4 registered tools (`get_publication_citation_graph`, `build_topic_literature_map`, `find_related_evidence_candidates`, `record_review_context`). LLMs discovering via capabilities cannot see them.
 - Fix: derive from `tool_names_for_profile(profile)` at runtime.
 
 ### 4.7 [MED] Tighten `search_literature` and `search_biomedical_entities` schemas
@@ -341,7 +341,7 @@ These are not bugs — they are how to turn PubTator-Link into a notably better 
 1. **`pubtator_replay` debug tool** (full profile only): re-runs a previous `_meta.request_id` deterministically against the audit table. Turns the audit log into a debugging superpower.
 2. **Background token-array warmer**: maintenance job that rebuilds the GIN-indexed token array (Phase 3.1) during low-traffic windows.
 3. **Promote `ground_question` as the canonical entry point** in every doc and capabilities response. Current tool surface invites premature step-by-step optimization.
-4. **Per-tool latency + error rate telemetry surfaced via `pubtator_diagnostics`** (counts only — no raw payloads, per Phase 1.2).
+4. **Per-tool latency + error rate telemetry surfaced via `diagnostics`** (counts only — no raw payloads, per Phase 1.2).
 5. **Worker fencing for indexer pods** — see Phase 2.7 — formalized into a small `LeaseManager` helper.
 
 ---

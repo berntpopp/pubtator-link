@@ -546,6 +546,6 @@ def _next_commands(*, has_metadata: bool) -> list[str]:
     if not has_metadata:
         return []
     return [
-        "Use pubtator_get_publication_passages for citable passage text.",
-        "Use pubtator_index_review_evidence after selecting the final PMID corpus.",
+        "Use get_publication_passages for citable passage text.",
+        "Use index_review_evidence after selecting the final PMID corpus.",
     ]

@@ -156,7 +156,7 @@ class ServerSettings(BaseSettings):
             "api.crossref.org",
         ],
         description=(
-            "Suffix-match hostnames allowed for pubtator_index_review_evidence "
+            "Suffix-match hostnames allowed for index_review_evidence "
             "curated_urls. Empty list means no curated URLs accepted."
         ),
     )

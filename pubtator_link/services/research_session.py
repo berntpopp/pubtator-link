@@ -144,9 +144,9 @@ class ResearchSessionService:
             manifest=manifest,
             _meta={
                 "next_commands": [
-                    "pubtator_get_research_session_status",
-                    "pubtator_inspect_review_index",
-                    "pubtator_retrieve_review_context_batch",
+                    "get_research_session_status",
+                    "inspect_review_index",
+                    "get_review_context_batch",
                 ],
                 "unsafe_for_clinical_use": True,
             },

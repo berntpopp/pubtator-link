@@ -337,10 +337,10 @@ def _rationale_for(role: CorpusCandidateRole) -> str:
 def _next_commands(request: CorpusSuggestionRequest, pmids: list[str]) -> list[str]:
     review_id = _review_id_for(request.question)
     return [
-        f"pubtator_get_publication_metadata(pmids={pmids!r})",
-        f"pubtator_index_review_evidence(review_id='{review_id}', pmids={pmids!r})",
-        f"pubtator_inspect_review_index(review_id='{review_id}')",
-        f"pubtator_retrieve_review_context_batch(review_id='{review_id}', queries={[request.question]!r})",
+        f"get_publication_metadata(pmids={pmids!r})",
+        f"index_review_evidence(review_id='{review_id}', pmids={pmids!r})",
+        f"inspect_review_index(review_id='{review_id}')",
+        f"get_review_context_batch(review_id='{review_id}', queries={[request.question]!r})",
     ]
 
 
