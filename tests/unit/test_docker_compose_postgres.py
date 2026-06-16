@@ -7,6 +7,14 @@ def _base_compose() -> dict[str, object]:
     return yaml.safe_load(Path("docker/docker-compose.yml").read_text())
 
 
+def test_base_compose_sets_explicit_project_name() -> None:
+    # An explicit top-level project name isolates this stack from sibling -link
+    # repos that also root their compose at docker/docker-compose.yml (which would
+    # otherwise all default to the "docker" project).
+    compose = _base_compose()
+    assert compose["name"] == "pubtator-link"
+
+
 def test_base_compose_defines_postgres_service() -> None:
     compose = _base_compose()
     services = compose["services"]
