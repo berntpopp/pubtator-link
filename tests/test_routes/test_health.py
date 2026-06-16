@@ -3,6 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from pubtator_link import __version__
 from pubtator_link.server_manager import UnifiedServerManager
 
 
@@ -24,7 +25,7 @@ class TestHealthAndRoot:
         assert response.status_code == 200
         data = response.json()
         assert data["name"] == "PubTator-Link"
-        assert data["version"] == "2.0.0"
+        assert data["version"] == __version__
         assert "description" in data
 
     def test_health_endpoint(self, test_client):
@@ -34,7 +35,7 @@ class TestHealthAndRoot:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "healthy"
-        assert data["version"] == "2.0.0"
+        assert data["version"] == __version__
 
     def test_readiness_endpoint_without_database_config(self, test_client):
         response = test_client.get("/ready")
@@ -42,7 +43,7 @@ class TestHealthAndRoot:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ready"
-        assert data["version"] == "2.0.0"
+        assert data["version"] == __version__
         assert data["dependencies"]["database"]["status"] == "not_configured"
 
     def test_ready_reports_schema_not_current(self, test_client):

@@ -4,8 +4,7 @@ PubTator-Link exposes a curated research-use MCP surface for biomedical literatu
 
 | Mode | Endpoint | Status | Use Case |
 |------|----------|--------|----------|
-| Streamable HTTP | `/mcp` | Recommended | Claude HTTP, ChatGPT developer mode, hosted remote MCP clients |
-| stdio | `pubtator-link-mcp` | Local fallback | Local desktop-only workflows |
+| Streamable HTTP | `/mcp` | Only transport | Claude HTTP, ChatGPT developer mode, hosted remote MCP clients |
 
 PubTator-Link tools are research-oriented and must not be used for diagnosis, treatment, triage, patient management, or clinical decision support.
 
@@ -18,7 +17,7 @@ allow read-only discovery and retrieval while excluding write/export tools.
 ## Start The Server
 
 ```bash
-python server.py --transport unified
+pubtator-link serve --transport unified
 ```
 
 The unified server provides:
@@ -46,7 +45,7 @@ claude mcp add --transport http pubtator-link https://your-domain.example/mcp
 For local development:
 
 ```bash
-python server.py --transport unified
+pubtator-link serve --transport unified
 claude mcp add --transport http pubtator-link http://127.0.0.1:8000/mcp
 ```
 
@@ -160,24 +159,6 @@ for backward compatibility. Refresh the MCP/tool cache to remove the stale argum
     "pubtator-link": {
       "type": "http",
       "url": "http://127.0.0.1:8000/mcp"
-    }
-  }
-}
-```
-
-## stdio Fallback
-
-Use stdio only for local desktop workflows that cannot connect to HTTP MCP endpoints:
-
-```json
-{
-  "mcpServers": {
-    "pubtator-link-stdio": {
-      "command": "pubtator-link-mcp",
-      "env": {
-        "PYTHONUNBUFFERED": "1",
-        "PUBTATOR_LINK_LOG_LEVEL": "WARNING"
-      }
     }
   }
 }

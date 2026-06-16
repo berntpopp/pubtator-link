@@ -17,17 +17,15 @@ services:
     # Volume mounts for hot-reloading
     volumes:
       - ../pubtator_link:/home/app/web/pubtator_link:delegated
-      - ../server.py:/home/app/web/server.py:ro
-      - ../mcp_server.py:/home/app/web/mcp_server.py:ro
       - ../pyproject.toml:/home/app/web/pyproject.toml:ro
       - ../README.md:/home/app/web/README.md:ro
 
-    # Development command with auto-reload
+    # Development command with auto-reload via the typer CLI.
     command: >
       sh -c "
         cd /home/app/web &&
         pip install -e . &&
-        uvicorn pubtator_link.server_manager:create_app --factory --host 0.0.0.0 --port 8000 --reload --reload-dir pubtator_link
+        pubtator-link serve --transport unified --host 0.0.0.0 --port 8000 --dev
       "
 
     # Override user to root for development (to avoid permission issues)

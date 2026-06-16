@@ -1,4 +1,13 @@
-"""Logging configuration for PubTator-Link."""
+"""Logging configuration for pubtator-link.
+
+GeneFoundry Logging & CLI Standard v1: ``structlog`` on the canonical processor
+chain (``merge_contextvars → add_log_level → TimeStamper(iso) →
+StackInfoRenderer → set_exc_info → static fields``) rendered as JSON in
+production or via ``ConsoleRenderer`` in development (selected by ``LOG_FORMAT``).
+The ``asgi-correlation-id`` request id is surfaced onto every log event through
+``merge_contextvars`` (the ``CorrelationIdMiddleware`` binds it per request in
+``server_manager``). Streamable HTTP only — there is no stdio stream routing.
+"""
 
 import logging
 import os
@@ -8,83 +17,58 @@ from typing import Any
 import structlog
 from structlog.typing import FilteringBoundLogger
 
+from . import __version__
 from .config import settings
 
 
-def configure_logging() -> FilteringBoundLogger:
-    """Configure structured logging for the application with transport-aware stream routing."""
-    # Determine output stream based on transport mode
-    # CRITICAL: STDIO mode MUST use stderr to avoid contaminating JSON protocol on stdout
-    log_stream = sys.stderr if settings.transport == "stdio" else sys.stdout
+def _add_static_fields(_logger: Any, _name: str, event_dict: dict[str, Any]) -> dict[str, Any]:
+    """Attach ``service`` and ``version`` to every log event."""
+    event_dict.setdefault("service", "pubtator-link")
+    event_dict.setdefault("version", __version__)
+    return event_dict
 
-    # Configure color support based on transport and environment
+
+def configure_logging() -> FilteringBoundLogger:
+    """Configure structured logging and return the package logger."""
     use_colors = (
-        settings.transport != "stdio"
-        and settings.log_format != "json"
+        settings.log_format != "json"
         and sys.stdout.isatty() is not False
         and "NO_COLOR" not in os.environ
     )
 
-    # Configure structlog
-    if settings.log_format == "json":
-        # JSON logging for production - always use specified stream
-        structlog.configure(
-            processors=[
-                structlog.contextvars.merge_contextvars,
-                structlog.processors.TimeStamper(fmt="iso"),
-                structlog.processors.add_log_level,
-                structlog.processors.StackInfoRenderer(),
-                structlog.dev.set_exc_info,
-                structlog.processors.JSONRenderer(),
-            ],
-            wrapper_class=structlog.make_filtering_bound_logger(
-                getattr(logging, settings.log_level.upper())
-            ),
-            logger_factory=structlog.WriteLoggerFactory(log_stream),
-            cache_logger_on_first_use=True,
-        )
-    else:
-        # Console logging for development with transport-aware coloring
-        structlog.configure(
-            processors=[
-                structlog.contextvars.merge_contextvars,
-                structlog.processors.TimeStamper(fmt="iso"),
-                structlog.processors.add_log_level,
-                structlog.processors.StackInfoRenderer(),
-                structlog.dev.set_exc_info,
-                structlog.dev.ConsoleRenderer(colors=use_colors),
-            ],
-            wrapper_class=structlog.make_filtering_bound_logger(
-                getattr(logging, settings.log_level.upper())
-            ),
-            logger_factory=structlog.WriteLoggerFactory(log_stream),
-            cache_logger_on_first_use=True,
-        )
+    shared_processors = [
+        structlog.contextvars.merge_contextvars,
+        structlog.processors.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.dev.set_exc_info,
+        _add_static_fields,
+    ]
 
-    # Configure standard library logging with transport-aware stream routing
+    if settings.log_format == "json":
+        processors = [*shared_processors, structlog.processors.JSONRenderer()]
+    else:
+        processors = [*shared_processors, structlog.dev.ConsoleRenderer(colors=use_colors)]
+
+    structlog.configure(
+        processors=processors,  # type: ignore[arg-type]
+        wrapper_class=structlog.make_filtering_bound_logger(
+            getattr(logging, settings.log_level.upper())
+        ),
+        logger_factory=structlog.WriteLoggerFactory(sys.stdout),
+        cache_logger_on_first_use=True,
+    )
+
     logging.basicConfig(
         format="%(message)s",
-        stream=log_stream,
+        stream=sys.stdout,
         level=getattr(logging, settings.log_level.upper()),
     )
 
-    # Transport-specific library log level adjustments
-    if settings.transport == "stdio":
-        # Aggressively reduce noise in STDIO mode to protect MCP protocol
-        logging.getLogger("uvicorn").setLevel(logging.ERROR)
-        logging.getLogger("uvicorn.access").setLevel(logging.ERROR)
-        logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
-        logging.getLogger("httpx").setLevel(logging.WARNING)
-        logging.getLogger("httpcore").setLevel(logging.WARNING)
-        logging.getLogger("fastapi").setLevel(logging.WARNING)
-        # Suppress FastMCP internal logging in STDIO mode
-        logging.getLogger("fastmcp").setLevel(logging.WARNING)
-        logging.getLogger("mcp").setLevel(logging.WARNING)
-    else:
-        # Normal log levels for HTTP modes
-        logging.getLogger("uvicorn.access").setLevel(logging.INFO)
-        logging.getLogger("httpx").setLevel(logging.INFO)
-        logging.getLogger("httpcore").setLevel(logging.INFO)
+    # Tame noisy third-party loggers for the HTTP transports.
+    logging.getLogger("uvicorn.access").setLevel(logging.INFO)
+    logging.getLogger("httpx").setLevel(logging.INFO)
+    logging.getLogger("httpcore").setLevel(logging.INFO)
 
     return structlog.get_logger("pubtator_link")  # type: ignore[no-any-return]
 

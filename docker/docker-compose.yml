@@ -56,8 +56,8 @@ services:
     ports:
       - "${PUBTATOR_LINK_PORT:-8000}:8000"
 
-    # Use uvicorn for development (similar to litvar-link approach)
-    command: ["uvicorn", "pubtator_link.server_manager:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+    # Boot the unified REST + MCP Streamable HTTP server via the typer CLI.
+    command: ["pubtator-link", "serve", "--transport", "unified", "--host", "0.0.0.0", "--port", "8000"]
 
     # Health check
     healthcheck:

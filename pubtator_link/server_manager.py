@@ -17,6 +17,7 @@ from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from structlog.typing import FilteringBoundLogger
 
+from . import __version__
 from .api.routes import (
     annotations_router,
     cache_router,
@@ -253,7 +254,7 @@ class UnifiedServerManager:
         app = FastAPI(
             title="PubTator-Link",
             description="A unified server for the PubTator3 biomedical literature API",
-            version="2.0.0",
+            version=__version__,
             lifespan=combined_lifespan,
             docs_url="/docs" if settings.enable_docs else None,
             redoc_url="/redoc" if settings.enable_docs else None,
@@ -290,7 +291,7 @@ class UnifiedServerManager:
             """Root endpoint."""
             return {
                 "name": "PubTator-Link",
-                "version": "2.0.0",
+                "version": __version__,
                 "description": "A unified server for the PubTator3 biomedical literature API",
                 "transport": settings.transport,
             }
@@ -300,7 +301,7 @@ class UnifiedServerManager:
             """Health check endpoint."""
             return {
                 "status": "healthy",
-                "version": "2.0.0",
+                "version": __version__,
                 "transport": settings.transport,
             }
 
@@ -347,7 +348,7 @@ class UnifiedServerManager:
                 )
             return {
                 "status": status,
-                "version": "2.0.0",
+                "version": __version__,
                 "transport": settings.transport,
                 "dependencies": {"database": database_dependency},
             }
@@ -370,52 +371,6 @@ class UnifiedServerManager:
         self.app = app
         return app
 
-    async def create_mcp_server(self, app: FastAPI) -> FastMCP:
-        """Create FastMCP server from FastAPI app."""
-        try:
-            # Import MCP configuration classes
-            from fastmcp.server.openapi import MCPType, RouteMap
-
-            # Define custom tool names for better LLM experience
-            mcp_custom_names = {
-                "export_publication_annotations": "export_publications",
-                "export_pmc_publications": "export_pmc_articles",
-                "search_entity_ids": "search_biomedical_entities",
-                "search_publications": "search_literature",
-                "find_related_entities": "find_entity_relations",
-                "submit_text_annotation": "annotate_text",
-                "get_annotation_results": "get_text_annotations",
-                "get_cache_statistics": "get_cache_stats",
-                "clear_cache": "clear_api_cache",
-            }
-
-            # Define route filtering to exclude utility endpoints from MCP
-            mcp_route_maps = [
-                # Exclude health and monitoring endpoints
-                RouteMap(pattern=r"^/health$", mcp_type=MCPType.EXCLUDE),
-                RouteMap(pattern=r"^/cache/.*$", mcp_type=MCPType.EXCLUDE),
-                # Exclude root and docs endpoints
-                RouteMap(pattern=r"^/$", mcp_type=MCPType.EXCLUDE),
-                RouteMap(pattern=r"^/docs$", mcp_type=MCPType.EXCLUDE),
-                RouteMap(pattern=r"^/openapi.json$", mcp_type=MCPType.EXCLUDE),
-                RouteMap(pattern=r"^/redoc$", mcp_type=MCPType.EXCLUDE),
-            ]
-
-            # Create MCP server from FastAPI app
-            mcp = FastMCP.from_fastapi(
-                app=app,
-                name="PubTator-Link Server",
-                mcp_names=mcp_custom_names,
-                route_maps=mcp_route_maps,
-            )
-
-            self.logger.info("FastMCP server created successfully")
-            return mcp
-
-        except Exception as e:
-            self.logger.error(f"Failed to create MCP server: {e}")
-            raise RuntimeError(f"MCP server creation failed: {e}") from e
-
     async def start_unified_server(
         self, host: str = "127.0.0.1", port: int = 8000, reload: bool = False
     ) -> None:
@@ -433,7 +388,6 @@ class UnifiedServerManager:
             host=host,
             port=port,
             log_level=settings.log_level.lower(),
-            access_log=settings.transport != "stdio",
             reload=reload,
             reload_dirs=["pubtator_link"] if reload else None,
         )
@@ -464,32 +418,6 @@ class UnifiedServerManager:
         self.logger.info("Starting HTTP server", host=host, port=port, transport="http")
 
         await self.server.serve()
-
-    async def start_stdio_server(self) -> None:
-        """Start STDIO MCP server."""
-        self.logger.info("Starting STDIO MCP server", transport="stdio")
-
-        # Create FastAPI app (for MCP introspection)
-        app = self.create_app()
-
-        # Use lifespan context manager for consistency with HTTP mode
-        self.logger.info("Initializing app state using lifespan context...")
-        async with self.lifespan(app):
-            # Create MCP server within the lifespan context
-            self.mcp = await self.create_mcp_server(app)
-
-            self.logger.info("STDIO MCP server ready")
-
-            # Run MCP server in STDIO mode
-            # Note: FastMCP needs direct access to sys.stdout.buffer for STDIO protocol
-            if self.resources is None:
-                await self.mcp.run_async(transport="stdio")
-            else:
-                token = bind_app_resources(self.resources)
-                try:
-                    await self.mcp.run_async(transport="stdio")
-                finally:
-                    reset_app_resources(token)
 
     async def shutdown(self) -> None:
         """Shutdown server."""

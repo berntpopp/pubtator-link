@@ -1,5 +1,43 @@
 # Changelog
 
+## 3.0.0
+
+### BREAKING: GeneFoundry Logging & CLI Standard v1 (closes #58)
+
+The command-line interface migrated from `argparse` to a single **typer** app
+with **rich** output, and the server is now **Streamable HTTP only**.
+
+- **CLI is now `typer`.** `pubtator_link/cli.py` exposes one
+  `Typer(name="pubtator-link", no_args_is_help=True)` app with the standard
+  commands: `serve`, `config [--validate]`, `health [--url]`, and `version`.
+  `serve` accepts `--transport {unified,http}` (default `unified`),
+  `--host`, `--port`, `--mcp-path`, `--log-level`, `--disable-docs`, and
+  `--dev`. There is no bare-serve.
+- **Single console script.** `[project.scripts]` is now
+  `pubtator-link = "pubtator_link.cli:app"`. The `pubtator-link-mcp` console
+  script and the root `server.py` / `mcp_server.py` entrypoints have been
+  **removed**.
+- **stdio removed.** The `stdio` transport, the `pubtator-link-mcp` entrypoint,
+  `UnifiedServerManager.start_stdio_server`, and the stdio branches in
+  `logging_config.py` / `config.py` are gone. The server speaks Streamable HTTP
+  only — MCP at `/mcp`, health at `/health` (both unchanged). The removed CLI
+  subcommands `test` / `entities` / `search` / `export` are not part of the
+  standard surface; the `python -m pubtator_link.benchmarks` path is unaffected.
+- **structlog logging confirmed on the canon.** `logging_config.py` now uses the
+  canonical processor chain
+  (`merge_contextvars → add_log_level → TimeStamper(iso) → StackInfoRenderer →
+  set_exc_info → static fields`) with JSON (prod) / Console (dev) renderers and
+  static `service`/`version` fields; the `asgi-correlation-id` request id is
+  surfaced via `merge_contextvars`.
+- **Docker / compose / Makefile / README** boot via `pubtator-link serve …`. The
+  default image command and the base Compose stack use the typer CLI; the
+  hardened production / NPM overlays keep their multi-worker Gunicorn entrypoint
+  (`pubtator_link.server_manager:create_app()`), which is unaffected.
+
+The MCP tool surface, services, and the `/health` / `/mcp` endpoints are
+unchanged, so the `genefoundry-router` gateway is unaffected. No deprecation
+shims — pre-alpha, MAJOR bump.
+
 ## 2.0.0
 
 ### BREAKING: GeneFoundry Tool-Naming Standard v1 (closes #57)

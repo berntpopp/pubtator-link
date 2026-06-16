@@ -1,4 +1,4 @@
-.PHONY: help install lock upgrade sync format format-check lint lint-ci lint-fix lint-loc typecheck typecheck-fast typecheck-stop typecheck-fresh test test-fast test-unit test-integration test-cov test-all check ci-local precommit clean dev mcp-serve mcp-serve-http benchmark-smoke benchmark-pubmedqa benchmark-bioasq benchmark-compare db-init docker-build docker-up docker-down docker-logs docker-prod-config docker-npm-config
+.PHONY: help install lock upgrade sync format format-check lint lint-ci lint-fix lint-loc typecheck typecheck-fast typecheck-stop typecheck-fresh test test-fast test-unit test-integration test-cov test-all check ci-local precommit clean dev serve benchmark-smoke benchmark-pubmedqa benchmark-bioasq benchmark-compare db-init docker-build docker-up docker-down docker-logs docker-prod-config docker-npm-config
 
 DOCKER_COMPOSE := $(shell if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then echo "docker compose"; elif command -v docker-compose >/dev/null 2>&1; then echo "docker-compose"; else echo "docker compose"; fi)
 
@@ -19,40 +19,40 @@ upgrade: ## Upgrade locked dependencies
 	uv lock --upgrade
 
 format: ## Format Python code
-	uv run ruff format pubtator_link tests server.py mcp_server.py
+	uv run ruff format pubtator_link tests
 
 format-check: ## Check formatting without writing
-	uv run ruff format --check pubtator_link tests server.py mcp_server.py
+	uv run ruff format --check pubtator_link tests
 
 lint: ## Lint Python code
-	uv run ruff check pubtator_link tests server.py mcp_server.py
+	uv run ruff check pubtator_link tests
 
 lint-ci: ## Lint Python code without modifying files
-	uv run ruff check pubtator_link tests server.py mcp_server.py --output-format=github
+	uv run ruff check pubtator_link tests --output-format=github
 
 lint-fix: ## Lint and apply safe fixes
-	uv run ruff check pubtator_link tests server.py mcp_server.py --fix
+	uv run ruff check pubtator_link tests --fix
 
 lint-loc: ## Enforce per-file line budget (see AGENTS.md "File Size Discipline")
 	uv run python scripts/check_file_size.py
 
 typecheck: ## Type check package
-	uv run mypy pubtator_link server.py mcp_server.py
+	uv run mypy pubtator_link
 
 typecheck-fast: ## Type check with mypy daemon and fallback
 	@tmp_log=$$(mktemp); \
-	if uv run dmypy run -- pubtator_link server.py mcp_server.py >$$tmp_log 2>&1; then \
+	if uv run dmypy run -- pubtator_link >$$tmp_log 2>&1; then \
 		cat $$tmp_log; \
 	elif grep -Eq "Daemon crashed!|INTERNAL ERROR" $$tmp_log; then \
 		echo "dmypy crashed; retrying with a fresh daemon..."; \
 		uv run dmypy stop >/dev/null 2>&1 || true; \
-		if uv run dmypy run -- pubtator_link server.py mcp_server.py >$$tmp_log 2>&1; then \
+		if uv run dmypy run -- pubtator_link >$$tmp_log 2>&1; then \
 			cat $$tmp_log; \
 		else \
 			cat $$tmp_log; \
 			echo "Falling back to plain mypy..."; \
 			uv run dmypy stop >/dev/null 2>&1 || true; \
-			uv run mypy pubtator_link server.py mcp_server.py; \
+			uv run mypy pubtator_link; \
 		fi; \
 	else \
 		cat $$tmp_log; \
@@ -66,7 +66,7 @@ typecheck-stop: ## Stop mypy daemon
 
 typecheck-fresh: ## Clear mypy cache and run typecheck
 	rm -rf .mypy_cache
-	uv run mypy pubtator_link server.py mcp_server.py
+	uv run mypy pubtator_link
 
 test: ## Run tests quickly
 	uv run pytest tests -q
@@ -94,14 +94,11 @@ precommit: ci-local ## Run checks expected before commit
 clean: ## Remove local caches and generated reports
 	rm -rf .pytest_cache .ruff_cache .mypy_cache htmlcov .coverage
 
-dev: ## Start REST plus MCP development server
-	PUBTATOR_LINK_TRANSPORT=unified uv run uvicorn pubtator_link.server_manager:create_app --factory --host 127.0.0.1 --port 8000 --reload --reload-dir pubtator_link
+dev: ## Start REST plus MCP development server (auto-reload)
+	uv run pubtator-link serve --transport unified --host 127.0.0.1 --port 8000 --dev
 
-mcp-serve: ## Start local stdio MCP server
-	uv run python mcp_server.py
-
-mcp-serve-http: ## Start hosted MCP endpoint with REST API
-	PUBTATOR_LINK_TRANSPORT=unified uv run uvicorn pubtator_link.server_manager:create_app --factory --host 127.0.0.1 --port 8000
+serve: ## Start the unified REST + MCP Streamable HTTP server
+	uv run pubtator-link serve --transport unified --host 127.0.0.1 --port 8000
 
 benchmark-smoke: ## Run PubMedQA benchmark smoke
 	uv run python -m pubtator_link.benchmarks run --suite benchmarks/suites/pubmedqa_smoke.yaml --answer-stack $${ANSWER_STACK:-dry_run:deterministic} $${BENCHMARK_ARGS:-}
