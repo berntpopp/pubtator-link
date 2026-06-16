@@ -10,10 +10,10 @@ surfacing opaque upstream HTTP 400s.
 from __future__ import annotations
 
 import json
-import re
 from typing import Any
 
 from pubtator_link.api.client import PubTatorAPIError
+from pubtator_link.api.search_filters import publication_year_of
 from pubtator_link.mcp.input_normalization import InputNormalizationError
 
 # PubTator3's /search/ endpoint accepts only these exact sort strings; any other
@@ -78,16 +78,6 @@ def normalize_search_sort(sort: str | None) -> tuple[str | None, str | None]:
     return canonical, f"Normalized sort '{sort}' to '{canonical}'."
 
 
-def filters_have_year(filters: str | None) -> bool:
-    if not filters:
-        return False
-    try:
-        parsed = json.loads(filters)
-    except json.JSONDecodeError:
-        return False
-    return isinstance(parsed, dict) and isinstance(parsed.get("year"), dict)
-
-
 def pubtator_filtered_search_unavailable(exc: PubTatorAPIError) -> bool:
     message = str(exc).lower()
     return "currently updating the database" in message or "please try again later" in message
@@ -97,6 +87,13 @@ def apply_local_search_filters(
     items: list[dict[str, Any]],
     filters: str | None,
 ) -> list[dict[str, Any]]:
+    """Apply a PubTator3 server-side filter JSON locally (transient-outage path).
+
+    Mirrors PubTator3's ``filters`` contract: ``type``/``journal``/``year`` map to
+    AND-combined value lists, and ``year`` holds discrete year strings. Year
+    *ranges* are not encoded here (they travel as a separate local window); see
+    :func:`pubtator_link.api.search_filters.apply_year_window`.
+    """
     if not filters:
         return items
     try:
@@ -106,48 +103,40 @@ def apply_local_search_filters(
     if not isinstance(parsed, dict):
         return items
     selected = items
-    year_filter = parsed.get("year")
-    if isinstance(year_filter, dict):
-        year_min = year_filter.get("min")
-        year_max = year_filter.get("max")
-        selected = [
-            item
-            for item in selected
-            if _item_matches_year_bounds(item, year_min=year_min, year_max=year_max)
-        ]
-    type_filter = parsed.get("type")
-    if isinstance(type_filter, list | tuple) and type_filter:
-        allowed = {str(value).lower() for value in type_filter}
-        selected = [
-            item
-            for item in selected
-            if allowed.intersection(
-                {str(value).lower() for value in item.get("publication_types", [])}
-            )
-        ]
+    selected = _filter_by_year_values(selected, parsed.get("year"))
+    selected = _filter_by_field(selected, parsed.get("type"), "publication_types")
+    selected = _filter_by_field(selected, parsed.get("journal"), "journal")
     return selected
 
 
-def _item_matches_year_bounds(
-    item: dict[str, Any],
-    *,
-    year_min: object,
-    year_max: object,
-) -> bool:
-    year = _item_publication_year(item)
-    if year is None:
-        return False
-    if isinstance(year_min, int) and year < year_min:
-        return False
-    return not (isinstance(year_max, int) and year > year_max)
+def _filter_by_year_values(
+    items: list[dict[str, Any]],
+    year_filter: Any,
+) -> list[dict[str, Any]]:
+    if not isinstance(year_filter, list | tuple) or not year_filter:
+        return items
+    allowed = {str(value).strip() for value in year_filter}
+    return [
+        item
+        for item in items
+        if (year := publication_year_of(item)) is not None and str(year) in allowed
+    ]
 
 
-def _item_publication_year(item: dict[str, Any]) -> int | None:
-    for key in ("pub_year", "pub_date", "meta_date_publication", "date"):
-        value = item.get(key)
-        if value is None:
-            continue
-        match = re.search(r"\b(18\d{2}|19\d{2}|20\d{2})\b", str(value))
-        if match is not None:
-            return int(match.group(1))
-    return None
+def _filter_by_field(
+    items: list[dict[str, Any]],
+    field_filter: Any,
+    item_key: str,
+) -> list[dict[str, Any]]:
+    if not isinstance(field_filter, list | tuple) or not field_filter:
+        return items
+    allowed = {str(value).lower() for value in field_filter}
+    return [item for item in items if allowed.intersection(_item_values(item.get(item_key)))]
+
+
+def _item_values(value: Any) -> set[str]:
+    if isinstance(value, list | tuple):
+        return {str(entry).lower() for entry in value}
+    if value is None:
+        return set()
+    return {str(value).lower()}

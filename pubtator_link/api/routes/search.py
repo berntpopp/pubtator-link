@@ -18,7 +18,7 @@ from ...services.search_shaping import (
     selected_search_items,
     shaped_search_response,
 )
-from ..search_filters import merge_search_filters
+from ..search_filters import apply_year_window, build_search_filter_plan
 from .dependencies import (
     ClientDep,
     PublicationMetadataServiceDep,
@@ -399,12 +399,14 @@ async def search_publications(
     validated_page = validate_page_number(page)
 
     try:
-        merged_filters = merge_search_filters(
+        filter_plan = build_search_filter_plan(
             filters=filters,
             publication_types=publication_types,
             year_min=year_min,
             year_max=year_max,
+            ignore_malformed_filters=False,
         )
+        merged_filters = filter_plan.server_filters
     except ValueError as e:
         detail = str(e)
         status_code = (
@@ -446,6 +448,16 @@ async def search_publications(
             filters=merged_filters,
             sections=(",".join([s.value for s in request.sections]) if request.sections else None),
         )
+
+        if filter_plan.has_local_year_window:
+            # PubTator3 only filters by an exact year server-side; apply the
+            # requested year range locally over this page (best-effort).
+            trimmed = apply_year_window(
+                list(result.get("results", [])),
+                filter_plan.local_year_min,
+                filter_plan.local_year_max,
+            )
+            result = {**result, "results": trimmed, "count": len(trimmed), "total_pages": 1}
 
         raw_items = selected_search_items(
             list(result.get("results", [])),

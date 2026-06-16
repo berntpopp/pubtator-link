@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from pubtator_link.api.client import PubTator3Client, PubTatorAPIError
-from pubtator_link.api.search_filters import merge_search_filters_lenient
+from pubtator_link.api.search_filters import (
+    SearchFilterPlan,
+    apply_year_window,
+    build_search_filter_plan,
+)
 from pubtator_link.config import text_processing_config
 from pubtator_link.mcp.audit_export import compact_audit_bundle_summary
 from pubtator_link.mcp.errors import mcp_field_validation_error
@@ -26,7 +30,6 @@ from pubtator_link.mcp.quickstart import (
 from pubtator_link.mcp.relations import shape_entity_relations
 from pubtator_link.mcp.search_fallback import (
     apply_local_search_filters,
-    filters_have_year,
     normalize_search_sort,
     pubtator_filtered_search_unavailable,
 )
@@ -496,18 +499,20 @@ async def search_literature_impl(
 ) -> dict[str, Any]:
     normalized_text = combined_search_text(text, entity_ids)
     normalized_sort, sort_warning = normalize_search_sort(sort)
-    merged_filters, filter_warning = merge_search_filters_lenient(
+    plan = build_search_filter_plan(
         filters=filters,
         publication_types=publication_types,
         year_min=year_min,
         year_max=year_max,
+        ignore_malformed_filters=True,
     )
-    result, local_filter_fallback = await _search_publications_with_filter_fallback(
+    filter_warning = plan.warning
+    result, filter_note = await _search_publications_with_filter_fallback(
         client=client,
         text=normalized_text,
         page=page,
         sort=normalized_sort,
-        filters=merged_filters,
+        plan=plan,
         sections=",".join(sections) if sections else None,
     )
     raw_items = _selected_search_items(
@@ -526,7 +531,7 @@ async def search_literature_impl(
         query=normalized_text,
         page=page,
         sort=normalized_sort,
-        filters=merged_filters,
+        filters=plan.server_filters,
         sections=sections,
         response_mode=response_mode,
         include_citations=include_citations,
@@ -547,12 +552,20 @@ async def search_literature_impl(
     }
     if coverage == "preflight" and preflight_service is not None:
         await attach_preflight_coverage(response, preflight_service)
-    if local_filter_fallback:
+    if filter_note == "transient_outage":
         response.message = (
             "PubTator3 filtered search was unavailable; returned an unfiltered page "
             "with local best-effort filters applied."
         )
         response.source_versions["pubtator3_filtering"] = "local_fallback"
+    elif filter_note == "year_range_local":
+        response.message = (
+            "PubTator3 supports server-side filtering by an exact year only, so the "
+            "requested year range was applied locally over a single newest-first page "
+            "(type/journal filters were applied server-side). Narrow to an exact year "
+            "for full server-side pagination."
+        )
+        response.source_versions["pubtator3_filtering"] = "year_range_local"
     dumped = dump_search_response(response, response_mode=response_mode)
     if include_meta:
         dumped["_meta"] = response_meta
@@ -569,46 +582,64 @@ async def _search_publications_with_filter_fallback(
     text: str,
     page: int,
     sort: str | None,
-    filters: str | None,
+    plan: SearchFilterPlan,
     sections: str | None,
-) -> tuple[dict[str, Any], bool]:
+) -> tuple[dict[str, Any], str | None]:
+    """Run the search, honouring PubTator3's filter limits.
+
+    Returns ``(result, note)`` where ``note`` is ``None`` for a fully server-side
+    search, ``"year_range_local"`` when a year range was trimmed locally, or
+    ``"transient_outage"`` when PubTator3's filtered endpoint was unavailable and
+    every filter had to be applied locally over an unfiltered page.
+    """
+    server_filters = plan.server_filters
+    # A year range can only be honoured locally over one page, so fetch
+    # newest-first (when the caller chose no sort) to avoid undercounting recent
+    # literature behind relevance-ranked older hits and dropping it on the trim.
+    fetch_sort = sort
+    if fetch_sort is None and plan.has_local_year_window:
+        fetch_sort = "date desc"
     try:
         result = await client.search_publications(
             text=text,
             page=page,
-            sort=sort,
-            filters=filters,
+            sort=fetch_sort,
+            filters=server_filters,
             sections=sections,
         )
-        return result, False
     except PubTatorAPIError as exc:
-        if filters is None or not pubtator_filtered_search_unavailable(exc):
+        if server_filters is None or not pubtator_filtered_search_unavailable(exc):
             raise
+        fallback = await client.search_publications(
+            text=text,
+            page=page,
+            sort=fetch_sort,
+            filters=None,
+            sections=sections,
+        )
+        items = apply_local_search_filters(list(fallback.get("results", [])), server_filters)
+        items = apply_year_window(items, plan.local_year_min, plan.local_year_max)
+        return _local_single_page(fallback, items), "transient_outage"
 
-    # The filtered endpoint is down. Local filtering only sees one page, so when a
-    # year bound is active and the caller did not pick a sort, fetch newest-first
-    # to avoid undercounting recent literature behind relevance-ranked older hits.
-    fallback_sort = sort
-    if fallback_sort is None and filters_have_year(filters):
-        fallback_sort = "date desc"
-    fallback = await client.search_publications(
-        text=text,
-        page=page,
-        sort=fallback_sort,
-        filters=None,
-        sections=sections,
-    )
-    filtered_results = apply_local_search_filters(list(fallback.get("results", [])), filters)
-    return (
-        {
-            **fallback,
-            "results": filtered_results,
-            "count": len(filtered_results),
-            "total": len(filtered_results),
-            "total_pages": 1,
-        },
-        True,
-    )
+    if plan.has_local_year_window:
+        items = apply_year_window(
+            list(result.get("results", [])), plan.local_year_min, plan.local_year_max
+        )
+        return _local_single_page(result, items), "year_range_local"
+    return result, None
+
+
+def _local_single_page(
+    base: dict[str, Any],
+    items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        **base,
+        "results": items,
+        "count": len(items),
+        "total": len(items),
+        "total_pages": 1,
+    }
 
 
 def _selected_search_items(

@@ -2777,10 +2777,11 @@ async def test_search_literature_adapter_merges_flat_filters() -> None:
         year_max=2026,
     )
 
+    # Year ranges are applied locally (PubTator3 has no server-side range
+    # support), so only journal + type are sent to the upstream filters param.
     assert json.loads(client.filters) == {
         "journal": ["Ann Rheum Dis"],
         "type": ["Guideline", "Practice Guideline"],
-        "year": {"min": 2020, "max": 2026},
     }
 
 
@@ -2878,8 +2879,10 @@ async def test_search_literature_retries_unfiltered_when_pubtator_filters_unavai
         metadata="none",
     )
 
+    # Year ranges are no longer encoded as an unsupported {"min","max"} object;
+    # only type goes server-side, and the year window is applied locally.
     assert client.calls == [
-        '{"type":["Practice Guideline"],"year":{"min":2020,"max":2026}}',
+        '{"type":["Practice Guideline"]}',
         None,
     ]
     assert [item["pmid"] for item in result["results"]] == ["2"]
@@ -2888,6 +2891,92 @@ async def test_search_literature_retries_unfiltered_when_pubtator_filters_unavai
         "with local best-effort filters applied."
     )
     assert result["source_versions"]["pubtator3_filtering"] == "local_fallback"
+
+
+@pytest.mark.asyncio
+async def test_search_literature_year_range_applied_locally_without_outage() -> None:
+    """The production scenario: a 2020+ range with PubTator3 fully healthy.
+
+    PubTator3 cannot filter a year range server-side, so the range is trimmed
+    locally over a newest-first page and flagged honestly -- without ever
+    claiming the filtered endpoint was unavailable.
+    """
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class HealthyClient:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, object]] = []
+
+        async def search_publications(
+            self,
+            text: str,
+            page: int,
+            sort: str | None,
+            filters: str | None,
+            sections: str | None,
+        ) -> dict[str, object]:
+            self.calls.append({"sort": sort, "filters": filters})
+            return {
+                "results": [
+                    {"pmid": "1", "title": "New review", "date": "2024-05-01T00:00:00Z"},
+                    {"pmid": "2", "title": "Old review", "date": "2018-05-01T00:00:00Z"},
+                ],
+                "count": 2,
+                "total_pages": 1,
+                "page_size": 10,
+            }
+
+    client = HealthyClient()
+    result = await search_literature_impl(
+        client=client,
+        text="CFTR",
+        year_min=2020,
+        metadata="none",
+    )
+
+    # No spurious filtered request; newest-first fetch with no server-side year.
+    assert len(client.calls) == 1
+    assert client.calls[0]["filters"] is None
+    assert client.calls[0]["sort"] == "date desc"
+    assert [item["pmid"] for item in result["results"]] == ["1"]
+    assert result["source_versions"]["pubtator3_filtering"] == "year_range_local"
+    assert "exact year" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_search_literature_exact_year_filters_server_side() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class RecordingClient:
+        filters: object = "unset"
+        sort: object = "unset"
+
+        async def search_publications(
+            self,
+            text: str,
+            page: int,
+            sort: str | None,
+            filters: str | None,
+            sections: str | None,
+        ) -> dict[str, object]:
+            type(self).filters = filters
+            type(self).sort = sort
+            return {"results": [], "count": 0, "total_pages": 0, "page_size": 10}
+
+    client = RecordingClient()
+    result = await search_literature_impl(
+        client=client,
+        text="CFTR",
+        year_min=2021,
+        year_max=2021,
+        metadata="none",
+    )
+
+    # Exact single year is fully server-side; no local fallback labeling.
+    assert json.loads(RecordingClient.filters) == {"year": ["2021"]}
+    assert RecordingClient.sort is None
+    assert result.get("source_versions", {}).get("pubtator3_filtering") is None
+    assert "message" not in result or "exact year" not in (result.get("message") or "")
 
 
 @pytest.mark.asyncio
@@ -3484,8 +3573,72 @@ async def test_search_literature_normalizes_bare_date_sort_end_to_end() -> None:
 
 
 @pytest.mark.asyncio
-async def test_filter_fallback_uses_date_desc_when_year_filter_present() -> None:
+async def test_filter_fallback_uses_date_desc_when_year_range_present() -> None:
+    from pubtator_link.api.search_filters import SearchFilterPlan
+    from pubtator_link.mcp.service_adapters import _search_publications_with_filter_fallback
+
+    class FakeClient:
+        calls: ClassVar[list[dict[str, object]]] = []
+
+        async def search_publications(self, *, text, page, sort, filters, sections):
+            type(self).calls.append({"sort": sort, "filters": filters})
+            return {
+                "count": 2,
+                "page": page,
+                "results": [
+                    {"pmid": "1", "title": "Recent", "date": "2025-01-01"},
+                    {"pmid": "2", "title": "Old", "date": "2010-01-01"},
+                ],
+            }
+
+    # Open-ended year range: nothing goes server-side, so a single newest-first
+    # page is fetched and trimmed locally (no spurious filtered request).
+    plan = SearchFilterPlan(server_filters=None, local_year_min=2020, local_year_max=None)
+    result, note = await _search_publications_with_filter_fallback(
+        client=FakeClient(),
+        text="Rett syndrome",
+        page=1,
+        sort=None,
+        plan=plan,
+        sections=None,
+    )
+
+    assert note == "year_range_local"
+    assert len(FakeClient.calls) == 1
+    assert FakeClient.calls[0]["filters"] is None
+    assert FakeClient.calls[0]["sort"] == "date desc"
+    assert [item["pmid"] for item in result["results"]] == ["1"]
+
+
+@pytest.mark.asyncio
+async def test_filter_fallback_respects_explicit_sort() -> None:
+    from pubtator_link.api.search_filters import SearchFilterPlan
+    from pubtator_link.mcp.service_adapters import _search_publications_with_filter_fallback
+
+    class FakeClient:
+        calls: ClassVar[list[dict[str, object]]] = []
+
+        async def search_publications(self, *, text, page, sort, filters, sections):
+            type(self).calls.append({"sort": sort, "filters": filters})
+            return {"count": 0, "page": page, "results": []}
+
+    plan = SearchFilterPlan(server_filters=None, local_year_min=2020, local_year_max=None)
+    await _search_publications_with_filter_fallback(
+        client=FakeClient(),
+        text="x",
+        page=1,
+        sort="score desc",
+        plan=plan,
+        sections=None,
+    )
+
+    assert FakeClient.calls[0]["sort"] == "score desc"
+
+
+@pytest.mark.asyncio
+async def test_filter_fallback_local_fallback_on_transient_outage() -> None:
     from pubtator_link.api.client import PubTatorAPIError
+    from pubtator_link.api.search_filters import SearchFilterPlan
     from pubtator_link.mcp.service_adapters import _search_publications_with_filter_fallback
 
     class FakeClient:
@@ -3499,52 +3652,31 @@ async def test_filter_fallback_uses_date_desc_when_year_filter_present() -> None
                     status_code=400,
                 )
             return {
-                "count": 2,
+                "count": 3,
                 "page": page,
                 "results": [
-                    {"pmid": "1", "title": "Recent", "date": "2025-01-01"},
-                    {"pmid": "2", "title": "Old", "date": "2010-01-01"},
+                    {"pmid": "1", "date": "2025-01-01", "publication_types": ["Review"]},
+                    {"pmid": "2", "date": "2010-01-01", "publication_types": ["Review"]},
+                    {"pmid": "3", "date": "2025-01-01", "publication_types": ["Journal Article"]},
                 ],
             }
 
-    result, fallback_used = await _search_publications_with_filter_fallback(
-        client=FakeClient(),
-        text="Rett syndrome",
-        page=1,
-        sort=None,
-        filters='{"year":{"min":2020}}',
-        sections=None,
+    # Genuine outage on a real server-side filter: refetch unfiltered, then apply
+    # both the server filter (type) and the local year window locally.
+    plan = SearchFilterPlan(
+        server_filters='{"type":["Review"]}', local_year_min=2020, local_year_max=None
     )
-
-    assert fallback_used is True
-    assert FakeClient.calls[0]["filters"] == '{"year":{"min":2020}}'
-    assert FakeClient.calls[0]["sort"] is None
-    assert FakeClient.calls[1]["filters"] is None
-    assert FakeClient.calls[1]["sort"] == "date desc"
-    assert [item["pmid"] for item in result["results"]] == ["1"]
-
-
-@pytest.mark.asyncio
-async def test_filter_fallback_respects_explicit_sort() -> None:
-    from pubtator_link.api.client import PubTatorAPIError
-    from pubtator_link.mcp.service_adapters import _search_publications_with_filter_fallback
-
-    class FakeClient:
-        calls: ClassVar[list[dict[str, object]]] = []
-
-        async def search_publications(self, *, text, page, sort, filters, sections):
-            type(self).calls.append({"sort": sort, "filters": filters})
-            if filters is not None:
-                raise PubTatorAPIError("HTTP 400: Please try again later", status_code=400)
-            return {"count": 0, "page": page, "results": []}
-
-    await _search_publications_with_filter_fallback(
+    result, note = await _search_publications_with_filter_fallback(
         client=FakeClient(),
         text="x",
         page=1,
-        sort="score desc",
-        filters='{"year":{"min":2020}}',
+        sort=None,
+        plan=plan,
         sections=None,
     )
 
-    assert FakeClient.calls[1]["sort"] == "score desc"
+    assert note == "transient_outage"
+    assert FakeClient.calls[0]["filters"] == '{"type":["Review"]}'
+    assert FakeClient.calls[1]["filters"] is None
+    assert FakeClient.calls[1]["sort"] == "date desc"
+    assert [item["pmid"] for item in result["results"]] == ["1"]

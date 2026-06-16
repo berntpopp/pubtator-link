@@ -20,7 +20,7 @@ from pubtator_link.api.routes.dependencies.resources import (
     current_app_resources,
     review_pool_kwargs,
 )
-from pubtator_link.api.search_filters import merge_search_filters
+from pubtator_link.api.search_filters import apply_year_window, build_search_filter_plan
 from pubtator_link.config import review_rerag_config
 from pubtator_link.models.responses import SearchResponse, SearchResult
 from pubtator_link.models.review_rerag import StageResearchSessionRequest
@@ -377,18 +377,27 @@ class _RouteSearchProvider(ResearchSessionSearchProvider):
         self.client = client
 
     async def search(self, request: StageResearchSessionRequest) -> SearchResponse:
+        filter_plan = build_search_filter_plan(
+            filters=request.filters,
+            publication_types=request.publication_types,
+            year_min=request.year_min,
+            year_max=request.year_max,
+            ignore_malformed_filters=False,
+        )
         raw = await self.client.search_publications(
             text=request.query or "",
             page=request.page,
             sort=request.sort,
-            filters=merge_search_filters(
-                filters=request.filters,
-                publication_types=request.publication_types,
-                year_min=request.year_min,
-                year_max=request.year_max,
-            ),
+            filters=filter_plan.server_filters,
             sections=",".join(request.sections) if request.sections else None,
         )
+        raw_results = list(raw.get("results", []))
+        if filter_plan.has_local_year_window:
+            # PubTator3 only filters by an exact year server-side; apply the
+            # requested year range locally over this page (best-effort).
+            raw_results = apply_year_window(
+                raw_results, filter_plan.local_year_min, filter_plan.local_year_max
+            )
         results = [
             SearchResult(
                 pmid=item.get("pmid", ""),
@@ -411,9 +420,13 @@ class _RouteSearchProvider(ResearchSessionSearchProvider):
                 pages=item.get("pages") or item.get("meta_pages"),
                 publication_types=item.get("publication_types", []),
             )
-            for item in raw.get("results", [])
+            for item in raw_results
         ]
-        total_results = int(raw.get("count", raw.get("total", 0)))
+        total_results = (
+            len(raw_results)
+            if filter_plan.has_local_year_window
+            else int(raw.get("count", raw.get("total", 0)))
+        )
         per_page = int(raw.get("page_size", raw.get("per_page", 20)))
         return SearchResponse(
             success=True,

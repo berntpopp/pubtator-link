@@ -603,15 +603,36 @@ class TestSearchRoutes:
 
         assert response.status_code == 200
         call_kwargs = mock_search.call_args.kwargs
-        assert call_kwargs["filters"] == (
-            '{"journal":["Ann Rheum Dis"],"type":["Guideline","Practice Guideline"],'
-            '"year":{"min":2020,"max":2026}}'
-        )
+        # Year ranges are applied locally (PubTator3 has no server-side range
+        # support), so only journal + type reach the upstream filters param.
         assert json.loads(call_kwargs["filters"]) == {
             "journal": ["Ann Rheum Dis"],
             "type": ["Guideline", "Practice Guideline"],
-            "year": {"min": 2020, "max": 2026},
         }
+
+    @patch.object(PubTator3Client, "search_publications")
+    def test_search_publications_applies_year_range_locally(self, mock_search, test_client):
+        """A year range is trimmed locally since PubTator3 has no range support."""
+        mock_search.return_value = {
+            "results": [
+                {"pmid": "1", "title": "Recent", "date": "2024-01-01T00:00:00Z"},
+                {"pmid": "2", "title": "Old", "date": "2015-01-01T00:00:00Z"},
+            ],
+            "count": 2,
+            "total_pages": 1,
+            "page_size": 10,
+        }
+
+        response = test_client.get(
+            "/api/search/",
+            params=[("text", "CFTR"), ("year_min", "2020")],
+        )
+
+        assert response.status_code == 200
+        # No unsupported year object is sent upstream.
+        assert mock_search.call_args.kwargs["filters"] is None
+        pmids = [r["pmid"] for r in response.json()["results"]]
+        assert pmids == ["1"]
 
     @patch.object(PubTator3Client, "search_publications")
     def test_search_publications_rejects_flat_filter_conflict(self, mock_search, test_client):
