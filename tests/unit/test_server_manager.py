@@ -152,53 +152,6 @@ async def test_shutdown_requests_server_exit_without_closing_resources() -> None
     assert client.closed is False
 
 
-@pytest.mark.asyncio
-async def test_start_stdio_server_binds_lifespan_resources(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    manager = UnifiedServerManager(logger=LoggerDouble())
-    client = ClientDouble()
-    resources = AppResources(
-        logger=manager.logger,
-        api_client=client,
-        publication_service=object(),
-        publication_passage_service=object(),
-    )
-    observed_resources: list[AppResources | None] = []
-
-    async def create_resources(logger: Any) -> AppResources:
-        return resources
-
-    async def close_resources(app_resources: AppResources) -> None:
-        await app_resources.api_client.close()
-
-    class StdioMcpDouble:
-        async def run_async(self, **kwargs: Any) -> None:
-            observed_resources.append(dependencies.current_app_resources())
-            assert kwargs == {"transport": "stdio"}
-
-    async def create_mcp_server(app: FastAPI) -> StdioMcpDouble:
-        assert isinstance(app, FastAPI)
-        return StdioMcpDouble()
-
-    monkeypatch.setattr(
-        "pubtator_link.server_manager.create_app_resources",
-        create_resources,
-    )
-    monkeypatch.setattr(
-        "pubtator_link.server_manager.close_app_resources",
-        close_resources,
-    )
-    monkeypatch.setattr(manager, "create_mcp_server", create_mcp_server)
-
-    await manager.start_stdio_server()
-
-    assert observed_resources == [resources]
-    assert dependencies.current_app_resources() is None
-    assert client.closed is True
-    assert manager.resources is None
-
-
 def test_create_app_uses_explicit_cors_methods_and_headers() -> None:
     manager = UnifiedServerManager(logger=LoggerDouble())
     app = manager.create_app()

@@ -19,8 +19,8 @@ class ServerSettings(BaseSettings):
         extra="ignore",
     )
 
-    # Server configuration
-    transport: Literal["unified", "http", "stdio"] = Field(
+    # Server configuration (Streamable HTTP only; stdio is not supported)
+    transport: Literal["unified", "http"] = Field(
         default="unified", description="Server transport mode"
     )
     host: str = Field(default="127.0.0.1", description="Server host")

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pubtator-link"
-version = "2.0.0"
+version = "3.0.0"
 description = "A unified server for the PubTator3 biomedical literature API with MCP integration"
 readme = "README.md"
 authors = [
@@ -75,8 +75,7 @@ Repository = "https://github.com/ai-assistant/pubtator-link"
 Issues = "https://github.com/ai-assistant/pubtator-link/issues"
 
 [project.scripts]
-pubtator-link = "pubtator_link.cli:main"
-pubtator-link-mcp = "mcp_server:main"
+pubtator-link = "pubtator_link.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["pubtator_link"]

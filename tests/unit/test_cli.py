@@ -1,175 +1,129 @@
+"""CLI contract tests for the GeneFoundry Logging & CLI Standard v1 typer app."""
+
 from __future__ import annotations
 
+import tomllib
+from pathlib import Path
+
+import click
 import pytest
+import typer
+from typer.testing import CliRunner
 
-from pubtator_link import cli
+from pubtator_link import __version__, cli
+
+runner = CliRunner()
 
 
-def test_cli_without_command_prints_help_and_returns(
-    monkeypatch: pytest.MonkeyPatch,
+def _command_option_names(command_name: str) -> set[str]:
+    """Return the registered option names for a subcommand.
+
+    Introspecting the click command is width-independent, unlike scraping the
+    rich-rendered ``--help`` text (which wraps option tokens on narrow / no-TTY
+    terminals such as CI).
+    """
+    group = typer.main.get_command(cli.app)
+    ctx = click.Context(group)
+    command = group.get_command(ctx, command_name)
+    assert command is not None
+    return {opt for param in command.params for opt in param.opts}
+
+
+def test_app_is_typer_with_standard_name() -> None:
+    assert cli.app.info.name == "pubtator-link"
+
+
+def test_standard_subcommands_are_registered() -> None:
+    group = typer.main.get_command(cli.app)
+    ctx = click.Context(group)
+    assert set(group.list_commands(ctx)) == {"serve", "config", "health", "version"}
+
+
+def test_no_args_shows_help_without_serving() -> None:
+    # ``no_args_is_help=True`` prints help and exits via click's missing-command
+    # path (exit code 2); it must never fall through to serving the app.
+    result = runner.invoke(cli.app, [])
+    assert result.exit_code == 2
+    assert "Usage" in result.output
+    assert "serve" in result.output
+
+
+def test_serve_command_exposes_standard_options() -> None:
+    options = _command_option_names("serve")
+    assert {
+        "--transport",
+        "--host",
+        "--port",
+        "--mcp-path",
+        "--log-level",
+        "--disable-docs",
+        "--dev",
+    } <= options
+
+
+def test_config_command_exposes_validate_option() -> None:
+    assert "--validate" in _command_option_names("config")
+
+
+def test_health_command_exposes_url_option() -> None:
+    assert "--url" in _command_option_names("health")
+
+
+def test_version_command_prints_version() -> None:
+    result = runner.invoke(cli.app, ["version"])
+    assert result.exit_code == 0
+    assert __version__ in result.output
+
+
+def test_config_validate_succeeds_for_default_config() -> None:
+    result = runner.invoke(cli.app, ["config", "--validate"])
+    assert result.exit_code == 0
+    assert "valid" in result.output.lower()
+
+
+@pytest.mark.parametrize("transport", ["unified", "http"])
+def test_serve_accepts_supported_transports(
+    monkeypatch: pytest.MonkeyPatch, transport: str
 ) -> None:
-    monkeypatch.setattr("sys.argv", ["pubtator-link"])
+    calls: list[tuple[str, str, int, bool]] = []
 
-    cli.main()
+    def fake_run_server(
+        *, transport: str, host: str, port: int, unified: bool, reload: bool
+    ) -> None:
+        calls.append((transport, host, port, unified))
 
+    monkeypatch.setattr(cli, "_run_server", fake_run_server)
 
-def test_cli_serve_without_mode_prints_help_and_returns(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr("sys.argv", ["pubtator-link", "serve"])
-
-    cli.main()
-
-
-def test_cli_dispatches_http_server(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[object] = []
-    sentinel = object()
-
-    def fake_serve_http(host: str, port: int, reload: bool) -> object:
-        calls.append((host, port, reload))
-        return sentinel
-
-    def fake_asyncio_run(coro: object) -> None:
-        calls.append(coro)
-
-    monkeypatch.setattr(
-        "sys.argv",
-        [
-            "pubtator-link",
-            "serve",
-            "http",
-            "--host",
-            "0.0.0.0",  # noqa: S104 - CLI smoke test verifies host argument dispatch.
-            "--port",
-            "9000",
-            "--reload",
-        ],
-    )
-    monkeypatch.setattr(cli, "serve_http", fake_serve_http)
-    monkeypatch.setattr(cli.asyncio, "run", fake_asyncio_run)
-
-    cli.main()
-
-    assert calls == [("0.0.0.0", 9000, True), sentinel]  # noqa: S104
+    result = runner.invoke(cli.app, ["serve", "--transport", transport, "--port", "8123"])
+    assert result.exit_code == 0
+    assert calls == [(transport, "127.0.0.1", 8123, transport == "unified")]
 
 
-def test_cli_dispatches_unified_server(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[object] = []
-    sentinel = object()
-
-    def fake_serve_unified(host: str, port: int, reload: bool) -> object:
-        calls.append((host, port, reload))
-        return sentinel
-
-    def fake_asyncio_run(coro: object) -> None:
-        calls.append(coro)
-
-    monkeypatch.setattr("sys.argv", ["pubtator-link", "serve", "unified", "--port", "9100"])
-    monkeypatch.setattr(cli, "serve_unified", fake_serve_unified)
-    monkeypatch.setattr(cli.asyncio, "run", fake_asyncio_run)
-
-    cli.main()
-
-    assert calls == [("127.0.0.1", 9100, False), sentinel]
+def test_serve_rejects_stdio_transport() -> None:
+    result = runner.invoke(cli.app, ["serve", "--transport", "stdio"])
+    assert result.exit_code == 2
+    assert "stdio" in result.output.lower() or "invalid" in result.output.lower()
 
 
-def test_cli_dispatches_mcp_server(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[str] = []
-
-    monkeypatch.setattr("sys.argv", ["pubtator-link", "serve", "mcp"])
-    monkeypatch.setattr(cli, "serve_mcp_only", lambda: calls.append("mcp"))
-
-    cli.main()
-
-    assert calls == ["mcp"]
+def test_serve_rejects_unknown_transport() -> None:
+    result = runner.invoke(cli.app, ["serve", "--transport", "carrier-pigeon"])
+    assert result.exit_code == 2
 
 
-def test_cli_dispatches_entities_command(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[object] = []
-    sentinel = object()
-
-    def fake_search_entities(query: str, concept: str | None, limit: int) -> object:
-        calls.append((query, concept, limit))
-        return sentinel
-
-    def fake_asyncio_run(coro: object) -> None:
-        calls.append(coro)
-
-    monkeypatch.setattr(
-        "sys.argv",
-        ["pubtator-link", "entities", "MEFV", "--concept", "Gene", "--limit", "3"],
-    )
-    monkeypatch.setattr(cli, "search_entities", fake_search_entities)
-    monkeypatch.setattr(cli.asyncio, "run", fake_asyncio_run)
-
-    cli.main()
-
-    assert calls == [("MEFV", "Gene", 3), sentinel]
+def test_health_reports_unreachable_server() -> None:
+    result = runner.invoke(cli.app, ["health", "--url", "http://127.0.0.1:1"])
+    assert result.exit_code == 1
+    assert "Failed to connect" in result.output
 
 
-def test_cli_dispatches_search_command(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[object] = []
-    sentinel = object()
-
-    def fake_search_publications(query: str, page: int) -> object:
-        calls.append((query, page))
-        return sentinel
-
-    def fake_asyncio_run(coro: object) -> None:
-        calls.append(coro)
-
-    monkeypatch.setattr("sys.argv", ["pubtator-link", "search", "colchicine", "--page", "2"])
-    monkeypatch.setattr(cli, "search_publications", fake_search_publications)
-    monkeypatch.setattr(cli.asyncio, "run", fake_asyncio_run)
-
-    cli.main()
-
-    assert calls == [("colchicine", 2), sentinel]
+def test_console_script_entry_point_resolves() -> None:
+    project = tomllib.loads(Path("pyproject.toml").read_text())["project"]
+    scripts = project["scripts"]
+    assert scripts == {"pubtator-link": "pubtator_link.cli:app"}
 
 
-def test_cli_dispatches_export_command(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[object] = []
-    sentinel = object()
-
-    def fake_export_publications(pmids: str, format: str, full: bool) -> object:
-        calls.append((pmids, format, full))
-        return sentinel
-
-    def fake_asyncio_run(coro: object) -> None:
-        calls.append(coro)
-
-    monkeypatch.setattr(
-        "sys.argv",
-        ["pubtator-link", "export", "1,2", "--format", "pubtator", "--full"],
-    )
-    monkeypatch.setattr(cli, "export_publications", fake_export_publications)
-    monkeypatch.setattr(cli.asyncio, "run", fake_asyncio_run)
-
-    cli.main()
-
-    assert calls == [("1,2", "pubtator", True), sentinel]
-
-
-@pytest.mark.parametrize(("success", "expected_code"), [(True, 0), (False, 1)])
-def test_cli_test_command_maps_connection_result_to_exit_code(
-    monkeypatch: pytest.MonkeyPatch,
-    success: bool,
-    expected_code: int,
-) -> None:
-    sentinel = object()
-
-    def fake_test_connection() -> object:
-        return sentinel
-
-    def fake_asyncio_run(coro: object) -> bool:
-        assert coro is sentinel
-        return success
-
-    monkeypatch.setattr("sys.argv", ["pubtator-link", "test"])
-    monkeypatch.setattr(cli, "test_connection", fake_test_connection)
-    monkeypatch.setattr(cli.asyncio, "run", fake_asyncio_run)
-
-    with pytest.raises(SystemExit) as exc_info:
-        cli.main()
-
-    assert exc_info.value.code == expected_code
+def test_no_stdio_entry_point_remains() -> None:
+    project = tomllib.loads(Path("pyproject.toml").read_text())["project"]
+    scripts = project["scripts"]
+    assert "pubtator-link-mcp" not in scripts
+    assert all("mcp_server" not in target for target in scripts.values())

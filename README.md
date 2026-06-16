@@ -8,7 +8,7 @@ A unified server for the PubTator3 biomedical literature API with MCP integratio
 - **MCP Integration**: Model Context Protocol server for seamless AI assistant integration
 - **Rate-Limited Client**: Respects PubTator3 API guidelines (3 requests/second max)
 - **Intelligent Caching**: Async LRU caching with configurable TTL for optimal performance
-- **Multiple Transport Modes**: HTTP REST API, MCP STDIO, or unified mode
+- **Streamable HTTP Transports**: unified (REST API + MCP at `/mcp`) or HTTP-only mode
 - **Rich Data Models**: Comprehensive Pydantic models for all API responses
 - **Production Ready**: Structured logging, health checks, and graceful shutdown
 
@@ -57,15 +57,25 @@ CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 
 ### Start the Server
 
+Streamable HTTP only — the server boots through the `pubtator-link` CLI in
+either the `unified` (REST API + MCP at `/mcp`) or `http` (REST API only)
+transport. There is no stdio transport.
+
 ```bash
-# Unified mode (REST API + MCP)
+# Unified mode (REST API + MCP) with auto-reload
 make dev
 
-# HTTP-only mode (REST API only)
-uv run python server.py --transport http
+# Unified mode (REST API + MCP)
+pubtator-link serve --transport unified --host 127.0.0.1 --port 8000
 
-# STDIO mode (MCP only)
-make mcp-serve
+# HTTP-only mode (REST API only)
+pubtator-link serve --transport http --host 127.0.0.1 --port 8000
+
+# Inspect (and validate) the resolved configuration
+pubtator-link config --validate
+
+# Probe a running server's health endpoint
+pubtator-link health --url http://127.0.0.1:8000
 ```
 
 ## 📋 REST API Endpoints
@@ -292,14 +302,6 @@ metadata (`budget`, `total_chars`, `estimated_tokens`) so clients can avoid
 context blow-ups without `jq` or shell post-processing. Use raw BioC tools only
 when explicitly inspecting the source export.
 
-### Local stdio Fallback
-
-```bash
-pubtator-link-mcp
-```
-
-Use stdio only for local desktop workflows that cannot connect to HTTP MCP endpoints.
-
 ### 📚 Additional Documentation
 
 - **[MCP Connection Guide](docs/MCP_CONNECTION_GUIDE.md)** - Detailed setup instructions for all transport modes
@@ -308,20 +310,20 @@ Use stdio only for local desktop workflows that cannot connect to HTTP MCP endpo
 
 ## 🛠️ CLI Usage
 
-The CLI provides convenient access to PubTator3 functionality:
+The `pubtator-link` CLI follows the GeneFoundry Logging & CLI Standard v1:
 
 ```bash
-# Test API connection
-pubtator-link test
+# Start the server (Streamable HTTP only)
+pubtator-link serve --transport unified --host 127.0.0.1 --port 8000
 
-# Search for entity IDs
-pubtator-link entities "breast cancer" --concept Disease --limit 5
+# Show and validate the resolved configuration
+pubtator-link config --validate
 
-# Search publications
-pubtator-link search "@CHEMICAL_remdesivir" --page 1
+# Probe a running server's /health endpoint
+pubtator-link health --url http://127.0.0.1:8000
 
-# Export publication annotations
-pubtator-link export "29355051,32511357" --format biocjson --full
+# Print the installed version
+pubtator-link version
 ```
 
 ## 🏗️ Architecture
@@ -344,9 +346,7 @@ pubtator-link/
 │   ├── config.py               # Configuration management
 │   ├── logging_config.py       # Structured logging
 │   ├── server_manager.py       # Unified server management
-│   └── cli.py                  # Command-line interface
-├── server.py                   # Main server entry point
-├── mcp_server.py              # MCP STDIO server entry point
+│   └── cli.py                  # Typer command-line interface (pubtator-link)
 └── pyproject.toml             # Modern Python project configuration
 ```
 
@@ -356,7 +356,7 @@ pubtator-link/
 - **Service Layer**: Business logic with async LRU caching
 - **Server Manager**: Unified handling of multiple transport modes
 - **Data Models**: Comprehensive Pydantic models for type safety
-- **MCP Integration**: Backwards-compatible STDIO server
+- **MCP Integration**: FastMCP Streamable HTTP facade mounted at `/mcp`
 
 ## 🧪 Development
 
@@ -410,7 +410,7 @@ The project uses modern Python tooling:
 |----------|---------|-------------|
 | `HOST` | `127.0.0.1` | Server host address |
 | `PORT` | `8000` | Server port |
-| `TRANSPORT` | `unified` | Server mode (unified/http/stdio) |
+| `TRANSPORT` | `unified` | Server mode (unified/http) |
 | `API_BASE_URL` | `https://www.ncbi.nlm.nih.gov/research/pubtator3-api` | PubTator3 API base URL |
 | `API_TIMEOUT` | `30` | API request timeout (seconds) |
 | `RATE_LIMIT_PER_SECOND` | `2.5` | Rate limit (requests/second) |

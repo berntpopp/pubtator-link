@@ -87,10 +87,12 @@ def test_ruff_enforces_modern_rules_with_narrow_fixture_exception() -> None:
 
 
 def test_server_signal_handler_keeps_shutdown_task_reference() -> None:
-    server = Path("server.py").read_text()
+    # The serve loop (and its signal handler) lives in the typer CLI now that
+    # the root server.py / mcp_server.py entrypoints are gone.
+    cli = Path("pubtator_link/cli.py").read_text()
 
-    assert "shutdown_task: asyncio.Task[None] | None = None" in server
-    assert "shutdown_task = asyncio.create_task(server_manager.shutdown())" in server
+    assert "shutdown_task: asyncio.Task[None] | None = None" in cli
+    assert "shutdown_task = asyncio.create_task(manager.shutdown())" in cli
 
 
 def test_makefile_exposes_expected_developer_commands() -> None:
@@ -116,8 +118,7 @@ def test_makefile_exposes_expected_developer_commands() -> None:
         "ci-local:",
         "precommit:",
         "dev:",
-        "mcp-serve:",
-        "mcp-serve-http:",
+        "serve:",
         "docker-build:",
         "docker-up:",
         "docker-down:",

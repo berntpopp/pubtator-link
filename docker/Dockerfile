@@ -69,7 +69,7 @@ WORKDIR /home/app/web
 
 # Copy application source code
 COPY --chown=app:app ./pubtator_link ./pubtator_link
-COPY --chown=app:app ./server.py ./mcp_server.py ./pyproject.toml ./README.md ./
+COPY --chown=app:app ./pyproject.toml ./README.md ./
 COPY --chown=app:app ./docker/gunicorn_conf.py ./
 
 # Install the application package
@@ -85,5 +85,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -fsS http://localhost:8000/health || exit 1
 
-# Default production command using Gunicorn with Uvicorn workers
-CMD ["gunicorn", "-c", "gunicorn_conf.py", "pubtator_link.server_manager:create_app()"]
+# Default command: the typer CLI boots the unified REST + MCP Streamable HTTP
+# server. Production overlays (docker-compose.prod.yml / .npm.yml) override this
+# with the hardened multi-worker Gunicorn entrypoint.
+CMD ["pubtator-link", "serve", "--transport", "unified", "--host", "0.0.0.0", "--port", "8000"]

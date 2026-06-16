@@ -10,16 +10,28 @@ DOCKER_ENV = Path(".env.docker.example")
 DOCKERFILE = Path("docker/Dockerfile").read_text()
 
 
-def test_base_compose_runs_unified_server_with_mcp() -> None:
+def test_base_compose_runs_unified_server_via_cli() -> None:
     assert "PUBTATOR_LINK_TRANSPORT: unified" in BASE
-    assert "--factory" in BASE
-    assert "pubtator_link.server_manager:create_app" in BASE
+    # Streamable HTTP only: the base stack boots through the typer CLI, not a
+    # raw uvicorn --factory invocation.
+    assert "--factory" not in BASE
+    assert '"pubtator-link", "serve"' in BASE
+    assert '"--transport", "unified"' in BASE
 
 
-def test_production_gunicorn_commands_use_callable_factory_entrypoint() -> None:
+def test_default_image_command_uses_cli_serve() -> None:
+    # The default image runs `pubtator-link serve` (GeneFoundry CLI Standard v1).
+    assert '"pubtator-link", "serve"' in DOCKERFILE
+    assert '"--transport", "unified"' in DOCKERFILE
+    assert "stdio" not in DOCKERFILE
+
+
+def test_production_gunicorn_overlays_use_callable_factory_entrypoint() -> None:
+    # Production / NPM overlays keep the hardened multi-worker Gunicorn
+    # entrypoint, which drives the unaffected ASGI app factory.
     expected = '"pubtator_link.server_manager:create_app()"'
 
-    for source in (DOCKERFILE, PROD, NPM):
+    for source in (PROD, NPM):
         assert '"--factory"' not in source
         assert expected in source
 
