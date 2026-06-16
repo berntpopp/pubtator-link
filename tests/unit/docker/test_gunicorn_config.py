@@ -34,9 +34,22 @@ def test_gunicorn_worker_tmp_dir_uses_dev_shm() -> None:
 
 
 def test_gunicorn_control_socket_is_disabled_for_read_only_containers() -> None:
-    # Regression test for issue #36: Gunicorn 25 defaults its control socket to
+    # Regression test for issue #36: Gunicorn 25+ defaults its control socket to
     # $HOME/.gunicorn when XDG_RUNTIME_DIR is unset, which fails under the
-    # production read_only filesystem.
+    # production read_only filesystem ("Control server error: [Errno 30] ...").
+    from gunicorn.config import Config
+
     module = _load_gunicorn_config()
 
+    # The config file must request the disable...
     assert module.control_socket_disable is True
+
+    # ...and `control_socket_disable` must stay a setting the installed Gunicorn
+    # actually honors. Gunicorn silently ignores config-file attributes whose
+    # names don't match a known setting, so a future Gunicorn rename/removal
+    # would otherwise reintroduce the read-only-filesystem error with no test
+    # failing. Validate against the real settings registry to catch that.
+    cfg = Config()
+    assert "control_socket_disable" in cfg.settings
+    cfg.set("control_socket_disable", module.control_socket_disable)
+    assert cfg.control_socket_disable is True
