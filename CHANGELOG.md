@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.1
+
+- **Container & Deployment Hardening Standard v1**: pin the base image by digest
+  (`python:3.14-slim@sha256:b877e50…`) for byte-reproducible builds (closes #86).
+
 ## 3.0.0
 
 ### BREAKING: GeneFoundry Logging & CLI Standard v1 (closes #58)
