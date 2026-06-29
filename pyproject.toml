@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pubtator-link"
-version = "3.0.0"
+version = "3.0.1"
 description = "A unified server for the PubTator3 biomedical literature API with MCP integration"
 readme = "README.md"
 authors = [
