@@ -109,6 +109,21 @@ class TestHealthAndRoot:
         assert isinstance(data["version"], str)
         assert len(data["version"]) > 0
 
+    def test_health_endpoint_mcp_transport_standard_fields(self, test_client):
+        """Health MUST carry status, version, and transport=streamable-http-stateless.
+
+        Asserted by the MCP Transport Standard v1 conformance probe (tests/conformance/).
+        """
+        response = test_client.get("/health")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert "status" in data
+        assert "version" in data
+        assert "transport" in data
+        assert data["transport"] == "streamable-http-stateless"
+
     def test_root_endpoint_content_type(self, test_client):
         """Test that root endpoint returns JSON content type."""
         response = test_client.get("/")

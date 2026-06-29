@@ -302,7 +302,7 @@ class UnifiedServerManager:
             return {
                 "status": "healthy",
                 "version": __version__,
-                "transport": settings.transport,
+                "transport": "streamable-http-stateless",
             }
 
         @app.get("/metrics", include_in_schema=False)
