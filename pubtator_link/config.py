@@ -83,6 +83,14 @@ class ServerSettings(BaseSettings):
         ge=1,
         description="Maximum requests per client per minute when inbound rate limiting is enabled",
     )
+    review_export_base_dir: str | None = Field(
+        default=None,
+        description=(
+            "Base directory that export_review_audit_bundle export_path writes must "
+            "resolve within (canonicalized). Unset disables file export; inline/compact "
+            "responses still work."
+        ),
+    )
 
     # Logging configuration
     log_level: str = Field(default="INFO", description="Logging level")
