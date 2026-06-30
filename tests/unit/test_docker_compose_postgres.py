@@ -46,3 +46,8 @@ def test_app_service_uses_postgres_database_url_and_health_dependency() -> None:
     )
     assert app["depends_on"] == {"pubtator-postgres": {"condition": "service_healthy"}}
     assert "pubtator_postgres_data" in compose["volumes"]
+
+
+def test_app_service_publishes_only_to_loopback() -> None:
+    app = _base_compose()["services"]["pubtator-link"]
+    assert app["ports"] == ["127.0.0.1:${PUBTATOR_LINK_PORT:-8000}:8000"]
