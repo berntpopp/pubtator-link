@@ -1671,9 +1671,7 @@ def _audit_export_base_error(output_path: Path, base_dir: str | None) -> dict[st
     except (OSError, RuntimeError):
         return _audit_export_path_field_error("export path could not be resolved")
     if not resolved.is_relative_to(base):
-        return _audit_export_path_field_error(
-            "export path escapes the configured base directory"
-        )
+        return _audit_export_path_field_error("export path escapes the configured base directory")
     return None
 
 

@@ -623,9 +623,7 @@ def test_index_review_evidence_caps_pmids_and_curated_urls() -> None:
     with pytest.raises(ValidationError):
         IndexReviewEvidenceRequest(pmids=[str(i) for i in range(201)])
     with pytest.raises(ValidationError):
-        IndexReviewEvidenceRequest(
-            curated_urls=[f"https://example.org/{i}" for i in range(201)]
-        )
+        IndexReviewEvidenceRequest(curated_urls=[f"https://example.org/{i}" for i in range(201)])
     ok = IndexReviewEvidenceRequest(
         pmids=[str(i) for i in range(200)],
         curated_urls=[f"https://example.org/{i}" for i in range(200)],

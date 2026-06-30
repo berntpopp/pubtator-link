@@ -151,15 +151,15 @@ class InboundRateLimitMiddleware:
         if self.trust_proxy_headers:
             for raw_name, raw_value in scope.get("headers", []):
                 if raw_name == b"x-forwarded-for":
-                    parts = [
+                    parts: list[str] = [
                         part.strip()
-                        for part in raw_value.decode("latin-1").split(",")
+                        for part in str(raw_value.decode("latin-1")).split(",")
                         if part.strip()
                     ]
                     if parts:
                         return parts[-1]
         client = scope.get("client")
-        return client[0] if client else "unknown"
+        return str(client[0]) if client else "unknown"
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
