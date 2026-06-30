@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
+
 BASE = Path("docker/docker-compose.yml").read_text()
 PROD = Path("docker/docker-compose.prod.yml").read_text()
 NPM = Path("docker/docker-compose.npm.yml").read_text()
@@ -70,3 +72,18 @@ def test_root_docker_env_example_matches_vps_manager_contract() -> None:
     assert "PUBTATOR_LINK_PUBLIC_DOMAIN=" in env
     assert "PUBTATOR_LINK_PUBLIC_URL=" in env
     assert "PUBTATOR_LINK_CORS_ORIGINS=" in env
+
+
+def test_base_compose_binds_published_ports_to_loopback() -> None:
+    compose = yaml.safe_load(BASE)
+    published = [
+        (name, mapping)
+        for name, svc in compose["services"].items()
+        for mapping in (svc.get("ports") or [])
+    ]
+    assert published, "base compose should publish at least one host port"
+    for name, mapping in published:
+        assert isinstance(mapping, str) and mapping.startswith("127.0.0.1:"), (
+            f"{name} publishes {mapping!r} on all interfaces; loopback-bind it "
+            "(127.0.0.1) so the unauthenticated backend is never exposed on the host IP"
+        )
