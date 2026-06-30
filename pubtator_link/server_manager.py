@@ -149,15 +149,20 @@ class InboundRateLimitMiddleware:
 
     def _client_ip(self, scope: Scope) -> str:
         if self.trust_proxy_headers:
+            # Collect ALL x-forwarded-for header values in wire order.
+            # Per RFC 7230 §3.2.2 multiple same-name lines are equivalent to one
+            # comma-joined value, so we flatten them into a single ordered list.
+            # The trusted reverse proxy always appends last, so the rightmost
+            # non-empty token is the real client IP seen by our proxy — a client
+            # cannot spoof it by prepending its own XFF line.
+            xff_tokens: list[str] = []
             for raw_name, raw_value in scope.get("headers", []):
                 if raw_name == b"x-forwarded-for":
-                    parts: list[str] = [
-                        part.strip()
-                        for part in str(raw_value.decode("latin-1")).split(",")
-                        if part.strip()
-                    ]
-                    if parts:
-                        return parts[-1]
+                    xff_tokens.extend(
+                        t.strip() for t in raw_value.decode("latin-1").split(",") if t.strip()
+                    )
+            if xff_tokens:
+                return xff_tokens[-1]
         client = scope.get("client")
         return str(client[0]) if client else "unknown"
 
