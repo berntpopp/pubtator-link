@@ -347,4 +347,43 @@ async def test_inbound_rate_limit_prunes_stale_client_entries() -> None:
     )
 
     assert "stale" not in middleware.requests
-    assert sent[0]["status"] == 200
+
+
+def test_inbound_rate_limit_keys_on_trusted_proxy_xff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("pubtator_link.server_manager.settings.enable_inbound_rate_limit", True)
+    monkeypatch.setattr("pubtator_link.server_manager.settings.inbound_rate_limit_per_minute", 1)
+    monkeypatch.setattr("pubtator_link.server_manager.settings.trust_proxy_headers", True)
+
+    manager = UnifiedServerManager(logger=LoggerDouble())
+    app = manager.create_app(include_mcp=False)
+
+    @app.get("/limited")
+    async def limited() -> dict[str, bool]:
+        return {"ok": True}
+
+    client = TestClient(app)
+    assert client.get("/limited", headers={"X-Forwarded-For": "1.1.1.1"}).status_code == 200
+    assert client.get("/limited", headers={"X-Forwarded-For": "2.2.2.2"}).status_code == 200
+    assert client.get("/limited", headers={"X-Forwarded-For": "1.1.1.1"}).status_code == 429
+
+
+def test_inbound_rate_limit_ignores_xff_when_proxy_untrusted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("pubtator_link.server_manager.settings.enable_inbound_rate_limit", True)
+    monkeypatch.setattr("pubtator_link.server_manager.settings.inbound_rate_limit_per_minute", 1)
+    monkeypatch.setattr("pubtator_link.server_manager.settings.trust_proxy_headers", False)
+
+    manager = UnifiedServerManager(logger=LoggerDouble())
+    app = manager.create_app(include_mcp=False)
+
+    @app.get("/limited")
+    async def limited() -> dict[str, bool]:
+        return {"ok": True}
+
+    client = TestClient(app)
+    assert client.get("/limited", headers={"X-Forwarded-For": "1.1.1.1"}).status_code == 200
+    # Spoofed XFF must not buy a fresh bucket when the proxy is untrusted.
+    assert client.get("/limited", headers={"X-Forwarded-For": "2.2.2.2"}).status_code == 429

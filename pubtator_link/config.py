@@ -91,6 +91,13 @@ class ServerSettings(BaseSettings):
             "responses still work."
         ),
     )
+    trust_proxy_headers: bool = Field(
+        default=False,
+        description=(
+            "Trust the rightmost X-Forwarded-For entry (added by a known reverse proxy) "
+            "for inbound rate limiting. Leave False when directly reachable."
+        ),
+    )
 
     # Logging configuration
     log_level: str = Field(default="INFO", description="Logging level")

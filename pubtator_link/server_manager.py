@@ -139,10 +139,27 @@ class RequestSizeLimitMiddleware:
 class InboundRateLimitMiddleware:
     """Apply a simple per-client 60-second inbound HTTP request limit."""
 
-    def __init__(self, app: ASGIApp, *, requests_per_minute: int) -> None:
+    def __init__(
+        self, app: ASGIApp, *, requests_per_minute: int, trust_proxy_headers: bool = False
+    ) -> None:
         self.app = app
         self.requests_per_minute = requests_per_minute
+        self.trust_proxy_headers = trust_proxy_headers
         self.requests: defaultdict[str, deque[float]] = defaultdict(deque)
+
+    def _client_ip(self, scope: Scope) -> str:
+        if self.trust_proxy_headers:
+            for raw_name, raw_value in scope.get("headers", []):
+                if raw_name == b"x-forwarded-for":
+                    parts = [
+                        part.strip()
+                        for part in raw_value.decode("latin-1").split(",")
+                        if part.strip()
+                    ]
+                    if parts:
+                        return parts[-1]
+        client = scope.get("client")
+        return client[0] if client else "unknown"
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -154,8 +171,7 @@ class InboundRateLimitMiddleware:
 
         now = time.monotonic()
         self._prune_stale_clients(now)
-        client = scope.get("client")
-        client_ip = client[0] if client else "unknown"
+        client_ip = self._client_ip(scope)
         timestamps = self.requests[client_ip]
         while timestamps and now - timestamps[0] >= 60:
             timestamps.popleft()
@@ -268,6 +284,7 @@ class UnifiedServerManager:
             app.add_middleware(
                 InboundRateLimitMiddleware,
                 requests_per_minute=settings.inbound_rate_limit_per_minute,
+                trust_proxy_headers=settings.trust_proxy_headers,
             )
         app.add_middleware(PubTatorResourcesMiddleware)
         app.add_middleware(
