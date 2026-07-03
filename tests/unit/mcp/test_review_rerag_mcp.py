@@ -1,5 +1,4 @@
 import pytest
-from fastmcp.exceptions import ToolError
 from pydantic import ValidationError
 
 from pubtator_link.mcp.facade import create_pubtator_mcp
@@ -212,14 +211,16 @@ async def test_record_review_context_propagates_service_errors(
     )
     tool = create_pubtator_mcp()._tool_manager._tools["record_review_context"]
 
-    with pytest.raises(ToolError):
-        await tool.run(
-            {
-                "review_id": "review-1",
-                "event_type": "passage_selected",
-                "passage_ids": ["PMID:1:abstract:0"],
-            }
-        )
+    result = await tool.run(
+        {
+            "review_id": "review-1",
+            "event_type": "passage_selected",
+            "passage_ids": ["PMID:1:abstract:0"],
+        }
+    )
+
+    assert result.is_error is True
+    assert result.structured_content["success"] is False
 
 
 @pytest.mark.asyncio
@@ -242,8 +243,10 @@ async def test_record_review_context_rejects_empty_passage_ids(
     )
     tool = create_pubtator_mcp()._tool_manager._tools["record_review_context"]
 
-    with pytest.raises(ToolError):
-        await tool.run({"review_id": "review-1", "event_type": "passage_selected"})
+    result = await tool.run({"review_id": "review-1", "event_type": "passage_selected"})
+
+    assert result.is_error is True
+    assert result.structured_content["success"] is False
 
 
 @pytest.mark.asyncio

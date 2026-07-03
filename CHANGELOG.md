@@ -1,5 +1,36 @@
 # Changelog
 
+## 4.0.0
+
+### BREAKING: GeneFoundry Response-Envelope Standard v1 (flat banner)
+
+`run_mcp_tool` (`pubtator_link/mcp/errors.py`) no longer raises
+`fastmcp.exceptions.ToolError` on execution or argument-validation failure.
+Every MCP tool now returns a flat `success: false` envelope **in-band**
+instead — `{success, error_code, message, retryable, fallback_tool,
+fallback_args, recovery_action, _meta{tool, next_commands,
+unsafe_for_clinical_use}}` — and the wire-level MCP `isError` flag is still
+set to `true` (via `ToolResult(is_error=True, structured_content=...)`,
+verified against the installed `fastmcp==3.4.2`), so clients keep seeing a
+protocol-level error while also getting a structured, parseable payload
+instead of a JSON string buried in the error text.
+
+- **`recovery` renamed to `recovery_action`** on every error envelope.
+- **`_meta.tool` added** to both success and error envelopes (previously
+  error envelopes only carried `_meta.next_commands` /
+  `_meta.unsafe_for_clinical_use`; success envelopes carried no `_meta` at
+  all unless the tool body set its own).
+- **Success envelopes now always carry `_meta.unsafe_for_clinical_use` and
+  `_meta.tool`**, backfilled by `run_mcp_tool` if the tool body did not
+  already set them; existing payload keys (e.g. `results`/`result`,
+  `next_commands`) are preserved, never dropped or replaced.
+- Any tool caller that used `pytest.raises(ToolError)` /
+  `json.loads(str(exc))` against this server's tools must instead inspect
+  the returned `ToolResult.is_error` / `structured_content`, or (over MCP)
+  the response's `isError` flag and `structuredContent` body.
+
+No deprecation shims — pre-alpha, MAJOR bump.
+
 ## 3.0.1
 
 - **Container & Deployment Hardening Standard v1**: pin the base image by digest

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -10,7 +9,7 @@ from typing import Any
 
 import asyncpg
 import httpx
-from fastmcp.exceptions import ToolError
+from fastmcp.tools.tool import ToolResult
 from pydantic import ValidationError as PydanticValidationError
 
 from pubtator_link.api.client import PubTatorAPIError
@@ -248,28 +247,14 @@ def _pmids_for_exception(exc: Exception) -> list[str] | None:
     return normalized or None
 
 
-def _tool_error_details(exc: ToolError) -> tuple[str, str]:
-    try:
-        payload = json.loads(str(exc))
-    except json.JSONDecodeError:
-        return "tool_error", sanitize_error_message(str(exc))
-    if not isinstance(payload, dict):
-        return "tool_error", sanitize_error_message(str(exc))
-    error_code = payload.get("error_code")
-    message = payload.get("message")
-    return (
-        error_code if isinstance(error_code, str) else "tool_error",
-        message if isinstance(message, str) else sanitize_error_message(str(exc)),
-    )
-
-
 def mcp_validation_tool_error(
     *,
     tool_name: str,
     parameters: dict[str, Any],
     exc: PydanticValidationError,
-) -> ToolError:
-    """Build a sanitized validation failure raised before tool execution starts."""
+) -> dict[str, Any]:
+    """Build a sanitized flat envelope for a validation failure raised before
+    tool execution starts (never raised -- see ``install_validation_error_handler``)."""
     payload: dict[str, Any] = {
         "success": False,
         "error_code": "validation_failed",
@@ -277,12 +262,13 @@ def mcp_validation_tool_error(
         "retryable": False,
         "fallback_tool": None,
         "fallback_args": None,
-        "recovery": _recovery_text_for_context(
+        "recovery_action": _recovery_text_for_context(
             McpErrorContext(tool_name=tool_name),
             fallback_tool=None,
             error_code="validation_failed",
         ),
         "_meta": {
+            "tool": tool_name,
             "next_commands": [{"tool": "diagnostics", "arguments": {}}],
             "unsafe_for_clinical_use": True,
         },
@@ -299,11 +285,44 @@ def mcp_validation_tool_error(
         error_code="validation_failed",
         latency_seconds=0.0,
     )
-    return ToolError(json.dumps(payload, separators=(",", ":"), sort_keys=True))
+    return payload
+
+
+def _is_error_envelope(value: Any) -> bool:
+    """Fingerprint a flat failure envelope built by this module.
+
+    ``recovery_action`` is exclusive to :func:`mcp_tool_error` and
+    :func:`mcp_validation_tool_error` -- no tool body in this codebase sets it
+    on its own ``success: False`` business payloads (e.g.
+    ``research_session_status_payload``), so this predicate cannot
+    misclassify an unrelated non-error result as a protocol error.
+    """
+    return isinstance(value, dict) and value.get("success") is False and "recovery_action" in value
 
 
 def install_validation_error_handler(mcp_server: Any) -> None:
-    """Wrap registered tools so FastMCP argument validation returns our envelope."""
+    """Wrap registered tools so failures return the flat in-band envelope.
+
+    Two responsibilities are centralised here rather than duplicated at each
+    ``run_mcp_tool`` call site:
+
+    * FastMCP argument-validation failures (``PydanticValidationError``,
+      raised by ``Tool.run`` before the tool body executes) are converted to
+      the same flat envelope shape ``run_mcp_tool`` uses for execution
+      failures, and returned instead of raised.
+    * Any tool result whose ``structured_content`` is one of our error
+      envelopes (see ``_is_error_envelope``) is re-wrapped as
+      ``ToolResult(is_error=True, ...)`` so the wire-level MCP ``isError``
+      flag is set. Returning the envelope as a plain dict would otherwise be
+      validated by the low-level MCP SDK against the tool's *success*
+      ``outputSchema`` (e.g. ``SearchResponse``'s required fields) and get
+      rejected, masking the real error behind a generic "Output validation
+      error". Constructing ``ToolResult(is_error=True, ...)`` bypasses that
+      check entirely: FastMCP round-trips an error result straight through
+      ``CallToolResult``, skipping schema validation (verified against the
+      installed fastmcp==3.4.2: ``ToolResult.to_mcp_result()`` returns a
+      ``CallToolResult`` whenever ``is_error`` is set).
+    """
     tool_manager = getattr(mcp_server, "_tool_manager", None)
     tools = getattr(tool_manager, "_tools", {})
     for tool in tools.values():
@@ -318,20 +337,33 @@ def install_validation_error_handler(mcp_server: Any) -> None:
             _tool: Any = tool,
         ) -> Any:
             try:
-                return await _original_run(arguments)
+                result = await _original_run(arguments)
             except PydanticValidationError as exc:
-                raise mcp_validation_tool_error(
+                payload = mcp_validation_tool_error(
                     tool_name=str(_tool.name),
                     parameters=dict(_tool.parameters),
                     exc=exc,
-                ) from None
+                )
+                return ToolResult(structured_content=payload, is_error=True)
+            if _is_error_envelope(getattr(result, "structured_content", None)):
+                return ToolResult(
+                    structured_content=result.structured_content,
+                    meta=result.meta,
+                    is_error=True,
+                )
+            return result
 
         object.__setattr__(tool, "run", wrapped_run)
         object.__setattr__(tool, "_pubtator_validation_wrapped", True)
 
 
-def mcp_tool_error(exc: Exception, context: McpErrorContext) -> ToolError:
-    """Build a sanitized FastMCP tool-execution error."""
+def mcp_tool_error(exc: Exception, context: McpErrorContext) -> dict[str, Any]:
+    """Build a sanitized flat envelope for an MCP tool execution failure.
+
+    Returned (never raised) so ``run_mcp_tool`` can hand the caller an
+    in-band ``success: false`` result; ``install_validation_error_handler``
+    is what upgrades it to a wire-level ``isError: true`` result.
+    """
     logger.warning(
         "MCP tool execution failed",
         extra={"tool_name": context.tool_name},
@@ -347,7 +379,7 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> ToolError:
         next_commands.append({"tool": fallback_tool, "arguments": fallback_args})
     next_commands.append({"tool": "diagnostics", "arguments": {}})
     error_code = error_code_for_exception(exc)
-    payload = {
+    payload: dict[str, Any] = {
         "success": False,
         "error_code": error_code,
         "message": "Invalid MCP arguments."
@@ -356,8 +388,9 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> ToolError:
         "retryable": error_code == "upstream_unavailable",
         "fallback_tool": fallback_tool,
         "fallback_args": fallback_args,
-        "recovery": _recovery_text_for_context(context, fallback_tool, error_code),
+        "recovery_action": _recovery_text_for_context(context, fallback_tool, error_code),
         "_meta": {
+            "tool": context.tool_name,
             "next_commands": next_commands,
             "unsafe_for_clinical_use": True,
         },
@@ -372,7 +405,7 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> ToolError:
         payload["diagnostics_snapshot"] = diagnostics_snapshot
     if context.fallback_preview is not None:
         payload["fallback_preview"] = context.fallback_preview
-    return ToolError(json.dumps(payload, separators=(",", ":"), sort_keys=True))
+    return payload
 
 
 async def run_mcp_tool(
@@ -386,37 +419,19 @@ async def run_mcp_tool(
     degraded_mode: DegradedMode | None = None,
     fallback_preview: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Run one MCP tool body and convert execution failures to ToolError."""
+    """Run one MCP tool body and return a flat envelope for success or failure.
+
+    Never raises for execution failures: the caller always gets a ``dict``
+    back, either the tool body's own payload (with ``success``/``_meta``
+    filled in if absent) or the flat ``mcp_tool_error`` failure frame.
+    ``install_validation_error_handler`` upgrades a returned failure frame to
+    a wire-level ``isError: true`` result once it reaches ``Tool.run``.
+    """
     started_at = perf_counter()
     pmid_count = len(pmids or [])
     logger.info("mcp_tool_started", extra={"tool_name": tool_name, "pmid_count": pmid_count})
     try:
         result = await func()
-    except ToolError as exc:
-        latency_seconds = perf_counter() - started_at
-        error_code, message = _tool_error_details(exc)
-        logger.warning(
-            "mcp_tool_failed",
-            extra={
-                "tool_name": tool_name,
-                "pmid_count": pmid_count,
-                "latency_ms": round(latency_seconds * 1000, 2),
-                "error_code": error_code,
-            },
-        )
-        record_mcp_error(
-            tool_name=tool_name,
-            error_code=error_code,
-            message=message,
-            raw_message=str(exc),
-        )
-        record_mcp_tool_call(
-            tool_name=tool_name,
-            outcome="failure",
-            error_code=error_code,
-            latency_seconds=latency_seconds,
-        )
-        raise
     except Exception as exc:
         latency_seconds = perf_counter() - started_at
         error_code = error_code_for_exception(exc)
@@ -442,7 +457,7 @@ async def run_mcp_tool(
             error_code=error_code,
             latency_seconds=latency_seconds,
         )
-        raise mcp_tool_error(
+        return mcp_tool_error(
             exc,
             McpErrorContext(
                 tool_name=tool_name,
@@ -453,7 +468,7 @@ async def run_mcp_tool(
                 degraded_mode=degraded_mode,
                 fallback_preview=fallback_preview,
             ),
-        ) from exc
+        )
     latency_seconds = perf_counter() - started_at
     logger.info(
         "mcp_tool_completed",
@@ -468,4 +483,11 @@ async def run_mcp_tool(
         outcome="success",
         latency_seconds=latency_seconds,
     )
+    if isinstance(result, dict):
+        result.setdefault("success", True)
+        existing_meta = result.get("_meta")
+        merged_meta: dict[str, Any] = dict(existing_meta) if isinstance(existing_meta, dict) else {}
+        merged_meta["tool"] = tool_name
+        merged_meta["unsafe_for_clinical_use"] = True
+        result["_meta"] = merged_meta
     return result

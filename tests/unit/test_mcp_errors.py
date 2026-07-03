@@ -4,7 +4,6 @@ import logging
 from pathlib import Path
 
 import pytest
-from fastmcp.exceptions import ToolError
 
 from pubtator_link.api.client import PubTatorAPIError
 from pubtator_link.mcp.errors import (
@@ -54,7 +53,7 @@ def test_extract_validation_details_finds_direct_and_anyof_enum_values() -> None
 
 
 def test_mcp_tool_error_serializes_recovery_envelope() -> None:
-    error = mcp_tool_error(
+    payload = mcp_tool_error(
         RuntimeError('column "updated_at" of relation "reviews" does not exist'),
         McpErrorContext(
             tool_name="index_review_evidence",
@@ -62,8 +61,6 @@ def test_mcp_tool_error_serializes_recovery_envelope() -> None:
         ),
     )
 
-    assert isinstance(error, ToolError)
-    payload = json.loads(str(error))
     assert payload["error_code"] == "review_schema_not_current"
     assert payload["fallback_tool"] == "get_publication_passages"
     assert payload["fallback_args"]["pmids"] == ["39540697"]
@@ -71,7 +68,7 @@ def test_mcp_tool_error_serializes_recovery_envelope() -> None:
 
 
 def test_preflight_review_sources_error_points_to_publication_passages() -> None:
-    error = mcp_tool_error(
+    payload = mcp_tool_error(
         RuntimeError("temporary preflight failure"),
         McpErrorContext(
             tool_name="preflight_review_sources",
@@ -79,19 +76,18 @@ def test_preflight_review_sources_error_points_to_publication_passages() -> None
         ),
     )
 
-    payload = json.loads(str(error))
-
     assert payload["error_code"] == "internal_error"
     assert payload["fallback_tool"] == "get_publication_passages"
     assert payload["fallback_args"] == {
         "pmids": ["10490564", "10927144"],
         "mode": "full_abstract",
     }
-    assert payload["recovery"] == (
+    assert payload["recovery_action"] == (
         "Call get_publication_passages with the same PMIDs. "
         "Use mode='full_abstract' for article-local answering; run diagnostics only if "
         "passage retrieval also fails."
     )
+    assert payload["_meta"]["tool"] == "preflight_review_sources"
     assert payload["_meta"]["next_commands"][0] == {
         "tool": "get_publication_passages",
         "arguments": {
@@ -123,31 +119,27 @@ def test_review_schema_stale_error_preserves_runtime_error_compatibility() -> No
 
 
 def test_mcp_tool_error_sanitizes_typed_review_schema_message() -> None:
-    error = mcp_tool_error(
+    payload = mcp_tool_error(
         ReviewSchemaStaleError("Review database schema is not current: review_sources"),
         McpErrorContext(tool_name="index_review_evidence"),
     )
-
-    payload = json.loads(str(error))
 
     assert payload["error_code"] == "review_schema_not_current"
     assert payload["message"] == "Review database schema is not current."
 
 
 def test_mcp_tool_error_sanitizes_typed_upstream_message() -> None:
-    error = mcp_tool_error(
+    payload = mcp_tool_error(
         UpstreamUnavailableError("service unavailable"),
         McpErrorContext(tool_name="search_literature"),
     )
-
-    payload = json.loads(str(error))
 
     assert payload["error_code"] == "upstream_unavailable"
     assert payload["message"] == "The upstream service is temporarily unavailable."
 
 
 def test_pubtator_api_database_maintenance_is_upstream_unavailable() -> None:
-    error = mcp_tool_error(
+    payload = mcp_tool_error(
         PubTatorAPIError(
             'HTTP 400: {"detail":"We are currently updating the Database. Please try again later"}',
             status_code=400,
@@ -155,15 +147,13 @@ def test_pubtator_api_database_maintenance_is_upstream_unavailable() -> None:
         McpErrorContext(tool_name="search_literature"),
     )
 
-    payload = json.loads(str(error))
-
     assert payload["error_code"] == "upstream_unavailable"
     assert payload["message"] == "The upstream service is temporarily unavailable."
-    assert "review schema" not in payload["recovery"].lower()
+    assert "review schema" not in payload["recovery_action"].lower()
 
 
 def test_pubtator_api_transport_failure_is_upstream_unavailable() -> None:
-    error = mcp_tool_error(
+    payload = mcp_tool_error(
         PubTatorAPIError(
             "Request failed: Server disconnected without sending a response.",
             retry_metadata={"terminal_reason": "request_error", "attempt_count": 3},
@@ -171,36 +161,30 @@ def test_pubtator_api_transport_failure_is_upstream_unavailable() -> None:
         McpErrorContext(tool_name="search_literature"),
     )
 
-    payload = json.loads(str(error))
-
     assert payload["error_code"] == "upstream_unavailable"
     assert payload["message"] == "The upstream service is temporarily unavailable."
     assert payload["retryable"] is True
 
 
 def test_generic_internal_error_does_not_claim_schema_is_stale() -> None:
-    error = mcp_tool_error(
+    payload = mcp_tool_error(
         RuntimeError("unexpected adapter failure"),
         McpErrorContext(tool_name="pubtator_unknown_tool"),
     )
 
-    payload = json.loads(str(error))
-
     assert payload["error_code"] == "internal_error"
-    assert "review schema" not in payload["recovery"].lower()
-    assert "recent_mcp_errors" in payload["recovery"]
+    assert "review schema" not in payload["recovery_action"].lower()
+    assert "recent_mcp_errors" in payload["recovery_action"]
 
 
 def test_schema_stale_recovery_is_reserved_for_schema_errors() -> None:
-    error = mcp_tool_error(
+    payload = mcp_tool_error(
         ReviewSchemaStaleError("schema stale"),
         McpErrorContext(tool_name="index_review_evidence"),
     )
 
-    payload = json.loads(str(error))
-
     assert payload["error_code"] == "review_schema_not_current"
-    assert "review schema is stale" in payload["recovery"].lower()
+    assert "review schema is stale" in payload["recovery_action"].lower()
 
 
 def test_tool_specific_recovery_text_for_discovery_text_and_audit_errors() -> None:
@@ -211,23 +195,20 @@ def test_tool_specific_recovery_text_for_discovery_text_and_audit_errors() -> No
     }
 
     for tool_name, expected in cases.items():
-        error = mcp_tool_error(RuntimeError("boom"), McpErrorContext(tool_name=tool_name))
-        payload = json.loads(str(error))
+        payload = mcp_tool_error(RuntimeError("boom"), McpErrorContext(tool_name=tool_name))
 
-        assert expected in payload["recovery"]
-        assert "review schema" not in payload["recovery"].lower()
+        assert expected in payload["recovery_action"]
+        assert "review schema" not in payload["recovery_action"].lower()
 
 
 def test_ground_question_error_uses_selected_pmids_for_fallback() -> None:
     error_source = RuntimeError("review database unavailable")
     error_source.pmids = ["11111111", "22222222"]  # type: ignore[attr-defined]
 
-    error = mcp_tool_error(
+    payload = mcp_tool_error(
         error_source,
         McpErrorContext(tool_name="ground_question"),
     )
-
-    payload = json.loads(str(error))
 
     assert payload["fallback_tool"] == "get_publication_passages"
     assert payload["fallback_args"] == {
@@ -243,11 +224,9 @@ async def test_ground_question_wrapper_uses_selected_pmids_for_fallback() -> Non
         error.pmids = ["11111111", "22222222"]  # type: ignore[attr-defined]
         raise error
 
-    with pytest.raises(ToolError) as exc_info:
-        await run_mcp_tool("ground_question", failing)
+    payload = await run_mcp_tool("ground_question", failing)
 
-    payload = json.loads(str(exc_info.value))
-
+    assert payload["success"] is False
     assert payload["fallback_tool"] == "get_publication_passages"
     assert payload["fallback_args"] == {
         "pmids": ["11111111", "22222222"],
@@ -256,7 +235,7 @@ async def test_ground_question_wrapper_uses_selected_pmids_for_fallback() -> Non
 
 
 def test_mcp_tool_error_includes_bounded_diagnostics_snapshot() -> None:
-    error = mcp_tool_error(
+    payload = mcp_tool_error(
         RuntimeError("relation review_passages is unavailable"),
         McpErrorContext(
             tool_name="index_review_evidence",
@@ -286,8 +265,6 @@ def test_mcp_tool_error_includes_bounded_diagnostics_snapshot() -> None:
             },
         ),
     )
-
-    payload = json.loads(str(error))
 
     assert payload["degraded_mode"] == "index_unavailable"
     assert payload["diagnostics_snapshot"]["database"]["schema_current"] is True
@@ -450,21 +427,21 @@ async def test_installed_mcp_output_validation_handler_replaces_bare_sdk_error()
 
 
 @pytest.mark.asyncio
-async def test_mcp_error_wrapper_raises_tool_error() -> None:
+async def test_mcp_error_wrapper_returns_flat_envelope_without_raising() -> None:
     from pubtator_link.mcp.errors import run_mcp_tool
 
     async def failing() -> dict[str, object]:
         raise RuntimeError('column "updated_at" of relation "reviews" does not exist')
 
-    with pytest.raises(ToolError) as exc_info:
-        await run_mcp_tool(
-            "index_review_evidence",
-            failing,
-            pmids=["39540697"],
-        )
+    payload = await run_mcp_tool(
+        "index_review_evidence",
+        failing,
+        pmids=["39540697"],
+    )
 
-    payload = json.loads(str(exc_info.value))
+    assert payload["success"] is False
     assert payload["error_code"] == "review_schema_not_current"
+    assert payload["_meta"]["tool"] == "index_review_evidence"
 
 
 @pytest.mark.asyncio
@@ -483,10 +460,9 @@ async def test_mcp_error_wrapper_preserves_input_normalization_details() -> None
     async def failing() -> dict[str, object]:
         raise InputNormalizationError(field_errors=field_errors, recovery_hint=recovery_hint)
 
-    with pytest.raises(ToolError) as exc_info:
-        await run_mcp_tool("get_review_context_batch", failing)
+    payload = await run_mcp_tool("get_review_context_batch", failing)
 
-    payload = json.loads(str(exc_info.value))
+    assert payload["success"] is False
     assert payload["error_code"] == "validation_failed"
     assert payload["field_errors"] == field_errors
     assert payload["recovery_hint"] == recovery_hint
@@ -494,7 +470,7 @@ async def test_mcp_error_wrapper_preserves_input_normalization_details() -> None
 
 
 @pytest.mark.asyncio
-async def test_mcp_tool_wrapper_preserves_json_tool_error_code_in_recent_errors_and_metrics(
+async def test_mcp_tool_wrapper_preserves_error_code_in_recent_errors_and_metrics(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     from pubtator_link.mcp.errors import (
@@ -505,17 +481,14 @@ async def test_mcp_tool_wrapper_preserves_json_tool_error_code_in_recent_errors_
     from pubtator_link.observability.metrics import metrics_payload
 
     async def failing() -> dict[str, object]:
-        raise mcp_tool_error(
-            RuntimeError('column "updated_at" of relation "reviews" does not exist'),
-            McpErrorContext(tool_name="index_review_evidence"),
-        )
+        raise RuntimeError('column "updated_at" of relation "reviews" does not exist')
 
     clear_recent_mcp_errors()
     caplog.set_level(logging.WARNING, logger="pubtator_link.mcp.errors")
 
-    with pytest.raises(ToolError):
-        await run_mcp_tool("index_review_evidence", failing)
+    payload = await run_mcp_tool("index_review_evidence", failing)
 
+    assert payload["success"] is False
     errors = get_recent_mcp_errors()
     failed_records = [record for record in caplog.records if record.message == "mcp_tool_failed"]
     metrics = metrics_payload().decode()
@@ -543,7 +516,9 @@ async def test_mcp_tool_wrapper_emits_lifecycle_logs_and_metrics(
 
     result = await run_mcp_tool("pubtator.test_tool", successful, pmids=["1", "2"])
 
-    assert result == {"ok": True}
+    assert result["ok"] is True
+    assert result["success"] is True
+    assert result["_meta"]["tool"] == "pubtator.test_tool"
     messages = [record.message for record in caplog.records]
     assert "mcp_tool_started" in messages
     assert "mcp_tool_completed" in messages

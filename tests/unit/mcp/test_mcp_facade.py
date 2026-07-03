@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import json
 import re
 
 import pytest
-from fastmcp.exceptions import ToolError
 
 from pubtator_link.mcp.profiles import LEAN_TOOLS
 
@@ -115,8 +113,16 @@ def _schema_enum_values(schema: dict[str, object]) -> set[object]:
     return values
 
 
-def _tool_error_payload(exc: ToolError) -> dict[str, object]:
-    payload = json.loads(str(exc))
+async def _run_error_tool(tool: object, arguments: dict[str, object]) -> dict[str, object]:
+    """Run a tool expected to fail and return its flat error envelope.
+
+    Post-migration, failures are RETURNED as an in-band ``ToolResult`` with
+    ``is_error=True`` and ``structured_content`` set to the flat envelope --
+    never raised.
+    """
+    result = await tool.run(arguments)  # type: ignore[attr-defined]
+    assert result.is_error is True
+    payload = result.structured_content
     assert isinstance(payload, dict)
     return payload
 
@@ -1121,10 +1127,8 @@ async def test_query_alias_missing_all_returns_validation_failed_tool_error() ->
 
     tool = create_pubtator_mcp(profile="full")._tool_manager._tools["search_guidelines"]
 
-    with pytest.raises(ToolError) as exc_info:
-        await tool.run({})
+    payload = await _run_error_tool(tool, {})
 
-    payload = _tool_error_payload(exc_info.value)
     assert payload["error_code"] == "validation_failed"
     assert payload["success"] is False
 
@@ -1135,10 +1139,8 @@ async def test_tool_validation_unknown_argument_reports_valid_and_unexpected_par
 
     tool = create_pubtator_mcp(profile="full")._tool_manager._tools["search_literature"]
 
-    with pytest.raises(ToolError) as exc_info:
-        await tool.run({"query": "familial mediterranean fever", "bogus": "x"})
+    payload = await _run_error_tool(tool, {"query": "familial mediterranean fever", "bogus": "x"})
 
-    payload = _tool_error_payload(exc_info.value)
     assert payload["success"] is False
     assert payload["error_code"] == "validation_failed"
     assert "query" in payload["valid_params"]
@@ -1153,15 +1155,14 @@ async def test_tool_validation_bad_enum_reports_valid_values() -> None:
 
     tool = create_pubtator_mcp(profile="full")._tool_manager._tools["search_literature"]
 
-    with pytest.raises(ToolError) as exc_info:
-        await tool.run(
-            {
-                "query": "familial mediterranean fever",
-                "response_mode": "tiny",
-            }
-        )
+    payload = await _run_error_tool(
+        tool,
+        {
+            "query": "familial mediterranean fever",
+            "response_mode": "tiny",
+        },
+    )
 
-    payload = _tool_error_payload(exc_info.value)
     assert payload["success"] is False
     assert payload["error_code"] == "validation_failed"
     assert payload["valid_values_for"]["response_mode"] == [
@@ -1178,8 +1179,7 @@ async def test_tool_validation_failure_records_failure_metrics() -> None:
 
     tool = create_pubtator_mcp(profile="full")._tool_manager._tools["search_literature"]
 
-    with pytest.raises(ToolError):
-        await tool.run({"query": "familial mediterranean fever", "response_mode": "tiny"})
+    await _run_error_tool(tool, {"query": "familial mediterranean fever", "response_mode": "tiny"})
 
     metrics = metrics_payload().decode()
     assert (
@@ -1197,10 +1197,10 @@ async def test_validation_error_handler_is_idempotent() -> None:
     install_validation_error_handler(mcp)
     tool = mcp._tool_manager._tools["search_literature"]
 
-    with pytest.raises(ToolError) as exc_info:
-        await tool.run({"query": "familial mediterranean fever", "response_mode": "tiny"})
+    payload = await _run_error_tool(
+        tool, {"query": "familial mediterranean fever", "response_mode": "tiny"}
+    )
 
-    payload = _tool_error_payload(exc_info.value)
     assert payload["success"] is False
     assert payload["error_code"] == "validation_failed"
     assert payload["valid_values_for"]["response_mode"] == [
@@ -1239,10 +1239,10 @@ async def test_query_alias_conflict_returns_validation_failed_tool_error(
     monkeypatch.setattr(literature_tools, "search_literature_impl", fake_search_literature_impl)
     tool = create_pubtator_mcp(profile="full")._tool_manager._tools["search_guidelines"]
 
-    with pytest.raises(ToolError) as exc_info:
-        await tool.run({"text": "MEFV guideline", "query": "colchicine guideline"})
+    payload = await _run_error_tool(
+        tool, {"text": "MEFV guideline", "query": "colchicine guideline"}
+    )
 
-    payload = _tool_error_payload(exc_info.value)
     assert payload["error_code"] == "validation_failed"
     assert payload["success"] is False
 
@@ -1389,10 +1389,8 @@ async def test_pmid_limit_rejects_combined_list_and_scalar_alias(
     tool = create_pubtator_mcp(profile="full")._tool_manager._tools["get_publication_metadata"]
     pmids = [str(10_000_000 + index) for index in range(100)]
 
-    with pytest.raises(ToolError) as exc_info:
-        await tool.run({"pmids": pmids, "pmid": "99999999"})
+    payload = await _run_error_tool(tool, {"pmids": pmids, "pmid": "99999999"})
 
-    payload = _tool_error_payload(exc_info.value)
     assert payload["error_code"] == "validation_failed"
     assert payload["success"] is False
 
