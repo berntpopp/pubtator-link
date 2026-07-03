@@ -17,8 +17,9 @@ services:
       POSTGRES_USER: "${PUBTATOR_LINK_POSTGRES_USER:-pubtator_link}"
       POSTGRES_PASSWORD: "${PUBTATOR_LINK_POSTGRES_PASSWORD:-pubtator_link}"
 
+    # Dev/local only — loopback-bound; never publish Postgres on a server.
     ports:
-      - "${PUBTATOR_LINK_POSTGRES_PORT:-5434}:5432"
+      - "127.0.0.1:${PUBTATOR_LINK_POSTGRES_PORT:-5434}:5432"
 
     volumes:
       - pubtator_postgres_data:/var/lib/postgresql
