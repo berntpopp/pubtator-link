@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.0.1
+
+### Fixed
+
+- **MCP `serverInfo.version` now advertises the package version** instead of the
+  FastMCP framework version. `create_pubtator_mcp()` passes `version=__version__`
+  to `FastMCP(...)`, so the `initialize` handshake reports `pubtator-link`'s own
+  version (matching `/health`) rather than the bundled `fastmcp` release.
+
+### Changed
+
+- **Single-source versioning.** `pubtator_link.__version__` now derives from the
+  installed package metadata (`importlib.metadata.version("pubtator-link")`)
+  rather than a hardcoded literal. `pyproject.toml [project].version` is the sole
+  source of truth.
+
 ## 4.0.0
 
 ### BREAKING: GeneFoundry Response-Envelope Standard v1 (flat banner)
