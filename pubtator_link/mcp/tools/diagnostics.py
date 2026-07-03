@@ -21,6 +21,7 @@ def register_diagnostics_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         title="PubTator-Link Diagnostics",
         output_schema=DiagnosticsResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
+        tags={"meta"},
     )
     async def diagnostics() -> dict[str, Any]:
         """Use this when a client needs PubTator-Link subsystem status and recovery commands."""

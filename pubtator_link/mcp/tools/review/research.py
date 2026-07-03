@@ -174,6 +174,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         title="Review Quickstart",
         output_schema=ReviewQuickstartResponse.model_json_schema(),
         annotations=NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
+        tags={"meta"},
     )
     async def review_quickstart(
         topic: Annotated[str | None, Field(min_length=1)] = None,

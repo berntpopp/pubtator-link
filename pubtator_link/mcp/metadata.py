@@ -79,6 +79,7 @@ def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
         title="Workflow Help",
         output_schema=WorkflowHelpResponse.model_json_schema(),
         annotations=READ_ONLY_CLOSED_WORLD,
+        tags={"meta"},
     )
     async def workflow_help(
         task: str = "clinical_genetics_review",
