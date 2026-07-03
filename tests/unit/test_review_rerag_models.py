@@ -617,3 +617,16 @@ def test_evidence_tier_derives_from_actual_coverage() -> None:
     assert coverage_to_evidence_tier("curated_url", "curated_pdf") == (
         EvidenceTier.CURATED_FULL_TEXT
     )
+
+
+def test_index_review_evidence_caps_pmids_and_curated_urls() -> None:
+    with pytest.raises(ValidationError):
+        IndexReviewEvidenceRequest(pmids=[str(i) for i in range(201)])
+    with pytest.raises(ValidationError):
+        IndexReviewEvidenceRequest(curated_urls=[f"https://example.org/{i}" for i in range(201)])
+    ok = IndexReviewEvidenceRequest(
+        pmids=[str(i) for i in range(200)],
+        curated_urls=[f"https://example.org/{i}" for i in range(200)],
+    )
+    assert len(ok.pmids) == 200
+    assert len(ok.curated_urls) == 200

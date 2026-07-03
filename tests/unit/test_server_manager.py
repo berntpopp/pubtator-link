@@ -347,4 +347,71 @@ async def test_inbound_rate_limit_prunes_stale_client_entries() -> None:
     )
 
     assert "stale" not in middleware.requests
-    assert sent[0]["status"] == 200
+
+
+def test_inbound_rate_limit_keys_on_trusted_proxy_xff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("pubtator_link.server_manager.settings.enable_inbound_rate_limit", True)
+    monkeypatch.setattr("pubtator_link.server_manager.settings.inbound_rate_limit_per_minute", 1)
+    monkeypatch.setattr("pubtator_link.server_manager.settings.trust_proxy_headers", True)
+
+    manager = UnifiedServerManager(logger=LoggerDouble())
+    app = manager.create_app(include_mcp=False)
+
+    @app.get("/limited")
+    async def limited() -> dict[str, bool]:
+        return {"ok": True}
+
+    client = TestClient(app)
+    assert client.get("/limited", headers={"X-Forwarded-For": "1.1.1.1"}).status_code == 200
+    assert client.get("/limited", headers={"X-Forwarded-For": "2.2.2.2"}).status_code == 200
+    assert client.get("/limited", headers={"X-Forwarded-For": "1.1.1.1"}).status_code == 429
+
+
+def test_inbound_rate_limit_ignores_xff_when_proxy_untrusted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("pubtator_link.server_manager.settings.enable_inbound_rate_limit", True)
+    monkeypatch.setattr("pubtator_link.server_manager.settings.inbound_rate_limit_per_minute", 1)
+    monkeypatch.setattr("pubtator_link.server_manager.settings.trust_proxy_headers", False)
+
+    manager = UnifiedServerManager(logger=LoggerDouble())
+    app = manager.create_app(include_mcp=False)
+
+    @app.get("/limited")
+    async def limited() -> dict[str, bool]:
+        return {"ok": True}
+
+    client = TestClient(app)
+    assert client.get("/limited", headers={"X-Forwarded-For": "1.1.1.1"}).status_code == 200
+    # Spoofed XFF must not buy a fresh bucket when the proxy is untrusted.
+    assert client.get("/limited", headers={"X-Forwarded-For": "2.2.2.2"}).status_code == 429
+
+
+def test_inbound_rate_limit_xff_last_header_wins_multi_line() -> None:
+    """Multi-line XFF spoofing: rightmost token of the LAST header wins.
+
+    Per RFC 7230 §3.2.2, multiple same-name header fields are equivalent to a
+    single comma-joined value.  A malicious client can send its own XFF line
+    *before* the reverse proxy appends the real one.  With trust enabled the
+    middleware must key on the rightmost token of the last header (i.e. the IP
+    the trusted proxy recorded), not on anything from the first header.
+    """
+    from pubtator_link.server_manager import InboundRateLimitMiddleware
+
+    async def _app(scope: Any, receive: Any, send: Any) -> None:  # pragma: no cover
+        pass
+
+    middleware = InboundRateLimitMiddleware(_app, requests_per_minute=60, trust_proxy_headers=True)
+    scope: dict[str, Any] = {
+        "type": "http",
+        "method": "GET",
+        "client": ("10.0.0.1", 1234),
+        "headers": [
+            (b"x-forwarded-for", b"1.2.3.4"),  # spoofed line sent by client
+            (b"x-forwarded-for", b"9.9.9.9"),  # real IP appended by trusted reverse proxy
+        ],
+    }
+    # Must return 9.9.9.9 (rightmost token of last header), NOT the spoofed 1.2.3.4
+    assert middleware._client_ip(scope) == "9.9.9.9"

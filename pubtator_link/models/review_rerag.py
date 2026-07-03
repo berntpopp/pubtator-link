@@ -192,8 +192,8 @@ class PreparationStatus(BaseModel):
 class IndexReviewEvidenceRequest(BaseModel):
     """Request to enqueue review-scoped evidence preparation."""
 
-    pmids: list[str] = Field(default_factory=list)
-    curated_urls: list[str] = Field(default_factory=list)
+    pmids: list[str] = Field(default_factory=list, max_length=200)
+    curated_urls: list[str] = Field(default_factory=list, max_length=200)
     prepare_mode: PrepareMode = "selected"
     session_id: str | None = Field(default=None, min_length=1)
     wait_for_completion: bool = False

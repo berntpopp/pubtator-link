@@ -11,7 +11,7 @@ from pubtator_link.api.search_filters import (
     apply_year_window,
     build_search_filter_plan,
 )
-from pubtator_link.config import text_processing_config
+from pubtator_link.config import settings, text_processing_config
 from pubtator_link.mcp.audit_export import compact_audit_bundle_summary
 from pubtator_link.mcp.errors import mcp_field_validation_error
 from pubtator_link.mcp.input_normalization import (
@@ -1574,6 +1574,7 @@ async def export_review_audit_bundle_impl(
     export_path: str | None = None,
     fallback_inline: bool = False,
     response_mode: Literal["full", "compact"] = "compact",
+    export_base_dir: str | None = None,
 ) -> dict[str, Any]:
     bundle = await service.export_bundle(review_id, session_id=session_id)
     bundle_json = bundle.model_dump(mode="json")
@@ -1589,7 +1590,10 @@ async def export_review_audit_bundle_impl(
 
     output_path = Path(export_path).expanduser()
     serialized = json.dumps(bundle_json, separators=(",", ":"), sort_keys=True)
-    field_error = _audit_export_path_error(output_path)
+    base_dir = export_base_dir if export_base_dir is not None else settings.review_export_base_dir
+    field_error = _audit_export_base_error(output_path, base_dir)
+    if field_error is None:
+        field_error = _audit_export_path_error(output_path)
     if field_error is not None:
         if fallback_inline:
             return _inline_audit_bundle_or_error(
@@ -1654,6 +1658,21 @@ def _audit_export_path_field_error(reason: str) -> dict[str, Any]:
         reason=reason,
         recovery_hint="Use fallback_inline=True or choose a writable path.",
     )
+
+
+def _audit_export_base_error(output_path: Path, base_dir: str | None) -> dict[str, Any] | None:
+    if base_dir is None:
+        return _audit_export_path_field_error(
+            "file export is disabled; set PUBTATOR_LINK_REVIEW_EXPORT_BASE_DIR"
+        )
+    base = Path(base_dir).expanduser().resolve()
+    try:
+        resolved = output_path.resolve()
+    except (OSError, RuntimeError):
+        return _audit_export_path_field_error("export path could not be resolved")
+    if not resolved.is_relative_to(base):
+        return _audit_export_path_field_error("export path escapes the configured base directory")
+    return None
 
 
 def _inline_audit_bundle_or_error(

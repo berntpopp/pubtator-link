@@ -46,3 +46,20 @@ def test_app_service_uses_postgres_database_url_and_health_dependency() -> None:
     )
     assert app["depends_on"] == {"pubtator-postgres": {"condition": "service_healthy"}}
     assert "pubtator_postgres_data" in compose["volumes"]
+
+
+def test_app_service_publishes_only_to_loopback() -> None:
+    app = _base_compose()["services"]["pubtator-link"]
+    assert app["ports"] == ["127.0.0.1:${PUBTATOR_LINK_PORT:-8000}:8000"]
+
+
+def test_security_doc_documents_write_profile_posture() -> None:
+    text = Path("docs/SECURITY.md").read_text(encoding="utf-8")
+    for token in (
+        "review_export_base_dir",
+        "trust_proxy_headers",
+        "mcp_profile",
+        "127.0.0.1",
+        "#85",
+    ):
+        assert token in text
