@@ -1,3 +1,3 @@
 """PubTator-Link: A unified server for the PubTator3 biomedical literature API."""
 
-__version__ = "3.0.1"
+__version__ = "4.0.0"
