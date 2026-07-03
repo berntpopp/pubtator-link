@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastmcp import FastMCP
 
+from pubtator_link import __version__
 from pubtator_link.config import settings
 from pubtator_link.mcp.compat import install_inspection_managers
 from pubtator_link.mcp.errors import install_validation_error_handler
@@ -23,6 +24,7 @@ def create_pubtator_mcp(profile: MCPToolProfile | str | None = None) -> FastMCP:
     )
     mcp = FastMCP(
         name="pubtator-link",
+        version=__version__,
         mask_error_details=True,
         instructions=(
             "PubTator-Link grounds biomedical literature work: search PubMed/PubTator, "
