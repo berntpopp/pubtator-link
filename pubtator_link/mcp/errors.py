@@ -9,6 +9,7 @@ from typing import Any
 
 import asyncpg
 import httpx
+from fastmcp.exceptions import ValidationError as FastMCPValidationError
 from fastmcp.tools.tool import ToolResult
 from pydantic import ValidationError as PydanticValidationError
 
@@ -247,11 +248,31 @@ def _pmids_for_exception(exc: Exception) -> list[str] | None:
     return normalized or None
 
 
+def _pydantic_validation_details(exc: BaseException) -> list[dict[str, Any]]:
+    """Return pydantic ``.errors()`` details for an argument-validation failure.
+
+    FastMCP 3.4.3+ re-raises argument-validation ``pydantic.ValidationError`` as
+    ``fastmcp.exceptions.ValidationError`` (see fastmcp #4128), chaining the
+    original pydantic error via ``__cause__``. Walk the cause chain so callers
+    keep the structured ``loc``/``type`` details needed for retry guidance,
+    regardless of which layer surfaced the failure.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        errors = getattr(current, "errors", None)
+        if isinstance(current, PydanticValidationError) and callable(errors):
+            return list(errors())
+        current = current.__cause__
+    return []
+
+
 def mcp_validation_tool_error(
     *,
     tool_name: str,
     parameters: dict[str, Any],
-    exc: PydanticValidationError,
+    exc: BaseException,
 ) -> dict[str, Any]:
     """Build a sanitized flat envelope for a validation failure raised before
     tool execution starts (never raised -- see ``install_validation_error_handler``)."""
@@ -273,7 +294,7 @@ def mcp_validation_tool_error(
             "unsafe_for_clinical_use": True,
         },
     }
-    payload.update(extract_validation_details(parameters, exc.errors()))
+    payload.update(extract_validation_details(parameters, _pydantic_validation_details(exc)))
     record_mcp_error(
         tool_name=tool_name,
         error_code="validation_failed",
@@ -306,7 +327,8 @@ def install_validation_error_handler(mcp_server: Any) -> None:
     Two responsibilities are centralised here rather than duplicated at each
     ``run_mcp_tool`` call site:
 
-    * FastMCP argument-validation failures (``PydanticValidationError``,
+    * FastMCP argument-validation failures (``PydanticValidationError`` on
+      fastmcp<3.4.3, or ``fastmcp.exceptions.ValidationError`` on fastmcp>=3.4.3,
       raised by ``Tool.run`` before the tool body executes) are converted to
       the same flat envelope shape ``run_mcp_tool`` uses for execution
       failures, and returned instead of raised.
@@ -320,7 +342,7 @@ def install_validation_error_handler(mcp_server: Any) -> None:
       error". Constructing ``ToolResult(is_error=True, ...)`` bypasses that
       check entirely: FastMCP round-trips an error result straight through
       ``CallToolResult``, skipping schema validation (verified against the
-      installed fastmcp==3.4.2: ``ToolResult.to_mcp_result()`` returns a
+      installed fastmcp==3.4.3: ``ToolResult.to_mcp_result()`` returns a
       ``CallToolResult`` whenever ``is_error`` is set).
     """
     tool_manager = getattr(mcp_server, "_tool_manager", None)
@@ -338,7 +360,11 @@ def install_validation_error_handler(mcp_server: Any) -> None:
         ) -> Any:
             try:
                 result = await _original_run(arguments)
-            except PydanticValidationError as exc:
+            except (PydanticValidationError, FastMCPValidationError) as exc:
+                # FastMCP 3.4.3+ re-raises argument-validation pydantic errors as
+                # fastmcp.exceptions.ValidationError (see fastmcp #4128); older
+                # releases raised the raw pydantic error. Catch both so failures
+                # keep returning the flat envelope instead of propagating.
                 payload = mcp_validation_tool_error(
                     tool_name=str(_tool.name),
                     parameters=dict(_tool.parameters),
