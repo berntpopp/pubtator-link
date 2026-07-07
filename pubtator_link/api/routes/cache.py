@@ -148,7 +148,7 @@ async def get_cache_statistics(
         )
 
     except Exception as e:
-        logger.error(f"Error retrieving cache statistics: {e}")
+        logger.error("Error retrieving cache statistics", extra={"error_type": type(e).__name__})
         raise HTTPException(status_code=500, detail="Failed to retrieve cache statistics") from e
 
 
@@ -279,5 +279,5 @@ async def clear_cache(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Error clearing cache: {e}")
+        logger.error("Error clearing cache", extra={"error_type": type(e).__name__})
         raise HTTPException(status_code=500, detail="Failed to clear cache") from e

@@ -40,8 +40,11 @@ def handle_api_errors(func: Callable[..., Any]) -> Callable[..., Any]:
             # Request timeout errors
             raise HTTPException(status_code=504, detail="Request timeout") from e
         except Exception as e:
-            # Generic server errors
-            logger.error(f"Unexpected error in {func.__name__}: {e}")
+            # Generic server errors. Never render the raw exception string; it
+            # can carry a DSN, host/IP, or free-text PII. Log only the type.
+            logger.error(
+                "Unexpected error in %s", func.__name__, extra={"error_type": type(e).__name__}
+            )
             raise HTTPException(status_code=500, detail="Internal server error") from e
 
     return wrapper

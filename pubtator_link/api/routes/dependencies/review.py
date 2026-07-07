@@ -163,7 +163,10 @@ def _build_embedding_provider() -> EmbeddingProvider | None:
             device=getattr(review_rerag_config, "embedding_device", "auto"),
         )
     except EmbeddingProviderUnavailableError as exc:
-        logger.warning("Review embedding provider unavailable; lexical fallback active: %s", exc)
+        logger.warning(
+            "Review embedding provider unavailable; lexical fallback active",
+            extra={"error_type": type(exc).__name__},
+        )
         return None
 
 
