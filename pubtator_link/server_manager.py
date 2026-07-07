@@ -256,10 +256,16 @@ class UnifiedServerManager:
         mcp_http_app = None
         if include_mcp:
             mcp = create_pubtator_mcp()
+            # host_origin_protection defaults to True since fastmcp 3.4.3, which
+            # 421s every request whose Host is not localhost -- including
+            # legitimate proxied traffic from the genefoundry-router. The reverse
+            # proxy (NPM) already validates the Host via server_name + TLS SNI, so
+            # disable the redundant app-layer guard here to keep /mcp reachable.
             mcp_http_app = mcp.http_app(
                 path=settings.mcp_path,
                 json_response=True,
                 stateless_http=True,
+                host_origin_protection=False,
             )
             self.mcp = mcp
 
