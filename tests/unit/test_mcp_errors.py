@@ -67,6 +67,48 @@ def test_mcp_tool_error_serializes_recovery_envelope() -> None:
     assert "updated_at" not in payload["message"]
 
 
+def test_mcp_tool_error_does_not_leak_raw_exception_to_logs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The failure log MUST NOT emit raw exception text or a traceback.
+
+    Regression guard: a raw ``exc_info`` here would render the exception
+    message and stack (which can carry a Postgres DSN, credentials, host/IP,
+    or free-text PII) into logs despite the sanitized envelope. Only the
+    sanitized ``error_code`` + ``exception_type`` fields may be logged.
+    """
+    dsn = "postgres://pubtator:s3cr3t-pw@10.1.2.3:5432/pubtatordb"
+    secrets = (dsn, "postgres://", "s3cr3t-pw", "10.1.2.3", "password authentication failed")
+
+    def _boom() -> None:
+        raise RuntimeError(f"connection to {dsn} failed: password authentication failed")
+
+    caplog.set_level(logging.WARNING, logger="pubtator_link.mcp.errors")
+    try:
+        _boom()
+    except RuntimeError as exc:
+        payload = mcp_tool_error(exc, McpErrorContext(tool_name="index_review_evidence"))
+
+    # The sanitized envelope itself never carries the raw message.
+    assert payload["success"] is False
+    for secret in secrets:
+        assert secret not in json.dumps(payload)
+
+    # No emitted log record may carry raw exc_info, and rendering every record
+    # (which appends any traceback) must be free of every secret fragment.
+    assert all(record.exc_info is None for record in caplog.records)
+    formatter = logging.Formatter("%(name)s %(levelname)s %(message)s")
+    rendered = "\n".join(formatter.format(record) for record in caplog.records)
+    for secret in secrets:
+        assert secret not in rendered
+
+    # The failure log still exists and carries only sanitized structured fields.
+    warning_records = [r for r in caplog.records if r.message == "MCP tool execution failed"]
+    assert warning_records
+    assert warning_records[-1].error_code == "internal_error"
+    assert warning_records[-1].exception_type == "RuntimeError"
+
+
 def test_preflight_review_sources_error_points_to_publication_passages() -> None:
     payload = mcp_tool_error(
         RuntimeError("temporary preflight failure"),
