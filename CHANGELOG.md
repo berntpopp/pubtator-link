@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.0.2
+
+### Security
+
+- **No raw exceptions in MCP failure logs.** `mcp_tool_error`
+  (`pubtator_link/mcp/errors.py`) no longer passes `exc_info` when logging a
+  tool failure. The exception message and traceback could carry a Postgres
+  DSN, credentials, host/IP, or free-text PII into logs despite the sanitized
+  in-band envelope. The failure log now emits only the sanitized `error_code`
+  and `exception_type` fields, matching `run_mcp_tool`.
+- **CORS credentials disabled on the unauthenticated edge.** The CORS
+  middleware now sets `allow_credentials=False` (this backend uses application
+  session IDs, not CORS browser credentials) with a fail-closed startup guard
+  rejecting the `allow_credentials=True` + wildcard-origin pair.
+
 ## 4.0.1
 
 ### Fixed
