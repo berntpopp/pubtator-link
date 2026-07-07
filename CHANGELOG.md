@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.0.3
+
+### Security
+
+- **No free-text query or raw exceptions in REST/service logs.** Several
+  REST-route and service log sites rendered the free-text search query (GDPR
+  Art. 9 — it can carry variant coordinates, phenotype text, or patient
+  identifiers) and raw exception strings (which can carry a Postgres DSN,
+  host/IP, or the query echoed back by an upstream error) into logs, despite
+  the sanitized response returned to the caller. This completes the 4.0.2
+  `mcp_tool_error` fix, which had scoped these pre-existing sites out.
+  - `publication_service.search_publications` no longer logs `query=text` or
+    `error=str(e)` (it logs `query_length` + `error_type` instead) and no longer
+    embeds the raw query in the cache-miss log `cache_key`.
+  - The PMC-export failure log now emits `error_type` rather than `error=str(e)`.
+  - `handle_api_errors` (`dependencies/validation.py`), `annotations.py`,
+    `cache.py`, and `dependencies/review.py` now log `error_type=type(e).__name__`
+    instead of interpolating the raw exception string.
+  - A sentinel regression guard asserts the query term and its echoed exception
+    string are absent from all emitted log values.
+
 ## 4.0.2
 
 ### Security
