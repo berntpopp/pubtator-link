@@ -364,10 +364,18 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> dict[str, Any]:
     in-band ``success: false`` result; ``install_validation_error_handler``
     is what upgrades it to a wire-level ``isError: true`` result.
     """
+    # Log only sanitized structured fields. A raw ``exc_info`` here would render
+    # the exception message and traceback (which can carry a Postgres DSN,
+    # credentials, host/IP, or free-text PII) into logs despite the sanitized
+    # envelope returned to the caller.
+    error_code = error_code_for_exception(exc)
     logger.warning(
         "MCP tool execution failed",
-        extra={"tool_name": context.tool_name},
-        exc_info=(type(exc), exc, exc.__traceback__),
+        extra={
+            "tool_name": context.tool_name,
+            "error_code": error_code,
+            "exception_type": type(exc).__name__,
+        },
     )
     fallback_tool, fallback_args = _fallback_for_context(context)
     exception_pmids = _pmids_for_exception(exc)
@@ -378,7 +386,6 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> dict[str, Any]:
     if fallback_tool and fallback_args is not None:
         next_commands.append({"tool": fallback_tool, "arguments": fallback_args})
     next_commands.append({"tool": "diagnostics", "arguments": {}})
-    error_code = error_code_for_exception(exc)
     payload: dict[str, Any] = {
         "success": False,
         "error_code": error_code,
