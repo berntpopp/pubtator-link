@@ -488,8 +488,9 @@ async def get_annotation_results(
             detail="Request timeout while retrieving annotation results",
         ) from e
     except Exception as e:
-        # Session not found or other error
-        logger.error(f"Error retrieving annotation results: {e}")
+        # Session not found or other error. Log only the sanitized type; the
+        # raw exception string can carry free-text or identifiers.
+        logger.error("Error retrieving annotation results", extra={"error_type": type(e).__name__})
         raise HTTPException(
             status_code=404, detail=f"Session {session_id} not found or has expired"
         ) from e

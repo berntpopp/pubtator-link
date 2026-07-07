@@ -137,7 +137,12 @@ class PublicationService:
 
         except PubTatorAPIError as e:
             if self.logger:
-                self.logger.error("PMC export failed", pmcids=pmcids, format=format, error=str(e))
+                self.logger.error(
+                    "PMC export failed",
+                    pmcids=pmcids,
+                    format=format,
+                    error_type=type(e).__name__,
+                )
             raise
 
     async def export_pmc_publications_list(
@@ -167,7 +172,11 @@ class PublicationService:
             Search response
         """
         if self.logger:
-            log_cache_event(self.logger, event="miss", cache_key=f"search:{text}:{page}", hit=False)
+            # Never log the free-text query (GDPR Art. 9). The cache_key is for
+            # log correlation only; the actual cache is keyed by @alru_cache.
+            log_cache_event(
+                self.logger, event="miss", cache_key=f"search:len={len(text)}:{page}", hit=False
+            )
 
         try:
             raw_data = await self.client.search_publications(text=text, page=page)
@@ -175,7 +184,14 @@ class PublicationService:
 
         except PubTatorAPIError as e:
             if self.logger:
-                self.logger.error("Publication search failed", query=text, page=page, error=str(e))
+                # Drop the raw query and exception string; both can carry
+                # free-text PII or an upstream error echoing the query back.
+                self.logger.error(
+                    "Publication search failed",
+                    page=page,
+                    query_length=len(text),
+                    error_type=type(e).__name__,
+                )
             raise
 
     def _parse_export_data(self, raw_data: dict[str, Any], format: str) -> list[dict[str, Any]]:
