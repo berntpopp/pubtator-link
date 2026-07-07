@@ -36,6 +36,16 @@
   session IDs, not CORS browser credentials) with a fail-closed startup guard
   rejecting the `allow_credentials=True` + wildcard-origin pair.
 
+### Changed
+
+- **Consolidated Dependabot dependency sweep.** Bumped `structlog`
+  (`>=24.4.0,<26.0.0` → `>=26.1.0,<27.0.0`, major), `numpy`
+  (`>=2.4.6,<3.0.0` → `>=2.5.1,<3.0.0`, major), `fastmcp` (3.4.2 → 3.4.3),
+  `orjson` (3.11.8 → 3.11.9), and `typer` (0.26.7 → 0.26.8). CI `astral-sh/setup-uv`
+  pinned 8.2.0 → 8.3.0 and the `pgvector/pgvector` Compose image bumped
+  `0.8.3-pg18-trixie` → `0.8.4-pg18-trixie`. No source changes were required for the
+  major bumps (structlog CalVer, numpy `asarray` usage unaffected).
+
 ## 4.0.1
 
 ### Fixed
