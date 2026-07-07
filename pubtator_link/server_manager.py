@@ -299,10 +299,20 @@ class UnifiedServerManager:
             generator=lambda: str(uuid4()),
             validator=None,
         )
+        # Credentials are meaningless for this unauthenticated backend (it uses
+        # application session IDs, not CORS browser credentials) and become a
+        # footgun if origins are ever widened to "*". Keep them off and fail
+        # closed as a regression tripwire if that dangerous pair is ever set.
+        cors_allow_credentials = False
+        if cors_allow_credentials and "*" in settings.cors_origins:
+            raise RuntimeError(
+                "Refusing to start: CORS allow_credentials=True with wildcard "
+                "origin '*' is forbidden."
+            )
         app.add_middleware(
             CORSMiddleware,
             allow_origins=settings.cors_origins,
-            allow_credentials=True,
+            allow_credentials=cors_allow_credentials,
             allow_methods=settings.cors_allow_methods,
             allow_headers=settings.cors_allow_headers,
         )

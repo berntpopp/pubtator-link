@@ -173,6 +173,25 @@ def test_create_app_uses_explicit_cors_methods_and_headers() -> None:
     ]
 
 
+def test_create_app_disables_cors_credentials_on_unauthenticated_backend() -> None:
+    """CORS credentials are meaningless here (session IDs, not cookies) and are a
+    footgun with a wildcard origin; they MUST be off and GET routes must still work."""
+    manager = UnifiedServerManager(logger=LoggerDouble())
+    app = manager.create_app()
+
+    cors_middleware = next(
+        middleware
+        for middleware in app.user_middleware
+        if middleware.cls.__name__ == "CORSMiddleware"
+    )
+    assert cors_middleware.kwargs["allow_credentials"] is False
+    # Preserve the existing method list; do NOT collapse to POST-only.
+    assert cors_middleware.kwargs["allow_methods"] == ["GET", "POST", "OPTIONS"]
+
+    response = TestClient(app).get("/health")
+    assert response.status_code == 200
+
+
 def test_post_request_size_limit_returns_stable_413(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("pubtator_link.server_manager.settings.http_max_request_bytes", 8)
 
