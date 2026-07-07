@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.0.4
+
+### Changed
+
+- **Release reconciliation.** Merges the consolidated Dependabot dependency
+  sweep (previously tagged `4.0.2` on `origin/main`) into the security
+  log-hardening release line (`4.0.2`–`4.0.3`). Both lineages had independently
+  published a `4.0.2`; the version is bumped to `4.0.4` to strictly supersede
+  both. The Dependabot dependency bumps (`structlog`, `numpy`, `fastmcp`,
+  `orjson`, `typer`) and the `errors.py` fastmcp-3.4.3 `ValidationError` handling
+  they carried are retained alongside all `4.0.2`/`4.0.3` security fixes. No new
+  functional source changes beyond the merge.
+
 ## 4.0.3
 
 ### Security
