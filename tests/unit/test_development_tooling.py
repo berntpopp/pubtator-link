@@ -233,6 +233,23 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
     )
 
 
+def test_release_service_token_is_scoped_to_compose_validation() -> None:
+    release = _workflow(".github/workflows/release.yml")
+    assert "PUBTATOR_LINK_MCP_SERVICE_TOKEN" not in (release.get("env") or {})
+    allowed_steps = {"Validate production Compose config", "Validate NPM Compose config"}
+    token_steps: set[str] = set()
+    for job in release["jobs"].values():
+        assert "PUBTATOR_LINK_MCP_SERVICE_TOKEN" not in (job.get("env") or {})
+        for step in job["steps"]:
+            step_env = step.get("env") or {}
+            if "PUBTATOR_LINK_MCP_SERVICE_TOKEN" in step_env:
+                token_steps.add(step.get("name", ""))
+                assert step.get("name") in allowed_steps
+                assert step_env["PUBTATOR_LINK_MCP_SERVICE_TOKEN"]
+
+    assert token_steps == allowed_steps
+
+
 def test_github_actions_are_sha_pinned_with_uv_version() -> None:
     workflows = [
         _workflow(".github/workflows/ci.yml"),
