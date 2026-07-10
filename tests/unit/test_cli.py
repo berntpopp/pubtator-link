@@ -124,7 +124,7 @@ def test_serve_rejects_public_bind_for_unauthenticated_write_exception(
     monkeypatch.setattr(cli.settings, "allow_unauthenticated_writes", True)
     monkeypatch.setattr(cli, "_run_server", fake_run_server)
 
-    result = runner.invoke(cli.app, ["serve", "--host", "0.0.0.0"])
+    result = runner.invoke(cli.app, ["serve", "--host", "0.0.0.0"])  # noqa: S104
 
     assert result.exit_code == 2
     assert "loopback" in result.output.lower()

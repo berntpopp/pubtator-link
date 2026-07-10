@@ -66,7 +66,7 @@ def test_registered_write_annotations_match_inventory() -> None:
 def test_readonly_preserves_full_surface_read_tools() -> None:
     full_names = _tool_names("full")
     readonly_names = _tool_names("readonly")
-    assert EXPECTED_WRITE_TOOLS <= full_names
+    assert full_names >= EXPECTED_WRITE_TOOLS
     assert readonly_names == full_names - EXPECTED_WRITE_TOOLS
     assert {
         "get_publication_annotations",

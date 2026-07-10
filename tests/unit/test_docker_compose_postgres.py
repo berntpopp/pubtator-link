@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -59,9 +60,11 @@ def test_merged_production_compose_is_readonly_and_requires_service_token(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("PUBTATOR_LINK_MCP_SERVICE_TOKEN", "compose-test-secret")
-    result = subprocess.run(
+    docker = shutil.which("docker")
+    assert docker is not None
+    result = subprocess.run(  # noqa: S603
         [
-            "docker",
+            docker,
             "compose",
             "-f",
             "docker/docker-compose.yml",
@@ -79,7 +82,9 @@ def test_merged_production_compose_is_readonly_and_requires_service_token(
     )
     service = json.loads(result.stdout)["services"]["pubtator-link"]
     assert service["environment"]["PUBTATOR_LINK_MCP_PROFILE"] == "readonly"
-    assert service["environment"]["PUBTATOR_LINK_MCP_SERVICE_TOKEN"] == "compose-test-secret"
+    assert (
+        service["environment"]["PUBTATOR_LINK_MCP_SERVICE_TOKEN"] == "compose-test-secret"  # noqa: S105
+    )
     assert service["environment"]["PUBTATOR_LINK_ALLOW_UNAUTHENTICATED_WRITES"] == "false"
     assert not service.get("ports")
 
