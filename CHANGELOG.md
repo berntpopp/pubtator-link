@@ -1,5 +1,27 @@
 # Changelog
 
+## 5.0.0
+
+### BREAKING
+
+- The default and hosted MCP profile is now `readonly`. The canonical eight state-changing
+  review, annotation, indexing, and export tools are excluded from the public catalog.
+- `export_review_audit_bundle` no longer accepts a caller-selected filesystem path. Callers use
+  `save_to_file`; deployments must configure an export base directory, and the server creates a
+  private generated JSON file beneath it.
+
+### Security
+
+- Require a router-owned Bearer credential on the effective MCP path while leaving `/health`
+  available to infrastructure probes. Non-loopback write-profile binds fail startup without a
+  service token; CLI and Gunicorn use the same validated bind settings.
+- Create audit exports with exclusive no-follow semantics and mode `0600`, preventing symlink,
+  overwrite, and caller-path races.
+- Production and NPM Compose require the service token, explicitly select the read-only profile,
+  and expose the application only behind the proxy.
+- Upgrade Soup Sieve from 2.8.3 to 2.8.4, fixing HIGH-severity denial-of-service vulnerabilities
+  CVE-2026-49476 and CVE-2026-49477.
+
 ## 4.0.4
 
 ### Changed
