@@ -6,7 +6,9 @@ import os
 from typing import Any
 
 # Server socket configuration
-bind = f"0.0.0.0:{os.environ.get('PUBTATOR_LINK_PORT', os.environ.get('PORT', '8000'))}"
+host = os.environ.get("PUBTATOR_LINK_HOST", os.environ.get("HOST", "127.0.0.1"))
+port = os.environ.get("PUBTATOR_LINK_PORT", os.environ.get("PORT", "8000"))
+bind = f"{host}:{port}"
 backlog = 2048
 
 # Worker processes configuration

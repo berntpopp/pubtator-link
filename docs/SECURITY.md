@@ -19,6 +19,8 @@ Generate a dedicated token with `openssl rand -hex 32`. Configure the same value
 `PUBTATOR_LINK_MCP_SERVICE_TOKEN` on this backend and `GF_PUBTATOR_TOKEN` on the router. The
 token is a service credential, not a caller credential; do not reuse or forward caller OAuth
 tokens and do not place the value in Compose YAML, logs, issue comments, or source control.
+The service token protects the MCP transport only. REST routes remain dependent on edge
+authentication, so the reverse proxy must not publish this backend as a general REST origin.
 
 For the initial rollout, configure and deploy the router first while the old backend still
 ignores the header, then deploy the backend that requires it. Rotation of the single configured

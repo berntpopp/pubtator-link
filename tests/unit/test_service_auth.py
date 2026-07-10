@@ -4,11 +4,14 @@ from fastapi.testclient import TestClient
 from pubtator_link.security import MCPServiceAuthMiddleware
 
 
-def _client(token: str = "service-secret") -> TestClient:  # noqa: S107
+def _client(
+    token: str = "service-secret",  # noqa: S107
+    path: str = "/mcp",
+) -> TestClient:
     app = FastAPI()
-    app.add_middleware(MCPServiceAuthMiddleware, token=token)
+    app.add_middleware(MCPServiceAuthMiddleware, token=token, path=path)
 
-    @app.api_route("/mcp", methods=["GET", "POST", "DELETE"])
+    @app.api_route(path, methods=["GET", "POST", "DELETE"])
     async def mcp() -> dict[str, bool]:
         return {"ok": True}
 
@@ -35,3 +38,14 @@ def test_mcp_service_auth_accepts_backend_token_and_leaves_health_public() -> No
     response = client.post("/mcp", headers={"Authorization": "Bearer service-secret"})
     assert response.status_code == 200
     assert client.get("/health").status_code == 200
+
+
+def test_mcp_service_auth_protects_configured_transport_path() -> None:
+    client = _client(path="/pubtator-mcp")
+    assert client.post("/pubtator-mcp").status_code == 401
+    response = client.post(
+        "/pubtator-mcp/",
+        headers={"Authorization": "Bearer service-secret"},
+        follow_redirects=False,
+    )
+    assert response.status_code in {200, 307}

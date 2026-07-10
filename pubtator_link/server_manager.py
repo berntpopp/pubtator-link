@@ -292,6 +292,7 @@ class UnifiedServerManager:
             app.add_middleware(
                 MCPServiceAuthMiddleware,
                 token=settings.mcp_service_token,
+                path=settings.mcp_path,
             )
 
         app.add_middleware(

@@ -10,12 +10,14 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 class MCPServiceAuthMiddleware:
     """Require the router-owned bearer credential on the MCP transport only."""
 
-    def __init__(self, app: ASGIApp, *, token: str) -> None:
+    def __init__(self, app: ASGIApp, *, token: str, path: str = "/mcp") -> None:
         self.app = app
         self.token = token
+        self.path = path.rstrip("/") or "/"
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or scope.get("path", "").rstrip("/") != "/mcp":
+        request_path = scope.get("path", "").rstrip("/") or "/"
+        if scope["type"] != "http" or request_path != self.path:
             await self.app(scope, receive, send)
             return
 

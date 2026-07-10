@@ -22,6 +22,15 @@ def test_gunicorn_respects_pubtator_port_and_proxy_headers() -> None:
     assert "secure_scheme_headers" in CONFIG
 
 
+def test_gunicorn_respects_validated_pubtator_host(monkeypatch) -> None:
+    monkeypatch.setenv("PUBTATOR_LINK_HOST", "127.0.0.1")
+    monkeypatch.setenv("PUBTATOR_LINK_PORT", "8123")
+
+    module = _load_gunicorn_config()
+
+    assert module.bind == "127.0.0.1:8123"
+
+
 def test_gunicorn_worker_count_is_container_safe() -> None:
     assert 'os.environ.get("GUNICORN_WORKERS", "2")' in CONFIG
     assert "max_requests_jitter" in CONFIG
