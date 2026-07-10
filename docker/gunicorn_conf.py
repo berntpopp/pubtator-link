@@ -6,8 +6,8 @@ import os
 from typing import Any
 
 # Server socket configuration
-host = os.environ.get("PUBTATOR_LINK_HOST", os.environ.get("HOST", "127.0.0.1"))
-port = os.environ.get("PUBTATOR_LINK_PORT", os.environ.get("PORT", "8000"))
+host = os.environ.get("PUBTATOR_LINK_HOST", "127.0.0.1")
+port = os.environ.get("PUBTATOR_LINK_PORT", "8000")
 bind = f"{host}:{port}"
 backlog = 2048
 

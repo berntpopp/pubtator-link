@@ -31,6 +31,15 @@ def test_gunicorn_respects_validated_pubtator_host(monkeypatch) -> None:
     assert module.bind == "127.0.0.1:8123"
 
 
+def test_gunicorn_ignores_unvalidated_generic_host(monkeypatch) -> None:
+    monkeypatch.delenv("PUBTATOR_LINK_HOST", raising=False)
+    monkeypatch.setenv("HOST", "0.0.0.0")  # noqa: S104
+
+    module = _load_gunicorn_config()
+
+    assert module.bind == "127.0.0.1:8000"
+
+
 def test_gunicorn_worker_count_is_container_safe() -> None:
     assert 'os.environ.get("GUNICORN_WORKERS", "2")' in CONFIG
     assert "max_requests_jitter" in CONFIG
