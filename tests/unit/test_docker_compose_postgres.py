@@ -1,3 +1,5 @@
+import json
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -51,6 +53,35 @@ def test_app_service_uses_postgres_database_url_and_health_dependency() -> None:
 def test_app_service_publishes_only_to_loopback() -> None:
     app = _base_compose()["services"]["pubtator-link"]
     assert app["ports"] == ["127.0.0.1:${PUBTATOR_LINK_PORT:-8000}:8000"]
+
+
+def test_merged_production_compose_is_readonly_and_requires_service_token(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("PUBTATOR_LINK_MCP_SERVICE_TOKEN", "compose-test-secret")
+    result = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            "docker/docker-compose.yml",
+            "-f",
+            "docker/docker-compose.prod.yml",
+            "-f",
+            "docker/docker-compose.npm.yml",
+            "config",
+            "--format",
+            "json",
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    service = json.loads(result.stdout)["services"]["pubtator-link"]
+    assert service["environment"]["PUBTATOR_LINK_MCP_PROFILE"] == "readonly"
+    assert service["environment"]["PUBTATOR_LINK_MCP_SERVICE_TOKEN"] == "compose-test-secret"
+    assert service["environment"]["PUBTATOR_LINK_ALLOW_UNAUTHENTICATED_WRITES"] == "false"
+    assert not service.get("ports")
 
 
 def test_security_doc_documents_write_profile_posture() -> None:

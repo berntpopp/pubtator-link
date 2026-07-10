@@ -13,6 +13,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  PUBTATOR_LINK_MCP_SERVICE_TOKEN: ci-compose-validation-only
+
 jobs:
   docker:
     name: Docker build and Compose validation

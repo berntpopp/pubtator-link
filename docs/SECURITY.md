@@ -1,23 +1,43 @@
 # Security & Deployment Posture
 
-PubTator-Link is **unauthenticated by design**. Edge authentication is owned by the
-GeneFoundry router / reverse proxy at the trust boundary; the backend must be reachable
-**only** through that proxy, never published directly to a LAN or the internet.
+Caller authentication and write authorization are owned by the GeneFoundry router at the
+trust boundary. Production PubTator-Link additionally requires a router-owned service bearer
+token on `/mcp`; `/health` remains unauthenticated for container probes. The backend must be
+reachable **only** through the router/proxy, never published directly to a LAN or the internet.
 
 ## MCP tool profiles (`PUBTATOR_LINK_MCP_PROFILE`)
 
-- `lean` (default) — read + the review-index write tool (`index_review_evidence`).
-- `readonly` — strips all write tools (`index_review_evidence`, `record_review_context`,
-  `submit_text_annotation`, `export_review_audit_bundle`, `stage_research_session`, ...).
-  Use this for any instance that could be reached without the proxy in front.
+- `readonly` (default) — exposes all read tools and strips the canonical write inventory.
+- `lean` — read tools plus a subset of review-index write tools. It requires service auth unless
+  a direct development process explicitly enables the loopback-only exception.
 - `full` — enables the complete write surface, including audit-bundle file export.
-  Run `full` **only** behind the router/proxy.
+  Run `full` **only** behind the authenticated router/proxy.
+
+## Backend service token
+
+Generate a dedicated token with `openssl rand -hex 32`. Configure the same value as
+`PUBTATOR_LINK_MCP_SERVICE_TOKEN` on this backend and `GF_PUBTATOR_TOKEN` on the router. The
+token is a service credential, not a caller credential; do not reuse or forward caller OAuth
+tokens and do not place the value in Compose YAML, logs, issue comments, or source control.
+
+For the initial rollout, configure and deploy the router first while the old backend still
+ignores the header, then deploy the backend that requires it. Rotation of the single configured
+token requires a coordinated router/backend deployment window; verify router read calls after
+rotation and revoke the old value immediately. A direct unauthenticated `/mcp` request must
+return `401`, while `/health` remains available.
+
+Direct host development may set `PUBTATOR_LINK_ALLOW_UNAUTHENTICATED_WRITES=true` only while
+binding to `127.0.0.1`, `::1`, or `localhost`. Docker binds inside its container to `0.0.0.0`, so
+the base Compose stack stays read-only by default. To exercise writes in Compose, set a random
+service token and explicitly select `PUBTATOR_LINK_MCP_PROFILE=lean` or `full`.
 
 ## Write-surface hardening (issue #85)
 
-- `PUBTATOR_LINK_REVIEW_EXPORT_BASE_DIR` — base directory that `export_review_audit_bundle`
-  `export_path` writes must canonically resolve within. **Unset disables file export**
-  (inline/compact responses still work). Set it to a dedicated, mounted export volume.
+- `PUBTATOR_LINK_REVIEW_EXPORT_BASE_DIR` — base directory for server-generated
+  `export_review_audit_bundle` files. Callers request `save_to_file=true` but never select a
+  path. Files use generated names, exclusive no-follow creation, and mode `0600`. **Unset
+  disables file export** (inline/compact responses still work). Set it to a dedicated, mounted
+  export volume.
 - `index_review_evidence` caps `pmids` and `curated_urls` at 200 entries each.
 - `PUBTATOR_LINK_TRUST_PROXY_HEADERS` — set `true` only when a known reverse proxy sits in
   front; the inbound rate limiter then keys on the rightmost `X-Forwarded-For` entry.
@@ -33,8 +53,10 @@ preventing header-spoofing attacks.
 
 ## review_export_base_dir
 
-See `PUBTATOR_LINK_REVIEW_EXPORT_BASE_DIR` above. The mcp_profile `full` is required to
-expose `export_review_audit_bundle` at all; the base dir setting then confines writes within
-a dedicated directory, preventing path traversal.
+See `PUBTATOR_LINK_REVIEW_EXPORT_BASE_DIR` above. The mcp_profile `full` is required to expose
+`export_review_audit_bundle`; the server creates the leaf beneath the configured directory.
+
+Docker networking is not an egress firewall. Hospital deployments require a host or network
+egress policy in addition to the inbound router boundary.
 
 Research use only. Not clinical decision support.
