@@ -133,8 +133,9 @@ def test_index_review_evidence_mcp_request_rejects_unknown_prepare_mode() -> Non
 
 
 def test_index_review_evidence_mcp_schema_does_not_advertise_candidate_fast() -> None:
-    mcp = create_pubtator_mcp()
-    schema = mcp._tool_manager._tools["index_review_evidence"].parameters
+    schema = (
+        create_pubtator_mcp(profile="lean")._tool_manager._tools["index_review_evidence"].parameters
+    )
 
     assert "prepare_mode" not in schema["properties"]
     assert "candidate_fast" not in str(schema)
@@ -175,7 +176,7 @@ async def test_index_review_evidence_accepts_legacy_prepare_mode_without_schema_
         return FakeQueue()
 
     monkeypatch.setattr(review_tools, "get_review_queue", fake_get_review_queue)
-    mcp = create_pubtator_mcp()
+    mcp = create_pubtator_mcp(profile="lean")
     tool = mcp._tool_manager._tools["index_review_evidence"]
 
     result = await tool.run(
@@ -209,7 +210,7 @@ async def test_record_review_context_propagates_service_errors(
         "get_llm_review_context_service",
         fake_get_llm_review_context_service,
     )
-    tool = create_pubtator_mcp()._tool_manager._tools["record_review_context"]
+    tool = create_pubtator_mcp(profile="lean")._tool_manager._tools["record_review_context"]
 
     result = await tool.run(
         {
@@ -241,7 +242,7 @@ async def test_record_review_context_rejects_empty_passage_ids(
         "get_llm_review_context_service",
         fake_get_llm_review_context_service,
     )
-    tool = create_pubtator_mcp()._tool_manager._tools["record_review_context"]
+    tool = create_pubtator_mcp(profile="lean")._tool_manager._tools["record_review_context"]
 
     result = await tool.run({"review_id": "review-1", "event_type": "passage_selected"})
 
@@ -287,7 +288,7 @@ async def test_record_review_context_records_audit_event(
         "get_llm_review_context_service",
         fake_get_llm_review_context_service,
     )
-    tool = create_pubtator_mcp()._tool_manager._tools["record_review_context"]
+    tool = create_pubtator_mcp(profile="lean")._tool_manager._tools["record_review_context"]
 
     result = await tool.run(
         {
@@ -341,7 +342,7 @@ async def test_index_review_evidence_reports_progress_when_waiting(monkeypatch) 
     monkeypatch.setattr("pubtator_link.mcp.tools.review.index_review_evidence_impl", fake_impl)
     monkeypatch.setattr("pubtator_link.mcp.tools.review.get_review_queue", fake_get_review_queue)
 
-    tool = create_pubtator_mcp()._tool_manager._tools["index_review_evidence"]
+    tool = create_pubtator_mcp(profile="lean")._tool_manager._tools["index_review_evidence"]
     await tool.fn(
         review_id="rev-1",
         pmids=["40234174"],

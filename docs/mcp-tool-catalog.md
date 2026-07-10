@@ -23,12 +23,12 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Name: `build_topic_literature_map`
 - Title: Build Topic Literature Map
 - Category: `publication`
-- Profiles: `full`
+- Profiles: `full`, `readonly`
 - Stability: `advanced`
 - Description: Use this when a user needs a topic literature graph. response_mode='compact' is the MCP default for candidate lanes and bounded summaries; full can be large. Returns response_size_class.
 - Do not use for: `claim-level evidence support`, `substitute evidence selection`
 - Example: `{"query":"familial Mediterranean fever colchicine","max_seed_papers":10}`
-- Next tools by profile: full: `get_publication_passages`, `index_review_evidence`
+- Next tools by profile: full: `get_publication_passages`, `index_review_evidence`; readonly: `get_publication_passages`
 - Resource links: None
 - Input schema: `query` (string | null; default: `None`); `topic` (string | null; default: `None`); `question` (string | null; default: `None`); `pmids` (array | null; default: `None`); `pmid` (string | null; default: `None`); `seed_pmids` (array | null; default: `None`); `max_seed_papers` (integer; default: `10`); `max_neighbors_per_paper` (integer; default: `5`); `response_mode` (string; enum: `compact`, `nodes_edges`, `full`; default: `compact`); `max_candidates` (integer; default: `8`); `include_demoted` (boolean; default: `True`); `max_demoted` (integer; default: `3`); `bias_toward` (array | null; default: `None`); `max_graph_nodes` (integer; default: `30`); `max_graph_edges` (integer; default: `60`); `include_authors` (boolean; default: `True`); `include_citations` (boolean; default: `True`); `include_pubtator_entities` (boolean; default: `True`); `include_related_candidates` (boolean; default: `True`); `year_min` (integer | null; default: `None`); `year_max` (integer | null; default: `None`); `prefer_full_text` (boolean; default: `True`); `timeout_ms` (integer; default: `45000`); `partial_ok` (boolean; default: `True`); `expand_query_seeds` (boolean; default: `False`); `citation_graph_timeout_ms` (integer | null; default: `15000`); `related_evidence_timeout_ms` (integer | null; default: `20000`); `metadata_backfill_timeout_ms` (integer | null; default: `10000`); `include_meta` (boolean; default: `True`)
 - Output schema: `TopicLiteratureMapResponse`; has_output_schema: `yes`
@@ -90,7 +90,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"review_id":"demo","fallback_inline":true}`
 - Next tools by profile: full: `get_review_audit_trail`
 - Resource links: `pubtator://reviews/{review_id}/audit`
-- Input schema: `review_id` (string); `session_id` (string | null; default: `None`); `export_path` (string | null; default: `None`); `fallback_inline` (boolean; default: `False`); `response_mode` (string; enum: `full`, `compact`; default: `compact`)
+- Input schema: `review_id` (string); `session_id` (string | null; default: `None`); `save_to_file` (boolean; default: `False`); `fallback_inline` (boolean; default: `False`); `response_mode` (string; enum: `full`, `compact`; default: `compact`)
 - Output schema: `McpReviewAuditBundleResponse`; has_output_schema: `yes`
 
 ## `find_entity_relations`
@@ -203,12 +203,12 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Name: `get_pmc_annotations`
 - Title: Fetch PMC Annotations
 - Category: `annotation`
-- Profiles: `full`
+- Profiles: `full`, `readonly`
 - Stability: `advanced`
 - Description: Use this when a user provides PMC IDs and needs raw PubTator full-text BioC annotation export. Do not use this for compact grounded answers; use get_publication_passages. Next: get_publication_passages.
 - Do not use for: `compact grounded answers`
 - Example: `{"pmcids":["PMC123456"],"format":"biocjson"}`
-- Next tools by profile: full: `get_publication_passages`
+- Next tools by profile: full: `get_publication_passages`; readonly: `get_publication_passages`
 - Resource links: None
 - Input schema: `pmcids` (array); `format` (string; enum: `biocxml`, `biocjson`; default: `biocjson`)
 - Output schema: `PublicationExportResponse`; has_output_schema: `yes`
@@ -218,12 +218,12 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Name: `get_publication_annotations`
 - Title: Fetch Publication Annotations
 - Category: `annotation`
-- Profiles: `full`
+- Profiles: `full`, `readonly`
 - Stability: `advanced`
 - Description: Use this when a user provides PubMed IDs and needs raw PubTator BioC annotation export. Do not use this for compact grounded answers; use get_publication_passages. Next: get_publication_passages.
 - Do not use for: `compact grounded answers`
 - Example: `{"pmids":["12345"],"format":"biocjson","full":false}`
-- Next tools by profile: full: `get_publication_passages`
+- Next tools by profile: full: `get_publication_passages`; readonly: `get_publication_passages`
 - Resource links: None
 - Input schema: `pmids` (array | null; default: `None`); `pmid` (string | null; default: `None`); `format` (string; enum: `pubtator`, `biocxml`, `biocjson`; default: `biocjson`); `full` (boolean; default: `False`)
 - Output schema: `PublicationExportResponse`; has_output_schema: `yes`

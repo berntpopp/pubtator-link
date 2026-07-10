@@ -69,7 +69,7 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
     ),
     "build_topic_literature_map": ToolCatalogSupplement(
         category="publication",
-        profiles=("full",),
+        profiles=("full", "readonly"),
         stability="advanced",
         purpose=(
             "Use this when a user needs a topic literature graph. response_mode='compact' "
@@ -110,7 +110,7 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
     ),
     "get_pmc_annotations": ToolCatalogSupplement(
         category="annotation",
-        profiles=("full",),
+        profiles=("full", "readonly"),
         stability="advanced",
         do_not_use_for=("compact grounded answers",),
         example='{"pmcids":["PMC123456"],"format":"biocjson"}',
@@ -118,7 +118,7 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
     ),
     "get_publication_annotations": ToolCatalogSupplement(
         category="annotation",
-        profiles=("full",),
+        profiles=("full", "readonly"),
         stability="advanced",
         do_not_use_for=("compact grounded answers",),
         example='{"pmids":["12345"],"format":"biocjson","full":false}',
