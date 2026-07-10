@@ -8,9 +8,6 @@ on:
 permissions:
   contents: read
 
-env:
-  PUBTATOR_LINK_MCP_SERVICE_TOKEN: ci-compose-validation-only
-
 jobs:
   release-validation:
     name: Release validation
@@ -39,9 +36,13 @@ jobs:
 
       - name: Validate production Compose config
         run: make docker-prod-config
+        env:
+          PUBTATOR_LINK_MCP_SERVICE_TOKEN: ci-compose-validation-only
 
       - name: Validate NPM Compose config
         run: make docker-npm-config
+        env:
+          PUBTATOR_LINK_MCP_SERVICE_TOKEN: ci-compose-validation-only
 
       - name: Build release Docker image
         run: docker build -f docker/Dockerfile -t pubtator-link:release .
