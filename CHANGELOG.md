@@ -1,5 +1,15 @@
 # Changelog
 
+## 6.0.0
+
+### BREAKING
+
+- Passage-bearing MCP tool fields now return structured `untrusted_text_v1`
+  envelopes instead of raw strings. The envelopes preserve the original
+  Unicode passage body while structurally fencing it from model instructions,
+  escaping delimiter-like code points, and attaching source provenance. REST
+  and service-layer passage contracts remain unchanged.
+
 ## 5.0.0
 
 ### BREAKING
