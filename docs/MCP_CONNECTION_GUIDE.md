@@ -8,7 +8,7 @@ PubTator-Link exposes a curated research-use MCP surface for biomedical literatu
 
 PubTator-Link tools are research-oriented and must not be used for diagnosis, treatment, triage, patient management, or clinical decision support.
 
-The MCP server defaults to `PUBTATOR_LINK_MCP_PROFILE=lean`. Use
+The MCP server defaults to `PUBTATOR_LINK_MCP_PROFILE=readonly`. Use
 `PUBTATOR_LINK_MCP_PROFILE=full` for advanced and compatibility tools such as
 single-query review retrieval, quickstart, exports, and maintenance views. Use
 `PUBTATOR_LINK_MCP_PROFILE=readonly` for hosted research deployments that should

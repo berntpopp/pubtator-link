@@ -216,10 +216,10 @@ claude mcp add --transport http pubtator-link http://127.0.0.1:8000/mcp
 
 For hosted deployments, configure remote MCP clients with `https://your-domain.example/mcp`. Public deployments should be protected by OAuth or an authenticated reverse proxy.
 
-The default MCP profile is `lean`, which exposes the core research and review
-workflow with a smaller tool surface. Set `PUBTATOR_LINK_MCP_PROFILE=full` for
-advanced and compatibility tools, or `PUBTATOR_LINK_MCP_PROFILE=readonly` for
-hosted research deployments that should not expose write/export operations.
+The default MCP profile is `readonly`, which exposes the complete read surface without write
+tools. Set `PUBTATOR_LINK_MCP_PROFILE=full` for advanced and compatibility tools, or `lean` for
+a smaller write-capable research workflow. Write-capable profiles require backend service auth
+unless a direct development process explicitly enables the loopback-only exception.
 
 ### Available MCP Tools
 

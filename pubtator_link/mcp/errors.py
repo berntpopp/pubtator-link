@@ -231,7 +231,7 @@ def _recovery_text_for_context(
         )
     if context.tool_name == "export_review_audit_bundle":
         return (
-            "Use fallback_inline=True or choose a writable export_path. Inspect "
+            "Use fallback_inline=True or ask the operator to configure file export. Inspect "
             "get_review_audit_trail if bundle export still fails."
         )
     return (

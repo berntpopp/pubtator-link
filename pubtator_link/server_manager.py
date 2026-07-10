@@ -42,6 +42,7 @@ from .db.migrate import ReviewSchemaDiagnostics
 from .logging_config import configure_logging
 from .mcp.facade import create_pubtator_mcp
 from .observability.metrics import CONTENT_TYPE_LATEST, metrics_payload
+from .security import MCPServiceAuthMiddleware
 
 
 async def _json_error_response(
@@ -286,6 +287,13 @@ class UnifiedServerManager:
             docs_url="/docs" if settings.enable_docs else None,
             redoc_url="/redoc" if settings.enable_docs else None,
         )
+
+        if settings.mcp_service_token:
+            app.add_middleware(
+                MCPServiceAuthMiddleware,
+                token=settings.mcp_service_token,
+                path=settings.mcp_path,
+            )
 
         app.add_middleware(
             RequestSizeLimitMiddleware,

@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from pubtator_link.mcp.profiles import LEAN_TOOLS
+from pubtator_link.mcp.profiles import READONLY_TOOLS
 
 # Anthropic remote-MCP tool name regex; tool names that fail this break the
 # claude.ai web UI and the MCP connector. See issue #26.
@@ -411,7 +411,7 @@ async def test_review_quickstart_accepts_question_alias(
 def test_ground_question_schema_exposes_one_call_arguments() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp()._tool_manager._tools["ground_question"]
+    tool = create_pubtator_mcp(profile="lean")._tool_manager._tools["ground_question"]
     properties = tool.parameters["properties"]
 
     assert "question" in properties
@@ -425,7 +425,7 @@ def test_ground_question_schema_exposes_one_call_arguments() -> None:
 def test_ground_question_schema_exposes_verbosity_and_auto_budget() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp()._tool_manager._tools["ground_question"]
+    tool = create_pubtator_mcp(profile="lean")._tool_manager._tools["ground_question"]
     properties = tool.parameters["properties"]
 
     assert properties["verbosity"]["default"] == "lean"
@@ -645,7 +645,7 @@ def test_curated_facade_registers_pubtator_tools() -> None:
     mcp = create_pubtator_mcp()
     tool_names = set(mcp._tool_manager._tools.keys())
 
-    assert tool_names == set(LEAN_TOOLS)
+    assert tool_names == set(READONLY_TOOLS)
     assert "pubtator.clear_api_cache" not in tool_names
     assert "pubtator.delete_review_index" not in tool_names
     assert "pubtator.delete_evidence_certainty" not in tool_names
@@ -1576,9 +1576,10 @@ def test_export_review_audit_bundle_exposes_export_options() -> None:
     properties = tool.parameters["properties"]
     required = set(tool.parameters.get("required", []))
 
-    assert "export_path" in properties
+    assert "save_to_file" in properties
+    assert "export_path" not in properties
     assert "fallback_inline" in properties
-    assert "export_path" not in required
+    assert "save_to_file" not in required
     assert "fallback_inline" not in required
     assert properties["response_mode"]["default"] == "compact"
 
@@ -1691,7 +1692,7 @@ def test_inspection_managers_are_installed_by_compat_module() -> None:
 
     mcp = create_pubtator_mcp()
 
-    assert set(mcp._tool_manager._tools) == set(LEAN_TOOLS)
+    assert set(mcp._tool_manager._tools) == set(READONLY_TOOLS)
     assert set(mcp._resource_manager._resources) == EXPECTED_RESOURCE_URIS
     assert set(mcp._prompt_manager._prompts) == EXPECTED_PROMPT_NAMES
 

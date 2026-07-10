@@ -4,7 +4,7 @@ from typing import Literal, cast
 
 MCPToolProfile = Literal["lean", "full", "readonly"]
 
-DEFAULT_MCP_PROFILE: MCPToolProfile = "lean"
+DEFAULT_MCP_PROFILE: MCPToolProfile = "readonly"
 
 LEAN_TOOLS: tuple[str, ...] = (
     "workflow_help",
@@ -55,11 +55,8 @@ FULL_ONLY_TOOLS: tuple[str, ...] = (
     "list_research_sessions",
 )
 
-READONLY_TOOLS: tuple[str, ...] = tuple(
-    name
-    for name in (*LEAN_TOOLS, *FULL_ONLY_TOOLS)
-    if name
-    not in {
+WRITE_TOOLS: frozenset[str] = frozenset(
+    {
         "index_review_evidence",
         "ground_question",
         "record_review_context",
@@ -68,10 +65,11 @@ READONLY_TOOLS: tuple[str, ...] = tuple(
         "add_evidence_certainty",
         "stage_research_session",
         "review_quickstart",
-        "build_topic_literature_map",
-        "get_publication_annotations",
-        "get_pmc_annotations",
     }
+)
+
+READONLY_TOOLS: tuple[str, ...] = tuple(
+    name for name in (*LEAN_TOOLS, *FULL_ONLY_TOOLS) if name not in WRITE_TOOLS
 )
 
 

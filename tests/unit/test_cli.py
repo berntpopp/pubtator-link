@@ -110,6 +110,27 @@ def test_serve_rejects_unknown_transport() -> None:
     assert result.exit_code == 2
 
 
+def test_serve_rejects_public_bind_for_unauthenticated_write_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = False
+
+    def fake_run_server(**_kwargs: object) -> None:
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(cli.settings, "mcp_profile", "full")
+    monkeypatch.setattr(cli.settings, "mcp_service_token", None)
+    monkeypatch.setattr(cli.settings, "allow_unauthenticated_writes", True)
+    monkeypatch.setattr(cli, "_run_server", fake_run_server)
+
+    result = runner.invoke(cli.app, ["serve", "--host", "0.0.0.0"])  # noqa: S104
+
+    assert result.exit_code == 2
+    assert "loopback" in result.output.lower()
+    assert called is False
+
+
 def test_health_reports_unreachable_server() -> None:
     result = runner.invoke(cli.app, ["health", "--url", "http://127.0.0.1:1"])
     assert result.exit_code == 1

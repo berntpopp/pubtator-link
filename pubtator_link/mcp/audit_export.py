@@ -33,5 +33,7 @@ def compact_audit_bundle_summary(bundle_json: dict[str, Any]) -> dict[str, Any]:
             "stable_citation_keys",
         ],
         "next_tools": ["export_review_audit_bundle"],
-        "recovery": ["Pass export_path to write the full audit bundle without inline token cost."],
+        "recovery": [
+            "Pass save_to_file=true to write the full audit bundle without inline token cost."
+        ],
     }

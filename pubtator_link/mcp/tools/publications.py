@@ -54,7 +54,7 @@ LiteratureGraphBias = Literal[
 
 
 def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
-    if profile == "full":
+    if profile in ("full", "readonly"):
 
         @mcp.tool(
             name="get_publication_annotations",
@@ -390,7 +390,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 pmids=tool_pmids,
             )
 
-        if profile == "full":
+        if profile in ("full", "readonly"):
 
             @mcp.tool(
                 name="get_pmc_annotations",

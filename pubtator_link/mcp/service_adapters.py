@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import uuid
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -1571,14 +1573,14 @@ async def export_review_audit_bundle_impl(
     service: ReviewAuditService,
     review_id: str,
     session_id: str | None = None,
-    export_path: str | None = None,
+    save_to_file: bool = False,
     fallback_inline: bool = False,
     response_mode: Literal["full", "compact"] = "compact",
     export_base_dir: str | None = None,
 ) -> dict[str, Any]:
     bundle = await service.export_bundle(review_id, session_id=session_id)
     bundle_json = bundle.model_dump(mode="json")
-    if export_path is None:
+    if not save_to_file:
         if response_mode == "compact":
             return McpReviewAuditBundleResponse(
                 audit_bundle_summary=compact_audit_bundle_summary(bundle_json)
@@ -1588,13 +1590,12 @@ async def export_review_audit_bundle_impl(
             exclude_none=True,
         )
 
-    output_path = Path(export_path).expanduser()
     serialized = json.dumps(bundle_json, separators=(",", ":"), sort_keys=True)
     base_dir = export_base_dir if export_base_dir is not None else settings.review_export_base_dir
-    field_error = _audit_export_base_error(output_path, base_dir)
-    if field_error is None:
-        field_error = _audit_export_path_error(output_path)
-    if field_error is not None:
+    if base_dir is None:
+        field_error = _audit_export_field_error(
+            "file export is disabled; set PUBTATOR_LINK_REVIEW_EXPORT_BASE_DIR"
+        )
         if fallback_inline:
             return _inline_audit_bundle_or_error(
                 bundle_json,
@@ -1607,16 +1608,9 @@ async def export_review_audit_bundle_impl(
         ).model_dump(mode="json", exclude_none=True)
 
     try:
-        with output_path.open("x", encoding="utf-8") as output_file:
-            output_file.write(serialized)
-    except FileExistsError:
-        field_error = _audit_export_path_field_error("export path already exists")
-    except IsADirectoryError:
-        field_error = _audit_export_path_field_error("export path is a directory")
+        output_path = _write_audit_export(base_dir, review_id, serialized)
     except OSError:
-        field_error = _audit_export_path_field_error("parent directory is not writable")
-
-    if field_error is not None:
+        field_error = _audit_export_field_error("audit export file could not be created")
         if fallback_inline:
             return _inline_audit_bundle_or_error(
                 bundle_json,
@@ -1634,45 +1628,37 @@ async def export_review_audit_bundle_impl(
     )
 
 
-def _audit_export_path_error(output_path: Path) -> dict[str, Any] | None:
-    if output_path.is_symlink():
-        return _audit_export_path_field_error("export path is a symlink")
-    if output_path.exists():
-        if output_path.is_dir():
-            return _audit_export_path_field_error("export path is a directory")
-        return _audit_export_path_field_error("export path already exists")
-
-    parent = output_path.parent
-    if not parent.exists():
-        return _audit_export_path_field_error("parent directory does not exist")
-    if not parent.is_dir():
-        return _audit_export_path_field_error("parent path is not a directory")
-    if not os.access(parent, os.W_OK):
-        return _audit_export_path_field_error("parent directory is not writable")
-    return None
+_SAFE_EXPORT_STEM = re.compile(r"[^A-Za-z0-9_.-]+")
 
 
-def _audit_export_path_field_error(reason: str) -> dict[str, Any]:
-    return mcp_field_validation_error(
-        field="export_path",
-        reason=reason,
-        recovery_hint="Use fallback_inline=True or choose a writable path.",
-    )
-
-
-def _audit_export_base_error(output_path: Path, base_dir: str | None) -> dict[str, Any] | None:
-    if base_dir is None:
-        return _audit_export_path_field_error(
-            "file export is disabled; set PUBTATOR_LINK_REVIEW_EXPORT_BASE_DIR"
-        )
-    base = Path(base_dir).expanduser().resolve()
+def _write_audit_export(base_dir: str, review_id: str, serialized: str) -> Path:
+    base = Path(base_dir).expanduser().resolve(strict=True)
+    if not base.is_dir():
+        raise OSError("export base is not a directory")
+    stem = _SAFE_EXPORT_STEM.sub("_", review_id).strip("._") or "review"
+    filename = f"review-audit-{stem}-{uuid.uuid4().hex}.json"
+    directory_fd = os.open(base, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
-        resolved = output_path.resolve()
-    except (OSError, RuntimeError):
-        return _audit_export_path_field_error("export path could not be resolved")
-    if not resolved.is_relative_to(base):
-        return _audit_export_path_field_error("export path escapes the configured base directory")
-    return None
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+        file_fd = os.open(filename, flags, 0o600, dir_fd=directory_fd)
+        with os.fdopen(file_fd, "w", encoding="utf-8") as output:
+            output.write(serialized)
+            output.flush()
+            os.fsync(output.fileno())
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+    return base / filename
+
+
+def _audit_export_field_error(reason: str) -> dict[str, Any]:
+    return mcp_field_validation_error(
+        field="save_to_file",
+        reason=reason,
+        recovery_hint=(
+            "Use fallback_inline=True or configure PUBTATOR_LINK_REVIEW_EXPORT_BASE_DIR."
+        ),
+    )
 
 
 def _inline_audit_bundle_or_error(
@@ -1684,7 +1670,10 @@ def _inline_audit_bundle_or_error(
     if serialized_size_bytes > INLINE_AUDIT_BUNDLE_MAX_BYTES:
         error: dict[str, Any] = {
             "code": "export_unavailable",
-            "recovery_hint": "Choose a writable export_path; the audit bundle is too large for inline JSON.",
+            "recovery_hint": (
+                "Configure PUBTATOR_LINK_REVIEW_EXPORT_BASE_DIR; "
+                "the audit bundle is too large for inline JSON."
+            ),
         }
         if field_error is not None and "field_errors" in field_error:
             error["field_errors"] = field_error["field_errors"]

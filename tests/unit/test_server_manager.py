@@ -80,6 +80,7 @@ def test_create_app_with_mcp_mounts_http_facade(monkeypatch: pytest.MonkeyPatch)
             "path": "/mcp",
             "json_response": True,
             "stateless_http": True,
+            "host_origin_protection": False,
         }
     ]
     assert any(

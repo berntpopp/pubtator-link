@@ -25,7 +25,7 @@ def register_export_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
     async def export_review_audit_bundle(
         review_id: str,
         session_id: str | None = None,
-        export_path: str | None = None,
+        save_to_file: bool = False,
         fallback_inline: bool = False,
         response_mode: Literal["full", "compact"] = "compact",
     ) -> dict[str, Any]:
@@ -37,7 +37,7 @@ def register_export_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 service=service,
                 review_id=review_id,
                 session_id=session_id,
-                export_path=export_path,
+                save_to_file=save_to_file,
                 fallback_inline=fallback_inline,
                 response_mode=response_mode,
             )
