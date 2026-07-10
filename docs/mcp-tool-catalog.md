@@ -271,7 +271,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Next tools by profile: lean: `preflight_review_sources`; full: `preflight_review_sources`; readonly: `preflight_review_sources`
 - Resource links: None
 - Input schema: `pmids` (array | null; default: `None`); `pmid` (string | null; default: `None`); `sections` (array | null; default: `None`); `mode` (string; enum: `abstracts`, `full_abstract`, `compact_passages`, `section_text`; default: `compact_passages`); `full` (boolean; default: `False`); `max_passages_per_pmid` (integer; default: `6`); `max_chars` (integer; default: `12000`); `include_tables` (boolean; default: `True`); `include_references` (boolean; default: `False`); `dry_run` (boolean; default: `False`); `verbosity` (string; enum: `lean`, `standard`, `full`; default: `standard`)
-- Output schema: `PublicationPassageResponse`; has_output_schema: `yes`
+- Output schema: `MCPPublicationPassageResponse`; has_output_schema: `yes`
 
 ## `get_research_session_status`
 

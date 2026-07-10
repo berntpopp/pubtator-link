@@ -35,9 +35,9 @@ from pubtator_link.models.literature_graph import (
 )
 from pubtator_link.models.publication_metadata import PublicationMetadataResponse
 from pubtator_link.models.publication_passages import (
+    MCPPublicationPassageResponse,
     PublicationContextEstimateResponse,
     PublicationPassageMode,
-    PublicationPassageResponse,
     Verbosity,
 )
 from pubtator_link.models.responses import PublicationExportResponse
@@ -181,7 +181,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
     @mcp.tool(
         name="get_publication_passages",
         title="Get Publication Passages",
-        output_schema=PublicationPassageResponse.model_json_schema(),
+        output_schema=MCPPublicationPassageResponse.model_json_schema(),
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_publication_passages(
