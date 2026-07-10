@@ -86,9 +86,8 @@ class ServerSettings(BaseSettings):
     review_export_base_dir: str | None = Field(
         default=None,
         description=(
-            "Base directory that export_review_audit_bundle export_path writes must "
-            "resolve within (canonicalized). Unset disables file export; inline/compact "
-            "responses still work."
+            "Base directory for server-generated export_review_audit_bundle files. "
+            "Unset disables file export; inline/compact responses still work."
         ),
     )
     trust_proxy_headers: bool = Field(

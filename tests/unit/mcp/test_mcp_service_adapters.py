@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import stat
+from pathlib import Path
+from types import SimpleNamespace
 from typing import ClassVar
 
 import pytest
@@ -569,76 +572,38 @@ async def test_export_review_audit_bundle_adapter_defaults_to_compact_summary() 
 
 
 @pytest.mark.asyncio
-async def test_export_review_audit_bundle_adapter_writes_new_file(tmp_path) -> None:
+async def test_export_writes_server_generated_leaf_with_private_mode(tmp_path) -> None:
     from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
-
-    export_path = tmp_path / "audit.json"
 
     result = await export_review_audit_bundle_impl(
         service=_FakeReviewAuditBundleService(),
         review_id="rev_123",
-        export_path=str(export_path),
+        save_to_file=True,
         export_base_dir=str(tmp_path),
     )
 
-    assert result == {"success": True, "export_path": str(export_path)}
-    written = json.loads(export_path.read_text(encoding="utf-8"))
+    output = Path(result["export_path"])
+    assert output.parent == tmp_path.resolve()
+    assert output.name.startswith("review-audit-rev_123-")
+    assert output.suffix == ".json"
+    assert stat.S_IMODE(output.stat().st_mode) == 0o600
+    written = json.loads(output.read_text(encoding="utf-8"))
     assert written["review_id"] == "rev_123"
 
 
 @pytest.mark.asyncio
-async def test_export_review_audit_bundle_adapter_refuses_existing_file(tmp_path) -> None:
-    from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
-
-    export_path = tmp_path / "audit.json"
-    export_path.write_text("do not replace", encoding="utf-8")
-
-    result = await export_review_audit_bundle_impl(
-        service=_FakeReviewAuditBundleService(),
-        review_id="rev_123",
-        export_path=str(export_path),
-        export_base_dir=str(tmp_path),
-    )
-
-    assert result["success"] is False
-    assert result["error"]["field_errors"][0]["field"] == "export_path"
-    assert "already exists" in result["error"]["field_errors"][0]["reason"]
-    assert export_path.read_text(encoding="utf-8") == "do not replace"
-
-
-@pytest.mark.asyncio
-async def test_export_review_audit_bundle_adapter_refuses_directory(tmp_path) -> None:
+async def test_export_save_is_disabled_without_base_directory() -> None:
     from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
 
     result = await export_review_audit_bundle_impl(
         service=_FakeReviewAuditBundleService(),
         review_id="rev_123",
-        export_path=str(tmp_path),
-        export_base_dir=str(tmp_path.parent),
+        save_to_file=True,
+        export_base_dir=None,
     )
 
     assert result["success"] is False
-    assert result["error"]["field_errors"][0]["field"] == "export_path"
-    assert "directory" in result["error"]["field_errors"][0]["reason"]
-
-
-@pytest.mark.asyncio
-async def test_export_review_audit_bundle_adapter_returns_field_error_without_inline(
-    tmp_path,
-) -> None:
-    from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
-
-    result = await export_review_audit_bundle_impl(
-        service=_FakeReviewAuditBundleService(),
-        review_id="rev_123",
-        export_path=str(tmp_path / "missing" / "audit.json"),
-        fallback_inline=False,
-        export_base_dir=str(tmp_path),
-    )
-
-    assert result["success"] is False
-    assert result["error"]["code"] == "validation_failed"
-    assert result["error"]["field_errors"][0]["field"] == "export_path"
+    assert "file export is disabled" in result["error"]["field_errors"][0]["reason"]
 
 
 @pytest.mark.asyncio
@@ -670,7 +635,8 @@ async def test_export_review_audit_bundle_adapter_returns_inline_fallback() -> N
         service=Service(),
         review_id="r1",
         fallback_inline=True,
-        export_path="/not/writable/audit.json",
+        save_to_file=True,
+        export_base_dir=None,
     )
 
     assert result["success"] is True
@@ -689,14 +655,14 @@ async def test_export_review_audit_bundle_oversized_inline_fallback_preserves_fi
     result = await service_adapters.export_review_audit_bundle_impl(
         service=_FakeReviewAuditBundleService(),
         review_id="rev_123",
-        export_path=str(tmp_path / "missing" / "audit.json"),
+        save_to_file=True,
         fallback_inline=True,
-        export_base_dir=str(tmp_path),
+        export_base_dir=None,
     )
 
     assert result["success"] is False
     assert result["error"]["code"] == "export_unavailable"
-    assert result["error"]["field_errors"][0]["field"] == "export_path"
+    assert result["error"]["field_errors"][0]["field"] == "save_to_file"
 
 
 async def test_stage_research_session_impl_calls_service() -> None:
@@ -3688,50 +3654,58 @@ async def test_filter_fallback_local_fallback_on_transient_outage() -> None:
 
 
 @pytest.mark.asyncio
-async def test_export_rejects_absolute_path_outside_base(tmp_path) -> None:
+async def test_export_sanitizes_review_id_into_generated_leaf(tmp_path) -> None:
     from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
 
     result = await export_review_audit_bundle_impl(
         service=_FakeReviewAuditBundleService(),
+        review_id="../../rev 123",
+        save_to_file=True,
+        export_base_dir=str(tmp_path),
+    )
+
+    output = Path(result["export_path"])
+    assert output.parent == tmp_path.resolve()
+    assert output.name.startswith("review-audit-rev_123-")
+
+
+@pytest.mark.asyncio
+async def test_export_does_not_follow_preexisting_generated_leaf(monkeypatch, tmp_path) -> None:
+    from pubtator_link.mcp import service_adapters
+
+    monkeypatch.setattr(
+        service_adapters.uuid,
+        "uuid4",
+        lambda: SimpleNamespace(hex="fixed"),
+    )
+    outside = tmp_path / "outside.json"
+    outside.write_text("do not replace", encoding="utf-8")
+    generated_leaf = tmp_path / "review-audit-rev_123-fixed.json"
+    generated_leaf.symlink_to(outside)
+
+    result = await service_adapters.export_review_audit_bundle_impl(
+        service=_FakeReviewAuditBundleService(),
         review_id="rev_123",
-        export_path="/etc/pubtator_owned.json",
+        save_to_file=True,
         export_base_dir=str(tmp_path),
     )
 
     assert result["success"] is False
-    assert result["error"]["field_errors"][0]["field"] == "export_path"
-    assert not (tmp_path / "pubtator_owned.json").exists()
+    assert result["error"]["field_errors"][0]["field"] == "save_to_file"
+    assert outside.read_text(encoding="utf-8") == "do not replace"
 
 
 @pytest.mark.asyncio
-async def test_export_rejects_parent_traversal_escape(tmp_path) -> None:
-    from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
-
-    base = tmp_path / "exports"
-    base.mkdir()
-    result = await export_review_audit_bundle_impl(
-        service=_FakeReviewAuditBundleService(),
-        review_id="rev_123",
-        export_path=str(base / ".." / ".." / "escape.json"),
-        export_base_dir=str(base),
-    )
-
-    assert result["success"] is False
-    assert result["error"]["field_errors"][0]["field"] == "export_path"
-    assert not (tmp_path / "escape.json").exists()
-
-
-@pytest.mark.asyncio
-async def test_export_disabled_when_no_base_configured(tmp_path) -> None:
+async def test_export_rejects_missing_base_directory(tmp_path) -> None:
     from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
 
     result = await export_review_audit_bundle_impl(
         service=_FakeReviewAuditBundleService(),
         review_id="rev_123",
-        export_path=str(tmp_path / "audit.json"),
-        export_base_dir=None,
+        save_to_file=True,
+        export_base_dir=str(tmp_path / "missing"),
     )
 
     assert result["success"] is False
-    assert result["error"]["field_errors"][0]["field"] == "export_path"
-    assert not (tmp_path / "audit.json").exists()
+    assert result["error"]["field_errors"][0]["field"] == "save_to_file"
+    assert "could not be created" in result["error"]["field_errors"][0]["reason"]

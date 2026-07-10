@@ -1576,9 +1576,10 @@ def test_export_review_audit_bundle_exposes_export_options() -> None:
     properties = tool.parameters["properties"]
     required = set(tool.parameters.get("required", []))
 
-    assert "export_path" in properties
+    assert "save_to_file" in properties
+    assert "export_path" not in properties
     assert "fallback_inline" in properties
-    assert "export_path" not in required
+    assert "save_to_file" not in required
     assert "fallback_inline" not in required
     assert properties["response_mode"]["default"] == "compact"
 
