@@ -92,6 +92,12 @@ def serve(
         )
         raise typer.Exit(code=2)
 
+    try:
+        settings.validate_write_boundary_for_host(host)
+    except ValueError as exc:
+        console.print(f"[red]Refusing unsafe MCP bind:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+
     settings.transport = transport  # type: ignore[assignment]
     settings.host = host
     settings.port = port

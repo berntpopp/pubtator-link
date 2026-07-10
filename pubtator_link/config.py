@@ -237,7 +237,12 @@ class ServerSettings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_write_boundary(self) -> "ServerSettings":
-        local_exception = self.allow_unauthenticated_writes and self.host in {
+        self.validate_write_boundary_for_host(self.host)
+        return self
+
+    def validate_write_boundary_for_host(self, host: str) -> None:
+        """Validate service authentication against the effective runtime bind."""
+        local_exception = self.allow_unauthenticated_writes and host in {
             "127.0.0.1",
             "::1",
             "localhost",
@@ -249,7 +254,6 @@ class ServerSettings(BaseSettings):
                 "write-capable MCP profile requires PUBTATOR_LINK_MCP_SERVICE_TOKEN "
                 "or the explicit loopback-development exception"
             )
-        return self
 
 
 @dataclass
