@@ -62,7 +62,7 @@ services:
 
     # Enhanced health check for production
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "-H", "Host: localhost", "http://localhost:8000/health"]
       interval: 20s
       timeout: 5s
       retries: 5

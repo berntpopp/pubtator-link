@@ -80,7 +80,9 @@ def test_create_app_with_mcp_mounts_http_facade(monkeypatch: pytest.MonkeyPatch)
             "path": "/mcp",
             "json_response": True,
             "stateless_http": True,
-            "host_origin_protection": False,
+            "host_origin_protection": True,
+            "allowed_hosts": ["localhost", "127.0.0.1", "::1"],
+            "allowed_origins": [],
         }
     ]
     assert any(
@@ -241,6 +243,9 @@ def test_request_size_limit_response_includes_cors_headers(
     monkeypatch.setattr(
         "pubtator_link.server_manager.settings.cors_origins", ["http://localhost:3000"]
     )
+    monkeypatch.setattr(
+        "pubtator_link.server_manager.settings.allowed_origins", ["http://localhost:3000"]
+    )
 
     manager = UnifiedServerManager(logger=LoggerDouble())
     app = manager.create_app(include_mcp=False)
@@ -259,7 +264,12 @@ def test_request_size_limit_response_includes_cors_headers(
     assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
 
 
-def test_cors_preflight_accepts_mcp_protocol_version_header() -> None:
+def test_cors_preflight_accepts_mcp_protocol_version_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "pubtator_link.server_manager.settings.allowed_origins", ["http://localhost:3000"]
+    )
     manager = UnifiedServerManager(logger=LoggerDouble())
     app = manager.create_app(include_mcp=False)
 
@@ -280,6 +290,9 @@ def test_cors_preflight_does_not_consume_rate_limit(
 ) -> None:
     monkeypatch.setattr("pubtator_link.server_manager.settings.enable_inbound_rate_limit", True)
     monkeypatch.setattr("pubtator_link.server_manager.settings.inbound_rate_limit_per_minute", 1)
+    monkeypatch.setattr(
+        "pubtator_link.server_manager.settings.allowed_origins", ["http://localhost:3000"]
+    )
 
     manager = UnifiedServerManager(logger=LoggerDouble())
     app = manager.create_app(include_mcp=False)
