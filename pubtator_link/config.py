@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Annotated, Any, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -109,7 +109,14 @@ class ServerSettings(BaseSettings):
         default=False, description="Enable opt-in cache management endpoints"
     )
     mcp_profile: Literal["lean", "full", "readonly"] = Field(
-        default="lean", description="MCP tool registration profile"
+        default="readonly", description="MCP tool registration profile"
+    )
+    mcp_service_token: str | None = Field(
+        default=None, description="Router-owned bearer token required by /mcp"
+    )
+    allow_unauthenticated_writes: bool = Field(
+        default=False,
+        description="Explicit loopback-development exception for write-capable profiles",
     )
 
     # Review-scoped re-RAG POC
@@ -228,6 +235,22 @@ class ServerSettings(BaseSettings):
                     return [str(item).strip() for item in loaded if str(item).strip()]
             return [item.strip() for item in v.split(",") if item.strip()]
         return v  # type: ignore[no-any-return]
+
+    @model_validator(mode="after")
+    def validate_write_boundary(self) -> "ServerSettings":
+        local_exception = self.allow_unauthenticated_writes and self.host in {
+            "127.0.0.1",
+            "::1",
+            "localhost",
+        }
+        if self.allow_unauthenticated_writes and not local_exception:
+            raise ValueError("unauthenticated writes are restricted to a loopback bind")
+        if self.mcp_profile != "readonly" and not self.mcp_service_token and not local_exception:
+            raise ValueError(
+                "write-capable MCP profile requires PUBTATOR_LINK_MCP_SERVICE_TOKEN "
+                "or the explicit loopback-development exception"
+            )
+        return self
 
 
 @dataclass
