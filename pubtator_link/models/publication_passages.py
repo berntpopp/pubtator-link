@@ -4,6 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, computed_field
 
+from pubtator_link.mcp.untrusted_content import UntrustedText, fence_untrusted_text
 from pubtator_link.services.degradation import DegradedMode
 
 PublicationPassageMode = Literal["abstracts", "full_abstract", "compact_passages", "section_text"]
@@ -107,6 +108,59 @@ class PublicationPassageResponse(BaseModel):
     pmids: list[str]
     mode: PublicationPassageMode
     passages: list[PublicationPassage]
+    dropped: list[PassageDropReason] = Field(default_factory=list)
+    context_estimate: PublicationContextEstimate
+    coverage_by_pmid: dict[str, PublicationCoverage] = Field(default_factory=dict)
+    coverage_reason_by_pmid: dict[str, str] = Field(default_factory=dict)
+    failed_pmids: list[FailedPublicationPmid] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    cache_key: str | None = None
+    corpus_snapshot_date: str | None = None
+    source_versions: dict[str, str] = Field(default_factory=dict)
+    degraded_mode: DegradedMode | None = None
+    dry_run: bool = False
+
+    def model_dump_mcp(self) -> dict[str, object]:
+        """Serialize with external passage prose fenced for the MCP boundary."""
+        fenced_passages: list[MCPPublicationPassage] = []
+        for passage in self.passages:
+            fenced = fence_untrusted_text(
+                passage.text,
+                source=passage.source,
+                record_id=f"PMID:{passage.pmid}#{passage.passage_id}",
+            )
+            fenced_passages.append(
+                MCPPublicationPassage(
+                    **passage.model_dump(exclude={"text", "char_count"}),
+                    text=fenced,
+                    char_count=len(fenced.text),
+                )
+            )
+        return MCPPublicationPassageResponse(
+            **self.model_dump(exclude={"passages"}),
+            passages=fenced_passages,
+        ).model_dump()
+
+
+class MCPPublicationPassage(BaseModel):
+    """One publication passage fenced for the public MCP response."""
+
+    passage_id: str
+    pmid: str
+    pmcid: str | None = None
+    section: str
+    text: UntrustedText
+    char_count: int
+    source: PublicationPassageSource
+
+
+class MCPPublicationPassageResponse(BaseModel):
+    """MCP-only response whose external passage prose is structurally fenced."""
+
+    success: bool = True
+    pmids: list[str]
+    mode: PublicationPassageMode
+    passages: list[MCPPublicationPassage]
     dropped: list[PassageDropReason] = Field(default_factory=list)
     context_estimate: PublicationContextEstimate
     coverage_by_pmid: dict[str, PublicationCoverage] = Field(default_factory=dict)

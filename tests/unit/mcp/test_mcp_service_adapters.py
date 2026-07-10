@@ -184,6 +184,55 @@ async def test_publication_passages_adapter_calls_service() -> None:
 
 
 @pytest.mark.asyncio
+async def test_publication_passages_adapter_fences_external_text() -> None:
+    import hashlib
+
+    from pubtator_link.mcp.service_adapters import get_publication_passages_impl
+    from pubtator_link.models.publication_passages import (
+        PublicationContextEstimate,
+        PublicationPassage,
+        PublicationPassageResponse,
+    )
+
+    raw = "Cafe\u0301\x00\u200b\u202e\nBRCA1"
+
+    class FakeService:
+        async def get_passages(self, request):
+            return PublicationPassageResponse(
+                pmids=request.pmids,
+                mode=request.mode,
+                passages=[
+                    PublicationPassage(
+                        passage_id="abstract-0",
+                        pmid="33454820",
+                        section="abstract",
+                        text=raw,
+                        char_count=len(raw),
+                        source="pubtator_abstract",
+                    )
+                ],
+                context_estimate=PublicationContextEstimate(
+                    estimated_passages=1,
+                    estimated_chars=len(raw),
+                    sections_by_pmid={"33454820": ["abstract"]},
+                    recommended_mode="compact_passages",
+                ),
+            )
+
+    result = await get_publication_passages_impl(
+        service=FakeService(),
+        pmids=["33454820"],
+    )
+
+    fenced = result["passages"][0]["text"]
+    assert fenced["kind"] == "untrusted_text"
+    assert fenced["text"] == "Caf\u00e9\nBRCA1"
+    assert fenced["raw_sha256"] == hashlib.sha256(raw.encode()).hexdigest()
+    assert fenced["provenance"]["record_id"] == "PMID:33454820#abstract-0"
+    assert result["passages"][0]["char_count"] == len(fenced["text"])
+
+
+@pytest.mark.asyncio
 async def test_get_publication_metadata_impl_returns_typed_payload() -> None:
     from pubtator_link.mcp import service_adapters
     from pubtator_link.models.publication_metadata import PublicationMetadataResponse

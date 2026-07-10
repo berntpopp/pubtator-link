@@ -211,6 +211,11 @@ def test_get_publication_passages_schema_exposes_dry_run_and_verbosity() -> None
 
     assert schema["properties"]["dry_run"]["default"] is False
     assert set(schema["properties"]["verbosity"]["enum"]) == {"lean", "standard", "full"}
+    text_schema = tool.output_schema["$defs"]["MCPPublicationPassage"]["properties"]["text"]
+    untrusted_ref = text_schema["$ref"]
+    untrusted_name = untrusted_ref.rsplit("/", 1)[-1]
+    kind_schema = tool.output_schema["$defs"][untrusted_name]["properties"]["kind"]
+    assert kind_schema["const"] == "untrusted_text"
 
 
 def test_citation_graph_tool_schema_is_flat() -> None:
@@ -1304,6 +1309,71 @@ async def test_get_publication_passages_accepts_scalar_pmid(
 
     assert result.structured_content["success"] is True
     assert result.structured_content["pmids"] == ["33454820"]
+
+
+@pytest.mark.asyncio
+async def test_get_publication_passages_structured_and_text_mirrors_agree(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import hashlib
+    import json
+
+    from fastmcp import Client
+
+    import pubtator_link.mcp.tools.publications as publication_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+    from pubtator_link.models.publication_passages import (
+        PublicationContextEstimate,
+        PublicationPassage,
+        PublicationPassageResponse,
+    )
+
+    raw = "BRCA1 external evidence"
+
+    class FakeService:
+        async def get_passages(self, request):
+            return PublicationPassageResponse(
+                pmids=request.pmids,
+                mode=request.mode,
+                passages=[
+                    PublicationPassage(
+                        passage_id="abstract-0",
+                        pmid="33454820",
+                        section="abstract",
+                        text=raw,
+                        char_count=len(raw),
+                        source="pubtator_abstract",
+                    )
+                ],
+                context_estimate=PublicationContextEstimate(
+                    estimated_passages=1,
+                    estimated_chars=len(raw),
+                    sections_by_pmid={"33454820": ["abstract"]},
+                    recommended_mode="compact_passages",
+                ),
+            )
+
+    async def fake_get_publication_passage_service() -> FakeService:
+        return FakeService()
+
+    monkeypatch.setattr(
+        publication_tools,
+        "get_publication_passage_service",
+        fake_get_publication_passage_service,
+    )
+    mcp = create_pubtator_mcp(profile="full")
+
+    async with Client(mcp) as client:
+        result = await client.call_tool("get_publication_passages", {"pmid": "33454820"})
+
+    structured = result.structured_content
+    mirrored = json.loads(result.content[0].text)
+    fenced = structured["passages"][0]["text"]
+    assert mirrored == structured
+    assert fenced["kind"] == "untrusted_text"
+    assert fenced["raw_sha256"] == hashlib.sha256(raw.encode()).hexdigest()
+    assert fenced["provenance"]["record_id"] == "PMID:33454820#abstract-0"
+    assert json.dumps(structured).count(raw) == 1
 
 
 def test_pmid_list_tools_expose_scalar_pmid_alias() -> None:
