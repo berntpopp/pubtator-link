@@ -42,10 +42,30 @@ from pubtator_link.mcp.review_resources import (
     get_review_summary_resource,
     get_tool_detail_resource,
 )
+from pubtator_link.mcp.untrusted_content import FORBIDDEN_CODEPOINTS
 from pubtator_link.models.workflow_help import WorkflowHelpResponse
 from pubtator_link.services.workflow_help import WorkflowHelpService
 
 logger = logging.getLogger(__name__)
+
+_MAX_REVIEW_ID_CHARS = 512
+
+
+def _is_valid_review_id(review_id: str) -> bool:
+    """A review id is echoable only if it is bounded and carries no forbidden
+    control/zero-width/bidi/NUL code point.
+
+    Callers may supply arbitrary review ids (the tools only enforce
+    ``min_length=1``), so this is deliberately permissive about ordinary
+    characters -- it strictly rejects exactly the code points the untrusted-text
+    fence forbids, which are the ones that could break out of a JSON string or a
+    structured log value. A non-matching id is never echoed back.
+    """
+    return (
+        bool(review_id)
+        and len(review_id) <= _MAX_REVIEW_ID_CHARS
+        and not any(ord(char) in FORBIDDEN_CODEPOINTS for char in review_id)
+    )
 
 
 async def _safe_review_resource(
@@ -53,21 +73,36 @@ async def _safe_review_resource(
 ) -> dict[str, Any]:
     """Run a review-resource body, converting any failure into a fixed payload.
 
-    A raw exception escaping a resource handler is rendered verbatim by FastMCP
-    (message + traceback) into its logs, which can carry a caller-influenced
-    upstream body or PII. Catch it at the handler boundary, log only the
-    exception type, and return a fixed, body-free error payload.
+    Two leaks are closed here:
+
+    * The caller-supplied ``review_id`` is validated against the id grammar
+      BEFORE the body runs. A non-matching id (hostile prose / control-code
+      points) is rejected with a fixed payload that never echoes it, so it can
+      reach neither a downstream (empty-result) payload nor a log record.
+    * A raw exception escaping a resource handler is otherwise rendered verbatim
+      by FastMCP (message + traceback) into its logs. It is caught at the
+      boundary and replaced with a fixed, identifier-free payload; only the
+      exception type is logged (never ``review_id`` or the exception text).
     """
+    if not _is_valid_review_id(review_id):
+        logger.warning(
+            "Review resource rejected an invalid review id",
+            extra={"error_code": "invalid_review_id"},
+        )
+        return {
+            "success": False,
+            "error_code": "invalid_review_id",
+            "message": "The review id is invalid.",
+        }
     try:
         return await build()
     except Exception as exc:
         logger.warning(
             "Review resource read failed",
-            extra={"review_id": review_id, "error_type": type(exc).__name__},
+            extra={"error_type": type(exc).__name__},
         )
         return {
             "success": False,
-            "review_id": review_id,
             "error_code": "resource_unavailable",
             "message": "The review resource is temporarily unavailable.",
         }

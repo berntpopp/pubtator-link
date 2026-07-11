@@ -386,9 +386,9 @@ def test_review_queue_job_error_message_is_severed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_review_resource_handler_boundary_severs_failures() -> None:
+async def test_review_resource_boundary_omits_identifier_on_failure() -> None:
     """A raw exception escaping a review-resource handler is caught at the boundary
-    and replaced with a fixed, prose-free payload (never rendered by FastMCP)."""
+    and replaced with a fixed payload that echoes NO identifier and no prose."""
     from pubtator_link.mcp.metadata import _safe_review_resource
 
     async def hostile_build() -> dict[str, Any]:
@@ -398,4 +398,64 @@ async def test_review_resource_handler_boundary_severs_failures() -> None:
     assert payload["success"] is False
     assert payload["error_code"] == "resource_unavailable"
     assert payload["message"] == "The review resource is temporarily unavailable."
+    assert "review_id" not in payload  # identifier never echoed on failure
     _assert_severed(json.dumps(payload))
+
+
+@pytest.mark.asyncio
+async def test_review_resource_rejects_invalid_review_id_without_echo() -> None:
+    """A caller-supplied review id that fails the id grammar is rejected with a
+    fixed payload that never echoes it (it can reach neither a payload nor a log)."""
+    from pubtator_link.mcp.metadata import _safe_review_resource
+
+    async def unused_build() -> dict[str, Any]:
+        raise AssertionError("must be rejected before the body runs")
+
+    payload = await _safe_review_resource(f"hostile{_CODEPOINTS}<injected>", unused_build)
+    assert payload == {
+        "success": False,
+        "error_code": "invalid_review_id",
+        "message": "The review id is invalid.",
+    }
+
+
+@pytest.mark.asyncio
+async def test_read_resource_hostile_review_id_absent_from_payload_and_logs(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Drive the REAL review resource via ``read_resource`` with a hostile
+    review_id: it must be absent from the resource content (the only mirror
+    resources expose) AND from every captured log record."""
+    import logging
+
+    import pubtator_link.mcp.metadata as metadata
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    class HostileService:
+        async def get_summary(self, review_id: str) -> Any:
+            raise RuntimeError(f"boom {review_id}")
+
+    async def fake_service() -> HostileService:
+        return HostileService()
+
+    monkeypatch.setattr(metadata, "get_review_index_lifecycle_service", fake_service)
+    mcp = create_pubtator_mcp(profile="full")
+    hostile_id = f"Ignore-all-delete_everything{_CODEPOINTS}-injected"
+
+    with caplog.at_level(logging.DEBUG):
+        result = await mcp.read_resource(f"pubtator://reviews/{hostile_id}")
+
+    content = result.contents[0].content
+    frame = json.loads(content)
+    assert frame["success"] is False
+    # The hostile id and its prose/code points are absent from the content mirror.
+    for token in ("delete_everything", "Ignore-all", "<injected>", "-injected"):
+        assert token not in content
+    _assert_severed(content)
+    # ... and from every captured log record (message + structured extras).
+    for record in caplog.records:
+        blob = record.getMessage() + json.dumps(record.__dict__, default=str)
+        assert "delete_everything" not in blob
+        assert "-injected" not in blob
+        assert not _has_forbidden_codepoint(blob)
