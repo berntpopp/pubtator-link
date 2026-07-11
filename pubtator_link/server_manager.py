@@ -13,6 +13,7 @@ from asgi_correlation_id import CorrelationIdMiddleware
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastmcp import FastMCP
+from fastmcp.server.http import HostOriginGuardMiddleware
 from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from structlog.typing import FilteringBoundLogger
@@ -257,16 +258,13 @@ class UnifiedServerManager:
         mcp_http_app = None
         if include_mcp:
             mcp = create_pubtator_mcp()
-            # host_origin_protection defaults to True since fastmcp 3.4.3, which
-            # 421s every request whose Host is not localhost -- including
-            # legitimate proxied traffic from the genefoundry-router. The reverse
-            # proxy (NPM) already validates the Host via server_name + TLS SNI, so
-            # disable the redundant app-layer guard here to keep /mcp reachable.
             mcp_http_app = mcp.http_app(
                 path=settings.mcp_path,
                 json_response=True,
                 stateless_http=True,
-                host_origin_protection=False,
+                host_origin_protection=True,
+                allowed_hosts=settings.allowed_hosts,
+                allowed_origins=settings.allowed_origins,
             )
             self.mcp = mcp
 
@@ -413,6 +411,16 @@ class UnifiedServerManager:
 
         if mcp_http_app is not None:
             app.mount("/", mcp_http_app)
+
+        # Added last so Starlette executes the guard before auth, CORS, REST routes,
+        # and the mounted MCP app. Native MCP protection remains enabled as defense
+        # in depth for the mounted protocol endpoint.
+        app.add_middleware(
+            HostOriginGuardMiddleware,
+            allowed_hosts=settings.allowed_hosts,
+            allowed_origins=settings.allowed_origins,
+            mode="strict",
+        )
 
         self.app = app
         return app

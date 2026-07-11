@@ -26,6 +26,14 @@ class ServerSettings(BaseSettings):
     host: str = Field(default="127.0.0.1", description="Server host")
     port: int = Field(default=8000, description="Server port")
     mcp_path: str = Field(default="/mcp", description="MCP endpoint path")
+    allowed_hosts: list[str] = Field(
+        default_factory=lambda: ["localhost", "127.0.0.1", "::1"],
+        description="Exact Host header allowlist for inbound HTTP requests",
+    )
+    allowed_origins: list[str] = Field(
+        default_factory=list,
+        description="Exact Origin header allowlist; requests without Origin remain allowed",
+    )
 
     # API configuration
     api_base_url: str = Field(
@@ -215,13 +223,25 @@ class ServerSettings(BaseSettings):
             return f"/{v}"
         return v
 
-    @field_validator("cors_origins", mode="before")
+    @field_validator("allowed_hosts", "allowed_origins", "cors_origins", mode="before")
     @classmethod
-    def parse_cors_origins(cls, v: Any) -> list[str]:
-        """Parse CORS origins from string or list."""
+    def parse_origin_allowlists(cls, v: Any) -> list[str]:
+        """Parse exact host/origin allowlists from JSON, CSV, or lists."""
         if isinstance(v, str):
+            stripped = v.strip()
+            if stripped.startswith("["):
+                loaded = json.loads(stripped)
+                if isinstance(loaded, list):
+                    return [str(item).strip() for item in loaded if str(item).strip()]
             return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v  # type: ignore[no-any-return]
+
+    @field_validator("allowed_hosts")
+    @classmethod
+    def reject_host_wildcards(cls, hosts: list[str]) -> list[str]:
+        if any(marker in host for host in hosts for marker in "*?[]"):
+            raise ValueError("allowed_hosts entries must be exact; wildcard syntax is forbidden")
+        return hosts
 
     @field_validator("cors_allow_methods", "cors_allow_headers", mode="before")
     @classmethod
