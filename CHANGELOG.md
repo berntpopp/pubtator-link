@@ -1,5 +1,16 @@
 # Changelog
 
+## 6.1.1
+
+### Security
+
+- Defense in depth: the MCP error path no longer echoes upstream API error-body
+  text or exception detail into caller-visible messages/partial-success
+  rows/validation frames/resources (fixed typed classifications), caller-visible
+  strings are sanitized of control/zero-width/bidi/NUL code points, hostile
+  review identifiers are rejected without echo, and raw exception text is kept
+  out of logs. Research use only.
+
 ## 6.1.0
 
 ### Security
