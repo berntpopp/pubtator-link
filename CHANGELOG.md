@@ -1,5 +1,12 @@
 # Changelog
 
+## 6.1.0
+
+### Security
+
+- Re-enabled FastMCP 3.4.4 strict Host/Origin protection (additive;
+  service-token write-boundary + public /health preserved).
+
 ## 6.0.0
 
 ### BREAKING
