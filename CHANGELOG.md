@@ -1,5 +1,18 @@
 # Changelog
 
+## 6.1.2
+
+### Security
+
+- Defense in depth: guard the FastMCP-core not-found reflection surface. Core
+  echoed the caller's own requested tool name / resource URI / prompt name (with
+  any control/zero-width/bidi/NUL code points) back to the caller and into logs
+  before backend middleware ran. A layered guard (registry preflight, resource
+  boundary, protocol-handler backstop, and a validation-log scrub filter) now
+  answers unknown tools/resources/prompts with fixed, input-free messages and
+  neutralizes the framework log records at their source loggers and FastMCP's own
+  handlers. Caller self-reflection surface; research use only.
+
 ## 6.1.1
 
 ### Security
