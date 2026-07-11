@@ -56,3 +56,22 @@ def fence_untrusted_text(raw: str, *, source: str, record_id: str) -> UntrustedT
         ),
         raw_sha256=hashlib.sha256(raw.encode("utf-8")).hexdigest(),
     )
+
+
+MAX_MESSAGE_CHARS = 280
+
+
+def sanitize_message(text: str) -> str:
+    """Strip the fence's forbidden control/zero-width/bidi/NUL code points + length-cap.
+
+    Applied to EVERY caller-visible message/error/diagnostics/warning string (the
+    error envelope, the shaped per-item drop/provider-status rows, resource
+    handlers, session-orientation payloads) so a hostile upstream -- or a
+    caller-influenced 4xx/5xx body reflected into ``str(exc)`` -- can never smuggle
+    control, zero-width, bidirectional, or NUL code points into a caller-visible
+    field. These strings are server-/provider-authored guidance data; the raw
+    upstream response body is additionally kept out of them at the source
+    (Surface A, see ``pubtator_link/api/client.py``).
+    """
+    clean = "".join(char for char in text if ord(char) not in FORBIDDEN_CODEPOINTS)
+    return clean[:MAX_MESSAGE_CHARS]
