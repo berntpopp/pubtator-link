@@ -79,6 +79,12 @@ def normalize_search_sort(sort: str | None) -> tuple[str | None, str | None]:
 
 
 def pubtator_filtered_search_unavailable(exc: PubTatorAPIError) -> bool:
+    # The client severs the raw upstream body and encodes PubTator3's transient
+    # filtered-search outage as this stable, body-free terminal_reason signal.
+    terminal_reason = exc.terminal_reason or exc.retry_metadata.get("terminal_reason")
+    if terminal_reason == "filtered_search_unavailable":
+        return True
+    # Back-compat for exceptions still constructed with the legacy body text.
     message = str(exc).lower()
     return "currently updating the database" in message or "please try again later" in message
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
+from pubtator_link.mcp.untrusted_content import sanitize_message
 from pubtator_link.models.responses import SearchResponse
 from pubtator_link.models.review_rerag import (
     ListResearchSessionsResponse,
@@ -95,7 +96,7 @@ class ResearchSessionService:
                             decision_reason="queue_rejected",
                             coverage_hint=hint,
                             source_id=f"PMID:{pmid}",
-                            error=str(exc),
+                            error=sanitize_message(str(exc)),
                         ),
                     )
                     await self.repository.upsert_research_session(

@@ -349,21 +349,21 @@ class PubTator3Client:
                 )
 
         except httpx.HTTPStatusError as e:
-            error_data: dict[str, Any] = {}
-            try:
-                parsed_error = e.response.json()
-                if isinstance(parsed_error, dict):
-                    error_data.update(parsed_error)
-            except Exception:
-                if self.logger:
-                    self.logger.warning("Failed to parse error response as JSON")
-            error_data["retry_metadata"] = _retry_metadata_payload(retry_metadata)
-
+            # Sever the (caller-influenceable) raw upstream body: surface only the
+            # safe HTTP-status scalar, never the body (message/response_data/logs).
+            status_code = e.response.status_code
+            body_lowered = e.response.text.lower()
+            updating = (
+                "currently updating the database" in body_lowered
+                or "please try again later" in body_lowered
+            )
+            retry_payload = _retry_metadata_payload(retry_metadata)
             raise PubTatorAPIError(
-                f"HTTP {e.response.status_code}: {e.response.text}",
-                status_code=e.response.status_code,
-                response_data=error_data,
-                retry_metadata=_retry_metadata_payload(retry_metadata),
+                f"PubTator3 API returned HTTP {status_code}.",
+                status_code=status_code,
+                response_data={"retry_metadata": retry_payload},
+                retry_metadata=retry_payload,
+                terminal_reason="filtered_search_unavailable" if updating else None,
             ) from e
 
     async def export_publications(

@@ -33,7 +33,7 @@ def test_sanitize_message_removes_each_named_codepoint() -> None:
 
 def test_sanitize_message_preserves_ordinary_prose_and_scientific_symbols() -> None:
     # Tabs, newlines and scientific symbols are NOT in the forbidden set.
-    prose = "p.Gly12Asp\tΔG = −1.2 kcal/mol\nBRCA1"
+    prose = "p.Gly12Asp\tΔG = −1.2 kcal/mol\nBRCA1"  # noqa: RUF001 (U+2212 minus is a preserved scientific symbol)
     assert sanitize_message(prose) == prose
 
 

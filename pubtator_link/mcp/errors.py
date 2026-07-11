@@ -15,6 +15,7 @@ from pydantic import ValidationError as PydanticValidationError
 
 from pubtator_link.api.client import PubTatorAPIError
 from pubtator_link.mcp.input_normalization import InputNormalizationError
+from pubtator_link.mcp.untrusted_content import sanitize_message
 from pubtator_link.mcp.validation_errors import extract_validation_details
 from pubtator_link.observability.metrics import record_mcp_tool_call
 from pubtator_link.services.degradation import DegradedMode
@@ -59,8 +60,14 @@ class McpErrorContext:
     fallback_preview: dict[str, Any] | None = None
 
 
-def sanitize_error_message(message: str) -> str:
-    """Map raw backend messages to safe, LLM-actionable summaries."""
+def _classify_error_message(message: str) -> str:
+    """Map raw backend messages to safe, LLM-actionable summaries.
+
+    Every branch returns a fixed, server-authored string; an unmapped message
+    falls through to a generic sentence rather than echoing ``str(exc)``. The
+    raw upstream response body is additionally severed at the API client
+    (Surface A), so it never reaches this function.
+    """
     safe_messages = {
         "Invalid MCP arguments.",
         "The tool response did not match its declared MCP output schema.",
@@ -87,6 +94,17 @@ def sanitize_error_message(message: str) -> str:
     return "The tool could not complete the requested operation."
 
 
+def sanitize_error_message(message: str) -> str:
+    """Return a safe, code-point-stripped summary for a raw backend message.
+
+    The semantic allowlist decides the surfaced sentence; the result is then run
+    through ``sanitize_message`` (strip forbidden control/zero-width/bidi/NUL code
+    points + length-cap) as a defensive backstop so no forbidden code point can
+    ever reach a caller-visible error frame, whatever the fallthrough.
+    """
+    return sanitize_message(_classify_error_message(message))
+
+
 def _is_pubtator_upstream_unavailable(exc: Exception) -> bool:
     if not isinstance(exc, PubTatorAPIError):
         return False
@@ -94,7 +112,11 @@ def _is_pubtator_upstream_unavailable(exc: Exception) -> bool:
     terminal_reason = exc.terminal_reason or exc.retry_metadata.get("terminal_reason")
     return (
         exc.status_code in {502, 503, 504}
-        or terminal_reason == "request_error"
+        or terminal_reason in {"request_error", "filtered_search_unavailable"}
+        # Back-compat: the raw upstream body is now severed at the client
+        # (Surface A) and its transient-outage meaning travels as the
+        # ``filtered_search_unavailable`` terminal_reason above; these substring
+        # checks still classify any exception constructed with the legacy body.
         or "currently updating the database" in message
         or "please try again later" in message
     )
@@ -124,12 +146,16 @@ def record_mcp_error(
     message: str,
     raw_message: str | None = None,
 ) -> None:
+    # Retention sink (not caller-visible: ``get_recent_mcp_errors`` filters
+    # ``_``-prefixed keys). Even so, no raw upstream body / PII is retained here:
+    # callers no longer pass ``str(exc)`` as ``raw_message`` and any value that is
+    # provided is code-point-stripped + capped, per the no-raw-sink policy.
     entry = {
         "timestamp": datetime.now(UTC).isoformat(),
         "tool_name": tool_name,
         "error_code": error_code,
         "message": sanitize_error_message(message)[:500],
-        "_raw_message": raw_message[:500] if raw_message else None,
+        "_raw_message": sanitize_message(raw_message)[:500] if raw_message else None,
     }
     _RECENT_MCP_ERRORS.append(entry)
     del _RECENT_MCP_ERRORS[:-RECENT_MCP_ERROR_LIMIT]
@@ -478,11 +504,13 @@ async def run_mcp_tool(
                 "error_code": error_code,
             },
         )
+        # Do NOT retain ``str(exc)``: for an upstream failure it can carry the
+        # (now client-severed) response body or free-text PII. Only the already
+        # sanitized, body-free ``message`` is recorded.
         record_mcp_error(
             tool_name=tool_name,
             error_code=error_code,
             message=message,
-            raw_message=str(exc),
         )
         record_mcp_tool_call(
             tool_name=tool_name,

@@ -13,6 +13,7 @@ from structlog.typing import FilteringBoundLogger
 
 from pubtator_link.api.client import PubTatorAPIError
 from pubtator_link.config import ReviewReragConfig
+from pubtator_link.mcp.untrusted_content import sanitize_message
 from pubtator_link.models.review_rerag import (
     CoverageReason,
     JobStatus,
@@ -123,7 +124,7 @@ class FullTextPreparationService:
                 pmid=pmid,
                 source_kind="pubtator_full_bioc",
                 status="failed",
-                reason=str(exc),
+                reason=sanitize_message(str(exc)),
                 coverage_reason=coverage_hint.coverage_reason if coverage_hint else "unknown",
                 coverage_hint=coverage_hint,
                 retry_metadata=self._retry_metadata_from_api_error(exc),
@@ -230,7 +231,7 @@ class FullTextPreparationService:
                     pmid=pmid,
                     source_kind="pubtator_abstract",
                     status="failed",
-                    reason=str(exc),
+                    reason=sanitize_message(str(exc)),
                     coverage_reason="abstract_fallback_used",
                     coverage_hint=coverage_hint,
                     retry_metadata=self._retry_metadata_from_api_error(exc),
@@ -308,7 +309,7 @@ class FullTextPreparationService:
             self.logger.warning(
                 "Review passage embedding generation skipped",
                 extra={
-                    "reason": str(exc),
+                    "reason": sanitize_message(str(exc)),
                     "passage_count": len(passages),
                     "model_name": self.embedding_model,
                     "embedding_dim": self.embedding_dim,
@@ -552,7 +553,7 @@ class FullTextPreparationService:
                 "blocked",
                 url=url,
                 content_type=None,
-                reason=str(exc),
+                reason=sanitize_message(str(exc)),
             )
             return "failed"
 

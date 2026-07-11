@@ -404,7 +404,8 @@ class TestPubTator3Client:
     @respx.mock
     @pytest.mark.asyncio
     async def test_error_response_with_details(self, client):
-        """Test error response with detailed error information."""
+        """The upstream error BODY is severed: the exception message is a fixed,
+        status-keyed string and never echoes the (caller-influenceable) body."""
         error_response = {
             "error": "Validation failed",
             "message": "Invalid parameters provided",
@@ -423,7 +424,11 @@ class TestPubTator3Client:
 
         error = exc_info.value
         assert error.status_code == 422
-        assert "Validation failed" in str(error)
+        # Only the safe HTTP-status scalar is surfaced; the body is gone.
+        assert "422" in str(error)
+        assert "Validation failed" not in str(error)
+        assert "Invalid parameters provided" not in str(error)
+        assert "Validation failed" not in str(error.response_data or {})
 
     @pytest.mark.asyncio
     async def test_client_configuration_validation(self):

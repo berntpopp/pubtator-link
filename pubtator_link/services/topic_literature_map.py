@@ -9,6 +9,7 @@ from collections import Counter
 from collections.abc import Awaitable, Sequence
 from typing import Any, Protocol
 
+from pubtator_link.mcp.untrusted_content import sanitize_message
 from pubtator_link.models.literature_graph import (
     LiteratureCandidateSummary,
     LiteratureClusterSummary,
@@ -1507,7 +1508,7 @@ async def _await_with_deadline(awaitable: Awaitable[Any], deadline: float | None
 def _provider_exception_message(exc: Exception, label: str) -> str:
     if isinstance(exc, TimeoutError):
         return f"{label} timed out before topic map completed; retry with narrower inputs or disable this stage."
-    return str(exc) or exc.__class__.__name__
+    return sanitize_message(str(exc) or exc.__class__.__name__)
 
 
 def _topic_provider_status(

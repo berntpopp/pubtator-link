@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from pubtator_link.config import ReviewReragConfig
+from pubtator_link.mcp.untrusted_content import sanitize_message
 from pubtator_link.models.review_rerag import PreparationEnqueueResult
 from pubtator_link.repositories.review_rerag import ReviewReragRepository
 from pubtator_link.services.full_text_preparation import FullTextPreparationService
@@ -283,7 +284,7 @@ class ReviewPreparationQueue:
 def _error_message(exc: Exception) -> str:
     message = str(exc).strip()
     if message:
-        return message[:500]
+        return sanitize_message(message)
     return type(exc).__name__[:500]
 
 

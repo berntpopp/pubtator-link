@@ -7,6 +7,7 @@ import time
 from collections.abc import Awaitable, Mapping, Sequence
 from typing import Any, Literal, Protocol
 
+from pubtator_link.mcp.untrusted_content import sanitize_message
 from pubtator_link.models.literature_graph import (
     CitationGraphDirection,
     LiteratureAvailability,
@@ -733,7 +734,7 @@ def _provider_failed_warning(provider: str, exc: Exception) -> ProviderWarning:
         provider=provider,
         status="provider_failed",
         retryable=True,
-        message=f"{provider} citation lookup failed: {exc}",
+        message=sanitize_message(f"{provider} citation lookup failed: {exc}"),
     )
 
 
@@ -861,7 +862,7 @@ def _provider_status(
         status=status,
         result_count=result_count,
         retryable=retryable,
-        message=message,
+        message=sanitize_message(message) if message is not None else None,
         elapsed_ms=elapsed_ms,
         budget_ms=budget_ms,
     )

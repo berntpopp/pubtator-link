@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from pubtator_link.mcp.untrusted_content import sanitize_message
+
 
 async def research_session_status_payload(
     *, service: Any, review_id: str | None, session_id: str
@@ -13,13 +15,18 @@ async def research_session_status_payload(
             else service.get_status_by_session_id(session_id=session_id)
         )
     except LookupError as exc:
-        return {"success": False, "manifest": None, "error_code": "not_found", "message": str(exc)}
+        return {
+            "success": False,
+            "manifest": None,
+            "error_code": "not_found",
+            "message": sanitize_message(str(exc)),
+        }
     except ValueError as exc:
         return {
             "success": False,
             "manifest": None,
             "error_code": "validation_failed",
-            "message": str(exc),
+            "message": sanitize_message(str(exc)),
         }
     return cast(dict[str, Any], response.model_dump(by_alias=True))
 

@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from html import unescape
 from typing import Any, Protocol, cast
 
+from pubtator_link.mcp.untrusted_content import sanitize_message
 from pubtator_link.models.publication_passages import (
     FailedPublicationPmid,
     PassageDropReason,
@@ -82,7 +83,7 @@ class PublicationPassageService:
                 dropped=[
                     PassageDropReason(
                         reason="upstream_error",
-                        message=str(exc),
+                        message=sanitize_message(str(exc)),
                     )
                 ],
                 context_estimate=estimate,
@@ -178,7 +179,7 @@ class PublicationPassageService:
                 estimated_chars=0,
                 sections_by_pmid={pmid: [] for pmid in request.pmids},
                 recommended_mode=request.mode,
-                warning=f"Publication export failed: {exc}",
+                warning=sanitize_message(f"Publication export failed: {exc}"),
             )
 
         passages, _ = self._compact_export(
