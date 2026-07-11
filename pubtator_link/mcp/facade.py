@@ -7,6 +7,11 @@ from pubtator_link.config import settings
 from pubtator_link.mcp.compat import install_inspection_managers
 from pubtator_link.mcp.errors import install_validation_error_handler
 from pubtator_link.mcp.metadata import register_metadata
+from pubtator_link.mcp.notfound_guard import (
+    NotFoundGuard,
+    install_protocol_error_handler,
+    install_validation_log_filter,
+)
 from pubtator_link.mcp.output_validation import install_output_validation_error_handler
 from pubtator_link.mcp.profiles import MCPToolProfile, normalize_mcp_profile
 from pubtator_link.mcp.resources import RESEARCH_USE_NOTICE
@@ -42,6 +47,13 @@ def create_pubtator_mcp(profile: MCPToolProfile | str | None = None) -> FastMCP:
             f"{RESEARCH_USE_NOTICE}"
         ),
     )
+    # Guard the FastMCP-core not-found reflection surface: core echoes the
+    # caller's OWN requested tool name / resource URI / prompt name (with any
+    # control/zero-width/bidi/NUL code points) to the caller and to logs BEFORE
+    # backend middleware runs. NotFoundGuard preflights the tool NAME (unknown ->
+    # fixed name-free envelope) and fixes the on_read_resource boundary; add it
+    # first so it is the OUTERMOST middleware. See notfound_guard.py.
+    mcp.add_middleware(NotFoundGuard())
     register_metadata(mcp, profile=selected_profile)
     register_literature_tools(mcp, profile=selected_profile)
     register_discovery_tools(mcp, profile=selected_profile)
@@ -52,4 +64,15 @@ def create_pubtator_mcp(profile: MCPToolProfile | str | None = None) -> FastMCP:
     install_inspection_managers(mcp)
     install_validation_error_handler(mcp)
     install_output_validation_error_handler(mcp)
+    # Layer 5: scrub FastMCP-core / MCP-SDK validation logs that would echo the
+    # caller-supplied name/URI (idempotent; process-global). Installed after the
+    # facade is built so FastMCP's own Rich handlers already exist.
+    install_validation_log_filter()
+    # Layer 3: install the protocol-handler backstop AFTER every tool/resource/
+    # prompt handler wrapper (incl. install_output_validation_error_handler) so it
+    # is the OUTERMOST wrapper on the raw CallTool/ReadResource/GetPrompt handlers
+    # -- catches the unknown-tool *return* path and any resource/prompt dispatch
+    # error that would echo the requested name/URI (the only layer covering the
+    # unknown-prompt surface).
+    install_protocol_error_handler(mcp)
     return mcp
