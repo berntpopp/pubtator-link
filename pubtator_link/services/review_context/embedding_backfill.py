@@ -73,13 +73,15 @@ async def backfill_review_passage_embeddings(
                     "failed_count": failed_count,
                     "batch_size": len(batch),
                     "elapsed_ms": round((time.monotonic() - started) * 1000, 2),
+                    "error_type": type(exc).__name__,
                 },
             )
+            # Fixed classification only -- never serialize the exception prose.
             return EmbeddingBackfillResult(
                 review_id=review_id,
                 embedded_count=embedded_count,
                 failed_count=failed_count,
-                error=str(exc),
+                error="Embedding backfill failed.",
             )
 
         records = [

@@ -450,7 +450,8 @@ async def test_prepare_pmid_records_retry_metadata_when_pubtator_export_fails() 
             "source_kind": "pubtator_full_bioc",
             "status": "failed",
             "content_type": "application/json",
-            "reason": "HTTP 503: busy",
+            # Severed: the exception prose is never echoed into the reason field.
+            "reason": "PubTator full BioC export failed.",
             "coverage_reason": "unknown",
             "attempt_count": 3,
             "last_status_code": 503,

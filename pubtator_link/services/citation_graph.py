@@ -7,7 +7,6 @@ import time
 from collections.abc import Awaitable, Mapping, Sequence
 from typing import Any, Literal, Protocol
 
-from pubtator_link.mcp.untrusted_content import sanitize_message
 from pubtator_link.models.literature_graph import (
     CitationGraphDirection,
     LiteratureAvailability,
@@ -447,7 +446,7 @@ class CitationGraphService:
                     "references",
                     "failed",
                     retryable=True,
-                    message=str(exc),
+                    message="provider request failed",
                     elapsed_ms=_elapsed_ms(started),
                 ),
                 _provider_failed_warning(CROSSREF_PROVIDER, exc),
@@ -479,7 +478,7 @@ class CitationGraphService:
                     "references",
                     "failed",
                     retryable=True,
-                    message=str(exc),
+                    message="provider request failed",
                     elapsed_ms=_elapsed_ms(started),
                 ),
                 _provider_failed_warning(OPENALEX_PROVIDER, exc),
@@ -511,7 +510,7 @@ class CitationGraphService:
                     "cited_by",
                     "failed",
                     retryable=True,
-                    message=str(exc),
+                    message="provider request failed",
                     elapsed_ms=_elapsed_ms(started),
                 ),
                 _provider_failed_warning(EUROPE_PMC_PROVIDER, exc),
@@ -543,7 +542,7 @@ class CitationGraphService:
                     "cited_by",
                     "failed",
                     retryable=True,
-                    message=str(exc),
+                    message="provider request failed",
                     elapsed_ms=_elapsed_ms(started),
                 ),
                 _provider_failed_warning(OPENALEX_PROVIDER, exc),
@@ -681,7 +680,7 @@ class CitationGraphService:
                             "open_access",
                             "failed",
                             retryable=True,
-                            message=str(exc),
+                            message="provider request failed",
                             elapsed_ms=_elapsed_ms(started),
                         ),
                         _provider_failed_warning(UNPAYWALL_PROVIDER, exc),
@@ -734,7 +733,7 @@ def _provider_failed_warning(provider: str, exc: Exception) -> ProviderWarning:
         provider=provider,
         status="provider_failed",
         retryable=True,
-        message=sanitize_message(f"{provider} citation lookup failed: {exc}"),
+        message=f"{provider} citation lookup failed.",
     )
 
 
@@ -862,7 +861,7 @@ def _provider_status(
         status=status,
         result_count=result_count,
         retryable=retryable,
-        message=sanitize_message(message) if message is not None else None,
+        message=message,
         elapsed_ms=elapsed_ms,
         budget_ms=budget_ms,
     )

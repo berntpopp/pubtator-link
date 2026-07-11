@@ -57,12 +57,14 @@ def normalize_search_sort(sort: str | None) -> tuple[str | None, str | None]:
     canonical = _CANONICAL_SEARCH_SORTS.get(key)
     if canonical is None:
         valid = ", ".join(f"'{value}'" for value in VALID_PUBTATOR_SORTS)
+        # Never echo the rejected caller sort VALUE back into the frame -- it can
+        # carry hostile prose / control-code points. Only server-authored guidance.
         raise InputNormalizationError(
             field_errors=[
                 {
                     "field": "sort",
                     "message": (
-                        f"Unsupported sort '{sort}'. PubTator3 accepts only {valid} "
+                        f"Unsupported sort value. PubTator3 accepts only {valid} "
                         "(descending only). Use 'date desc' for newest-first or "
                         "'score desc' for relevance, or omit sort."
                     ),
@@ -75,7 +77,7 @@ def normalize_search_sort(sort: str | None) -> tuple[str | None, str | None]:
         )
     if canonical == raw:
         return canonical, None
-    return canonical, f"Normalized sort '{sort}' to '{canonical}'."
+    return canonical, f"Normalized sort to '{canonical}'."
 
 
 def pubtator_filtered_search_unavailable(exc: PubTatorAPIError) -> bool:

@@ -13,7 +13,6 @@ from structlog.typing import FilteringBoundLogger
 
 from pubtator_link.api.client import PubTatorAPIError
 from pubtator_link.config import ReviewReragConfig
-from pubtator_link.mcp.untrusted_content import sanitize_message
 from pubtator_link.models.review_rerag import (
     CoverageReason,
     JobStatus,
@@ -124,7 +123,7 @@ class FullTextPreparationService:
                 pmid=pmid,
                 source_kind="pubtator_full_bioc",
                 status="failed",
-                reason=sanitize_message(str(exc)),
+                reason="PubTator full BioC export failed.",
                 coverage_reason=coverage_hint.coverage_reason if coverage_hint else "unknown",
                 coverage_hint=coverage_hint,
                 retry_metadata=self._retry_metadata_from_api_error(exc),
@@ -231,7 +230,7 @@ class FullTextPreparationService:
                     pmid=pmid,
                     source_kind="pubtator_abstract",
                     status="failed",
-                    reason=sanitize_message(str(exc)),
+                    reason="PubTator abstract export failed.",
                     coverage_reason="abstract_fallback_used",
                     coverage_hint=coverage_hint,
                     retry_metadata=self._retry_metadata_from_api_error(exc),
@@ -309,7 +308,7 @@ class FullTextPreparationService:
             self.logger.warning(
                 "Review passage embedding generation skipped",
                 extra={
-                    "reason": sanitize_message(str(exc)),
+                    "error_type": type(exc).__name__,
                     "passage_count": len(passages),
                     "model_name": self.embedding_model,
                     "embedding_dim": self.embedding_dim,
@@ -545,7 +544,7 @@ class FullTextPreparationService:
 
         try:
             content, content_type = await self._fetch_curated_url(fetcher, url)
-        except UrlSafetyError as exc:
+        except UrlSafetyError:
             await self.repository.record_retrieval_attempt(
                 review_id,
                 url,
@@ -553,7 +552,7 @@ class FullTextPreparationService:
                 "blocked",
                 url=url,
                 content_type=None,
-                reason=sanitize_message(str(exc)),
+                reason="Curated URL rejected.",
             )
             return "failed"
 

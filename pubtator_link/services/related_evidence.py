@@ -7,7 +7,6 @@ import time
 from collections.abc import Iterable
 from typing import Any
 
-from pubtator_link.mcp.untrusted_content import sanitize_message
 from pubtator_link.models.literature_graph import (
     LiteraturePaper,
     LiteratureProviderStatus,
@@ -91,7 +90,7 @@ class RelatedEvidenceService:
                     "related_articles",
                     "failed",
                     retryable=True,
-                    message=str(exc),
+                    message="provider request failed",
                     elapsed_ms=_elapsed_ms(elink_started),
                 )
             )
@@ -125,7 +124,7 @@ class RelatedEvidenceService:
                     "source_metadata",
                     "failed",
                     retryable=True,
-                    message=str(exc),
+                    message="provider request failed",
                     elapsed_ms=_elapsed_ms(source_started),
                 )
             )
@@ -169,7 +168,7 @@ class RelatedEvidenceService:
                         "candidate_neighbors",
                         "failed",
                         retryable=True,
-                        message=str(exc),
+                        message="provider request failed",
                         elapsed_ms=_elapsed_ms(graph_started),
                         budget_ms=request.citation_graph_timeout_ms,
                     )
@@ -358,7 +357,7 @@ class RelatedEvidenceService:
                     "candidate_metadata",
                     "failed",
                     retryable=True,
-                    message=str(exc),
+                    message="provider request failed",
                     elapsed_ms=_elapsed_ms(started),
                     budget_ms=request.metadata_timeout_ms,
                 ),
@@ -547,7 +546,7 @@ def _provider_failed_warning(provider: str, exc: Exception) -> ProviderWarning:
         provider=provider,
         status="provider_failed",
         retryable=True,
-        message=sanitize_message(f"{provider} lookup failed: {exc}"),
+        message=f"{provider} lookup failed.",
     )
 
 
@@ -568,7 +567,7 @@ def _provider_status(
         status=status,
         result_count=result_count,
         retryable=retryable,
-        message=sanitize_message(message) if message is not None else None,
+        message=message,
         elapsed_ms=elapsed_ms,
         budget_ms=budget_ms,
     )

@@ -85,7 +85,7 @@ def recovery_from_query_summary(summary: QueryDiagnosticsSummary) -> RecoveryHin
     if summary.returned_count == 0 and summary.zero_result_reason is not None:
         return RecoveryHint(
             reason=summary.zero_result_reason,
-            message=f"No passages returned for query: {summary.query}",
+            message="No passages returned for the query.",
             next_steps=summary.next_steps,
             suggested_queries=summary.suggested_queries,
             suggested_filters=RecoverySuggestedFilters(
@@ -96,7 +96,7 @@ def recovery_from_query_summary(summary: QueryDiagnosticsSummary) -> RecoveryHin
     if summary.dropped_count >= max(3, summary.returned_count * 3):
         return RecoveryHint(
             reason="high_drop_pressure",
-            message=f"Many candidate passages were dropped for query: {summary.query}",
+            message="Many candidate passages were dropped for the query.",
             next_steps=summary.next_steps or ["increase_budget", "filter_sections"],
             suggested_queries=summary.suggested_queries,
             suggested_filters=RecoverySuggestedFilters(

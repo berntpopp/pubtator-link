@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from pubtator_link.mcp.untrusted_content import sanitize_message
-
 
 async def research_session_status_payload(
     *, service: Any, review_id: str | None, session_id: str
@@ -14,19 +12,21 @@ async def research_session_status_payload(
             if review_id
             else service.get_status_by_session_id(session_id=session_id)
         )
-    except LookupError as exc:
+    except LookupError:
+        # Fixed message only; the caller-supplied session_id is never echoed back
+        # (it can carry hostile prose / control-code points).
         return {
             "success": False,
             "manifest": None,
             "error_code": "not_found",
-            "message": sanitize_message(str(exc)),
+            "message": "Research session not found.",
         }
-    except ValueError as exc:
+    except ValueError:
         return {
             "success": False,
             "manifest": None,
             "error_code": "validation_failed",
-            "message": sanitize_message(str(exc)),
+            "message": "Research session request was invalid or ambiguous.",
         }
     return cast(dict[str, Any], response.model_dump(by_alias=True))
 

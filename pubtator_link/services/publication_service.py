@@ -75,11 +75,13 @@ class PublicationService:
 
         except PubTatorAPIError as e:
             if self.logger:
+                # Log the exception TYPE only -- never str(e), which can carry a
+                # caller-influenced upstream body / PII.
                 self.logger.error(
                     "Publication export failed",
                     pmids=pmids,
                     format=format,
-                    error=str(e),
+                    error_type=type(e).__name__,
                 )
             raise
 

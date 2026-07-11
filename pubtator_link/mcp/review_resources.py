@@ -13,7 +13,6 @@ from pubtator_link.mcp.service_adapters import (
     review_sessions_resource_impl,
     review_summary_resource_impl,
 )
-from pubtator_link.mcp.untrusted_content import sanitize_message
 
 
 async def get_review_summary_resource(*, service: Any, review_id: str) -> dict[str, Any]:
@@ -96,9 +95,8 @@ def get_tool_detail_resource(tool_name: str) -> dict[str, Any]:
     tools = _runtime_tool_metadata()
     tool = tools.get(tool_name)
     if tool is None:
-        # ``tool_name`` is caller-supplied; strip forbidden code points before it
-        # is echoed back into a resource message.
-        return {"error": "not_found", "message": sanitize_message(f"Unknown tool: {tool_name}")}
+        # Fixed message only; the caller-supplied tool_name is never echoed back.
+        return {"error": "not_found", "message": "Unknown tool."}
 
     return {
         "name": tool_name,

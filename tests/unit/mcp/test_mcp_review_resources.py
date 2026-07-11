@@ -123,9 +123,11 @@ def test_tool_detail_resource_uses_runtime_tool_metadata() -> None:
 
 
 def test_tool_detail_resource_returns_not_found_for_unknown_tool() -> None:
+    # The caller-supplied tool name is not echoed back into the message (it could
+    # carry hostile prose / code points); a fixed message is returned instead.
     payload = get_tool_detail_resource("pubtator.nope")
 
-    assert payload == {"error": "not_found", "message": "Unknown tool: pubtator.nope"}
+    assert payload == {"error": "not_found", "message": "Unknown tool."}
 
 
 @pytest.mark.asyncio

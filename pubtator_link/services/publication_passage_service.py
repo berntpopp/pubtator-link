@@ -7,7 +7,6 @@ from collections.abc import Mapping
 from html import unescape
 from typing import Any, Protocol, cast
 
-from pubtator_link.mcp.untrusted_content import sanitize_message
 from pubtator_link.models.publication_passages import (
     FailedPublicationPmid,
     PassageDropReason,
@@ -63,7 +62,7 @@ class PublicationPassageService:
                 format="biocjson",
                 full=request.full,
             )
-        except Exception as exc:
+        except Exception:
             coverage_by_pmid = cast(
                 dict[str, PublicationCoverage],
                 dict.fromkeys(request.pmids, "unknown"),
@@ -83,7 +82,7 @@ class PublicationPassageService:
                 dropped=[
                     PassageDropReason(
                         reason="upstream_error",
-                        message=sanitize_message(str(exc)),
+                        message="Publication export failed.",
                     )
                 ],
                 context_estimate=estimate,
@@ -170,7 +169,7 @@ class PublicationPassageService:
                 format="biocjson",
                 full=request.full,
             )
-        except Exception as exc:
+        except Exception:
             return PublicationContextEstimateResponse(
                 success=False,
                 pmids=request.pmids,
@@ -179,7 +178,7 @@ class PublicationPassageService:
                 estimated_chars=0,
                 sections_by_pmid={pmid: [] for pmid in request.pmids},
                 recommended_mode=request.mode,
-                warning=sanitize_message(f"Publication export failed: {exc}"),
+                warning="Publication export failed.",
             )
 
         passages, _ = self._compact_export(

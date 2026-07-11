@@ -7,7 +7,6 @@ import logging
 from typing import Any
 
 from pubtator_link.config import ReviewReragConfig
-from pubtator_link.mcp.untrusted_content import sanitize_message
 from pubtator_link.models.review_rerag import PreparationEnqueueResult
 from pubtator_link.repositories.review_rerag import ReviewReragRepository
 from pubtator_link.services.full_text_preparation import FullTextPreparationService
@@ -230,12 +229,16 @@ class ReviewPreparationQueue:
                         error=error,
                     )
             except Exception as exc:
-                self.logger.exception(
+                # Log stable fields + the exception TYPE only. ``logger.exception``
+                # would render the message + traceback, which can carry a
+                # caller-influenced upstream body or PII.
+                self.logger.error(
                     "Review preparation job failed",
                     extra={
                         "review_id": review_id,
                         "source_id": source_id,
                         "source_kind": source_kind,
+                        "error_type": type(exc).__name__,
                     },
                 )
                 if claimed:
@@ -282,10 +285,10 @@ class ReviewPreparationQueue:
 
 
 def _error_message(exc: Exception) -> str:
-    message = str(exc).strip()
-    if message:
-        return sanitize_message(message)
-    return type(exc).__name__[:500]
+    # Fixed classification only -- never serialize the exception prose (it can
+    # carry a caller-influenced upstream body / PII). The source identity travels
+    # in the structured source_id / source_kind fields of the job record.
+    return "Source preparation failed."
 
 
 def _source_value_from_job(*, source_id: str, source_kind: str) -> str | None:

@@ -68,10 +68,14 @@ def _normalize_enum_casing(
         return []
     lowered = value.lower()
     if lowered not in allowed_values:
+        # Never echo the rejected caller VALUE back into the frame -- it can carry
+        # hostile prose / control-code points. The field name + allowed values are
+        # server-authored and safe.
         return [
             _field_error(
                 field,
-                f"Unsupported value '{value}'. Expected one of {', '.join(sorted(allowed_values))}.",
+                f"Unsupported value for '{field}'. Expected one of "
+                f"{', '.join(sorted(allowed_values))}.",
             )
         ]
     if lowered == value:

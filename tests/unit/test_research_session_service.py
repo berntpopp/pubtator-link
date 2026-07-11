@@ -247,7 +247,8 @@ async def test_stage_queue_failure_marks_partial_and_records_candidate_error() -
     assert repository.candidates[0].status == "queued"
     assert repository.candidates[1].status == "failed"
     assert repository.candidates[1].decision_reason == "queue_rejected"
-    assert repository.candidates[1].error == "queue unavailable for 2"
+    # Severed: the candidate error is a fixed classification, never the exception prose.
+    assert repository.candidates[1].error == "Preparation failed."
 
 
 async def test_stage_missing_manifest_raises_clear_service_error() -> None:

@@ -47,6 +47,26 @@ def mcp_field_validation_error(
     }
 
 
+def _sever_validation_frame(field_errors: list[dict[str, str]]) -> list[dict[str, Any]]:
+    """Rebuild a validation frame with every string value code-point-stripped.
+
+    The rejected caller VALUE is already kept out of the message at the source
+    (input normalization raises server-authored, value-free field errors); this
+    boundary is a defensive backstop that also strips forbidden code points from
+    any field/message string before it reaches either MCP mirror.
+    """
+    severed: list[dict[str, Any]] = []
+    for entry in field_errors:
+        if isinstance(entry, dict):
+            severed.append(
+                {
+                    key: sanitize_message(value) if isinstance(value, str) else value
+                    for key, value in entry.items()
+                }
+            )
+    return severed
+
+
 @dataclass(frozen=True)
 class McpErrorContext:
     """Context used to build an MCP tool execution error."""
@@ -320,7 +340,16 @@ def mcp_validation_tool_error(
             "unsafe_for_clinical_use": True,
         },
     }
-    payload.update(extract_validation_details(parameters, _pydantic_validation_details(exc)))
+    details = extract_validation_details(parameters, _pydantic_validation_details(exc))
+    # ``unexpected_params`` echoes the caller-supplied (arbitrary) argument names;
+    # strip forbidden code points before they reach either MCP mirror. The other
+    # keys are schema-derived (server-authored) and safe.
+    if isinstance(details.get("unexpected_params"), list):
+        details["unexpected_params"] = [
+            sanitize_message(name) if isinstance(name, str) else name
+            for name in details["unexpected_params"]
+        ]
+    payload.update(details)
     record_mcp_error(
         tool_name=tool_name,
         error_code="validation_failed",
@@ -455,8 +484,8 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> dict[str, Any]:
         },
     }
     if isinstance(exc, InputNormalizationError):
-        payload["field_errors"] = exc.field_errors
-        payload["recovery_hint"] = exc.recovery_hint
+        payload["field_errors"] = _sever_validation_frame(exc.field_errors)
+        payload["recovery_hint"] = sanitize_message(exc.recovery_hint)
     if context.degraded_mode is not None:
         payload["degraded_mode"] = context.degraded_mode
     diagnostics_snapshot = bounded_diagnostics_snapshot(context.diagnostics_snapshot)
