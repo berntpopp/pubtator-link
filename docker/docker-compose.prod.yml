@@ -7,6 +7,21 @@ services:
     # Application containers reach it over the Compose network.
     ports: !reset []
 
+    # F-14: production REQUIRES an explicit DB password with NO predictable
+    # fallback. `${VAR:?msg}` makes `docker compose config`/`up` fail closed when
+    # PUBTATOR_LINK_POSTGRES_PASSWORD is unset, so the base compose developer
+    # default ("pubtator_link") can never reach a deployed database.
+    #
+    # ROTATION: set a fresh secret (e.g. `openssl rand -hex 32`) as
+    # PUBTATOR_LINK_POSTGRES_PASSWORD in the deployment secret store. Postgres
+    # only consumes POSTGRES_PASSWORD at initdb on an empty data volume, so
+    # rotating an existing deployment means: update the value, run
+    # `ALTER ROLE ... WITH PASSWORD` inside the running database (or recreate the
+    # pubtator_postgres_data volume from a backup), then recreate the app
+    # container so its DSN picks up the new secret.
+    environment:
+      POSTGRES_PASSWORD: "${PUBTATOR_LINK_POSTGRES_PASSWORD:?PUBTATOR_LINK_POSTGRES_PASSWORD is required in production (no fallback)}"
+
   pubtator-link:
     # Production-specific environment variables
     environment:
@@ -16,6 +31,10 @@ services:
       PUBTATOR_LINK_MCP_PROFILE: readonly
       PUBTATOR_LINK_ALLOW_UNAUTHENTICATED_WRITES: "false"
       PUBTATOR_LINK_MCP_SERVICE_TOKEN: "${PUBTATOR_LINK_MCP_SERVICE_TOKEN:?required}"
+      # F-14: mirror the no-fallback DB secret requirement in the app DSN so a
+      # missing PUBTATOR_LINK_POSTGRES_PASSWORD also fails the app service closed
+      # (the base overlay's `:-pubtator_link` default is not inherited here).
+      PUBTATOR_LINK_DATABASE_URL: "postgresql://${PUBTATOR_LINK_POSTGRES_USER:-pubtator_link}:${PUBTATOR_LINK_POSTGRES_PASSWORD:?PUBTATOR_LINK_POSTGRES_PASSWORD is required in production (no fallback)}@pubtator-postgres:5432/${PUBTATOR_LINK_POSTGRES_DB:-pubtator_link}"
       PUBTATOR_LINK_ENABLE_INBOUND_RATE_LIMIT: "true"
       PUBTATOR_LINK_TRUST_PROXY_HEADERS: "true"
       GUNICORN_WORKERS: 4

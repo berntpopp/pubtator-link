@@ -60,6 +60,9 @@ def test_merged_production_compose_is_readonly_and_requires_service_token(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("PUBTATOR_LINK_MCP_SERVICE_TOKEN", "compose-test-secret")
+    # F-14: the prod overlay now requires the DB secret with no fallback, so the
+    # merged config only renders once PUBTATOR_LINK_POSTGRES_PASSWORD is set.
+    monkeypatch.setenv("PUBTATOR_LINK_POSTGRES_PASSWORD", "compose-test-db-secret")
     docker = shutil.which("docker")
     assert docker is not None
     result = subprocess.run(  # noqa: S603
