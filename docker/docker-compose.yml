@@ -9,7 +9,11 @@ name: pubtator-link
 
 services:
   pubtator-postgres:
-    image: pgvector/pgvector:0.8.4-pg18-trixie
+    # F-15: digest-pinned (multi-arch index digest) so the deployed bytes are
+    # reproducible and tamper-evident; the tag is retained for readability.
+    # To upgrade: `docker buildx imagetools inspect pgvector/pgvector:<tag>` and
+    # replace both the tag and the @sha256 index digest.
+    image: pgvector/pgvector:0.8.4-pg18-trixie@sha256:dc8631aeee036a59d054c28d29ddb15536caa0c89a96f548fa944774a50af973
     container_name: pubtator_link_postgres
 
     environment:
