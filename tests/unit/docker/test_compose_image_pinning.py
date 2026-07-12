@@ -8,15 +8,20 @@ manifest digest makes the deployed bytes reproducible and tamper-evident.
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
-COMPOSE_FILES = (
-    Path("docker/docker-compose.yml"),
-    Path("docker/docker-compose.prod.yml"),
-    Path("docker/docker-compose.npm.yml"),
-)
+BASE = Path("docker/docker-compose.yml")
+PROD = Path("docker/docker-compose.prod.yml")
+NPM = Path("docker/docker-compose.npm.yml")
+ENV_EXAMPLE = Path(".env.docker.example")
+
+COMPOSE_FILES = (BASE, PROD, NPM)
 
 
 class _ComposeLoader(yaml.SafeLoader):
@@ -61,3 +66,47 @@ def test_pgvector_image_keeps_tag_alongside_digest() -> None:
     assert pgvector, "expected the pgvector postgres image to be present"
     for image in pgvector:
         assert "0.8.4-pg18-trixie@sha256:" in image
+
+
+@pytest.mark.skipif(shutil.which("docker") is None, reason="docker CLI unavailable")
+def test_rendered_npm_stack_images_are_digest_pinned() -> None:
+    """The fully-rendered npm production stack (base+prod+npm) must expose only
+    digest-pinned images — the per-file scan can miss an image an overlay swaps in.
+    """
+    docker = shutil.which("docker")
+    assert docker is not None
+    env = {
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": os.environ.get("HOME", ""),
+        "PUBTATOR_LINK_MCP_SERVICE_TOKEN": "compose-test-token",
+        "PUBTATOR_LINK_POSTGRES_PASSWORD": "compose-test-db-secret",
+    }
+    result = subprocess.run(  # noqa: S603
+        [
+            docker,
+            "compose",
+            "-f",
+            str(BASE),
+            "-f",
+            str(PROD),
+            "-f",
+            str(NPM),
+            "--env-file",
+            str(ENV_EXAMPLE),
+            "config",
+        ],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    rendered = yaml.safe_load(result.stdout)
+    images = [
+        spec["image"]
+        for spec in (rendered.get("services") or {}).values()
+        if isinstance(spec, dict) and spec.get("image")
+    ]
+    assert images, "rendered npm stack should declare at least one image"
+    unpinned = [i for i in images if "@sha256:" not in i]
+    assert not unpinned, f"rendered npm stack has tag-only images: {unpinned}"

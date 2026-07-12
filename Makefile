@@ -132,8 +132,17 @@ docker-down: ## Stop Docker development stack
 docker-logs: ## Follow Docker logs
 	$(DOCKER_COMPOSE) -f docker/docker-compose.yml logs -f
 
+# Config-validation only: throwaway values so the prod/npm `${VAR:?}` guards
+# render during `docker compose config`. These are NOT real secrets — production
+# supplies the real DB password and MCP service token from a secret store at
+# deploy time. Injecting them here (shell env wins over --env-file) keeps the
+# structure check deterministic instead of failing for lack of a secret.
+COMPOSE_CONFIG_DUMMY_ENV := \
+	PUBTATOR_LINK_MCP_SERVICE_TOKEN=ci-compose-validation-only \
+	PUBTATOR_LINK_POSTGRES_PASSWORD=ci-compose-validation-only
+
 docker-prod-config: ## Render production Compose configuration
-	$(DOCKER_COMPOSE) -f docker/docker-compose.yml -f docker/docker-compose.prod.yml config
+	$(COMPOSE_CONFIG_DUMMY_ENV) $(DOCKER_COMPOSE) -f docker/docker-compose.yml -f docker/docker-compose.prod.yml config
 
 docker-npm-config: ## Render NPM Compose configuration
-	$(DOCKER_COMPOSE) -f docker/docker-compose.yml -f docker/docker-compose.prod.yml -f docker/docker-compose.npm.yml --env-file .env.docker.example config
+	$(COMPOSE_CONFIG_DUMMY_ENV) $(DOCKER_COMPOSE) -f docker/docker-compose.yml -f docker/docker-compose.prod.yml -f docker/docker-compose.npm.yml --env-file .env.docker.example config
