@@ -21,6 +21,7 @@ BASE = Path("docker/docker-compose.yml")
 PROD = Path("docker/docker-compose.prod.yml")
 NPM = Path("docker/docker-compose.npm.yml")
 ENV_EXAMPLE = Path(".env.docker.example")
+DOCKER_README = Path("docker/README.md")
 MAKEFILE = Path("Makefile")
 
 PASSWORD_VAR = "PUBTATOR_LINK_POSTGRES_PASSWORD"  # noqa: S105 (env var name, not a secret)
@@ -124,6 +125,30 @@ def test_prod_compose_config_succeeds_with_db_password() -> None:
 # with no predictable fallback, and the config-validation path must render a
 # throwaway (non-predictable) credential, never a committed ``change-me``.
 # --------------------------------------------------------------------------- #
+
+
+def test_docker_readme_documents_no_predictable_prod_db_password() -> None:
+    """F-14 doc gate: ``docker/README.md`` must not present the predictable DB
+    password as a production example.
+
+    The prod/npm overlays already require ``PUBTATOR_LINK_POSTGRES_PASSWORD`` from
+    a secret store with no fallback. The README must not undermine that by
+    documenting the predictable ``pubtator_link`` credential as a production env
+    assignment; the env-config block must instead direct operators to a secret
+    store. A purely-local ``make db-init`` command may keep the dev fallback only
+    because it is explicitly labelled local-dev-only on the host-published dev
+    port that the prod overlays never expose.
+    """
+    text = DOCKER_README.read_text()
+    predictable_assignment = f"{PASSWORD_VAR}=pubtator_link"
+    assert predictable_assignment not in text, (
+        f"docker/README.md documents the predictable production credential "
+        f"{predictable_assignment!r}; require it from a secret store instead"
+    )
+    assert f"{PASSWORD_VAR}=<from-secret-store>" in text, (
+        "docker/README.md env block must present the DB password as a required "
+        "secret-store placeholder, not a predictable default"
+    )
 
 
 def test_env_docker_example_ships_no_predictable_db_password() -> None:

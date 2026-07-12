@@ -70,9 +70,12 @@ PUBTATOR_LINK_CACHE_TTL=3600
 # Review re-RAG PostgreSQL settings
 PUBTATOR_LINK_POSTGRES_DB=pubtator_link
 PUBTATOR_LINK_POSTGRES_USER=pubtator_link
-PUBTATOR_LINK_POSTGRES_PASSWORD=pubtator_link
+# REQUIRED secret — no default. Inject from your secret store at deploy time; the
+# prod/npm overlays fail closed when it is unset. Never commit a real or
+# predictable value (`docker compose config` renders it verbatim).
+PUBTATOR_LINK_POSTGRES_PASSWORD=<from-secret-store>
 PUBTATOR_LINK_POSTGRES_PORT=5434
-PUBTATOR_LINK_DATABASE_URL=postgresql://pubtator_link:pubtator_link@localhost:5434/pubtator_link
+PUBTATOR_LINK_DATABASE_URL=postgresql://pubtator_link:<password>@localhost:5434/pubtator_link
 
 # Production scaling
 GUNICORN_WORKERS=4
@@ -98,7 +101,9 @@ GUNICORN_LOG_LEVEL=warning
 docker-compose up --build
 ```
 
-To apply the schema to an already existing database volume after schema changes:
+To apply the schema to an already existing database volume after schema changes
+(local dev only — not for production; this uses the base-compose dev fallback
+password on the host-published dev port, which the prod overlays never expose):
 
 ```bash
 PUBTATOR_LINK_DATABASE_URL=postgresql://pubtator_link:pubtator_link@localhost:5434/pubtator_link make db-init
