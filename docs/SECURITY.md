@@ -61,4 +61,30 @@ See `PUBTATOR_LINK_REVIEW_EXPORT_BASE_DIR` above. The mcp_profile `full` is requ
 Docker networking is not an egress firewall. Hospital deployments require a host or network
 egress policy in addition to the inbound router boundary.
 
+## Repository security settings (F-18: GitHub secret scanning)
+
+GitHub **secret scanning** and **push protection** are repository settings, not something a
+workflow or source change can enable. They are the last line of defence against a credential
+(service token, DB password, API key) being committed to history — push protection blocks the
+push before the secret lands. This repository already runs CodeQL; secret scanning must be
+enabled as an operator action.
+
+Enable both (operator, with a token that has admin on the repo):
+
+```bash
+gh api -X PATCH repos/berntpopp/pubtator-link \
+  -f 'security_and_analysis[secret_scanning][status]=enabled' \
+  -f 'security_and_analysis[secret_scanning_push_protection][status]=enabled'
+```
+
+Verify:
+
+```bash
+gh api repos/berntpopp/pubtator-link --jq '.security_and_analysis'
+```
+
+Both `secret_scanning.status` and `secret_scanning_push_protection.status` must read `enabled`.
+If a committed secret is ever detected, treat it as exposed: rotate it immediately (see the
+service-token and DB-password rotation notes above) and purge it from history.
+
 Research use only. Not clinical decision support.
