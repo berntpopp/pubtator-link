@@ -29,10 +29,12 @@ ENV VIRTUAL_ENV="/opt/venv" \
 WORKDIR /app
 COPY uv.lock pyproject.toml README.md ./
 
-# Install dependencies in the virtual environment
+# F-19: use a digest-pinned uv binary instead of a floating `pip install
+# --upgrade pip uv`, so the build toolchain is reproducible and tamper-evident.
+COPY --from=ghcr.io/astral-sh/uv:0.8.7@sha256:1e26f9a868360eeb32500a35e05787ffff3402f01a8dc8168ef6aee44aef0aab /uv /usr/local/bin/uv
+
 # Install production dependencies only
-RUN pip install --upgrade pip uv && \
-    uv sync --frozen --no-dev --active
+RUN uv sync --frozen --no-dev --active
 
 # --- Production Stage ---
 # This stage creates the final, minimal production image
