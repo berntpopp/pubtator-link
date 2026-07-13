@@ -1,5 +1,23 @@
 # Changelog
 
+## [6.1.5] - 2026-07-13
+
+### Fixed
+
+- Release evidence now states the data contract this repository actually
+  declares. The reusable release workflow hardcoded `--contract
+  data-independent` and `data_requirements: {"mode":"none"}`, so the signed
+  release manifest claimed the image binds to no data while
+  `container-release.json` declares `data-bound` with a pinned
+  `restored-database` corpus. Re-pinned the container CI and release callers to
+  the corrected standard revision
+  (`86b11f7ed062ed84dfddcbd309e34da88f3dae5b`), which reads the contract and the
+  data identity from `container-release.json`.
+- This also activates `_require_data_binding`, which previously returned early
+  for a `data-independent` contract. The release now asserts that the captured
+  data identity equals the pinned `data.release_tag` and `data.digest` instead
+  of silently skipping the strongest assertion in the evidence chain.
+
 ## [6.1.4] - 2026-07-13
 
 ### Changed
