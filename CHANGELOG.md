@@ -1,5 +1,20 @@
 # Changelog
 
+## 6.1.3
+
+### Changed
+
+- Consolidated dependency maintenance (supersedes Dependabot #112-#118):
+  - `fastapi` 0.136.1 -> 0.139.0 (floor raised to `>=0.139.0`).
+  - `uvicorn[standard]` 0.48.0 -> 0.51.0 (floor raised to `>=0.51.0`).
+  - `sentence-transformers` 5.5.1 -> 5.6.0 (optional `embeddings` extra).
+  - `mypy` 2.1.0 -> 2.3.0 (floor raised to `>=2.2.0`; latest compatible locked).
+  - `ruff` 0.15.18 -> 0.15.21.
+  - `astral-sh/setup-uv` 8.3.0 -> 8.3.2 (SHA-pinned) across the CI, Docker,
+    release, and conformance workflows.
+  - `pgvector/pgvector` Compose image 0.8.4-pg18-trixie -> 0.8.5-pg18-trixie,
+    re-pinned to the new multi-arch index digest.
+
 ## 6.1.2
 
 ### Security
