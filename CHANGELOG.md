@@ -11,7 +11,7 @@
   `container-release.json` declares `data-bound` with a pinned
   `restored-database` corpus. Re-pinned the container CI and release callers to
   the corrected standard revision
-  (`62e12c043dbd4745eac41dccacdee9a73306e9bd`), which reads the contract and the
+  (`86b11f7ed062ed84dfddcbd309e34da88f3dae5b`), which reads the contract and the
   data identity from `container-release.json`.
 - This also activates `_require_data_binding`, which previously returned early
   for a `data-independent` contract. The release now asserts that the captured
