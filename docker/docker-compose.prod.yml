@@ -23,6 +23,12 @@ services:
       POSTGRES_PASSWORD: "${PUBTATOR_LINK_POSTGRES_PASSWORD:?PUBTATOR_LINK_POSTGRES_PASSWORD is required in production (no fallback)}"
 
   pubtator-link:
+    build: !reset null
+    image: "${PUBTATOR_LINK_IMAGE:?PUBTATOR_LINK_IMAGE must be set to ghcr.io/berntpopp/pubtator-link@sha256:<digest>}"
+    pull_policy: missing
+    container_name: !reset null
+    env_file: !reset []
+
     # Production-specific environment variables
     environment:
       PUBTATOR_LINK_LOG_LEVEL: INFO
@@ -41,10 +47,12 @@ services:
       GUNICORN_LOG_LEVEL: warning
 
     # Remove development volume mounts
-    volumes: []
+    volumes: !reset []
 
     # ports: []
     ports: !reset []
+    expose:
+      - "8000"
 
     read_only: true
     tmpfs:

@@ -41,15 +41,20 @@ RUN uv sync --frozen --no-dev --active
 FROM python:3.14-slim@sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1 AS production
 
 
-# Runtime identity. The deploy builds from a source checkout rather than pulling a
-# registry image, so there is no immutable OCI digest to pin; stamping the exact
-# commit into the image is what lets an operator prove the running container was
-# built from the revision the router's release inventory pins, instead of trusting
-# a moving `main`. VCS_REF is unprefixed on purpose: a <SERVICE>_-prefixed name
-# would land in the pydantic settings namespace.
-ARG VCS_REF=unknown
-LABEL org.opencontainers.image.source="https://github.com/berntpopp/pubtator-link" \
-      org.opencontainers.image.revision="${VCS_REF}"
+# Release identity is supplied by the central container-release workflow.
+ARG APP_VERSION=0.0.0
+ARG VCS_REF=0000000000000000000000000000000000000000
+ARG BUILD_DATE=1970-01-01T00:00:00Z
+LABEL org.opencontainers.image.title="PubTator Link" \
+      org.opencontainers.image.description="FastAPI and MCP server for PubTator3 biomedical literature research data" \
+      org.opencontainers.image.source="https://github.com/berntpopp/pubtator-link" \
+      org.opencontainers.image.url="https://github.com/berntpopp/pubtator-link" \
+      org.opencontainers.image.documentation="https://github.com/berntpopp/pubtator-link#readme" \
+      org.opencontainers.image.version="${APP_VERSION}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.vendor="GeneFoundry"
 ENV VCS_REF="${VCS_REF}"
 
 # Set environment variables

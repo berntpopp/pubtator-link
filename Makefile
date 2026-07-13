@@ -138,6 +138,7 @@ docker-logs: ## Follow Docker logs
 # deploy time. Injecting them here (shell env wins over --env-file) keeps the
 # structure check deterministic instead of failing for lack of a secret.
 COMPOSE_CONFIG_DUMMY_ENV := \
+	PUBTATOR_LINK_IMAGE=ghcr.io/berntpopp/pubtator-link@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
 	PUBTATOR_LINK_MCP_SERVICE_TOKEN=ci-compose-validation-only \
 	PUBTATOR_LINK_POSTGRES_PASSWORD=ci-compose-validation-only
 

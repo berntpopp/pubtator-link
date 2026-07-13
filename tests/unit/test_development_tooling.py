@@ -24,9 +24,12 @@ def _branch_protection_policy() -> dict[str, Any]:
 
 
 def _workflow_action_refs(workflow: dict[str, Any]) -> list[str]:
-    return [
-        step["uses"] for job in workflow["jobs"].values() for step in job["steps"] if "uses" in step
-    ]
+    refs: list[str] = []
+    for job in workflow["jobs"].values():
+        if "uses" in job:
+            refs.append(job["uses"])
+        refs.extend(step["uses"] for step in job.get("steps", []) if "uses" in step)
+    return refs
 
 
 def test_python_baseline_is_modern_and_consistent() -> None:
@@ -187,7 +190,8 @@ def test_coverage_threshold_matches_verified_baseline() -> None:
 
 def test_github_actions_workflows_exist_and_use_make_targets() -> None:
     ci = _workflow(".github/workflows/ci.yml")
-    docker = _workflow(".github/workflows/docker.yml")
+    container_ci = _workflow(".github/workflows/container-ci.yml")
+    container_release = _workflow(".github/workflows/container-release.yml")
     security = _workflow(".github/workflows/security.yml")
 
     assert ci["permissions"] == {"contents": "read"}
@@ -198,13 +202,24 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
     assert "make ci-local" in ci_commands
     assert "make test-cov" in ci_commands
 
-    assert docker["permissions"] == {"contents": "read"}
-    docker_job = docker["jobs"]["docker"]
-    assert docker_job["name"] == "Docker build and Compose validation"
-    docker_commands = {step.get("run") for step in docker_job["steps"]}
-    assert "make docker-prod-config" in docker_commands
-    assert "make docker-npm-config" in docker_commands
-    assert "docker build -f docker/Dockerfile -t pubtator-link:ci ." in docker_commands
+    assert container_ci["permissions"] == {}
+    container_ci_job = container_ci["jobs"]["container-ci"]
+    assert container_ci_job["permissions"] == {"contents": "read"}
+    assert container_ci_job["uses"].startswith(
+        "berntpopp/genefoundry-router/.github/workflows/_container-ci.yml@"
+    )
+
+    assert container_release["permissions"] == {}
+    container_release_job = container_release["jobs"]["container-release"]
+    assert container_release_job["permissions"] == {
+        "attestations": "write",
+        "contents": "write",
+        "id-token": "write",
+        "packages": "write",
+    }
+    assert container_release_job["uses"].startswith(
+        "berntpopp/genefoundry-router/.github/workflows/_container-release.yml@"
+    )
 
     assert security["permissions"] == {"contents": "read"}
     codeql_job = security["jobs"]["codeql"]
@@ -253,8 +268,8 @@ def test_release_service_token_is_scoped_to_compose_validation() -> None:
 def test_github_actions_are_sha_pinned_with_uv_version() -> None:
     workflows = [
         _workflow(".github/workflows/ci.yml"),
-        _workflow(".github/workflows/container-security.yml"),
-        _workflow(".github/workflows/docker.yml"),
+        _workflow(".github/workflows/container-ci.yml"),
+        _workflow(".github/workflows/container-release.yml"),
         _workflow(".github/workflows/release.yml"),
         _workflow(".github/workflows/security.yml"),
     ]
@@ -268,7 +283,7 @@ def test_github_actions_are_sha_pinned_with_uv_version() -> None:
         step
         for workflow in workflows
         for job in workflow["jobs"].values()
-        for step in job["steps"]
+        for step in job.get("steps", [])
         if str(step.get("uses", "")).startswith("astral-sh/setup-uv@")
     ]
     assert setup_uv_steps
@@ -290,9 +305,9 @@ def test_branch_protection_docs_define_required_checks() -> None:
     assert "Require pull request before merging" in docs
     assert "make ci-local" in docs
     assert "coverage" in docs
-    assert "Docker validation" in docs
+    assert "Container CI calls" in docs
     assert "CI / Format, lint, typecheck, tests, and coverage" in docs
-    assert "Docker / Docker build and Compose validation" in docs
+    assert "Container CI / container-ci" in docs
     assert "Security / CodeQL" in docs
     assert "Security / Dependency review" in docs
 
@@ -325,18 +340,18 @@ def test_branch_protection_required_checks_match_workflow_job_names() -> None:
     policy = _branch_protection_policy()
     workflows = {
         "CI": _workflow(".github/workflows/ci.yml"),
-        "Docker": _workflow(".github/workflows/docker.yml"),
+        "Container CI": _workflow(".github/workflows/container-ci.yml"),
         "Security": _workflow(".github/workflows/security.yml"),
     }
     workflow_checks = {
-        f"{workflow_name} / {job['name']}"
+        f"{workflow_name} / {job.get('name', job_name)}"
         for workflow_name, workflow in workflows.items()
-        for job in workflow["jobs"].values()
+        for job_name, job in workflow["jobs"].items()
     }
 
     assert set(policy["required_status_checks"]) == {
         "CI / Format, lint, typecheck, tests, and coverage",
-        "Docker / Docker build and Compose validation",
+        "Container CI / container-ci",
         "Security / CodeQL",
         "Security / Dependency review",
     }
@@ -344,16 +359,14 @@ def test_branch_protection_required_checks_match_workflow_job_names() -> None:
 
 
 def test_container_security_workflow_generates_scan_and_sbom_artifacts() -> None:
-    workflow = _workflow(".github/workflows/container-security.yml")
-    job = workflow["jobs"]["container-security"]
-    uses_steps = {step["uses"] for step in job["steps"] if "uses" in step}
-    run_steps = "\n".join(str(step.get("run", "")) for step in job["steps"])
+    workflow = _workflow(".github/workflows/container-ci.yml")
+    job = workflow["jobs"]["container-ci"]
 
-    assert workflow["permissions"] == {"contents": "read"}
-    assert job["name"] == "Container scan and SBOM"
-    assert "aquasecurity/trivy-action" in "\n".join(str(step) for step in job["steps"])
-    assert "docker build -f docker/Dockerfile -t pubtator-link:scan ." in run_steps
-    assert any(action.startswith("actions/upload-artifact@") for action in uses_steps)
+    assert workflow["permissions"] == {}
+    assert job["permissions"] == {"contents": "read"}
+    assert job["uses"].startswith(
+        "berntpopp/genefoundry-router/.github/workflows/_container-ci.yml@"
+    )
 
 
 def test_release_workflow_validates_tagged_builds_without_publishing() -> None:

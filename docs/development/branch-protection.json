@@ -8,7 +8,7 @@
   "postgres_integration_required": false,
   "required_status_checks": [
     "CI / Format, lint, typecheck, tests, and coverage",
-    "Docker / Docker build and Compose validation",
+    "Container CI / container-ci",
     "Security / CodeQL",
     "Security / Dependency review"
   ],

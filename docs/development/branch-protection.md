@@ -17,16 +17,16 @@ Recommended branch protection for `main`:
 Required status checks:
 
 - `CI / Format, lint, typecheck, tests, and coverage`
-- `Docker / Docker build and Compose validation`
+- `Container CI / container-ci`
 - `Security / CodeQL`
 - `Security / Dependency review`
 
 The CI check runs `make ci-local` and `make test-cov`, including the coverage
 baseline enforced in `pyproject.toml`.
 
-Docker validation runs the Compose configuration checks with
-`make docker-prod-config` and `make docker-npm-config`, then builds the image with
-`docker build -f docker/Dockerfile -t pubtator-link:ci .`.
+Container CI calls the router-owned reusable container workflow, which validates
+the release config, Compose production config, content policy, SBOM/scan
+evidence, and the production image build.
 
 Security CodeQL runs Python CodeQL analysis. Security Dependency Review runs on
 pull requests to flag dependency changes before merge.

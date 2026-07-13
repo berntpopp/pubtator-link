@@ -1,5 +1,14 @@
 # Changelog
 
+## [6.1.3]
+
+### Added
+
+- Adopt the GeneFoundry router container-release standard with SHA-pinned
+  reusable container CI/release callers, digest-only production image
+  configuration, code-only Docker context controls, and complete OCI image
+  labels.
+
 ## 6.1.2
 
 ### Security
