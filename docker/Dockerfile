@@ -65,7 +65,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PUBTATOR_LINK_HOST=0.0.0.0 \
     PUBTATOR_LINK_PORT=8000 \
     PUBTATOR_LINK_TRANSPORT=unified \
-    TMPDIR=/tmp/pubtator-link
+    TMPDIR=/tmp
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -77,8 +77,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Create non-root user for security
 RUN groupadd --system app && \
     useradd --system --gid app --home /home/app --create-home app && \
-    mkdir -p /tmp/pubtator-link /var/cache/pubtator-link && \
-    chown -R app:app /tmp/pubtator-link /var/cache/pubtator-link /home/app
+    mkdir -p /var/cache/pubtator-link && \
+    chown -R app:app /var/cache/pubtator-link /home/app
 
 # Copy the virtual environment from builder stage
 COPY --from=builder /opt/venv /opt/venv
@@ -139,7 +139,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PUBTATOR_LINK_HOST=0.0.0.0 \
     PUBTATOR_LINK_PORT=8000 \
     PUBTATOR_LINK_TRANSPORT=unified \
-    TMPDIR=/tmp/pubtator-link
+    TMPDIR=/tmp
 WORKDIR /home/app/web
 
 # Switch to non-root user
@@ -152,7 +152,11 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -fsS http://localhost:8000/health || exit 1
 
-# Default command: the typer CLI boots the unified REST + MCP Streamable HTTP
-# server. Production overlays (docker-compose.prod.yml / .npm.yml) override this
-# with the hardened multi-worker Gunicorn entrypoint.
-CMD ["pubtator-link", "serve", "--transport", "unified", "--host", "0.0.0.0", "--port", "8000"]
+# Default command: the hardened multi-worker Gunicorn entrypoint that drives the
+# unified REST + MCP Streamable HTTP ASGI app factory.
+#
+# The GeneFoundry container-release standard forbids a Compose `command:` override
+# on the application service, so the released image must already run the exact
+# production process. The `pubtator-link serve` typer CLI (Logging & CLI Standard
+# v1) remains the interactive/dev entrypoint and is what docker-compose.yml runs.
+CMD ["gunicorn", "-c", "gunicorn_conf.py", "pubtator_link.server_manager:create_app()"]

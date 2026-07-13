@@ -1,13 +1,35 @@
 # Changelog
 
-## [6.1.3]
+## [6.1.4] - 2026-07-13
 
-### Added
+### Changed
 
-- Adopt the GeneFoundry router container-release standard with SHA-pinned
-  reusable container CI/release callers, digest-only production image
-  configuration, code-only Docker context controls, and complete OCI image
-  labels.
+- Adopt the GeneFoundry router container-release standard: SHA-pinned reusable
+  container CI/release callers, digest-only production image configuration,
+  code-only Docker context controls, and complete OCI image labels.
+- Declare the `pubtator-postgres` pgvector sidecar as a `database`-role auxiliary
+  service in `container-release.json` and harden it to the central Compose policy
+  (digest-pinned untagged image, `read_only`, `cap_drop: ALL`,
+  `no-new-privileges`, bounded `deploy` limits and logging, named-volume writable
+  storage, no published ports).
+- Production now runs the image's own Gunicorn default command instead of a
+  Compose `command:` override.
+
+## 6.1.3
+
+### Changed
+
+- Consolidated dependency maintenance (supersedes Dependabot #112-#118):
+  - `fastapi` 0.136.1 -> 0.139.0 (floor raised to `>=0.139.0`).
+  - `uvicorn[standard]` 0.48.0 -> 0.51.0 (floor raised to `>=0.51.0`).
+  - `sentence-transformers` 5.5.1 -> 5.6.0 (optional `embeddings` extra).
+  - `mypy` 2.1.0 -> 2.3.0 (floor raised to `>=2.2.0`; latest compatible locked).
+  - `ruff` 0.15.18 -> 0.15.21.
+  - `astral-sh/setup-uv` 8.3.0 -> 8.3.2 (SHA-pinned) across the CI, Docker,
+    release, and conformance workflows.
+  - `pgvector/pgvector` Compose image 0.8.4-pg18-trixie -> 0.8.5-pg18-trixie,
+    re-pinned to the new multi-arch index digest.
+
 
 ## 6.1.2
 

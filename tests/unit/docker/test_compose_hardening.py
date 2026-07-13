@@ -12,30 +12,51 @@ DOCKER_ENV = Path(".env.docker.example")
 DOCKERFILE = Path("docker/Dockerfile").read_text()
 
 
-def test_base_compose_runs_unified_server_via_cli() -> None:
+def test_base_compose_serves_unified_transport_via_the_image_default() -> None:
     assert "PUBTATOR_LINK_TRANSPORT: unified" in BASE
-    # Streamable HTTP only: the base stack boots through the typer CLI, not a
-    # raw uvicorn --factory invocation.
+    # Streamable HTTP only: no raw uvicorn --factory invocation.
     assert "--factory" not in BASE
-    assert '"pubtator-link", "serve"' in BASE
-    assert '"--transport", "unified"' in BASE
+    # The container-release standard forbids a Compose `command:` override on the
+    # application service in the production render. Keeping the base file free of
+    # one means the CI smoke stack (base + generated override) exercises exactly
+    # the process the released image runs in production.
+    base = yaml.safe_load(BASE)
+    app = base["services"]["pubtator-link"]
+    assert "command" not in app
+    assert "entrypoint" not in app
 
 
-def test_default_image_command_uses_cli_serve() -> None:
-    # The default image runs `pubtator-link serve` (GeneFoundry CLI Standard v1).
-    assert '"pubtator-link", "serve"' in DOCKERFILE
-    assert '"--transport", "unified"' in DOCKERFILE
+def test_dev_overlay_keeps_the_typer_cli_entrypoint() -> None:
+    # GeneFoundry Logging & CLI Standard v1: `pubtator-link serve` stays the
+    # interactive/dev entrypoint even though the image default is Gunicorn.
+    dev = Path("docker/docker-compose.dev.yml").read_text()
+    assert "pubtator-link serve" in dev
+
+
+def test_default_image_command_is_the_production_gunicorn_entrypoint() -> None:
+    # The released image must already run the exact production process, because
+    # the central Compose policy rejects a `command:`/`entrypoint:` override on
+    # the application service.
+    assert (
+        'CMD ["gunicorn", "-c", "gunicorn_conf.py", '
+        '"pubtator_link.server_manager:create_app()"]' in DOCKERFILE
+    )
+    assert '"--factory"' not in DOCKERFILE
     assert "stdio" not in DOCKERFILE
 
 
-def test_production_gunicorn_overlays_use_callable_factory_entrypoint() -> None:
-    # Production / NPM overlays keep the hardened multi-worker Gunicorn
-    # entrypoint, which drives the unaffected ASGI app factory.
-    expected = '"pubtator_link.server_manager:create_app()"'
-
+def test_production_overlays_never_override_the_image_process() -> None:
+    # A `command:`/`entrypoint:` override on the application service is a policy
+    # violation in the effective production render; the only permitted mention is
+    # the explicit `!reset` that strips an inherited one.
     for source in (PROD, NPM):
-        assert '"--factory"' not in source
-        assert expected in source
+        for override in ("command:", "entrypoint:"):
+            for line in source.splitlines():
+                stripped = line.strip()
+                if stripped.startswith(override):
+                    assert stripped == f"{override} !reset null", (
+                        f"production overlay overrides the image process: {stripped!r}"
+                    )
 
 
 def test_prod_compose_has_security_controls() -> None:
@@ -43,7 +64,9 @@ def test_prod_compose_has_security_controls() -> None:
     assert "no-new-privileges:true" in PROD
     assert "cap_drop:" in PROD
     assert "- ALL" in PROD
-    assert "/tmp/pubtator-link" in PROD  # noqa: S108
+    # The central policy fixes the application's writable targets at /tmp (tmpfs)
+    # and /data; a nested /tmp/pubtator-link tmpfs is no longer accepted.
+    assert "/tmp:rw,noexec,nosuid" in PROD  # noqa: S108
     assert "mode=1777" in PROD
 
 

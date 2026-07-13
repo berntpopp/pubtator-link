@@ -14,7 +14,12 @@ def test_dockerfile_uses_python_314_and_uv_lock() -> None:
 
 def test_dockerfile_runs_as_non_root_and_has_runtime_dirs() -> None:
     assert "USER app" in DOCKERFILE
-    assert "/tmp/pubtator-link" in DOCKERFILE  # noqa: S108
+    # The production overlay mounts /tmp as the container's only writable tmpfs
+    # (the central Compose policy fixes the app's writable targets at /tmp and
+    # /data), so scratch must resolve to /tmp itself — not a nested subdirectory
+    # that would not exist under the read-only rootfs.
+    assert "TMPDIR=/tmp\n" in DOCKERFILE
+    assert "/tmp/pubtator-link" not in DOCKERFILE  # noqa: S108
     assert "/var/cache/pubtator-link" in DOCKERFILE
 
 

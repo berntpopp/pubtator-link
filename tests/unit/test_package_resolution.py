@@ -25,4 +25,4 @@ def test_modern_mcp_dependencies_are_declared() -> None:
     # bounded major range rather than an exact floor so version bumps don't break CI.
     assert any(d.startswith("mcp[cli]>=1.") and d.endswith(",<2.0.0") for d in deps), deps
     assert any(d.startswith("fastmcp>=3.") and d.endswith(",<4.0.0") for d in deps), deps
-    assert "fastapi>=0.115.0,<1.0.0" in dependencies
+    assert "fastapi>=0.139.0,<1.0.0" in dependencies

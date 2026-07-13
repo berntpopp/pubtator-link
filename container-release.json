@@ -11,10 +11,27 @@
     "container_port": 8000,
     "health_path": "/health",
     "mcp_path": "/mcp",
-    "startup_timeout_seconds": 180
+    "startup_timeout_seconds": 180,
+    "auxiliary": [
+      {
+        "name": "pubtator-postgres",
+        "role": "database",
+        "egress": "approved-networks",
+        "writable_targets": [
+          "/var/lib/postgresql",
+          "/var/run/postgresql",
+          "/tmp"
+        ],
+        "read_only_targets": [],
+        "healthcheck_test": [
+          "CMD-SHELL",
+          "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""
+        ]
+      }
+    ]
   },
   "data": {
-    "mode": "external-reference",
+    "mode": "restored-database",
     "release_tag": "observed-2026.07.13",
     "digest": "sha256:e3a508657abbea8cb5a2282459f9313ff4f52aa27506f24d554292f9d2635295",
     "image_allowlist": []

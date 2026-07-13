@@ -1,8 +1,26 @@
-# Production docker-compose override
-# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Production overlay for pubtator-link (Container & Deployment Hardening Standard v1
+# + the GeneFoundry container-release standard).
+#
+#   PUBTATOR_LINK_IMAGE=ghcr.io/berntpopp/pubtator-link@sha256:<digest> \
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up -d
+#
+# The effective render of (base + this file) is validated by the router's central
+# `validate-compose` gate. Every rule it enforces applies to BOTH the application
+# and the declared `pubtator-postgres` sidecar (see container-release.json ->
+# service.auxiliary): digest-pinned untagged image, pull_policy: missing, read_only
+# rootfs, cap_drop: [ALL], no-new-privileges, bounded deploy limits + json-file
+# logging, named-volume writable storage, approved networks, and no published ports.
 
 services:
   pubtator-postgres:
+    # Untagged repository digest: the central policy requires a fully qualified
+    # `<registry>/<repo>@sha256:<digest>` reference with no mutable tag component.
+    # The readable `pgvector/pgvector:0.8.5-pg18-trixie` tag stays in the base file;
+    # this is the same multi-arch index digest.
+    image: docker.io/pgvector/pgvector@sha256:9d2e61c7352b9e9f4798df5fd9a498f043f4cda1cdacc707de3d198650f4321e
+    pull_policy: missing
+    container_name: !reset null
+
     # Do not publish PostgreSQL to the host in production overlays.
     # Application containers reach it over the Compose network.
     ports: !reset []
@@ -22,6 +40,49 @@ services:
     environment:
       POSTGRES_PASSWORD: "${PUBTATOR_LINK_POSTGRES_PASSWORD:?PUBTATOR_LINK_POSTGRES_PASSWORD is required in production (no fallback)}"
 
+    # Only Compose-managed named volumes. The base file's read-only bind of
+    # review_schema.sql into /docker-entrypoint-initdb.d is a local-dev bootstrap
+    # convenience; production owns its schema through the application's
+    # PUBTATOR_LINK_AUTO_MIGRATE path (pubtator_link/db/migrations), and host binds
+    # are forbidden for a database-role sidecar.
+    volumes: !override
+      - pubtator_postgres_data:/var/lib/postgresql
+      - pubtator_postgres_run:/var/run/postgresql
+
+    read_only: true
+    tmpfs: !override
+      - /tmp:rw,noexec,nosuid,size=64m,mode=1777
+
+    security_opt: !override
+      - no-new-privileges:true
+    cap_drop: !override
+      - ALL
+    init: true
+    restart: on-failure
+
+    deploy: !override
+      resources:
+        limits:
+          memory: 2g
+          cpus: "2.0"
+          pids: 256
+
+    healthcheck: !override
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+    networks: !override
+      - default
+
   pubtator-link:
     build: !reset null
     image: "${PUBTATOR_LINK_IMAGE:?PUBTATOR_LINK_IMAGE must be set to ghcr.io/berntpopp/pubtator-link@sha256:<digest>}"
@@ -29,8 +90,17 @@ services:
     container_name: !reset null
     env_file: !reset []
 
+    # The image's own default command IS the hardened multi-worker Gunicorn
+    # entrypoint. The central policy forbids a Compose `command:`/`entrypoint:`
+    # override on the application service, so the released image must already run
+    # the production process.
+    command: !reset null
+
     # Production-specific environment variables
     environment:
+      # Host header used by the container healthcheck below; the app's
+      # TrustedHost middleware only accepts PUBTATOR_LINK_ALLOWED_HOSTS.
+      GF_HEALTHCHECK_HOST: localhost
       PUBTATOR_LINK_LOG_LEVEL: INFO
       PUBTATOR_LINK_LOG_FORMAT: json
       PUBTATOR_LINK_TRANSPORT: unified
@@ -55,41 +125,30 @@ services:
       - "8000"
 
     read_only: true
-    tmpfs:
-      - /tmp/pubtator-link:rw,noexec,nosuid,size=64m,mode=1777
+    tmpfs: !override
+      - /tmp:rw,noexec,nosuid,size=64m,mode=1777
 
-    security_opt:
+    security_opt: !override
       - no-new-privileges:true
-    cap_drop:
+    cap_drop: !override
       - ALL
-
-    pids_limit: 256
     init: true
+    restart: on-failure
 
-    # Use the default production command (Gunicorn)
-    command: ["gunicorn", "-c", "gunicorn_conf.py", "pubtator_link.server_manager:create_app()"]
+    # Resource limits live only under `deploy`; the central policy rejects the
+    # service-level `pids_limit`/`mem_limit`/`cpus` overrides.
+    pids_limit: !reset null
 
-    # Production resource limits
-    deploy:
+    deploy: !override
       resources:
         limits:
-          memory: 1G
-          cpus: '1.0'
+          memory: 1g
+          cpus: "1.0"
           pids: 256
-        reservations:
-          memory: 512M
-          cpus: '0.5'
-
-      # Production restart policy
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-        window: 120s
 
     # Enhanced health check for production
-    healthcheck:
-      test: ["CMD", "curl", "-f", "-H", "Host: localhost", "http://localhost:8000/health"]
+    healthcheck: !override
+      test: ["CMD", "sh", "-c", "curl -f -H \"Host: $${GF_HEALTHCHECK_HOST}\" http://localhost:8000/health"]
       interval: 20s
       timeout: 5s
       retries: 5
@@ -102,3 +161,16 @@ services:
         max-size: "50m"
         max-file: "5"
         labels: "service=pubtator-link,environment=production"
+
+    networks: !override
+      - default
+
+volumes: !override
+  pubtator_postgres_data:
+    name: pubtator-link_pubtator_postgres_data
+  pubtator_postgres_run:
+    name: pubtator-link_pubtator_postgres_run
+
+networks: !override
+  default:
+    name: pubtator-link_default

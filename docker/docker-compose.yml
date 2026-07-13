@@ -13,7 +13,7 @@ services:
     # reproducible and tamper-evident; the tag is retained for readability.
     # To upgrade: `docker buildx imagetools inspect pgvector/pgvector:<tag>` and
     # replace both the tag and the @sha256 index digest.
-    image: pgvector/pgvector:0.8.4-pg18-trixie@sha256:dc8631aeee036a59d054c28d29ddb15536caa0c89a96f548fa944774a50af973
+    image: pgvector/pgvector:0.8.5-pg18-trixie@sha256:9d2e61c7352b9e9f4798df5fd9a498f043f4cda1cdacc707de3d198650f4321e
     container_name: pubtator_link_postgres
 
     environment:
@@ -27,6 +27,11 @@ services:
 
     volumes:
       - pubtator_postgres_data:/var/lib/postgresql
+      # The container-release standard runs every container (including this
+      # sidecar) with a read-only rootfs, so PostgreSQL's Unix-socket directory
+      # must be explicit writable storage. A named volume — not a tmpfs — because
+      # the central smoke stack replaces `tmpfs:` wholesale with its own /tmp cap.
+      - pubtator_postgres_run:/var/run/postgresql
       - ../pubtator_link/db/review_schema.sql:/docker-entrypoint-initdb.d/010-review-schema.sql:ro
 
     healthcheck:
@@ -58,7 +63,14 @@ services:
       PUBTATOR_LINK_PORT: 8000
       PUBTATOR_LINK_TRANSPORT: unified
       PUBTATOR_LINK_MCP_PROFILE: "${PUBTATOR_LINK_MCP_PROFILE:-readonly}"
-      PUBTATOR_LINK_MCP_SERVICE_TOKEN: "${PUBTATOR_LINK_MCP_SERVICE_TOKEN:-}"
+      # PUBTATOR_LINK_MCP_SERVICE_TOKEN is deliberately NOT interpolated here.
+      # Setting it installs MCPServiceAuthMiddleware, which bearer-gates the whole
+      # /mcp path. The production overlay requires it from the secret store; the
+      # base (readonly) stack must stay open so that (a) a bare `docker compose up`
+      # works and (b) the central container-CI smoke gate — which derives its env
+      # from every REQUIRED variable across base+prod and probes /mcp with no
+      # Authorization header — is not 401'd by an injected placeholder token.
+      # Local development can still supply one through ../.env (env_file above).
       PUBTATOR_LINK_ALLOWED_HOSTS: '["localhost","127.0.0.1","::1"]'
       PUBTATOR_LINK_ALLOWED_ORIGINS: '[]'
       PUBTATOR_LINK_ALLOW_UNAUTHENTICATED_WRITES: "false"
@@ -76,8 +88,13 @@ services:
     ports:
       - "127.0.0.1:${PUBTATOR_LINK_PORT:-8000}:8000"
 
-    # Boot the unified REST + MCP Streamable HTTP server via the typer CLI.
-    command: ["pubtator-link", "serve", "--transport", "unified", "--host", "0.0.0.0", "--port", "8000"]
+    # No `command:` override — the image's own default CMD is the hardened
+    # multi-worker Gunicorn entrypoint that serves unified REST + MCP Streamable
+    # HTTP. The container-release standard forbids a Compose command override on
+    # the application service in the production render, so keeping the base file
+    # free of one means the CI smoke stack exercises exactly the process that
+    # production runs. `docker-compose.dev.yml` overrides it with the typer CLI
+    # (`pubtator-link serve --reload`) for local development.
 
     # Health check
     healthcheck:
@@ -107,3 +124,4 @@ services:
 
 volumes:
   pubtator_postgres_data:
+  pubtator_postgres_run:

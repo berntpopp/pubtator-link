@@ -106,7 +106,12 @@ def test_compose_profiles_wire_exact_allowlists_and_explicit_health_host() -> No
     assert "PUBTATOR_LINK_ALLOWED_HOSTS" in base
     assert "PUBTATOR_LINK_ALLOWED_ORIGINS" in base
     assert "Host: localhost" in base
-    assert "Host: localhost" in prod
+    # The production healthcheck sends its Host header through the fleet-standard
+    # GF_HEALTHCHECK_HOST indirection (the central Compose policy pins that exact
+    # probe argv). It must still resolve to a host the TrustedHost allowlist
+    # accepts, so assert both halves rather than the literal header.
+    assert "Host: $${GF_HEALTHCHECK_HOST}" in prod
+    assert "GF_HEALTHCHECK_HOST: localhost" in prod
     assert "PUBTATOR_LINK_ALLOWED_HOSTS" in npm
     assert "PUBTATOR_LINK_ALLOWED_ORIGINS" in npm
     assert "PUBTATOR_LINK_CORS_ORIGINS" in npm
