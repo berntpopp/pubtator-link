@@ -38,7 +38,7 @@ RUN uv sync --frozen --no-dev --active
 
 # --- Production Stage ---
 # This stage creates the final, minimal production image
-FROM python:3.14-slim@sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1 AS production
+FROM python:3.14-slim@sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1 AS prepared
 
 
 # Release identity is supplied by the central container-release workflow.
@@ -93,6 +93,54 @@ COPY --chown=app:app ./docker/gunicorn_conf.py ./
 
 # Install the application package
 RUN /opt/venv/bin/pip install -e . --no-deps
+
+RUN rm -rf /root/.cache/pip \
+           /usr/local/lib/python*/ensurepip \
+           /usr/local/lib/python*/site-packages/pip \
+           /usr/local/lib/python*/site-packages/pip-*.dist-info \
+           /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.* \
+           /opt/venv/lib/python*/site-packages/pip \
+           /opt/venv/lib/python*/site-packages/pip-*.dist-info \
+           /opt/venv/bin/pip /opt/venv/bin/pip3 /opt/venv/bin/pip3.* \
+           /opt/venv/lib/python*/site-packages/docutils/writers/odf_odt/styles.odt \
+    && find / -xdev -type d -name __pycache__ -prune -exec rm -rf '{}' + \
+    && find / -xdev -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
+RUN find / -xdev -perm /6000 -exec chmod a-s '{}' + \
+    && test -z "$(find / -xdev -perm /6000 -print -quit)"
+RUN actual="$(find / -xdev -type f -links +1 -printf '%i %p\n' | sort -k2,2)" \
+    && expected="$(printf '%s %s\n%s %s\n' \
+         "$(stat -c '%i' /usr/bin/perl)" /usr/bin/perl \
+         "$(stat -c '%i' /usr/bin/perl5.40.1)" /usr/bin/perl5.40.1 | sort -k2,2)" \
+    && { test "$actual" = "$expected" || { printf 'unexpected hardlinks:\n%s\n' "$actual"; exit 1; }; } \
+    && rm -f /usr/bin/perl5.40.1
+
+FROM scratch AS production
+COPY --from=prepared / /
+
+ARG APP_VERSION=0.0.0
+ARG VCS_REF=0000000000000000000000000000000000000000
+ARG BUILD_DATE=1970-01-01T00:00:00Z
+LABEL org.opencontainers.image.title="PubTator Link" \
+      org.opencontainers.image.description="FastAPI and MCP server for PubTator3 biomedical literature research data" \
+      org.opencontainers.image.source="https://github.com/berntpopp/pubtator-link" \
+      org.opencontainers.image.url="https://github.com/berntpopp/pubtator-link" \
+      org.opencontainers.image.documentation="https://github.com/berntpopp/pubtator-link#readme" \
+      org.opencontainers.image.version="${APP_VERSION}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.vendor="GeneFoundry"
+ENV VCS_REF="${VCS_REF}"
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH="/home/app/web" \
+    PUBTATOR_LINK_HOST=0.0.0.0 \
+    PUBTATOR_LINK_PORT=8000 \
+    PUBTATOR_LINK_TRANSPORT=unified \
+    TMPDIR=/tmp/pubtator-link
+WORKDIR /home/app/web
 
 # Switch to non-root user
 USER app
