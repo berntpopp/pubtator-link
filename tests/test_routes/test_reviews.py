@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi.routing import iter_route_contexts
 from httpx import ASGITransport, AsyncClient
 
 from pubtator_link.api.routes.dependencies import (
@@ -39,7 +40,10 @@ from pubtator_link.server_manager import UnifiedServerManager
 
 
 def test_stage_research_session_route_is_registered(app) -> None:
-    route_paths = {route.path for route in app.routes}
+    # FastAPI >=0.139 defers `include_router` expansion: `app.routes` holds
+    # `_IncludedRouter` markers rather than flattened routes, so enumerate the
+    # effective routes through the supported `iter_route_contexts` helper.
+    route_paths = {context.path for context in iter_route_contexts(app.routes)}
     assert "/api/reviews/{review_id}/sessions/stage" in route_paths
     assert "/api/reviews/{review_id}/sessions/{session_id}" in route_paths
     assert "/api/reviews/{review_id}/sessions" in route_paths

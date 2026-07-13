@@ -1,7 +1,7 @@
 """F-15 regression: every image reference in the production Compose files must be
 digest-pinned (``@sha256:``), not tag-only.
 
-A tag like ``pgvector/pgvector:0.8.4-pg18-trixie`` is mutable — the registry can
+A tag like ``pgvector/pgvector:0.8.5-pg18-trixie`` is mutable — the registry can
 re-point it at a different (possibly malicious or regressed) build. Pinning the
 manifest digest makes the deployed bytes reproducible and tamper-evident.
 """
@@ -65,7 +65,7 @@ def test_pgvector_image_keeps_tag_alongside_digest() -> None:
     pgvector = [i for _f, _s, i in _image_refs() if i.startswith("pgvector/pgvector:")]
     assert pgvector, "expected the pgvector postgres image to be present"
     for image in pgvector:
-        assert "0.8.4-pg18-trixie@sha256:" in image
+        assert "0.8.5-pg18-trixie@sha256:" in image
 
 
 @pytest.mark.skipif(shutil.which("docker") is None, reason="docker CLI unavailable")
