@@ -1,5 +1,20 @@
 # Changelog
 
+## [6.1.4] - 2026-07-13
+
+### Changed
+
+- Adopt the GeneFoundry router container-release standard: SHA-pinned reusable
+  container CI/release callers, digest-only production image configuration,
+  code-only Docker context controls, and complete OCI image labels.
+- Declare the `pubtator-postgres` pgvector sidecar as a `database`-role auxiliary
+  service in `container-release.json` and harden it to the central Compose policy
+  (digest-pinned untagged image, `read_only`, `cap_drop: ALL`,
+  `no-new-privileges`, bounded `deploy` limits and logging, named-volume writable
+  storage, no published ports).
+- Production now runs the image's own Gunicorn default command instead of a
+  Compose `command:` override.
+
 ## 6.1.3
 
 ### Changed
@@ -14,6 +29,7 @@
     release, and conformance workflows.
   - `pgvector/pgvector` Compose image 0.8.4-pg18-trixie -> 0.8.5-pg18-trixie,
     re-pinned to the new multi-arch index digest.
+
 
 ## 6.1.2
 

@@ -2,7 +2,7 @@
 # Exclude unnecessary files and directories from Docker build context
 
 # Version control
-.git
+.git/
 .gitignore
 .gitattributes
 .github/
@@ -54,8 +54,6 @@ coverage.xml
 
 # Documentation
 docs/
-*.md
-!README.md
 .readthedocs.yml
 
 # IDE and editors
@@ -94,13 +92,15 @@ dmypy.json
 .ruff_cache/
 
 # Docker
-Dockerfile*
-docker-compose*.yml
-.dockerignore
+# Docker build inputs are intentionally left in context for release checks.
 
 # Environment files (will be passed via docker-compose)
-.env*
+.env
+.env.*
+**/.env
+**/.env.*
 !.env.example
+!.env.docker.example
 
 # Development scripts
 scripts/
@@ -116,6 +116,21 @@ yarn-error.log*
 *.db
 *.sqlite
 *.sqlite3
+*.duckdb
+data/
+datasets/
+corpus/
+output/
+outputs/
+*.tar
+*.tar.gz
+*.tgz
+*.gz
+*.zst
+*.zip
+*.vcf
+*.bcf
+*.parquet
 
 # Backup files
 *.bak

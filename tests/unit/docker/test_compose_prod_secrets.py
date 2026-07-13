@@ -93,6 +93,10 @@ def _config(*, with_password: bool) -> subprocess.CompletedProcess[str]:
         # Satisfy the unrelated ${...:?required} service-token guard so the run
         # can fail (or pass) specifically on the DB password.
         "PUBTATOR_LINK_MCP_SERVICE_TOKEN": "compose-test-token",
+        "PUBTATOR_LINK_IMAGE": (
+            "ghcr.io/berntpopp/pubtator-link@sha256:"
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ),
     }
     if with_password:
         env[PASSWORD_VAR] = "compose-test-db-secret"
