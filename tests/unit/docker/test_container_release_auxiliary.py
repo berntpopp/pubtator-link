@@ -42,6 +42,12 @@ def test_postgres_sidecar_is_declared_with_the_database_role() -> None:
     assert auxiliary["healthcheck_test"]
     assert auxiliary["writable_targets"]
     assert not set(auxiliary["writable_targets"]) & set(auxiliary.get("read_only_targets", []))
+    # The upstream entrypoint gosu-drops from root, which cannot work under the
+    # mandatory cap_drop: [ALL]. The sidecar must start as a non-root uid:gid, and
+    # the declared value is compared exactly against the rendered compose service.
+    uid, _, gid = auxiliary["user"].partition(":")
+    assert uid.isdigit() and gid.isdigit()
+    assert int(uid) > 0 and int(gid) > 0, "the sidecar must not run as root"
 
 
 def test_smoke_profile_matches_the_restored_database_mode() -> None:
@@ -98,7 +104,8 @@ def test_rendered_sidecar_matches_the_declared_role_contract() -> None:
     ), "the sidecar image must be an untagged repository digest"
     assert not sidecar.get("ports")
     assert "container_name" not in sidecar
-    assert "user" not in sidecar
+    # Declared and rendered `user` must be identical or the central policy rejects it.
+    assert sidecar["user"] == auxiliary["user"]
     assert "pids_limit" not in sidecar
     assert set(sidecar["deploy"]["resources"]["limits"]) == {"cpus", "memory", "pids"}
     assert sidecar["logging"]["driver"] == "json-file"
@@ -129,3 +136,14 @@ def test_base_compose_gives_the_sidecar_writable_socket_storage() -> None:
     volumes = base["services"][SIDECAR]["volumes"]
     assert "pubtator_postgres_run:/var/run/postgresql" in volumes
     assert "pubtator_postgres_run" in base["volumes"]
+
+
+def test_base_compose_pins_the_sidecar_to_the_non_root_uid() -> None:
+    """The CI smoke stack renders from the BASE file plus a generated override.
+
+    That override does not set ``user``, so the non-root uid:gid has to live in the
+    base file or the sidecar would start as root there and die on the mandatory
+    ``cap_drop: [ALL]``.
+    """
+    base = yaml.safe_load(BASE.read_text())
+    assert base["services"][SIDECAR]["user"] == _auxiliary()["user"]

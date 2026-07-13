@@ -21,6 +21,14 @@ services:
     pull_policy: missing
     container_name: !reset null
 
+    # Run as the image's own non-root postgres uid:gid. The upstream entrypoint
+    # starts as root and `gosu`-drops to `postgres`, which needs CAP_SETUID /
+    # CAP_SETGID / CAP_CHOWN — impossible under the standard's mandatory
+    # `cap_drop: [ALL]`. Starting as uid 999 makes the entrypoint skip its root
+    # branch entirely. Must stay identical to `service.auxiliary[].user` in
+    # container-release.json; the central policy compares them exactly.
+    user: "999:999"
+
     # Do not publish PostgreSQL to the host in production overlays.
     # Application containers reach it over the Compose network.
     ports: !reset []

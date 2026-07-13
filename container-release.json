@@ -17,6 +17,7 @@
         "name": "pubtator-postgres",
         "role": "database",
         "egress": "approved-networks",
+        "user": "999:999",
         "writable_targets": [
           "/var/lib/postgresql",
           "/var/run/postgresql",

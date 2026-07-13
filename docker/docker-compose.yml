@@ -16,6 +16,14 @@ services:
     image: pgvector/pgvector:0.8.5-pg18-trixie@sha256:9d2e61c7352b9e9f4798df5fd9a498f043f4cda1cdacc707de3d198650f4321e
     container_name: pubtator_link_postgres
 
+    # The image's own non-root postgres uid:gid. Declared here (not only in the
+    # prod overlay) because the central CI smoke stack is rendered from THIS file
+    # plus a generated override that does not set `user`. The upstream entrypoint
+    # starts as root and `gosu`-drops to `postgres`, which needs CAP_SETUID /
+    # CAP_SETGID / CAP_CHOWN — impossible under the standard's mandatory
+    # `cap_drop: [ALL]`. Starting as uid 999 skips that root branch entirely.
+    user: "999:999"
+
     environment:
       POSTGRES_DB: "${PUBTATOR_LINK_POSTGRES_DB:-pubtator_link}"
       POSTGRES_USER: "${PUBTATOR_LINK_POSTGRES_USER:-pubtator_link}"
