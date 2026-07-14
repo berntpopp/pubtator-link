@@ -26,11 +26,17 @@ class ServerSettings(BaseSettings):
     host: str = Field(default="127.0.0.1", description="Server host")
     port: int = Field(default=8000, description="Server port")
     mcp_path: str = Field(default="/mcp", description="MCP endpoint path")
-    allowed_hosts: list[str] = Field(
+    # NoDecode: pydantic-settings JSON-decodes complex fields inside the env source,
+    # which raises SettingsError on a CSV value before `parse_origin_allowlists`
+    # (mode="before") ever runs — so the CSV support that validator advertises was
+    # unreachable from the environment, and `cp .env.example .env` failed to load.
+    # Deferring the decode to the validator makes both spellings work: CSV (as
+    # .env.example writes them) and JSON (as docker-compose.yml writes them).
+    allowed_hosts: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["localhost", "127.0.0.1", "::1"],
         description="Exact Host header allowlist for inbound HTTP requests",
     )
-    allowed_origins: list[str] = Field(
+    allowed_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=list,
         description="Exact Origin header allowlist; requests without Origin remain allowed",
     )
@@ -58,7 +64,7 @@ class ServerSettings(BaseSettings):
     cache_ttl: int = Field(default=3600, description="Cache TTL in seconds")
 
     # CORS configuration
-    cors_origins: list[str] = Field(
+    cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"],
         description="CORS allowed origins",
     )

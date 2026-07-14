@@ -63,10 +63,30 @@ Useful focused commands:
 ## Coding Standards
 
 - Use `uv` for dependency management; do not use direct `pip` installs.
+- Dependencies are locked in `uv.lock`; update them with `uv lock` (or `make lock`).
+  Never hand-edit the lock file.
+- Install the locked development environment with `make install` (`uv sync --group dev`).
 - Use modern Python typing: `list[str]`, `dict[str, int]`, `str | None`.
 - Format and lint Python with Ruff.
 - Type check with mypy targeting Python 3.11.
 - Keep FastAPI route behavior covered by route tests and service behavior covered by unit tests.
+
+## Documentation Layout
+
+The README is the front door, not the manual: it follows the GeneFoundry README Standard v1
+(hard ceiling 200 lines, fixed section order, four badges, no hand-typed counts), enforced by
+`make lint-readme`. Reference material lives in `docs/` and MUST NOT be moved back into it:
+
+- `docs/configuration.md` — environment variables, tool profiles, caching, CLI.
+- `docs/rest-api.md` — the FastAPI REST surface.
+- `docs/architecture.md` — package layout, transports, review re-RAG subsystem.
+- `docs/deployment.md` — Docker, the pgvector sidecar, health, observability.
+- `docs/SECURITY.md` — trust boundary, service token, write-surface hardening.
+- `docs/MCP_CONNECTION_GUIDE.md` — MCP clients, review workflow, response modes.
+
+The README's `## Tools` table is machine-verified against the registered `readonly` tool
+surface by `tests/unit/test_readme_tools.py`. Adding or renaming a tool means updating that
+table in the same commit, or CI fails.
 
 ## File Size Discipline
 
