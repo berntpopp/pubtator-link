@@ -1,0 +1,34 @@
+# CITATION.cff — GENERATED. Do not edit.
+# Source: genefoundry-router/fleet-metadata.yaml + this repo's pyproject.toml.
+# Regenerate: `make citation-write` in genefoundry-router.
+# See genefoundry-router/docs/REPO-METADATA-STANDARD-v1.md.
+cff-version: 1.2.0
+message: If you use this software, please cite it as below.
+title: pubtator-link
+abstract: 'MCP server for NCBI PubTator3: biomedical literature search with gene, variant, disease and
+  chemical entity annotation — returns compact, citable passages instead of raw BioC.'
+type: software
+authors:
+- family-names: Popp
+  given-names: Bernt
+  email: bernt.popp@charite.de
+  affiliation: Charité – Universitätsmedizin Berlin
+version: 6.1.6
+license: MIT
+repository-code: https://github.com/berntpopp/pubtator-link
+url: https://genefoundry.org
+keywords:
+- bioinformatics
+- claude
+- fastmcp
+- genefoundry
+- literature-mining
+- llm-tools
+- mcp
+- mcp-server
+- model-context-protocol
+- named-entity-recognition
+- pubmed
+- pubtator
+- text-mining
+date-released: '2026-07-14'
