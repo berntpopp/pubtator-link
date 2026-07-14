@@ -70,10 +70,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ai-assistant/pubtator-link"
-Repository = "https://github.com/ai-assistant/pubtator-link"
-Issues = "https://github.com/ai-assistant/pubtator-link/issues"
-
+Homepage = "https://github.com/berntpopp/pubtator-link"
+Repository = "https://github.com/berntpopp/pubtator-link"
+Issues = "https://github.com/berntpopp/pubtator-link/issues"
 [project.scripts]
 pubtator-link = "pubtator_link.cli:app"
 
