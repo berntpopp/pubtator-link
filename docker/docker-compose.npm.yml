@@ -2,7 +2,26 @@
 # Usage: docker compose --env-file docker/.env.npm -f docker/docker-compose.yml -f docker/docker-compose.prod.yml -f docker/docker-compose.npm.yml up -d
 
 services:
+  # `docker-compose.prod.yml` sets `container_name: !reset null` on both services, which
+  # is right for the standalone production stack it targets: Compose then auto-generates
+  # names and the stack can be brought up more than once on a host.
+  #
+  # The NPM topology CANNOT tolerate that. Nginx Proxy Manager routes by forwarding to a
+  # HOSTNAME on the shared `npm_default` network, and that hostname is the CONTAINER NAME
+  # — the live proxy host emits `proxy_pass http://pubtator_link_server:8000;`. With the
+  # name reset, Compose would name the container `pubtator-link-pubtator-link-1`, NPM
+  # would fail to resolve `pubtator_link_server`, and pubtator-link.genefoundry.org would
+  # 502. The management tooling (config/projects.yaml -> `containers:`) also addresses
+  # these containers by name for status/health/logs.
+  #
+  # So the NPM overlay must UNDO prod.yml's reset and restore the names the deployment
+  # is wired to.
+  pubtator-postgres:
+    container_name: pubtator_link_postgres
+
   pubtator-link:
+    container_name: pubtator_link_server
+
     environment:
       PUBTATOR_LINK_LOG_LEVEL: INFO
       PUBTATOR_LINK_LOG_FORMAT: json
