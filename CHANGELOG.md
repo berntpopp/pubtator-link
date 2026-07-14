@@ -1,5 +1,22 @@
 # Changelog
 
+## [6.1.6] - 2026-07-14
+
+### Fixed
+
+- **The NPM deployment would have lost its public hostname on the next deploy.**
+  `docker-compose.prod.yml` sets `container_name: !reset null` on both
+  `pubtator-link` and `pubtator-postgres`. That is correct for the standalone
+  production stack it targets, but the deployed chain is
+  `docker-compose.yml -f docker-compose.prod.yml -f docker-compose.npm.yml`, and
+  Nginx Proxy Manager forwards to a **container name** on the shared network — the
+  live proxy host emits `proxy_pass http://pubtator_link_server:8000;`. With the name
+  reset, Compose would have named the container `pubtator-link-pubtator-link-1`, NPM
+  could not have resolved it, and `pubtator-link.genefoundry.org` would have started
+  returning 502 the moment the server pulled this compose. The NPM overlay now
+  restores `container_name` (`pubtator_link_server`, `pubtator_link_postgres`) for the
+  topology that depends on it. `docker-compose.prod.yml` is untouched.
+
 ## [6.1.5] - 2026-07-13
 
 ### Fixed
