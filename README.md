@@ -135,7 +135,7 @@ full text they annotate remain under their publishers' terms.
 
 - [MCP connection guide](docs/MCP_CONNECTION_GUIDE.md) — clients, the review workflow, response modes, and troubleshooting.
 - [Tool catalog](docs/mcp-tool-catalog.md) — generated per-tool schemas and arguments.
-- [Configuration](docs/configuration.md) — every environment variable, the tool profiles, and caching.
+- [Configuration](docs/configuration.md) — the `PUBTATOR_LINK_` environment prefix, the tool profiles, and caching.
 - [REST API](docs/rest-api.md) — the FastAPI surface: export, search, relations, annotation.
 - [Architecture](docs/architecture.md) — package layout, transports, and the review re-RAG subsystem.
 - [Deployment](docs/deployment.md) — Docker, the pgvector sidecar, health, and observability.

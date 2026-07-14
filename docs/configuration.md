@@ -1,9 +1,13 @@
 # Configuration
 
 Every setting is read from the environment (or `.env`) by `pubtator_link/config.py`.
-Settings use the `PUBTATOR_LINK_` prefix; the historical unprefixed names for the core
-server/API/cache/logging knobs are still accepted. Start from
-[`.env.example`](../.env.example) and inspect what actually resolved:
+**Every name carries the `PUBTATOR_LINK_` prefix.** The prefix is not optional: `config.py`
+sets `env_prefix="PUBTATOR_LINK_"` with `extra="ignore"`, so an unprefixed name such as
+`PORT` or `LOG_LEVEL` is *silently discarded* — no error, no warning, no effect.
+
+The tables below cover the settings you are most likely to change, not all of them;
+`config.py` remains the complete list. Start from [`.env.example`](../.env.example) and
+inspect what actually resolved:
 
 ```bash
 pubtator-link config --validate
@@ -13,9 +17,9 @@ pubtator-link config --validate
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HOST` | `127.0.0.1` | Server host address |
-| `PORT` | `8000` | Server port |
-| `TRANSPORT` | `unified` | `unified` (REST + MCP at `/mcp`) or `http` (REST only). There is no stdio transport. |
+| `PUBTATOR_LINK_HOST` | `127.0.0.1` | Server host address |
+| `PUBTATOR_LINK_PORT` | `8000` | Server port |
+| `PUBTATOR_LINK_TRANSPORT` | `unified` | `unified` (REST + MCP at `/mcp`) or `http` (REST only). There is no stdio transport. |
 | `PUBTATOR_LINK_MCP_PATH` | `/mcp` | MCP endpoint path |
 | `PUBTATOR_LINK_HTTP_MAX_REQUEST_BYTES` | see `config.py` | Inbound request-body cap |
 | `PUBTATOR_LINK_ENABLE_INBOUND_RATE_LIMIT` | `false` | Enable the inbound (caller-facing) rate limiter |
@@ -26,11 +30,11 @@ pubtator-link config --validate
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `API_BASE_URL` | `https://www.ncbi.nlm.nih.gov/research/pubtator3-api` | PubTator3 API base URL |
-| `API_TIMEOUT` | `30` | PubTator3 request timeout (seconds) |
-| `RATE_LIMIT_PER_SECOND` | `2.5` | Outbound rate limit. **PubTator3 permits at most 3 requests/second — do not raise this above 3.** |
-| `TEXT_API_BASE_URL` | `https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/RESTful` | Text-processing (NER submission) API |
-| `TEXT_API_TIMEOUT` | `60` | Text-processing request timeout (seconds) |
+| `PUBTATOR_LINK_API_BASE_URL` | `https://www.ncbi.nlm.nih.gov/research/pubtator3-api` | PubTator3 API base URL |
+| `PUBTATOR_LINK_API_TIMEOUT` | `30` | PubTator3 request timeout (seconds) |
+| `PUBTATOR_LINK_RATE_LIMIT_PER_SECOND` | `2.5` | Outbound rate limit. **PubTator3 permits at most 3 requests/second — do not raise this above 3.** |
+| `PUBTATOR_LINK_TEXT_API_BASE_URL` | `https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/RESTful` | Text-processing (NER submission) API |
+| `PUBTATOR_LINK_TEXT_API_TIMEOUT` | `60` | Text-processing request timeout (seconds) |
 
 Optional metadata-enrichment upstreams (Europe PMC fallback, Crossref, OpenAlex, Unpaywall)
 have their own `PUBTATOR_LINK_*` knobs — including polite-pool contact addresses
@@ -47,6 +51,10 @@ have their own `PUBTATOR_LINK_*` knobs — including polite-pool contact address
 | `PUBTATOR_LINK_ALLOWED_HOSTS` | `localhost,127.0.0.1,::1` | Exact Host allowlist |
 | `PUBTATOR_LINK_ALLOWED_ORIGINS` | empty | Browser Origin allowlist (request admission; distinct from CORS response headers) |
 | `PUBTATOR_LINK_REVIEW_EXPORT_BASE_DIR` | unset | Base directory for `export_review_audit_bundle` files. **Unset disables file export.** |
+
+The three allowlists (`..._ALLOWED_HOSTS`, `..._ALLOWED_ORIGINS`, `..._CORS_ORIGINS`) accept
+either comma-separated values, as `.env.example` writes them, or a JSON array, as
+`docker/docker-compose.yml` writes them.
 
 Write-capable profiles require service auth unless the loopback-only exception is enabled.
 The full rationale, rollout order, and token-rotation procedure are in [Security](SECURITY.md).
@@ -86,8 +94,8 @@ unavailable, or `pgvector` is not installed.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CACHE_SIZE` | `1000` | LRU cache size |
-| `CACHE_TTL` | `3600` | Cache TTL (seconds) |
+| `PUBTATOR_LINK_CACHE_SIZE` | `1000` | LRU cache size |
+| `PUBTATOR_LINK_CACHE_TTL` | `3600` | Cache TTL (seconds) |
 | `PUBTATOR_LINK_ENABLE_CACHE_ENDPOINTS` | `false` | Expose the opt-in cache management REST endpoints |
 
 The caching system uses async LRU caching with configurable size and TTL:
@@ -106,10 +114,10 @@ pattern-based clearing is rejected until scoped invalidation exists.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LOG_LEVEL` | `INFO` | Logging level |
-| `LOG_FORMAT` | `console` | `console` for development, `json` for production |
+| `PUBTATOR_LINK_LOG_LEVEL` | `INFO` | Logging level |
+| `PUBTATOR_LINK_LOG_FORMAT` | `console` | `console` for development, `json` for production |
 | `PUBTATOR_LINK_ENABLE_DOCS` | `true` | Serve the interactive REST docs at `/docs` |
-| `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | CORS **response** headers. Distinct from `PUBTATOR_LINK_ALLOWED_ORIGINS`, which admits the request. |
+| `PUBTATOR_LINK_CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | CORS **response** headers. Distinct from `PUBTATOR_LINK_ALLOWED_ORIGINS`, which admits the request. |
 
 ## CLI
 
