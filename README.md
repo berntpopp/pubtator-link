@@ -1,513 +1,156 @@
-# PubTator-Link
+# pubtator-link
 
-A unified server for the PubTator3 biomedical literature API with MCP integration for AI assistants.
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![CI](https://github.com/berntpopp/pubtator-link/actions/workflows/ci.yml/badge.svg)](https://github.com/berntpopp/pubtator-link/actions/workflows/ci.yml)
+[![Conformance](https://github.com/berntpopp/pubtator-link/actions/workflows/conformance.yml/badge.svg)](https://github.com/berntpopp/pubtator-link/actions/workflows/conformance.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-## 🎯 Core Features
+An MCP (Streamable HTTP) server over NCBI's [PubTator3](https://www.ncbi.nlm.nih.gov/research/pubtator3/)
+biomedical literature API: PubMed/PMC search, entity and relation annotation, and a
+review-scoped retrieval index that returns compact, citable passages instead of raw BioC.
 
-- **Unified API Server**: Modern FastAPI-based REST API for PubTator3 data access
-- **MCP Integration**: Model Context Protocol server for seamless AI assistant integration
-- **Rate-Limited Client**: Respects PubTator3 API guidelines (3 requests/second max)
-- **Intelligent Caching**: Async LRU caching with configurable TTL for optimal performance
-- **Streamable HTTP Transports**: unified (REST API + MCP at `/mcp`) or HTTP-only mode
-- **Rich Data Models**: Comprehensive Pydantic models for all API responses
-- **Production Ready**: Structured logging, health checks, and graceful shutdown
+> [!IMPORTANT]
+> Research use only. Not clinical decision support. Do not use for diagnosis,
+> treatment, triage, or patient management.
 
-## 🚀 Quick Start
+## Why
 
-### Installation
+PubTator3 has a good REST API, but it is built for bulk export, not for a model with a
+context window. Its unit of exchange is a whole BioC document — one full-text article can
+exhaust an LLM's context — and it has no notion of a *corpus* that survives a turn, so an
+agent re-fetches and re-reads the same papers on every question.
+
+pubtator-link adds the layer a literature review actually needs: a rate-limit-respecting
+client (PubTator3 permits at most 3 requests/second), compact citable passages in place of
+raw BioC, and a durable review index keyed by a caller-chosen `review_id` — prepared
+passages land in Postgres/pgvector, so evidence can be retrieved, cited by a stable passage
+ID, expanded to its neighbours, and audited across sessions. Retrieved article text is
+treated as evidence, never as instructions.
+
+## Quick start
+
+The fleet is hosted behind the [genefoundry-router](https://github.com/berntpopp/genefoundry-router),
+which owns edge auth; tools surface there as `pubtator_<tool>`:
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd pubtator-link
+claude mcp add --transport http genefoundry https://genefoundry.org/mcp
+```
 
-# Install the locked development environment
+The backend itself (`https://pubtator-link.genefoundry.org/mcp`) is deliberately not a
+public origin: it requires the router's service bearer token (see [Security](docs/SECURITY.md)).
+
+To run it locally (Python 3.12+, [uv](https://github.com/astral-sh/uv)):
+
+```bash
 make install
-
-# Create environment configuration
 cp .env.example .env
-```
-
-### Environment Configuration
-
-Create a `.env` file with your configuration:
-
-```env
-# Server Configuration
-HOST=127.0.0.1
-PORT=8000
-TRANSPORT=unified
-
-# API Configuration
-API_BASE_URL=https://www.ncbi.nlm.nih.gov/research/pubtator3-api
-API_TIMEOUT=30
-RATE_LIMIT_PER_SECOND=2.5
-
-# Cache Configuration
-CACHE_SIZE=1000
-CACHE_TTL=3600
-
-# Logging Configuration
-LOG_LEVEL=INFO
-LOG_FORMAT=console
-
-# CORS Configuration
-CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
-```
-
-### Start the Server
-
-Streamable HTTP only — the server boots through the `pubtator-link` CLI in
-either the `unified` (REST API + MCP at `/mcp`) or `http` (REST API only)
-transport. There is no stdio transport.
-
-```bash
-# Unified mode (REST API + MCP) with auto-reload
-make dev
-
-# Unified mode (REST API + MCP)
-pubtator-link serve --transport unified --host 127.0.0.1 --port 8000
-
-# HTTP-only mode (REST API only)
-pubtator-link serve --transport http --host 127.0.0.1 --port 8000
-
-# Inspect (and validate) the resolved configuration
-pubtator-link config --validate
-
-# Probe a running server's health endpoint
-pubtator-link health --url http://127.0.0.1:8000
-```
-
-## 📋 REST API Endpoints
-
-### Core Endpoints
-
-- `GET /` - Root endpoint with service information
-- `GET /health` - Health check and status
-- `GET /api/cache/stats` - Cache statistics when `PUBTATOR_LINK_ENABLE_CACHE_ENDPOINTS=true`
-- `DELETE /api/cache/clear` - Clear all publication-service caches when cache endpoints are explicitly enabled
-
-### Publication Export
-
-- `GET /api/publications/export/{format}` - Export publication annotations by PMIDs
-- `GET /api/publications/pmc_export/{format}` - Export PMC publications by PMC IDs
-
-**Supported formats**: `pubtator`, `biocxml`, `biocjson`
-
-```bash
-# Export publication annotations in BioC JSON format
-curl "http://127.0.0.1:8000/api/publications/export/biocjson?pmids=29355051,32511357"
-
-# Export with full text (biocxml/biocjson only)
-curl "http://127.0.0.1:8000/api/publications/export/biocxml?pmids=29355051&full=true"
-
-# Export PMC publications
-curl "http://127.0.0.1:8000/api/publications/pmc_export/biocjson?pmcids=PMC7696669,PMC8869656"
-```
-
-### Entity Search
-
-- `GET /api/entities/autocomplete` - Find entity IDs through autocomplete
-
-**Supported bioconcepts**: `Gene`, `Disease`, `Chemical`, `Species`, `Variant`, `CellLine`
-
-```bash
-# Find disease entities
-curl "http://127.0.0.1:8000/api/entities/autocomplete?query=breast%20cancer&concept=Disease&limit=5"
-
-# Find gene entities
-curl "http://127.0.0.1:8000/api/entities/autocomplete?query=BRCA1&concept=Gene"
-```
-
-### Publication Search
-
-- `GET /api/search` - Search publications by text, entity IDs, or relations with sorting
-
-```bash
-# Free text search (default: relevance-based sorting)
-curl "http://127.0.0.1:8000/api/search?text=breast%20cancer&page=1"
-
-# Sort by publication date (newest first)
-curl "http://127.0.0.1:8000/api/search?text=breast%20cancer&sort=date%20desc"
-
-# Sort by publication date (oldest first)
-curl "http://127.0.0.1:8000/api/search?text=autism&sort=date%20asc"
-
-# Sort by relevance score (highest first)
-curl "http://127.0.0.1:8000/api/search?text=epilepsy&sort=score%20desc"
-
-# Entity-based search with sorting
-curl "http://127.0.0.1:8000/api/search?text=@CHEMICAL_remdesivir&sort=date%20desc"
-
-# Relation-based search
-curl "http://127.0.0.1:8000/api/search?text=relations:ANY|@CHEMICAL_Doxorubicin|@DISEASE_Neoplasms"
-```
-
-**Supported sort options:**
-- `date desc` - Newest publications first (default for date sorting)
-- `date asc` - Oldest publications first
-- `score desc` - Highest relevance first (default for relevance sorting)
-- `score asc` - Lowest relevance first
-
-### Entity Relations
-
-- `GET /api/relations` - Find related entities
-
-**Supported relation types**: `treat`, `cause`, `cotreat`, `convert`, `compare`, `interact`, `associate`, `positive_correlate`, `negative_correlate`, `prevent`, `inhibit`, `stimulate`, `drug_interact`
-
-```bash
-# Find entities that interact with a chemical
-curl "http://127.0.0.1:8000/api/relations?e1=@CHEMICAL_remdesivir&type=interact"
-
-# Find diseases treated by a chemical
-curl "http://127.0.0.1:8000/api/relations?e1=@CHEMICAL_Doxorubicin&type=treat&e2=Disease"
-```
-
-### Text Annotation
-
-- `POST /api/annotations/submit` - Submit text for NER processing
-- `GET /api/annotations/{session_id}` - Retrieve annotation results
-
-```bash
-# Submit text for gene entity extraction
-curl -X POST "http://127.0.0.1:8000/api/annotations/submit" \
-  -H "Content-Type: application/json" \
-  -d '{"text": "The ESR1 mutations are associated with breast cancer", "bioconcept": "Gene"}'
-
-# Retrieve results (use session_id from submit response)
-curl "http://127.0.0.1:8000/api/annotations/abc123def456"
-```
-
-## 🔧 MCP Integration
-
-PubTator-Link exposes a curated Streamable HTTP MCP endpoint at `/mcp` in unified mode. Hosted MCP tools are research-oriented and must not be used for diagnosis, treatment, triage, patient management, or clinical decision support.
-
-Literature graph tools are candidate-discovery aids: graph relatedness does not imply claim support, and passage-level review is still required for grounded biomedical conclusions.
-
-### Namespace token & tool naming
-
-This server follows the **GeneFoundry Tool-Naming Standard v1**: leaf tools are
-**unprefixed** (`search_literature`, not `pubtator_search_literature`) and the
-`serverInfo.name` is `pubtator-link`. Its canonical gateway **namespace token is
-`pubtator`**. The [`genefoundry-router`](https://github.com/berntpopp/genefoundry-router)
-mounts it with `mount(namespace="pubtator")`, so tools surface at the gateway as
-`pubtator_<tool>` (e.g. `pubtator_search_literature`). Standalone MCP clients
-already namespace this server as `mcp__pubtator-link__<tool>`, so the leaf names
-stay clean to avoid double-prefixing. See `CHANGELOG.md` for the v2.0.0 migration
-map from the previous `pubtator_`-prefixed names.
-
-### Recommended HTTP Setup
-
-```json
-{
-  "mcpServers": {
-    "pubtator-link": {
-      "type": "http",
-      "url": "http://127.0.0.1:8000/mcp"
-    }
-  }
-}
-```
-
-```bash
-make dev
+make dev                                                     # REST + MCP on :8000
 claude mcp add --transport http pubtator-link http://127.0.0.1:8000/mcp
 ```
 
-For hosted deployments, configure remote MCP clients with `https://your-domain.example/mcp`. Public deployments should be protected by OAuth or an authenticated reverse proxy.
-
-The default MCP profile is `readonly`, which exposes the complete read surface without write
-tools. Set `PUBTATOR_LINK_MCP_PROFILE=full` for advanced and compatibility tools, or `lean` for
-a smaller write-capable research workflow. Write-capable profiles require backend service auth
-unless a direct development process explicitly enables the loopback-only exception.
-
-### Available MCP Tools
-
-| Tool | Use When |
-|------|----------|
-| `workflow_help` | Get canonical workflow steps, fallbacks, and tool sequences |
-| `search_literature` | Search PubMed literature through PubTator3; use `metadata="basic"` or `"full"` when citation fields are needed |
-| `search_guidelines` | Search guideline, recommendation, consensus, and systematic review papers |
-| `diagnostics` | Check MCP subsystem readiness and recovery hints |
-| `convert_article_ids` | Read-only research-use article ID conversion; returns candidate PMIDs for staging/indexing |
-| `get_mesh` | Read-only research-use MeSH vocabulary lookup before search |
-| `get_citation` | Read-only research-use citation-to-PMID lookup; returns candidate PMIDs |
-| `find_related_articles` | Read-only research-use related/cited/reference article expansion; returns candidate PMIDs |
-| `suggest_corpus` | Suggest a compact, role-labeled candidate PMID corpus from a research question |
-| `get_publication_metadata` | Fetch citation-grade PMID metadata, publication types, MeSH terms, and coverage hints |
-| `get_publication_passages` | Fetch compact citable passages for PubMed IDs |
-| `get_publication_citation_graph` | Explore references and cited-by neighbors for one PMID or DOI |
-| `find_related_evidence_candidates` | Find transparent related evidence candidates for one seed PMID |
-| `build_topic_literature_map` | Build a bounded topic graph across papers, authors, citations, and entities |
-| `estimate_publication_context` | Estimate compact publication context before fetching |
-| `inspect_review_index` | Inspect indexed PMIDs, sections, counts, failures, and useful samples with `min_sample_chars=80` |
-| `get_review_context_batch` | Preferred review retrieval path; try multiple queries and merge compact citable context |
-| `record_review_context` | Persist durable review decisions, selected evidence IDs, and next-step state without article text |
-| `stage_research_session` | Stage query or PMID candidates with coverage hints and queued review preparation |
-| `get_research_session_status` | Poll staged candidate and preparation status |
-| `list_research_sessions` | List staged sessions for a review ID |
-| `get_publication_annotations` | Fetch annotations for PubMed IDs |
-| `get_pmc_annotations` | Fetch annotations for PMC full-text articles |
-| `search_biomedical_entities` | Find canonical PubTator biomedical entity IDs |
-| `find_entity_relations` | Explore literature-derived relations for a PubTator entity |
-| `submit_text_annotation` | Submit research text for PubTator biomedical NER |
-| `get_text_annotation_results` | Retrieve asynchronous text annotation results |
-| `get_server_capabilities` | Discover formats, bioconcepts, relation types, and limitations |
-
-### Context-Safe Review Retrieval
-
-Prefer `get_review_context_batch` for LLM clients. It uses
-flat arguments and defaults to `response_mode="compact"`, returning merged
-citable passages plus per-query summaries. Use `response_mode="diagnostics"` to
-refine queries without passage text, `response_mode="merged_only"` for the
-smallest citable response, and `response_mode="full"` only when full per-query
-passage packs are intentionally needed.
-
-Prefer MCP resources for follow-up reads after retrieval instead of rerunning
-tools: `pubtator://reviews/{review_id}`,
-`pubtator://reviews/{review_id}/sessions/{session_id}`,
-`pubtator://reviews/{review_id}/passages/{passage_id}`,
-`pubtator://reviews/{review_id}/audit/{passage_id}`, and
-`pubtator://reviews/{review_id}/llm-context/latest`. Use
-`record_review_context` to persist selected PMIDs/passages, open
-questions, user decisions, and next commands for later resume.
-
-Search defaults are compact for LLM use: `response_mode="compact"`,
-`include_citations="none"`, `text_hl_format="plain"`, and MCP coverage
-preflight enabled. Use `metadata="basic"` on `search_literature` when
-the result list needs authors, DOI, publication types, or journal fields, and
-reserve `metadata="full"` for citation-finalization passes. Ask for
-`include_citations="nlm"` or `"bibtex"` only for the final source list, and use
-`search_guidelines` when a guideline or consensus source should be
-boosted.
-
-For reproducible review setup, call `workflow_help`, use
-`suggest_corpus(question, max_pmids)` or
-`search_literature(metadata="basic")` to build candidates, then index
-and inspect with `inspect_review_index(min_sample_chars=80)` before
-retrieval.
-
-`review_id` is a durable caller-provided namespace for one review corpus.
-Reusing it appends new PMIDs and treats already prepared PMIDs as no-ops. Use a
-stable project slug and never include PHI.
-
-If `index_review_evidence` is unavailable, call
-`diagnostics` first. For self-hosted databases, run `make db-migrate`
-to repair stale review schema, then retry. While indexing is unavailable, fall
-back to `get_publication_passages` with the same PMIDs so the LLM can
-continue with abstract/compact passage grounding.
-
-Review retrieval excludes tables and references by default and returns budget
-metadata (`budget`, `total_chars`, `estimated_tokens`) so clients can avoid
-context blow-ups without `jq` or shell post-processing. Use raw BioC tools only
-when explicitly inspecting the source export.
-
-### 📚 Additional Documentation
-
-- **[MCP Connection Guide](docs/MCP_CONNECTION_GUIDE.md)** - Detailed setup instructions for all transport modes
-- **[Configuration Examples](docs/examples/claude_desktop_config_example.json)** - Ready-to-use Claude Desktop configurations
-- **Interactive API Docs** - Available at http://localhost:8000/docs when server is running
-
-## 🛠️ CLI Usage
-
-The `pubtator-link` CLI follows the GeneFoundry Logging & CLI Standard v1:
+No data build is needed — PubTator3 is a live API. The **review-index tools additionally
+require PostgreSQL with pgvector**; the Compose stack starts one:
 
 ```bash
-# Start the server (Streamable HTTP only)
-pubtator-link serve --transport unified --host 127.0.0.1 --port 8000
-
-# Show and validate the resolved configuration
-pubtator-link config --validate
-
-# Probe a running server's /health endpoint
-pubtator-link health --url http://127.0.0.1:8000
-
-# Print the installed version
-pubtator-link version
+make docker-up                       # app + pgvector sidecar
+make db-migrate                      # PUBTATOR_LINK_DATABASE_URL must be set
 ```
 
-## 🏗️ Architecture
+Without a database the review tools degrade: call `diagnostics`, then fall back to
+`get_publication_passages` for the same PMIDs. The default tool profile is `readonly`
+(full read surface, no write tools) — see [Configuration](docs/configuration.md).
 
-### Project Structure
+## Tools
 
-```
-pubtator-link/
-├── pubtator_link/
-│   ├── api/
-│   │   ├── client.py           # PubTator3 API client with rate limiting
-│   │   └── routes/             # FastAPI route definitions
-│   ├── models/
-│   │   ├── requests.py         # Request validation models
-│   │   ├── responses.py        # Response models
-│   │   ├── entities.py         # Bioconcept entity models
-│   │   └── publications.py     # Publication models
-│   ├── services/
-│   │   └── publication_service.py  # Business logic with caching
-│   ├── config.py               # Configuration management
-│   ├── logging_config.py       # Structured logging
-│   ├── server_manager.py       # Unified server management
-│   └── cli.py                  # Typer command-line interface (pubtator-link)
-└── pyproject.toml             # Modern Python project configuration
-```
+| Tool | Purpose |
+|------|---------|
+| `workflow_help` | Canonical research workflow for a fresh context |
+| `get_server_capabilities` | Supported tools, transports, formats, and limitations |
+| `diagnostics` | Subsystem status and recovery commands |
+| `search_literature` | PubMed literature search through PubTator3 |
+| `search_guidelines` | Guideline, consensus, and systematic-review papers |
+| `suggest_corpus` | Compact review-feeding candidate PMID corpus for a question |
+| `search_biomedical_entities` | Canonical PubTator entity IDs (gene, disease, chemical, species, variant, cell line) |
+| `find_entity_relations` | Literature-derived related entities for a PubTator entity |
+| `get_mesh` | MeSH descriptors and candidate PubMed search terms |
+| `get_citation` | Candidate PMIDs from a free-text citation |
+| `convert_article_ids` | Normalize PMIDs, PMCIDs, and DOIs to candidate PMIDs |
+| `find_related_articles` | Similar, cited-by, or reference-linked articles for seed PMIDs |
+| `find_related_evidence_candidates` | Full-text-preferred related candidates for one seed PMID |
+| `get_publication_citation_graph` | Reference and cited-by neighbours for one publication |
+| `build_topic_literature_map` | Bounded topic map across papers, authors, citations, and entities |
+| `get_publication_metadata` | Citation-grade metadata for known PMIDs |
+| `get_publication_passages` | Compact citable passages for PMIDs, without raw BioC |
+| `estimate_publication_context` | Estimate passage count and context size before fetching |
+| `get_publication_annotations` | Raw PubTator BioC annotation export for PMIDs |
+| `get_pmc_annotations` | Raw full-text BioC annotation export for PMC IDs |
+| `get_variant_evidence` | Source-attributed variant records and literature evidence for a gene |
+| `get_text_annotation_results` | Results for an asynchronous text-annotation session |
+| `preflight_review_sources` | Source coverage and full-text vs abstract-only outlook before indexing |
+| `inspect_review_index` | Indexed PMIDs, sections, passage counts, and failures for a `review_id` |
+| `get_review_index_summary` | One persisted review index summary, without passage samples |
+| `list_review_indexes` | Persisted review indexes with status, counts, and storage size |
+| `get_review_context` | Compact citable context from prepared review passages |
+| `get_review_context_batch` | Preferred retrieval path: merges several query variants in one call |
+| `get_review_passages_by_id` | Exact prepared review passages by stable passage ID |
+| `get_neighboring_review_passages` | Prepared passages adjacent to a cited passage, for local context |
+| `get_review_audit_trail` | Copy-ready audit block for selected prepared passages |
+| `get_evidence_certainty` | One user-supplied evidence-certainty judgment |
+| `list_evidence_certainty` | User-supplied evidence-certainty judgments for a review |
+| `get_research_session_status` | Staged candidate, coverage, and preparation status |
+| `list_research_sessions` | Staged research sessions for a review ID |
 
-### Key Components
+That is the default `readonly` surface. The `lean` and `full` profiles add write tools
+(indexing, staging, recording, audit-bundle export) and require service auth —
+[Security](docs/SECURITY.md) explains why.
 
-- **API Client**: Rate-limited HTTP client respecting PubTator3 guidelines
-- **Service Layer**: Business logic with async LRU caching
-- **Server Manager**: Unified handling of multiple transport modes
-- **Data Models**: Comprehensive Pydantic models for type safety
-- **MCP Integration**: FastMCP Streamable HTTP facade mounted at `/mcp`
+Leaf names are unprefixed per [Tool-Naming Standard v1](https://github.com/berntpopp/genefoundry-router/blob/main/docs/TOOL-NAMING-STANDARD-v1.md);
+`serverInfo.name` is `pubtator-link` and the canonical gateway namespace token is
+`pubtator`, so behind genefoundry-router they surface as `pubtator_<tool>` (e.g.
+`pubtator_search_literature`). Standalone MCP clients already namespace them as
+`mcp__pubtator-link__<tool>`, so leaf names stay clean to avoid double-prefixing;
+[`CHANGELOG.md`](CHANGELOG.md) holds the v2.0.0 migration map from the old `pubtator_`-prefixed
+names. Argument shapes, response modes, and MCP resource URIs are in the
+[tool catalog](docs/mcp-tool-catalog.md) and the [MCP connection guide](docs/MCP_CONNECTION_GUIDE.md).
 
-## 🧪 Development
+## Data & provenance
 
-### Modern Development Workflow
+**Upstream.** The [PubTator3 API](https://www.ncbi.nlm.nih.gov/research/pubtator3-api)
+(NCBI), plus NCBI's text-processing API for NER submissions. There is no local bundle and
+no ingest step: every call is live, and responses are async-LRU cached.
 
-This project uses `uv` and `make` as the primary local development interface.
+**Rate limit.** PubTator3 permits at most 3 requests/second. The client ships
+`RATE_LIMIT_PER_SECOND=2.5` to stay under that ceiling; do not raise it above 3.
 
-```bash
-make install       # install project and dev dependencies
-make lock          # update uv.lock
-make format        # format with Ruff
-make lint          # lint with Ruff
-make typecheck     # run mypy
-make test          # run tests
-make test-fast     # run tests in parallel
-make ci-local      # run local CI checks
-```
+**Provenance.** Prepared review passages are stored in *your own* Postgres, scoped by a
+caller-chosen `review_id` — a durable project slug, never PHI, and never an identifier for
+patient data. Do not submit identifiable patient data to public instances.
 
-Dependencies are locked in `uv.lock`; update them with `uv lock` or
-`make lock`. Agentic coding tools should follow `AGENTS.md`; Claude Code also
-loads the lean `CLAUDE.md` entrypoint.
+**Citation.** Cite the underlying publications, not this server. Search hits and passages
+carry a `recommended_citation` field and a `stable_citation_key`; paste them verbatim
+rather than paraphrasing. PubTator3 annotations are produced by NCBI; the abstracts and
+full text they annotate remain under their publishers' terms.
 
-### Testing
+## Documentation
 
-```bash
-# Run all tests
-make test
+- [MCP connection guide](docs/MCP_CONNECTION_GUIDE.md) — clients, the review workflow, response modes, and troubleshooting.
+- [Tool catalog](docs/mcp-tool-catalog.md) — generated per-tool schemas and arguments.
+- [Configuration](docs/configuration.md) — every environment variable, the tool profiles, and caching.
+- [REST API](docs/rest-api.md) — the FastAPI surface: export, search, relations, annotation.
+- [Architecture](docs/architecture.md) — package layout, transports, and the review re-RAG subsystem.
+- [Deployment](docs/deployment.md) — Docker, the pgvector sidecar, health, and observability.
+- [Security](docs/SECURITY.md) — service token, write-surface hardening, and Host/Origin policy.
+- [AGENTS.md](AGENTS.md) — engineering conventions for humans and coding agents.
 
-# Run with coverage
-make test-cov
+## Contributing
 
-# Run specific test categories
-make test-unit        # Exclude integration and slow tests
-make test-integration # Only integration tests
-```
+Read [`AGENTS.md`](AGENTS.md) first: it carries the make targets, the file-size budget, and
+the testing layout. `make ci-local` is the definition-of-done gate — format, lint, line
+budget, README standard, mypy, and tests. Release notes live in [`CHANGELOG.md`](CHANGELOG.md).
 
-### Code Quality
+## License
 
-The project uses modern Python tooling:
-
-- **Ruff**: Fast linting and formatting
-- **MyPy**: Static type checking
-- **Pytest**: Testing framework with async support
-- **Pre-commit**: Git hooks for code quality
-
-## 📦 Configuration
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `HOST` | `127.0.0.1` | Server host address |
-| `PORT` | `8000` | Server port |
-| `TRANSPORT` | `unified` | Server mode (unified/http) |
-| `API_BASE_URL` | `https://www.ncbi.nlm.nih.gov/research/pubtator3-api` | PubTator3 API base URL |
-| `API_TIMEOUT` | `30` | API request timeout (seconds) |
-| `RATE_LIMIT_PER_SECOND` | `2.5` | Rate limit (requests/second) |
-| `CACHE_SIZE` | `1000` | LRU cache size |
-| `CACHE_TTL` | `3600` | Cache TTL (seconds) |
-| `PUBTATOR_LINK_ENABLE_CACHE_ENDPOINTS` | `false` | Enable opt-in cache management REST endpoints |
-| `LOG_LEVEL` | `INFO` | Logging level |
-| `LOG_FORMAT` | `console` | Log format (console/json) |
-| `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | CORS allowed origins |
-
-### Cache Configuration
-
-The caching system uses async LRU caching with configurable size and TTL:
-
-- **Publication Export**: Cached by PMIDs, format, and full-text flag
-- **Entity Autocomplete**: Cached by query, concept, and limit
-- **Publication Search**: Cached by query text and page number
-- **Entity Relations**: Cached by entity, relation type, and target type
-
-Cache management endpoints are disabled by default. Set
-`PUBTATOR_LINK_ENABLE_CACHE_ENDPOINTS=true` to expose `/api/cache/stats` and
-`/api/cache/clear`. The clear endpoint clears all publication-service async-lru
-caches; pattern-based clearing is rejected until scoped invalidation exists.
-
-## 🚀 Production Deployment
-
-### Docker
-
-```bash
-make docker-prod-config
-make docker-build
-make docker-up
-```
-
-### Health Monitoring
-
-The server provides comprehensive health checks:
-
-```bash
-# Check server health
-curl http://localhost:8000/health
-
-# Monitor cache performance only when cache endpoints are enabled
-PUBTATOR_LINK_ENABLE_CACHE_ENDPOINTS=true make dev
-curl http://localhost:8000/api/cache/stats
-```
-
-### Observability
-
-- **Structured Logging**: JSON format for production, console for development
-- **Performance Metrics**: Request timing and cache statistics
-- **Error Tracking**: Comprehensive error logging with context
-- **Rate Limiting**: Built-in protection against API abuse
-
-## 📊 Performance
-
-- **Rate Limiting**: Respects PubTator3 API guidelines (max 3 requests/second)
-- **Async Architecture**: Non-blocking I/O for high concurrency
-- **Intelligent Caching**: Reduces API calls and improves response times
-- **Connection Pooling**: Efficient HTTP client management
-- **Graceful Degradation**: Fallback strategies for API failures
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Install development dependencies (`make install`)
-4. Make your changes and add tests
-5. Run code quality checks (`make ci-local`)
-6. Run focused tests as needed (`make test`)
-7. Commit your changes (`git commit -m 'Add amazing feature'`)
-8. Push to the branch (`git push origin feature/amazing-feature`)
-9. Open a Pull Request
-
-## 📚 API Reference
-
-For detailed API documentation, visit the interactive docs when running the server:
-
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-
-## 🔗 Related Projects
-
-- **gnomAD-Link**: MCP server for gnomAD genomic data
-- **GeneReviews-Link**: MCP server for NCBI GeneReviews
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [PubTator3](https://www.ncbi.nlm.nih.gov/research/pubtator3/) - NCBI's biomedical literature annotation service
-- [Model Context Protocol](https://modelcontextprotocol.io/) - Open standard for AI-tool integration
-- [FastAPI](https://fastapi.tiangolo.com/) - Modern Python web framework
-- [Pydantic](https://pydantic.dev/) - Data validation using Python type hints
-
----
-
-**Status**: Production Ready | **Version**: 1.0.0 | **Python**: 3.12+
+[MIT](LICENSE) © Bernt Popp — code only. PubTator3 annotations are an NCBI product and the
+literature they annotate stays under its publishers' terms; consult
+[NCBI's PubTator3 pages](https://www.ncbi.nlm.nih.gov/research/pubtator3/) before
+redistributing retrieved content.

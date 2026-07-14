@@ -174,13 +174,21 @@ def test_claude_md_is_lean_and_references_agents() -> None:
     assert len(claude.splitlines()) <= 20
 
 
-def test_readme_documents_modern_development_commands() -> None:
+def test_development_commands_documented_in_agents_and_linked_from_readme() -> None:
+    """The locked uv/make workflow must stay written down.
+
+    README Standard v1 exiles the make-target tour from the README to AGENTS.md, so
+    this asserts the contract at its new home *and* that the README still routes a
+    contributor there — strictly more than the old README-only substring check.
+    """
+    agents = Path("AGENTS.md").read_text()
     readme = Path("README.md").read_text()
 
-    assert "make install" in readme
-    assert "make ci-local" in readme
-    assert "uv lock" in readme
-    assert "AGENTS.md" in readme
+    for command in ("make install", "uv lock", "make ci-local"):
+        assert command in agents, f"AGENTS.md must document `{command}`"
+
+    assert "](AGENTS.md)" in readme, "README must link AGENTS.md as the contributor guide"
+    assert "make ci-local" in readme, "README must name the definition-of-done gate"
 
 
 def test_coverage_threshold_matches_verified_baseline() -> None:
@@ -400,7 +408,13 @@ def test_readme_quickstart_uses_uv_and_make_not_pip_install() -> None:
     assert "make dev" in readme
     assert 'pip install -e ".[dev]"' not in readme
     assert "FROM python:3.11-slim" not in readme
-    assert "**Python**: 3.12+" in readme
+
+    # The Python floor used to be a hand-typed status footer ("**Python**: 3.12+"),
+    # exactly the kind of derived fact README Standard v1 deletes because it rots.
+    # It is now carried by a badge that links out, and enforced by the only source
+    # of truth that can actually reject a wrong interpreter.
+    assert "img.shields.io/badge/python-3.12" in readme
+    assert _pyproject()["project"]["requires-python"] == ">=3.12"  # type: ignore[index]
 
 
 def test_repo_local_claude_workflows_exist_for_agentic_development() -> None:
