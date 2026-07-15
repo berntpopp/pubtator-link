@@ -438,6 +438,24 @@ def _is_error_envelope(value: Any) -> bool:
     return isinstance(value, dict) and value.get("success") is False and "recovery_action" in value
 
 
+def _canonicalize_envelope_error_code(env: dict[str, Any]) -> None:
+    """Force a success:false envelope's ``error_code`` into the closed enum, in place.
+
+    A code already in the enum is left untouched. An off-enum code (e.g. ``export_unavailable``)
+    is preserved under ``error_subtype`` and replaced with its canonical projection; a missing
+    code defaults to ``internal``. This is the last line of defence at the egress -- individual
+    error sources should already emit a canonical code.
+    """
+    code = env.get("error_code")
+    if code in CANONICAL_ERROR_CODES:
+        return
+    if isinstance(code, str) and code:
+        env.setdefault("error_subtype", code)
+        env["error_code"] = canonical_error_code(code)
+    else:
+        env["error_code"] = "internal"
+
+
 def install_validation_error_handler(mcp_server: Any) -> None:
     """Wrap registered tools so failures return the flat in-band envelope.
 
@@ -462,10 +480,22 @@ def install_validation_error_handler(mcp_server: Any) -> None:
       installed fastmcp==3.4.3: ``ToolResult.to_mcp_result()`` returns a
       ``CallToolResult`` whenever ``is_error`` is set).
     """
+    # FastMCP 3.4.4 stores tools on ``_local_provider._components`` (keyed ``tool:<name>@``) and
+    # mirrors them onto the legacy ``_tool_manager._tools`` mapping. Probe BOTH so the wrapper is
+    # installed regardless of which the running server dispatches through -- wrapping only
+    # ``_tool_manager`` left a fresh server's tools unwrapped, so a raised error escaped to the wire
+    # with structuredContent:NULL. The ``_pubtator_validation_wrapped`` guard dedupes shared objects.
+    candidates: list[Any] = []
     tool_manager = getattr(mcp_server, "_tool_manager", None)
-    tools = getattr(tool_manager, "_tools", {})
-    for tool in tools.values():
-        if getattr(tool, "_pubtator_validation_wrapped", False):
+    legacy_tools = getattr(tool_manager, "_tools", None)
+    if isinstance(legacy_tools, dict):
+        candidates.extend(legacy_tools.values())
+    local_provider = getattr(mcp_server, "_local_provider", None)
+    components = getattr(local_provider, "_components", None)
+    if isinstance(components, dict):
+        candidates.extend(components.values())
+    for tool in candidates:
+        if not hasattr(tool, "run") or getattr(tool, "_pubtator_validation_wrapped", False):
             continue
         original_run = tool.run
 
@@ -488,12 +518,22 @@ def install_validation_error_handler(mcp_server: Any) -> None:
                     exc=exc,
                 )
                 return ToolResult(structured_content=payload, is_error=True)
+            except Exception as exc:  # egress backstop: any leaked error is re-shaped below
+                # A tool error raised OUTSIDE run_mcp_tool (or any leaked exception) would otherwise
+                # reach the wire as isError:true with structuredContent:NULL -- the machine-readable
+                # envelope lost. Re-shape it into the flat error frame so every RAISED error still
+                # carries a non-null structuredContent with a six-value error_code.
+                payload = mcp_tool_error(exc, McpErrorContext(tool_name=str(_tool.name)))
+                return ToolResult(structured_content=payload, is_error=True)
             structured = getattr(result, "structured_content", None)
             # Response-Envelope Standard v1: every ``success: false`` envelope MUST carry MCP
-            # ``isError: true`` so a client branching on isError surfaces it to the model. This
-            # covers both the flat error frame (recovery_action) and any business payload that sets
-            # success=False on its own (e.g. a partial estimate or a not-found manifest).
+            # ``isError: true`` AND an error_code inside the closed enum. This covers the flat error
+            # frame, a raised error re-shaped above, and any business payload that sets success=False
+            # on its own (e.g. a partial estimate, a not-found manifest, or an audit bundle too large
+            # for inline export). An off-enum or missing code is projected onto the canon at egress,
+            # preserving the original under ``error_subtype``.
             if isinstance(structured, dict) and structured.get("success") is False:
+                _canonicalize_envelope_error_code(structured)
                 return ToolResult(
                     structured_content=structured,
                     meta=result.meta,
