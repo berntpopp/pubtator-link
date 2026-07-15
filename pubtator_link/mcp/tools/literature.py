@@ -12,7 +12,6 @@ from pubtator_link.api.routes.dependencies import (
     get_variant_evidence_service,
 )
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
-from pubtator_link.mcp.argument_aliases import coalesce_query
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.service_adapters import (
@@ -53,14 +52,6 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 examples=["BRCA1 ovarian cancer PARP inhibitor"],
             ),
         ],
-        query: Annotated[
-            str | None,
-            Field(
-                min_length=1,
-                max_length=1000,
-                description="Legacy alias for `text`; consulted only when `text` is omitted.",
-            ),
-        ] = None,
         page: Annotated[
             int,
             Field(ge=1, le=1000, description="1-based page number for paging beyond `limit`."),
@@ -168,10 +159,10 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             Field(description="Include the _meta orientation block (next_commands, provenance)."),
         ] = True,
     ) -> dict[str, Any]:
-        """Use this when a user needs PubMed literature search through PubTator3. Provide one of text or query. Supports flat filters, section filters, and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false means continue with results or inspect diagnostics."""
+        """Use this when a user needs PubMed literature search through PubTator3. Supports flat filters, section filters, and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false means continue with results or inspect diagnostics."""
 
         async def call() -> dict[str, Any]:
-            search_text = coalesce_query(text, query)
+            search_text = text
             preflight_service = (
                 await get_source_preflight_service() if coverage == "preflight" else None
             )
@@ -223,14 +214,6 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 examples=["asthma treatment adults"],
             ),
         ],
-        query: Annotated[
-            str | None,
-            Field(
-                min_length=1,
-                max_length=1000,
-                description="Legacy alias for `text`; consulted only when `text` is omitted.",
-            ),
-        ] = None,
         page: Annotated[
             int,
             Field(ge=1, le=1000, description="1-based page number for paging beyond `limit`."),
@@ -269,10 +252,10 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             Field(description="'preflight' (default) or 'none' to skip source-coverage hints."),
         ] = "preflight",
     ) -> dict[str, Any]:
-        """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. Provide one of text or query. Wraps search_literature with guideline/systematic-review filters and guideline boosting; not an independent guideline database."""
+        """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. Wraps search_literature with guideline/systematic-review filters and guideline boosting; not an independent guideline database."""
 
         async def call() -> dict[str, Any]:
-            search_text = coalesce_query(text, query)
+            search_text = text
             preflight_service = (
                 await get_source_preflight_service() if coverage == "preflight" else None
             )
@@ -313,13 +296,6 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 examples=["TP53"],
             ),
         ],
-        text: Annotated[
-            str | None,
-            Field(
-                min_length=1,
-                description="Legacy alias for `query`; used only when `query` is omitted.",
-            ),
-        ] = None,
         concept: Annotated[
             Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine", "Phenotype"]
             | None,
@@ -338,7 +314,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             client = await get_api_client()
             return await search_biomedical_entities_impl(
                 client=client,
-                query=query if query and query.strip() else text or "",
+                query=query,
                 concept=concept,
                 limit=limit,
             )
@@ -366,7 +342,22 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 ),
             ],
             relation_type: Annotated[
-                str | None,
+                Literal[
+                    "treat",
+                    "cause",
+                    "cotreat",
+                    "convert",
+                    "compare",
+                    "interact",
+                    "associate",
+                    "positive_correlate",
+                    "negative_correlate",
+                    "prevent",
+                    "inhibit",
+                    "stimulate",
+                    "drug_interact",
+                ]
+                | None,
                 Field(
                     description=(
                         "Optional relation type to keep, e.g. 'treat', 'cause', 'associate'; "
@@ -375,7 +366,16 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 ),
             ] = None,
             target_entity_type: Annotated[
-                str | None,
+                Literal[
+                    "Gene",
+                    "Disease",
+                    "Chemical",
+                    "Species",
+                    "Variant",
+                    "CellLine",
+                    "Phenotype",
+                ]
+                | None,
                 Field(
                     description=(
                         "Optional target concept type to keep, e.g. 'Disease' or 'Chemical'; "

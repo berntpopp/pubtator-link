@@ -95,10 +95,6 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             list[str] | None,
             Field(description="Explicit candidate PMIDs to stage.", examples=[["12345"]]),
         ] = None,
-        pmid: Annotated[
-            str | None,
-            Field(min_length=1, description="Single-PMID convenience alias, merged with `pmids`."),
-        ] = None,
         session_id: Annotated[
             str | None,
             Field(min_length=1, description="Reuse/extend an existing staged session."),
@@ -145,7 +141,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         """Use this when a user needs to stage candidate PMIDs with coverage hints and queued review preparation after search planning."""
 
         async def call() -> dict[str, Any]:
-            selected_pmids = merge_pmids(pmids, pmid, max_items=100) if pmids or pmid else None
+            selected_pmids = merge_pmids(pmids, None, max_items=100) if pmids else None
             service = await review_tools.get_research_session_service()
             return await review_tools.stage_research_session_impl(
                 service=service,
@@ -165,7 +161,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             )
 
         try:
-            tool_pmids = merge_pmids(pmids, pmid, max_items=100)
+            tool_pmids = merge_pmids(pmids, None, max_items=100)
         except ValueError:
             tool_pmids = None
         result = await run_mcp_tool(
@@ -192,10 +188,6 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 examples=["Does colchicine prevent FMF flares?"],
             ),
         ],
-        query: Annotated[
-            str | None,
-            Field(min_length=1, description="Legacy alias for `question`."),
-        ] = None,
         max_pmids: Annotated[
             int, Field(ge=1, le=20, description="Maximum PMIDs to search and index.")
         ] = 8,
@@ -232,10 +224,10 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             Field(description="Response character budget: 'auto' (default) or an integer cap."),
         ] = "auto",
     ) -> dict[str, Any]:
-        """Use this when a user wants one compact grounded evidence workflow from a question: search literature, index candidate PMIDs, inspect readiness, and retrieve citable review context. Provide one of question or query."""
+        """Use this when a user wants one compact grounded evidence workflow from a question: search literature, index candidate PMIDs, inspect readiness, and retrieve citable review context."""
 
         async def call() -> dict[str, Any]:
-            selected_question = coalesce_query(question, query)
+            selected_question = question
             client = await review_tools.get_api_client()
             queue = await review_tools.get_review_queue()
             context_service = await review_tools.get_review_context_service()

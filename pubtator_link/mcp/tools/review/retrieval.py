@@ -9,7 +9,7 @@ from pubtator_link.mcp.annotations import (
     NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
     READ_ONLY_OPEN_WORLD,
 )
-from pubtator_link.mcp.argument_aliases import coalesce_query, merge_pmids
+from pubtator_link.mcp.argument_aliases import merge_pmids
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.meta_budget import strip_meta_for_repeated_call
 from pubtator_link.mcp.profiles import MCPToolProfile
@@ -56,20 +56,12 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 examples=["EGFR resistance"],
             ),
         ],
-        query: Annotated[
-            str | None,
-            Field(description="Short keyword query. Alias for `question`."),
-        ] = None,
         session_id: Annotated[
             str | None, Field(description="Optional staged session to scope retrieval to.")
         ] = None,
         pmids: Annotated[
             list[str] | None,
             Field(description="Restrict retrieval to these PMIDs.", examples=[["12345"]]),
-        ] = None,
-        pmid: Annotated[
-            str | None,
-            Field(min_length=1, description="Single-PMID convenience alias, merged with `pmids`."),
         ] = None,
         entity_ids: Annotated[
             list[str] | None,
@@ -119,11 +111,11 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         ] = True,
         ctx: Context | None = None,
     ) -> dict[str, Any]:
-        """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Provide one of question or query. Use a short keyword query and PMID filters. If zero passages are returned, simplify the query, inspect the review index, or fall back to get_publication_annotations."""
+        """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Use a short keyword query and PMID filters. If zero passages are returned, simplify the query, inspect the review index, or fall back to get_publication_annotations."""
 
         async def call() -> dict[str, Any]:
-            selected_question = coalesce_query(question, query)
-            selected_pmids = merge_pmids(pmids, pmid, max_items=100) if pmids or pmid else None
+            selected_question = question
+            selected_pmids = merge_pmids(pmids, None, max_items=100) if pmids else None
             service = await review_tools.get_review_context_service()
             result = await review_tools.retrieve_review_context_impl(
                 service=service,
@@ -148,7 +140,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             return result
 
         try:
-            tool_pmids = merge_pmids(pmids, pmid, max_items=100)
+            tool_pmids = merge_pmids(pmids, None, max_items=100)
         except ValueError:
             tool_pmids = None
         result = await run_mcp_tool("get_review_context", call, pmids=tool_pmids)
@@ -186,10 +178,6 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         pmids: Annotated[
             list[str] | None,
             Field(description="Restrict retrieval to these PMIDs.", examples=[["12345"]]),
-        ] = None,
-        pmid: Annotated[
-            str | None,
-            Field(min_length=1, description="Single-PMID convenience alias, merged with `pmids`."),
         ] = None,
         entity_ids: Annotated[
             list[str] | None,
@@ -278,7 +266,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode uses query_fair budgeting, merged passages, per-query summaries, and next_steps for zero-result queries. Use response_mode="quotes" for short citable snippets or dry_run for diagnostics without passage text."""
 
         async def call() -> dict[str, Any]:
-            selected_pmids = merge_pmids(pmids, pmid, max_items=100) if pmids or pmid else None
+            selected_pmids = merge_pmids(pmids, None, max_items=100) if pmids else None
             service = await review_tools.get_review_context_service()
             result = await review_tools.retrieve_review_context_batch_impl(
                 service=service,
@@ -313,7 +301,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             return result
 
         try:
-            tool_pmids = merge_pmids(pmids, pmid, max_items=100)
+            tool_pmids = merge_pmids(pmids, None, max_items=100)
         except ValueError:
             tool_pmids = None
         result = await run_mcp_tool(
@@ -356,22 +344,20 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         ] = None,
         pmids: Annotated[
             list[Annotated[str, _STR_ITEM]] | None,
-            Field(description="PMIDs referenced by the event.", examples=[["12345"]]),
+            Field(description="Cited PMIDs.", examples=[["12345"]]),
         ] = None,
         passage_ids: Annotated[
             list[Annotated[str, _STR_ITEM]] | None,
-            Field(description="Prepared passage IDs referenced by the event.", examples=[["p1"]]),
+            Field(description="Cited passage IDs.", examples=[["p1"]]),
         ] = None,
         queries: Annotated[
             list[Annotated[str, _STR_ITEM]] | None,
             Field(
-                description="Retrieval queries associated with the event.",
+                description="Associated queries.",
                 examples=[["EGFR resistance"]],
             ),
         ] = None,
-        decision: Annotated[
-            dict[str, Any] | None, Field(description="Structured decision payload.")
-        ] = None,
+        decision: Annotated[dict[str, Any] | None, Field(description="Decision payload.")] = None,
         topic: Annotated[
             str | None, Field(max_length=500, description="Topic label for the event.")
         ] = None,
@@ -381,77 +367,78 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         question_hash: Annotated[
             str | None, Field(max_length=128, description="Stable hash of the research question.")
         ] = None,
-        request: Annotated[
-            dict[str, Any] | None, Field(description="Structured request payload to persist.")
-        ] = None,
+        request: Annotated[dict[str, Any] | None, Field(description="Request payload.")] = None,
         response_summary: Annotated[
-            dict[str, Any] | None, Field(description="Structured response summary to persist.")
+            dict[str, Any] | None, Field(description="Response summary.")
         ] = None,
         selected_pmids: Annotated[
             list[Annotated[str, _STR_ITEM]] | None,
-            Field(description="PMIDs the user/model selected.", examples=[["12345"]]),
+            Field(description="Selected PMIDs.", examples=[["12345"]]),
         ] = None,
         rejected_pmids: Annotated[
             list[Annotated[str, _STR_ITEM]] | None,
-            Field(description="PMIDs the user/model rejected.", examples=[["67890"]]),
+            Field(description="Rejected PMIDs.", examples=[["67890"]]),
         ] = None,
         preferred_entity_ids: Annotated[
             list[Annotated[str, _STR_ITEM]] | None,
-            Field(description="Preferred PubTator entity IDs.", examples=[["@GENE_EGFR"]]),
+            Field(description="Preferred entity IDs.", examples=[["@GENE_EGFR"]]),
         ] = None,
         selected_passage_ids: Annotated[
             list[Annotated[str, _STR_ITEM]] | None,
-            Field(description="Passage IDs used in the answer.", examples=[["p1"]]),
+            Field(description="Answer passage IDs.", examples=[["p1"]]),
         ] = None,
         audit_passage_ids: Annotated[
             list[Annotated[str, _STR_ITEM]] | None,
-            Field(description="Passage IDs kept for audit.", examples=[["p1"]]),
+            Field(description="Audit passage IDs.", examples=[["p1"]]),
         ] = None,
         active_queries: Annotated[
             list[Annotated[str, _STR_ITEM]] | None,
-            Field(
-                description="Currently active retrieval queries.", examples=[["EGFR resistance"]]
-            ),
+            Field(description="Active queries.", examples=[["EGFR resistance"]]),
         ] = None,
         successful_queries: Annotated[
             list[Annotated[str, _STR_ITEM]] | None,
-            Field(
-                description="Queries that returned useful passages.", examples=[["EGFR resistance"]]
-            ),
+            Field(description="Successful queries.", examples=[["EGFR resistance"]]),
         ] = None,
         failed_queries: Annotated[
             list[Annotated[str, _STR_ITEM]] | None,
-            Field(
-                description="Queries that returned nothing useful.", examples=[["EGFR resistence"]]
-            ),
+            Field(description="Failed queries.", examples=[["EGFR resistence"]]),
         ] = None,
         open_questions: Annotated[
             list[dict[str, Any]] | None,
-            Field(description="Structured open questions to persist."),
+            Field(
+                description="Open questions.",
+                examples=[[{"question": "Does dose matter?", "status": "open"}]],
+            ),
         ] = None,
         user_decisions: Annotated[
             list[dict[str, Any]] | None,
-            Field(description="Structured user decisions to persist."),
+            Field(
+                description="User decisions.",
+                examples=[[{"decision": "include", "pmid": "12345"}]],
+            ),
         ] = None,
         last_next_commands: Annotated[
             list[dict[str, Any]] | None,
-            Field(description="The next_commands block last shown to the user."),
+            Field(
+                description="The next_commands block last shown to the user.",
+                examples=[[{"tool": "diagnostics", "arguments": {}}]],
+            ),
         ] = None,
         stable_citation_keys: Annotated[
             dict[str, str] | None,
-            Field(description="Mapping of passage/PMID to stable citation key."),
+            Field(description="Passage/PMID to citation-key map."),
         ] = None,
         cache_key: Annotated[
             str | None, Field(max_length=500, description="Cache key for the recorded context.")
         ] = None,
         token_estimate: Annotated[
-            int | None, Field(ge=0, description="Estimated token size of the recorded context.")
+            int | None, Field(ge=0, description="Estimated token size.")
         ] = None,
         payload: Annotated[
-            dict[str, Any] | None, Field(description="Arbitrary structured payload to persist.")
+            dict[str, Any] | None, Field(description="Arbitrary payload to persist.")
         ] = None,
         created_by: Annotated[
-            str | None, Field(max_length=200, description="Attribution for the recorded event.")
+            str | None, Field(max_length=200, description="Recorded-by attribution.")
         ] = None,
     ) -> dict[str, Any]:
         """Use this when a user needs to persist compact LLM review context, selected evidence IDs, decisions, or next-step state without storing article text."""

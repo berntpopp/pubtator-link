@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, cast
 
 from fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field
@@ -131,7 +131,20 @@ def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
     )
     async def get_server_capabilities(
         details: Annotated[
-            list[str] | None,
+            list[
+                Literal[
+                    "server",
+                    "transport",
+                    "endpoint",
+                    "llm_driver_contract",
+                    "tools",
+                    "workflow_help",
+                    "sample_calls",
+                    "schema_policy",
+                    "preferred_tool_names",
+                ]
+            ]
+            | None,
             Field(
                 description=(
                     "Optional capability sections to expand (e.g. 'tools', 'workflow_help'); "
@@ -144,7 +157,9 @@ def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
         """Use this when a client needs supported tools, transports, formats, and limitations. Do not use this for task-specific workflow guidance; use workflow_help. Next: workflow_help."""
 
         async def call() -> dict[str, Any]:
-            return get_capabilities_resource(details=details, profile=profile)
+            return get_capabilities_resource(
+                details=cast("list[str] | None", details), profile=profile
+            )
 
         return await run_mcp_tool("get_server_capabilities", call)
 

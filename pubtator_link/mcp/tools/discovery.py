@@ -10,7 +10,7 @@ from pubtator_link.api.routes.dependencies import (
     get_discovery_service,
 )
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
-from pubtator_link.mcp.argument_aliases import coalesce_query, merge_pmids
+from pubtator_link.mcp.argument_aliases import merge_pmids
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.service_adapters import suggest_corpus_impl
@@ -37,14 +37,6 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
                 examples=["Does colchicine prevent FMF flares?"],
             ),
         ],
-        query: Annotated[
-            str | None,
-            Field(
-                min_length=3,
-                max_length=1000,
-                description="Legacy alias for `question`; used only when `question` is omitted.",
-            ),
-        ] = None,
         max_pmids: Annotated[
             int,
             Field(ge=1, le=20, description="Maximum candidate PMIDs to return."),
@@ -72,10 +64,10 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
             Field(description="Attach per-PMID citation metadata to each candidate."),
         ] = True,
     ) -> dict[str, Any]:
-        """Use this when a user needs a compact, review-feeding PMID corpus for a research question. Provide one of question or query. Returns candidate PMIDs, roles, coverage hints, metadata, and next commands."""
+        """Use this when a user needs a compact, review-feeding PMID corpus for a research question. Returns candidate PMIDs, roles, coverage hints, metadata, and next commands."""
 
         async def call() -> dict[str, Any]:
-            selected_question = coalesce_query(question, query)
+            selected_question = question
             service = await get_corpus_suggestion_service()
             return await suggest_corpus_impl(
                 service=service,
@@ -139,14 +131,6 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
                 examples=["breast cancer"],
             ),
         ],
-        text: Annotated[
-            str | None,
-            Field(
-                min_length=1,
-                max_length=500,
-                description="Legacy alias for `query`; used only when `query` is omitted.",
-            ),
-        ] = None,
         limit: Annotated[
             int,
             Field(ge=1, le=50, description="Maximum MeSH descriptors to return."),
@@ -159,7 +143,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
         """Use this when a user needs MeSH descriptors and candidate PubMed search terms for a biomedical research query."""
 
         async def call() -> dict[str, Any]:
-            selected_query = coalesce_query(query, text)
+            selected_query = query
             service = await get_discovery_service()
             response = await service.lookup_mesh(query=selected_query, limit=limit, exact=exact)
             return response.model_dump(by_alias=True)
@@ -208,10 +192,6 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
                 examples=[["25741868"]],
             ),
         ],
-        pmid: Annotated[
-            str | None,
-            Field(min_length=1, description="Single-PMID convenience alias, merged with `pmids`."),
-        ] = None,
         mode: Annotated[
             RelatedArticleMode,
             Field(
@@ -228,7 +208,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
         """Use this when a user has seed PMIDs and needs similar, cited-by, or reference-linked articles to expand a research corpus."""
 
         async def call() -> dict[str, Any]:
-            selected_pmids = merge_pmids(pmids, pmid, max_items=100)
+            selected_pmids = merge_pmids(pmids, None, max_items=100)
             service = await get_discovery_service()
             response = await service.find_related_articles(
                 pmids=selected_pmids,
@@ -238,7 +218,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
             return response.model_dump(by_alias=True)
 
         try:
-            tool_pmids = merge_pmids(pmids, pmid, max_items=100)
+            tool_pmids = merge_pmids(pmids, None, max_items=100)
         except ValueError:
             tool_pmids = None
         return await run_mcp_tool("find_related_articles", call, pmids=tool_pmids)

@@ -14,7 +14,7 @@ from pubtator_link.api.routes.dependencies import (
     get_topic_literature_map_service,
 )
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
-from pubtator_link.mcp.argument_aliases import coalesce_query, merge_pmids
+from pubtator_link.mcp.argument_aliases import merge_pmids
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.meta_budget import strip_meta_for_repeated_call
 from pubtator_link.mcp.profiles import MCPToolProfile
@@ -73,12 +73,6 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                     examples=[["25741868"]],
                 ),
             ],
-            pmid: Annotated[
-                str | None,
-                Field(
-                    min_length=1, description="Single-PMID convenience alias, merged with `pmids`."
-                ),
-            ] = None,
             format: Annotated[
                 Literal["pubtator", "biocxml", "biocjson"],
                 Field(
@@ -93,7 +87,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             """Use this when a user provides PubMed IDs and needs raw PubTator BioC annotation export. Do not use this for compact grounded answers; use get_publication_passages. Next: get_publication_passages."""
 
             async def call() -> dict[str, Any]:
-                selected_pmids = merge_pmids(pmids, pmid, max_items=50)
+                selected_pmids = merge_pmids(pmids, None, max_items=50)
                 service = await get_publication_service()
                 return await fetch_publication_annotations_impl(
                     service=service,
@@ -103,7 +97,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 )
 
             try:
-                tool_pmids = merge_pmids(pmids, pmid, max_items=50)
+                tool_pmids = merge_pmids(pmids, None, max_items=50)
             except ValueError:
                 tool_pmids = None
             return await run_mcp_tool(
@@ -128,33 +122,12 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                     examples=["familial Mediterranean fever colchicine"],
                 ),
             ],
-            topic: Annotated[
-                str | None,
-                Field(min_length=1, max_length=1000, description="Alias for `query`."),
-            ] = None,
-            question: Annotated[
-                str | None,
-                Field(min_length=1, max_length=1000, description="Alias for `query`."),
-            ] = None,
             pmids: Annotated[
                 list[str] | None,
                 Field(
                     min_length=1,
                     max_length=100,
                     description="Optional seed PMIDs to anchor the map on.",
-                    examples=[["31036433"]],
-                ),
-            ] = None,
-            pmid: Annotated[
-                str | None,
-                Field(min_length=1, description="Single-PMID convenience alias for seeds."),
-            ] = None,
-            seed_pmids: Annotated[
-                list[str] | None,
-                Field(
-                    min_length=1,
-                    max_length=100,
-                    description="Alias for `pmids` (seed PMIDs).",
                     examples=[["31036433"]],
                 ),
             ] = None,
@@ -240,17 +213,11 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 bool, Field(description="Include the _meta orientation block.")
             ] = True,
         ) -> dict[str, Any]:
-            """Use this when a user needs a bounded topic-level literature map from a query or seed PMIDs. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: get_publication_passages."""
+            """Use this when a user needs a bounded topic-level literature map from a topic query, optionally seeded with PMIDs. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: get_publication_passages."""
 
             async def call() -> dict[str, Any]:
-                selected_query = (
-                    coalesce_query(query, topic, question) if query or topic or question else None
-                )
-                selected_pmids = (
-                    merge_pmids(pmids or seed_pmids, pmid, max_items=100)
-                    if pmids or seed_pmids or pmid
-                    else None
-                )
+                selected_query = query
+                selected_pmids = merge_pmids(pmids, None, max_items=100) if pmids else None
                 service = await get_topic_literature_map_service()
                 return await build_topic_literature_map_impl(
                     service=service,
@@ -281,7 +248,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 )
 
             try:
-                tool_pmids = merge_pmids(pmids or seed_pmids, pmid, max_items=100)
+                tool_pmids = merge_pmids(pmids, None, max_items=100)
             except ValueError:
                 tool_pmids = None
             result = await run_mcp_tool(
@@ -307,10 +274,6 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 examples=[["25741868"]],
             ),
         ],
-        pmid: Annotated[
-            str | None,
-            Field(min_length=1, description="Single-PMID convenience alias, merged with `pmids`."),
-        ] = None,
         sections: Annotated[list[PassageSection] | None, _SECTIONS_FIELD] = None,
         mode: Annotated[
             PublicationPassageMode,
@@ -345,7 +308,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. For article-local answering, use mode='full_abstract' first; it returns all title/abstract passages without truncating structured abstracts. If full=True returns only abstracts, inspect coverage_by_pmid and answer from available evidence. Do not use for prepared review RAG; use get_review_context_batch."""
 
         async def call() -> dict[str, Any]:
-            selected_pmids = merge_pmids(pmids, pmid, max_items=25)
+            selected_pmids = merge_pmids(pmids, None, max_items=25)
             service = await get_publication_passage_service()
             return await get_publication_passages_impl(
                 service=service,
@@ -362,7 +325,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             )
 
         try:
-            tool_pmids = merge_pmids(pmids, pmid, max_items=25)
+            tool_pmids = merge_pmids(pmids, None, max_items=25)
         except ValueError:
             tool_pmids = None
         return await run_mcp_tool("get_publication_passages", call, pmids=tool_pmids)
@@ -383,10 +346,6 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 examples=[["25741868"]],
             ),
         ],
-        pmid: Annotated[
-            str | None,
-            Field(min_length=1, description="Single-PMID convenience alias, merged with `pmids`."),
-        ] = None,
         include_mesh: Annotated[bool, Field(description="Include MeSH descriptors.")] = True,
         include_publication_types: Annotated[
             bool, Field(description="Include PubMed publication types.")
@@ -402,7 +361,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         """Use this when a user needs citation-grade metadata for known PMIDs. Do not use this for article text or annotations; use get_publication_passages. Next: get_publication_passages."""
 
         async def call() -> dict[str, Any]:
-            selected_pmids = merge_pmids(pmids, pmid, max_items=100)
+            selected_pmids = merge_pmids(pmids, None, max_items=100)
             service = await get_publication_metadata_service()
             return await get_publication_metadata_impl(
                 service=service,
@@ -414,7 +373,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             )
 
         try:
-            tool_pmids = merge_pmids(pmids, pmid, max_items=100)
+            tool_pmids = merge_pmids(pmids, None, max_items=100)
         except ValueError:
             tool_pmids = None
         return await run_mcp_tool("get_publication_metadata", call, pmids=tool_pmids)
@@ -434,20 +393,6 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 examples=["40562663"],
             ),
         ],
-        doi: Annotated[
-            str | None,
-            Field(
-                min_length=1, description="DOI alternative identifier (used only if resolvable)."
-            ),
-        ] = None,
-        query: Annotated[
-            str | None,
-            Field(
-                min_length=1,
-                max_length=1000,
-                description="Free-text lookup to resolve the seed publication when no PMID is known.",
-            ),
-        ] = None,
         direction: Annotated[
             Literal["references", "cited_by", "both"],
             Field(description="Which neighbors: 'references', 'cited_by', or 'both' (default)."),
@@ -482,8 +427,6 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             return await get_publication_citation_graph_impl(
                 service=service,
                 pmid=pmid,
-                doi=doi,
-                query=query,
                 direction=direction,
                 response_mode=response_mode,
                 resolve_metadata=resolve_metadata,
@@ -600,12 +543,6 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                     examples=[["25741868"]],
                 ),
             ],
-            pmid: Annotated[
-                str | None,
-                Field(
-                    min_length=1, description="Single-PMID convenience alias, merged with `pmids`."
-                ),
-            ] = None,
             sections: Annotated[list[PassageSection] | None, _SECTIONS_FIELD] = None,
             mode: Annotated[
                 PublicationPassageMode,
@@ -632,7 +569,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             """Use this when a user needs to estimate passage count and context size before fetching publication passages. Do not use this for text retrieval; use get_publication_passages. Next: get_publication_passages."""
 
             async def call() -> dict[str, Any]:
-                selected_pmids = merge_pmids(pmids, pmid, max_items=25)
+                selected_pmids = merge_pmids(pmids, None, max_items=25)
                 service = await get_publication_passage_service()
                 return await estimate_publication_context_impl(
                     service=service,
@@ -646,7 +583,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 )
 
             try:
-                tool_pmids = merge_pmids(pmids, pmid, max_items=25)
+                tool_pmids = merge_pmids(pmids, None, max_items=25)
             except ValueError:
                 tool_pmids = None
             return await run_mcp_tool(
