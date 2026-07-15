@@ -65,6 +65,10 @@ def _build_oauth(settings: ServerSettings) -> Any:
     from fastmcp.server.auth import MultiAuth, OAuthProxy
     from fastmcp.server.auth.providers.jwt import JWTVerifier
 
+    # validate_oauth_config guarantees these are set; narrow str | None -> str.
+    assert settings.oauth_authorize_url and settings.oauth_token_url
+    assert settings.oauth_client_id and settings.public_base_url
+
     verifier = JWTVerifier(
         jwks_uri=settings.jwt_jwks_url,
         issuer=settings.jwt_issuer,
@@ -88,7 +92,5 @@ def _build_oauth(settings: ServerSettings) -> Any:
     )
     verifiers: list[Any] = [verifier]
     if settings.mcp_service_token:
-        verifiers.append(
-            ServiceTokenVerifier(settings.mcp_service_token, scopes=SERVICE_SCOPES)
-        )
+        verifiers.append(ServiceTokenVerifier(settings.mcp_service_token, scopes=SERVICE_SCOPES))
     return MultiAuth(server=oauth, verifiers=verifiers)

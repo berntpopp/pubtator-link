@@ -38,10 +38,10 @@ from .api.routes.dependencies import (
     reset_app_resources,
     resources_from_request,
 )
+from .auth import build_auth
 from .config import review_rerag_config, settings
 from .db.migrate import ReviewSchemaDiagnostics
 from .logging_config import configure_logging
-from .auth import build_auth
 from .mcp.facade import create_pubtator_mcp
 from .observability.metrics import CONTENT_TYPE_LATEST, metrics_payload
 from .security import MCPServiceAuthMiddleware
