@@ -714,3 +714,41 @@ Expected: `clean: no WIP files in feature commits`.
 - PRM well-known path served by `http_app()` at the expected URL when `mcp_http_app` is mounted at `/` — assert in an oauth-mode test or manual curl.
 - `mcp.add_middleware` is the correct FastMCP 3.4.2 API for server middleware (vs `add_middleware` on the ASGI app) — verify against installed package in Task 5.
 - `AccessToken` constructor kwargs (`token`, `client_id`, `scopes`, `expires_at`) match fastmcp 3.4.2 — verify in Task 2.
+
+---
+
+## Revision 2 — corrected task deltas (post-Codex, verified against fastmcp 3.4.4)
+
+See spec Revision 2 for rationale. Apply these over the tasks above:
+
+- **All tasks:** `from pubtator_link.config import Settings` → `ServerSettings`; config tests
+  construct `ServerSettings(...)`, wiring tests monkeypatch the global `settings`.
+- **Task 1 (`validate_oauth_config`):** also require `oauth_jwt_signing_key` and
+  `mcp_service_token`; assert `public_base_url` is an HTTPS origin with **no path/query**
+  and `jwt_audience == public_base_url.rstrip('/') + mcp_path` (kills `/mcp/mcp`).
+- **Task 3 (`_build_oauth`):** add `allowed_client_redirect_uris=<claude.ai + loopback
+  patterns from settings>`, `valid_scopes=["pubtator:read","pubtator:write"]`,
+  `redirect_path="/auth/callback"` (default). `http_app` kwargs
+  (`host_origin_protection`/`allowed_hosts`/`allowed_origins`) are valid in 3.4.4 — keep.
+- **Task 5 (authz):** `from pubtator_link.mcp.profiles import WRITE_TOOLS` — the
+  authoritative **8-tool** set; do NOT hand-list. Test **every** tool in `WRITE_TOOLS`,
+  not `next(iter(...))`.
+- **NEW Task 5b (REST surface):** in `server_manager.create_app`, when
+  `settings.auth_mode == "oauth"`, do **not** register the mutating REST review routes
+  (`reviews_router` write/DELETE). Test: anonymous `POST`/`DELETE` to those paths returns
+  404/401 in oauth mode (route absent), still present in none mode.
+- **Task 6 (compose/Docker):** `FASTMCP_HOME=/home/app/.fastmcp`; add
+  `RUN mkdir -p /home/app/.fastmcp && chown app:app /home/app/.fastmcp` to the Dockerfile;
+  make `PUBTATOR_LINK_ALLOWED_HOSTS` configurable and include the public host in the
+  go-live block.
+- **Tasks 3/4/11 tests:** use a real `FastMCP` app inside `with TestClient(app)`; assert
+  HTTP 200 + a valid `initialize` JSON-RPC result, anonymous → 401, GET
+  `/.well-known/oauth-protected-resource/mcp` returns PRM whose resource == audience, and
+  crypto JWT valid / bad-signature / wrong-audience cases (sign test JWTs with a local
+  key + a matching JWKS via `JWTVerifier(public_key=...)` or a stub jwks).
+- **Task 8 WIP-leak check:** diff **all** changed paths since the feature base against an
+  exact allowlist of this feature's files; fail on any unmatched path (not a 6-commit grep).
+- **Docs (Task 7):** Keycloak runbook registers `PUBLIC_BASE_URL/auth/callback` (not the
+  claude.ai redirect) and documents a Keycloak mapper emitting `pubtator:read`/`write` into
+  the `scope`/`scp` claim (JWTVerifier does not read `realm_access.roles`). Add the
+  accepted cross-user-write risk + per-subject-ownership follow-up.
