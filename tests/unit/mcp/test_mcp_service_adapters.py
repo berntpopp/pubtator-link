@@ -261,6 +261,81 @@ async def test_get_publication_metadata_impl_returns_typed_payload() -> None:
 
 
 @pytest.mark.asyncio
+async def test_readonly_metadata_hides_textual_indexing_follow_up() -> None:
+    from pubtator_link.mcp.profiles import tool_names_for_profile
+    from pubtator_link.mcp.service_adapters import get_publication_metadata_impl
+    from pubtator_link.models.publication_metadata import PublicationMetadataResponse
+
+    class FakeService:
+        async def get_metadata(self, request):
+            return PublicationMetadataResponse(
+                metadata=[],
+                _meta={
+                    "next_commands": [
+                        "Use get_publication_passages for citable passage text.",
+                        "Use index_review_evidence after selecting the final PMID corpus.",
+                        "Use stage_research_session to prepare a live research session.",
+                    ]
+                },
+            )
+
+    result = await get_publication_metadata_impl(
+        service=FakeService(),
+        pmids=["1"],
+        profile="readonly",
+    )
+
+    assert result["_meta"]["next_commands"] == [
+        "Use get_publication_passages for citable passage text."
+    ]
+    unavailable = tool_names_for_profile("full") - tool_names_for_profile("readonly")
+    assert not any(
+        tool_name in command
+        for command in result["_meta"]["next_commands"]
+        for tool_name in unavailable
+    )
+
+
+@pytest.mark.asyncio
+async def test_lean_metadata_preserves_title_matching_an_unavailable_tool() -> None:
+    from pubtator_link.mcp.profiles import tool_names_for_profile
+    from pubtator_link.mcp.service_adapters import get_publication_metadata_impl
+    from pubtator_link.models.publication_metadata import (
+        PublicationMetadata,
+        PublicationMetadataResponse,
+    )
+
+    title = "get_review_context identifies a BRCA1 evidence gap"
+
+    class FakeService:
+        async def get_metadata(self, request):
+            return PublicationMetadataResponse(
+                metadata=[PublicationMetadata(pmid="1", title=title)],
+                _meta={
+                    "next_commands": [
+                        "Use get_publication_passages for evidence.",
+                        "Use get_review_context for a single-query review result.",
+                    ]
+                },
+            )
+
+    result = await get_publication_metadata_impl(
+        service=FakeService(),
+        pmids=["1"],
+        profile="lean",
+    )
+
+    assert result["metadata"][0]["title"] == title
+    assert result["_meta"]["next_commands"] == ["Use get_publication_passages for evidence."]
+    unavailable = tool_names_for_profile("full") - tool_names_for_profile("lean")
+    assert not any(
+        tool_name in command
+        for command in result["_meta"]["next_commands"]
+        for tool_name in unavailable
+    )
+
+
+@pytest.mark.asyncio
 async def test_get_publication_metadata_impl_preserves_public_100_pmid_cap() -> None:
     from pydantic import ValidationError
 
@@ -300,7 +375,7 @@ async def test_graph_adapters_default_omitted_response_mode_to_compact() -> None
     class CitationService:
         request = None
 
-        async def get_citation_graph(self, request):
+        async def get_citation_graph(self, request, *, profile="full"):
             self.request = request
             return PublicationCitationGraphResponse(
                 source=LiteraturePaper(pmid="1"),
@@ -361,6 +436,38 @@ async def test_graph_adapters_default_omitted_response_mode_to_compact() -> None
     assert "response_mode_deprecation" not in str(citation_result)
     assert "response_mode_deprecation" not in str(related_result)
     assert "response_mode_deprecation" not in str(topic_result)
+
+
+@pytest.mark.asyncio
+async def test_readonly_citation_graph_hides_indexing_follow_up() -> None:
+    from pubtator_link.mcp.service_adapters import get_publication_citation_graph_impl
+    from pubtator_link.models.literature_graph import (
+        LiteraturePaper,
+        PublicationCitationGraphResponse,
+    )
+
+    class CitationService:
+        async def get_citation_graph(self, request, *, profile="full"):
+            return PublicationCitationGraphResponse(
+                source=LiteraturePaper(pmid="1"),
+                response_mode=request.response_mode,
+                _meta={
+                    "next_commands": [
+                        {"tool": "get_publication_passages", "arguments": {"pmids": ["2"]}},
+                        {"tool": "index_review_evidence", "arguments": {"pmids": ["2"]}},
+                    ]
+                },
+            )
+
+    result = await get_publication_citation_graph_impl(
+        service=CitationService(),
+        pmid="1",
+        profile="readonly",
+    )
+
+    assert result["_meta"]["next_commands"] == [
+        {"tool": "get_publication_passages", "arguments": {"pmids": ["2"]}}
+    ]
 
 
 @pytest.mark.asyncio
@@ -762,8 +869,9 @@ async def test_suggest_corpus_impl_returns_candidate_pmids() -> None:
     from pubtator_link.models.corpus_suggestion import CorpusSuggestionResponse
 
     class FakeService:
-        async def suggest(self, request):
+        async def suggest(self, request, *, profile="full"):
             assert request.question == "FMF MEFV VUS colchicine"
+            assert profile == "full"
             return CorpusSuggestionResponse(
                 candidate_pmids=["26802180"],
                 candidates=[],
@@ -1598,6 +1706,51 @@ async def test_retrieve_review_context_batch_adapter_calls_service() -> None:
 
 
 @pytest.mark.asyncio
+async def test_readonly_review_context_batch_hides_indexing_recovery_hints() -> None:
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        PreparationStatus,
+        QueryDiagnosticsSummary,
+        RecoveryHint,
+        RetrieveReviewContextBatchResponse,
+    )
+
+    class FakeService:
+        async def retrieve_context_batch(self, review_id, request):
+            return RetrieveReviewContextBatchResponse(
+                review_id=review_id,
+                results=[],
+                merged_context_pack=ContextPack(question="MEFV", passages=[], citation_map={}),
+                preparation_status=PreparationStatus(),
+                response_mode=request.response_mode,
+                query_summaries=[
+                    QueryDiagnosticsSummary(
+                        query="MEFV",
+                        query_tokens=["mefv"],
+                        next_steps=["index_review_evidence", "inspect_review_index"],
+                    )
+                ],
+                recovery=RecoveryHint(
+                    reason="review_not_indexed",
+                    message="No passages returned.",
+                    next_steps=["index_review_evidence", "inspect_review_index"],
+                ),
+            )
+
+    result = await retrieve_review_context_batch_impl(
+        service=FakeService(),
+        review_id="rev-1",
+        queries=["MEFV"],
+        response_mode="diagnostics",
+        profile="readonly",
+    )
+
+    assert result["query_summaries"][0]["next_steps"] == ["inspect_review_index"]
+    assert result["recovery"]["next_steps"] == ["inspect_review_index"]
+
+
+@pytest.mark.asyncio
 async def test_retrieve_review_context_batch_adapter_accepts_auto_budget_and_verbosity() -> None:
     from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
     from pubtator_link.models.review_rerag import (
@@ -2183,6 +2336,60 @@ async def test_retrieve_review_context_adapter_builds_request_from_flat_args() -
 
 
 @pytest.mark.asyncio
+async def test_readonly_retrieval_preserves_tool_named_query_and_passage_quote() -> None:
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_impl
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        ContextPassage,
+        PassageQuote,
+        PreparationStatus,
+        RetrieveReviewContextResponse,
+    )
+
+    query = "index_review_evidence BRCA1"
+    quote = "The article states index_review_evidence was not performed."
+
+    class FakeService:
+        async def retrieve_context(self, review_id, request):
+            return RetrieveReviewContextResponse(
+                review_id=review_id,
+                context_pack=ContextPack(
+                    question=request.question,
+                    passages=[
+                        ContextPassage(
+                            citation_key="S1",
+                            passage_id="PMID:1:abstract:0",
+                            pmid="1",
+                            section="abstract",
+                            text=quote,
+                            quote=PassageQuote(
+                                text=quote,
+                                returned_start_offset=0,
+                                returned_end_offset=len(quote),
+                                passage_start_char=0,
+                                passage_end_char=len(quote),
+                            ),
+                        )
+                    ],
+                    citation_map={"S1": "PMID:1:abstract:0"},
+                ),
+                preparation_status=PreparationStatus(),
+            )
+
+    result = await retrieve_review_context_impl(
+        service=FakeService(),
+        review_id="review-1",
+        question=query,
+        profile="readonly",
+    )
+
+    passage = result["context_pack"]["passages"][0]
+    assert result["context_pack"]["question"] == query
+    assert passage["text"] == quote
+    assert passage["quote"]["text"] == quote
+
+
+@pytest.mark.asyncio
 async def test_inspect_review_index_adapter_builds_request_from_flat_args() -> None:
     from pubtator_link.mcp.service_adapters import inspect_review_index_impl
     from pubtator_link.models.review_rerag import (
@@ -2286,6 +2493,27 @@ async def test_search_literature_meta_uses_short_next_tool_hints() -> None:
     assert meta["workflow"] == "search -> preflight -> index -> inspect -> retrieve"
     assert meta["details_resource"] == "pubtator://workflow-help"
     assert "next_commands" not in meta
+
+
+@pytest.mark.asyncio
+async def test_readonly_search_literature_meta_ends_in_direct_passage_retrieval() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {"results": [{"pmid": "1", "title": "FMF guideline"}], "count": 1}
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="FMF",
+        profile="readonly",
+    )
+
+    assert result["_meta"]["next_tools"] == [
+        "preflight_review_sources",
+        "get_publication_passages",
+    ]
+    assert result["_meta"]["workflow"] == "search -> preflight -> direct passages"
 
 
 @pytest.mark.asyncio
@@ -3585,8 +3813,9 @@ async def test_citation_graph_adapter_accepts_compact_response_mode() -> None:
     )
 
     class Service:
-        async def get_citation_graph(self, request):
+        async def get_citation_graph(self, request, *, profile="full"):
             assert request.response_mode == "compact"
+            assert profile == "full"
             return PublicationCitationGraphResponse(
                 source=LiteraturePaper(pmid="1"),
                 response_mode="compact",

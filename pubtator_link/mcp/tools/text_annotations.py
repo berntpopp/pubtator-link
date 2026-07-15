@@ -82,7 +82,7 @@ def register_text_annotation_tools(mcp: FastMCP, profile: MCPToolProfile = "lean
             str,
             Field(
                 min_length=8,
-                description="PubTator text-annotation session ID returned by submit_text_annotation.",
+                description="PubTator text-annotation session ID returned by a prior request.",
                 examples=["session-12345678"],
             ),
         ],

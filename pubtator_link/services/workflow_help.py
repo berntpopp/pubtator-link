@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import cast
 
-from pubtator_link.mcp.profiles import MCPToolProfile, tool_names_for_profile
+from pubtator_link.mcp.profiles import (
+    MCPToolProfile,
+    filter_reachable_hints,
+    reachable_tools,
+    tool_names_for_profile,
+)
 from pubtator_link.models.workflow_help import (
     WorkflowFallback,
     WorkflowHelpResponse,
@@ -29,7 +34,6 @@ class WorkflowHelpService:
 
     def __init__(self, profile: MCPToolProfile = "full") -> None:
         self.profile = profile
-        self._allowed_tools = tool_names_for_profile(profile)
 
     def get_help(
         self,
@@ -54,19 +58,20 @@ class WorkflowHelpService:
         )
 
     def _profile_response(self, response: WorkflowHelpResponse) -> WorkflowHelpResponse:
-        if self.profile == "full":
-            return response
-
-        steps = [step for step in response.steps if step.tool_name in self._allowed_tools]
-        fallbacks = [
-            fallback for fallback in response.fallbacks if fallback.tool_name in self._allowed_tools
-        ]
-        meta = dict(response.meta)
-        next_commands = meta.get("next_commands")
-        if isinstance(next_commands, list):
-            meta["next_commands"] = [
-                command for command in next_commands if command in self._allowed_tools
+        selected = set(
+            reachable_tools(self.profile, tuple(step.tool_name for step in response.steps))
+        )
+        steps = [step for step in response.steps if step.tool_name in selected]
+        if self.profile == "readonly":
+            steps = [
+                step.model_copy(update={"order": order})
+                for order, step in enumerate(steps, start=1)
             ]
+        allowed_tools = tool_names_for_profile(self.profile)
+        fallbacks = [
+            fallback for fallback in response.fallbacks if fallback.tool_name in allowed_tools
+        ]
+        meta = filter_reachable_hints(self.profile, dict(response.meta))
         return WorkflowHelpResponse(
             task=response.task,
             steps=steps,
@@ -76,6 +81,62 @@ class WorkflowHelpService:
         )
 
     def _clinical_or_literature_review(self, task: WorkflowTask) -> WorkflowHelpResponse:
+        if self.profile == "readonly":
+            steps = [
+                WorkflowStep(
+                    order=1,
+                    tool_name="search_biomedical_entities",
+                    purpose="Resolve canonical entity IDs for genes, diseases, chemicals, and variants.",
+                ),
+                WorkflowStep(
+                    order=2,
+                    tool_name="find_entity_relations",
+                    purpose="Use grounded entity IDs to discover relation evidence and PMID candidates.",
+                ),
+                WorkflowStep(
+                    order=3,
+                    tool_name="get_variant_evidence",
+                    purpose="Look up source-attributed variant records and literature evidence without backend classification.",
+                ),
+                WorkflowStep(
+                    order=4,
+                    tool_name="search_literature",
+                    purpose="Find candidate PMIDs with compact results and optional metadata.",
+                    key_args={"metadata": "basic", "coverage": "preflight"},
+                ),
+                WorkflowStep(
+                    order=5,
+                    tool_name="get_publication_metadata",
+                    purpose="Fetch citation-grade author and journal metadata for selected PMIDs.",
+                ),
+                WorkflowStep(
+                    order=6,
+                    tool_name="preflight_review_sources",
+                    purpose="Check likely source coverage before direct passage retrieval.",
+                ),
+                WorkflowStep(
+                    order=7,
+                    tool_name="get_publication_passages",
+                    purpose="Fetch direct citable passages for the selected PMIDs.",
+                ),
+            ]
+            fallbacks = [
+                WorkflowFallback(
+                    condition="selected PMIDs need citation fields",
+                    tool_name="get_publication_metadata",
+                    action="Fetch citation metadata before drafting references.",
+                ),
+                WorkflowFallback(
+                    condition="GeneReviews/NBK source is an NCBI Bookshelf URL",
+                    tool_name="get_citation",
+                    action=(
+                        "Call get_citation with the NBK ID, then retrieve direct passages for "
+                        "the returned PMID when available."
+                    ),
+                ),
+            ]
+            return _response(task=task, steps=steps, fallbacks=fallbacks)
+
         steps = [
             WorkflowStep(
                 order=0,
@@ -190,6 +251,14 @@ class WorkflowHelpService:
                 purpose="Check likely source coverage before indexing or retrieval.",
             ),
         ]
+        if self.profile == "readonly":
+            steps.append(
+                WorkflowStep(
+                    order=4,
+                    tool_name="get_publication_passages",
+                    purpose="Fetch direct citable passages for the selected PMIDs.",
+                )
+            )
         fallbacks = [
             WorkflowFallback(
                 condition="citation lookup is ambiguous",
@@ -200,6 +269,57 @@ class WorkflowHelpService:
         return _response(task="citation_audit", steps=steps, fallbacks=fallbacks)
 
     def _literature_graph(self) -> WorkflowHelpResponse:
+        if self.profile == "readonly":
+            steps = [
+                WorkflowStep(
+                    order=1,
+                    tool_name="search_literature",
+                    purpose="Find initial topic PMIDs before building graph neighborhoods.",
+                    key_args={"metadata": "basic", "coverage": "preflight"},
+                ),
+                WorkflowStep(
+                    order=2,
+                    tool_name="build_topic_literature_map",
+                    purpose="Build a compact topic map with bounded candidate signals.",
+                    key_args={"response_mode": "compact", "max_candidates": 12},
+                ),
+                WorkflowStep(
+                    order=3,
+                    tool_name="get_publication_citation_graph",
+                    purpose="Inspect reference and cited-by candidate lanes for selected papers.",
+                    key_args={"direction": "both", "response_mode": "compact"},
+                ),
+                WorkflowStep(
+                    order=4,
+                    tool_name="find_related_evidence_candidates",
+                    purpose="Expand from seed PMIDs using related-evidence scores.",
+                    key_args={"response_mode": "compact", "prefer_full_text": True},
+                ),
+                WorkflowStep(
+                    order=5,
+                    tool_name="get_publication_passages",
+                    purpose="Fetch direct citable passages for the selected candidate PMIDs.",
+                ),
+            ]
+            fallbacks = [
+                WorkflowFallback(
+                    condition="host ToolSearch has not loaded all graph schemas",
+                    tool_name="get_server_capabilities",
+                    action="Inspect workflow_bundles.literature_graph before calling the next tool.",
+                ),
+                WorkflowFallback(
+                    condition="graph compact candidates are not enough for claim grounding",
+                    tool_name="get_publication_passages",
+                    action="Retrieve direct passage-level evidence before drafting claims.",
+                ),
+            ]
+            return _response(
+                task="graph",
+                steps=steps,
+                fallbacks=fallbacks,
+                meta={"bundle": "literature_graph"},
+            )
+
         steps = [
             WorkflowStep(
                 order=1,

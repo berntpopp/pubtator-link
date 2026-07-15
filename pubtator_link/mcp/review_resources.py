@@ -80,6 +80,7 @@ async def get_review_llm_context_resource(
     review_id: str,
     latest: bool = False,
     session_id: str | None = None,
+    profile: MCPToolProfile = "full",
 ) -> dict[str, Any]:
     from pubtator_link.mcp.service_adapters import review_llm_context_resource_impl
 
@@ -88,10 +89,19 @@ async def get_review_llm_context_resource(
         review_id=review_id,
         latest=latest,
         session_id=session_id,
+        profile=profile,
     )
 
 
-def get_tool_detail_resource(tool_name: str) -> dict[str, Any]:
+def get_tool_detail_resource(
+    tool_name: str,
+    *,
+    profile: MCPToolProfile = "full",
+) -> dict[str, Any]:
+    if tool_name not in tool_names_for_profile(profile):
+        # Use the same fixed response as an unknown tool: readonly clients must
+        # not receive a schema or workflow text for an unavailable write tool.
+        return {"error": "not_found", "message": "Unknown tool."}
     tools = _runtime_tool_metadata()
     tool = tools.get(tool_name)
     if tool is None:

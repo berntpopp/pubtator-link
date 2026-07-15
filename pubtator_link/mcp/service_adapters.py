@@ -20,6 +20,7 @@ from pubtator_link.mcp.input_normalization import (
     attach_normalization_meta,
     normalize_retrieve_review_context_batch_args,
 )
+from pubtator_link.mcp.profiles import MCPToolProfile, filter_reachable_hints
 from pubtator_link.mcp.quickstart import (
     query_length_warning,
     quickstart_review_id,
@@ -165,13 +166,10 @@ def _bounded_list(
 ) -> list[Any]:
     if not isinstance(values, list):
         return []
-    bounded: list[Any] = []
-    for value in values[:limit]:
-        if isinstance(value, dict):
-            bounded.append(_bounded_mapping(value, allowed_keys))
-        else:
-            bounded.append(value)
-    return bounded
+    return [
+        _bounded_mapping(value, allowed_keys) if isinstance(value, dict) else value
+        for value in values[:limit]
+    ]
 
 
 def _strip_resolver_trace(result: dict[str, Any]) -> dict[str, Any]:
@@ -285,6 +283,7 @@ async def get_publication_metadata_impl(
     include_publication_types: bool = True,
     include_citations: Literal["none", "nlm", "bibtex", "both"] = "both",
     include_coverage: bool = True,
+    profile: MCPToolProfile = "full",
 ) -> dict[str, Any]:
     response = await service.get_metadata(
         PublicationMetadataRequest(
@@ -295,7 +294,7 @@ async def get_publication_metadata_impl(
             include_coverage=include_coverage,
         )
     )
-    return response.model_dump(by_alias=True)
+    return filter_reachable_hints(profile, response.model_dump(by_alias=True))
 
 
 async def get_publication_citation_graph_impl(
@@ -312,6 +311,7 @@ async def get_publication_citation_graph_impl(
     include_provider_status: bool = True,
     include_open_access_status: bool = True,
     max_results: int = 50,
+    profile: MCPToolProfile = "full",
 ) -> dict[str, Any]:
     effective_response_mode = response_mode or "compact"
     response = await service.get_citation_graph(
@@ -327,9 +327,10 @@ async def get_publication_citation_graph_impl(
             include_provider_status=include_provider_status,
             include_open_access_status=include_open_access_status,
             max_results=max_results,
-        )
+        ),
+        profile=profile,
     )
-    return response.model_dump(by_alias=True)
+    return filter_reachable_hints(profile, response.model_dump(by_alias=True))
 
 
 async def find_related_evidence_candidates_impl(
@@ -346,6 +347,7 @@ async def find_related_evidence_candidates_impl(
     year_max: int | None = None,
     citation_graph_timeout_ms: int = 15_000,
     metadata_timeout_ms: int = 20_000,
+    profile: MCPToolProfile = "full",
 ) -> dict[str, Any]:
     effective_response_mode = response_mode or "compact"
     response = await service.find_candidates(
@@ -363,7 +365,7 @@ async def find_related_evidence_candidates_impl(
             metadata_timeout_ms=metadata_timeout_ms,
         )
     )
-    return response.model_dump(by_alias=True)
+    return filter_reachable_hints(profile, response.model_dump(by_alias=True))
 
 
 async def build_topic_literature_map_impl(
@@ -393,6 +395,7 @@ async def build_topic_literature_map_impl(
     citation_graph_timeout_ms: int | None = 15_000,
     related_evidence_timeout_ms: int | None = 20_000,
     metadata_backfill_timeout_ms: int | None = 10_000,
+    profile: MCPToolProfile = "full",
 ) -> dict[str, Any]:
     effective_response_mode = response_mode or "compact"
     response = await service.build_map(
@@ -423,7 +426,7 @@ async def build_topic_literature_map_impl(
             metadata_backfill_timeout_ms=metadata_backfill_timeout_ms,
         )
     )
-    return response.model_dump(by_alias=True)
+    return filter_reachable_hints(profile, response.model_dump(by_alias=True))
 
 
 async def suggest_corpus_impl(
@@ -435,6 +438,7 @@ async def suggest_corpus_impl(
     must_include_pmids: list[str] | None = None,
     prefer_guidelines: bool = True,
     include_metadata: bool = True,
+    profile: MCPToolProfile = "full",
 ) -> dict[str, Any]:
     response = await service.suggest(
         CorpusSuggestionRequest(
@@ -444,7 +448,8 @@ async def suggest_corpus_impl(
             must_include_pmids=must_include_pmids or [],
             prefer_guidelines=prefer_guidelines,
             include_metadata=include_metadata,
-        )
+        ),
+        profile=profile,
     )
     return response.model_dump(by_alias=True)
 
@@ -496,6 +501,7 @@ async def search_literature_impl(
     metadata: SearchMetadataMode = "basic",
     metadata_service: PublicationMetadataService | None = None,
     include_meta: bool = True,
+    profile: MCPToolProfile = "full",
 ) -> dict[str, Any]:
     normalized_text = combined_search_text(text, entity_ids)
     normalized_sort, sort_warning = normalize_search_sort(sort)
@@ -544,10 +550,22 @@ async def search_literature_impl(
     response_meta = {
         "coverage_note": (
             "Search is read-only metadata discovery. Use coverage='preflight' or "
-            "preflight_review_sources before indexing if source coverage matters."
+            + (
+                "preflight_review_sources before direct passage retrieval if source coverage matters."
+                if profile == "readonly"
+                else "preflight_review_sources before indexing if source coverage matters."
+            )
         ),
-        "next_tools": ["preflight_review_sources", "index_review_evidence"],
-        "workflow": "search -> preflight -> index -> inspect -> retrieve",
+        "next_tools": (
+            ["preflight_review_sources", "get_publication_passages"]
+            if profile == "readonly"
+            else ["preflight_review_sources", "index_review_evidence"]
+        ),
+        "workflow": (
+            "search -> preflight -> direct passages"
+            if profile == "readonly"
+            else "search -> preflight -> index -> inspect -> retrieve"
+        ),
         "details_resource": "pubtator://workflow-help",
     }
     if coverage == "preflight" and preflight_service is not None:
@@ -1368,6 +1386,7 @@ async def review_llm_context_resource_impl(
     review_id: str,
     latest: bool = False,
     session_id: str | None = None,
+    profile: MCPToolProfile = "full",
 ) -> dict[str, Any]:
     context = await service.get_latest_context(review_id, session_id=session_id)
     context_payload = (
@@ -1375,6 +1394,7 @@ async def review_llm_context_resource_impl(
         if isinstance(context, ReviewLlmContext)
         else _empty_llm_context_resource(review_id)
     )
+    context_payload = filter_reachable_hints(profile, context_payload, scope="llm_context")
     return {
         "success": True,
         "review_id": review_id,
@@ -1707,6 +1727,7 @@ async def retrieve_review_context_impl(
     allow_truncated_passages: bool = True,
     max_chars_per_passage: int = 2200,
     include_resolver_trace: bool = False,
+    profile: MCPToolProfile = "full",
 ) -> dict[str, Any]:
     response = await service.retrieve_context(
         review_id=review_id,
@@ -1727,7 +1748,7 @@ async def retrieve_review_context_impl(
             max_chars_per_passage=max_chars_per_passage,
         ),
     )
-    result = response.model_dump()
+    result = filter_reachable_hints(profile, response.model_dump())
     return result if include_resolver_trace else _strip_resolver_trace(result)
 
 
@@ -1764,6 +1785,7 @@ async def retrieve_review_context_batch_impl(
     max_chars_per_passage: int = 2200,
     dry_run: bool = False,
     include_resolver_trace: bool = False,
+    profile: MCPToolProfile = "full",
 ) -> dict[str, Any]:
     args: dict[str, Any] = {
         "review_id": review_id,
@@ -1839,7 +1861,7 @@ async def retrieve_review_context_batch_impl(
         review_id=review_id,
         request=request,
     )
-    result = response.model_dump()
+    result = filter_reachable_hints(profile, response.model_dump())
     if not include_resolver_trace:
         result = _strip_resolver_trace(result)
     return attach_normalization_meta(result, normalization_warnings)

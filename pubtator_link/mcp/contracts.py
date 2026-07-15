@@ -1,5 +1,23 @@
 from __future__ import annotations
 
+from typing import Any
+
+from pubtator_link.mcp.profiles import MCPToolProfile, tool_names_for_profile
+
+READONLY_RETRIEVAL_WORKFLOW_TOOLS = [
+    "search_literature",
+    "preflight_review_sources",
+    "get_publication_passages",
+]
+
+LEAN_REVIEW_WORKFLOW_TOOLS = [
+    "search_literature",
+    "preflight_review_sources",
+    "index_review_evidence",
+    "inspect_review_index",
+    "get_review_context_batch",
+]
+
 CORE_WORKFLOW_TOOLS = [
     "workflow_help",
     "search_literature",
@@ -114,3 +132,66 @@ SCHEMA_POLICY = {
     ],
     "deprecated_tools": [],
 }
+
+
+def get_llm_driver_contract(profile: MCPToolProfile | None = None) -> dict[str, Any]:
+    contract: dict[str, Any] = {
+        "version": "2026-05-02",
+        "recommended_entrypoint": "workflow_help",
+        "discovery_policy": {
+            "strategy": "progressive_discovery",
+            "rationale": "Full tool schemas are large; inspect core workflow tools as needed.",
+        },
+        "core_workflow_tools": [
+            "search_biomedical_entities",
+            "search_literature",
+            "preflight_review_sources",
+            "index_review_evidence",
+            "inspect_review_index",
+            "ground_question",
+            "get_review_context_batch",
+            "get_review_context",
+            "get_review_passages_by_id",
+            "get_review_audit_trail",
+        ],
+        "detail_levels": ["catalog", "schemas", "examples"],
+        "schema_bundle": {
+            "index_review_evidence": {
+                "input_schema": "tools/list.parameters.index_review_evidence",
+                "output_schema": "IndexReviewEvidenceResponse",
+            },
+            "get_review_context_batch": {
+                "input_schema": "tools/list.parameters.get_review_context_batch",
+                "output_schema": "RetrieveReviewContextBatchResponse",
+            },
+            "get_review_audit_trail": {
+                "input_schema": "tools/list.parameters.get_review_audit_trail",
+                "output_schema": "ReviewAuditTrailResponse",
+            },
+        },
+        "response_contracts": {
+            "recovery": "Top-level recovery hints appear on empty, degraded, or high-drop retrievals.",
+            "quote": "Context passages include optional quote offsets for returned text and original passage text.",
+            "confidence_for_grounding": (
+                "Deterministic retrieval confidence for source grounding, not clinical "
+                "certainty. Serialized passages expose level plus compact basis codes."
+            ),
+            "dropped_summary": "Structured dropped-passage reason counts plus bounded filter and budget advice.",
+        },
+    }
+    if profile is not None:
+        allowed_tools = tool_names_for_profile(profile)
+        if profile == "readonly":
+            contract["core_workflow_tools"] = list(READONLY_RETRIEVAL_WORKFLOW_TOOLS)
+        elif profile == "lean":
+            contract["core_workflow_tools"] = list(LEAN_REVIEW_WORKFLOW_TOOLS)
+        else:
+            contract["core_workflow_tools"] = [
+                name for name in contract["core_workflow_tools"] if name in allowed_tools
+            ]
+        contract["schema_bundle"] = {
+            name: schema
+            for name, schema in contract["schema_bundle"].items()
+            if name in allowed_tools
+        }
+    return contract

@@ -17,6 +17,18 @@ def test_workflow_help_includes_metadata_and_review_index_steps() -> None:
     assert response.meta["next_commands"]
 
 
+def test_full_workflow_help_keeps_legacy_step_orders() -> None:
+    response = WorkflowHelpService().get_help("clinical_genetics_review")
+
+    assert response.steps[0].order == 0
+
+
+def test_lean_workflow_help_keeps_filtered_legacy_step_orders() -> None:
+    response = WorkflowHelpService(profile="lean").get_help("clinical_genetics_review")
+
+    assert [step.order for step in response.steps] == [0, 2, 4, 5, 6, 7, 8, 9, 10]
+
+
 def test_workflow_help_entity_discovery_uses_discovery_tools() -> None:
     response = WorkflowHelpService().get_help("entity_discovery")
 
@@ -94,3 +106,28 @@ def test_workflow_help_keeps_citation_audit_aliases_on_audit_workflow() -> None:
         assert response.task == "citation_audit"
         assert response.tool_sequence[0] == "get_citation"
         assert "get_publication_citation_graph" not in response.tool_sequence
+
+
+def test_readonly_clinical_workflow_is_contiguous_and_retrieval_only() -> None:
+    response = WorkflowHelpService(profile="readonly").get_help("clinical_genetics_review")
+
+    assert response.tool_sequence == [
+        "search_biomedical_entities",
+        "find_entity_relations",
+        "get_variant_evidence",
+        "search_literature",
+        "get_publication_metadata",
+        "preflight_review_sources",
+        "get_publication_passages",
+    ]
+    assert [step.order for step in response.steps] == list(range(1, len(response.steps) + 1))
+    assert "index_review_evidence" not in response.tool_sequence
+    assert "stage_research_session" not in response.model_dump_json()
+
+
+def test_readonly_graph_workflow_ends_with_direct_passage_retrieval() -> None:
+    response = WorkflowHelpService(profile="readonly").get_help("literature_graph")
+
+    assert response.tool_sequence[-1] == "get_publication_passages"
+    assert "index_review_evidence" not in response.tool_sequence
+    assert "get_review_context_batch" not in response.tool_sequence

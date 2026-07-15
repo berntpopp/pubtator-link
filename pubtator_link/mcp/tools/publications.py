@@ -245,17 +245,14 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                     citation_graph_timeout_ms=citation_graph_timeout_ms,
                     related_evidence_timeout_ms=related_evidence_timeout_ms,
                     metadata_backfill_timeout_ms=metadata_backfill_timeout_ms,
+                    profile=profile,
                 )
 
             try:
                 tool_pmids = merge_pmids(pmids, None, max_items=100)
             except ValueError:
                 tool_pmids = None
-            result = await run_mcp_tool(
-                "build_topic_literature_map",
-                call,
-                pmids=tool_pmids,
-            )
+            result = await run_mcp_tool("build_topic_literature_map", call, pmids=tool_pmids)
             return result if include_meta else strip_meta_for_repeated_call(result)
 
     @mcp.tool(
@@ -370,6 +367,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 include_publication_types=include_publication_types,
                 include_citations=include_citations,
                 include_coverage=include_coverage,
+                profile=profile,
             )
 
         try:
@@ -435,6 +433,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 include_provider_status=include_provider_status,
                 include_open_access_status=include_open_access_status,
                 max_results=max_results,
+                profile=profile,
             )
 
         return await run_mcp_tool(
@@ -516,6 +515,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 year_max=year_max,
                 citation_graph_timeout_ms=citation_graph_timeout_ms,
                 metadata_timeout_ms=metadata_timeout_ms,
+                profile=profile,
             )
 
         result = await run_mcp_tool(

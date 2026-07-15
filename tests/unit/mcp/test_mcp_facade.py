@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from typing import ClassVar
 
@@ -844,8 +845,7 @@ async def test_diagnostics_response_includes_minimum_workflow() -> None:
 
 
 @pytest.mark.asyncio
-async def test_readonly_diagnostics_minimum_workflow_only_advertises_registered_tools() -> None:
-    from pubtator_link.mcp.profiles import tool_names_for_profile
+async def test_readonly_diagnostics_minimum_workflow_uses_direct_passage_retrieval() -> None:
     from pubtator_link.mcp.tools.diagnostics import _diagnostics_impl
     from pubtator_link.models.responses import DiagnosticsResponse
 
@@ -869,10 +869,110 @@ async def test_readonly_diagnostics_minimum_workflow_only_advertises_registered_
 
     result = await _diagnostics_impl(Service(), profile="readonly")
 
-    readonly_tools = tool_names_for_profile("readonly")
-    assert set(result["minimum_workflow"]["grounded_review"]) <= readonly_tools
-    assert "index_review_evidence" not in result["minimum_workflow"]["grounded_review"]
+    assert result["minimum_workflow"]["grounded_review"] == [
+        "search_literature",
+        "preflight_review_sources",
+        "get_publication_passages",
+    ]
     assert "one_call" not in result["minimum_workflow"]
+
+
+@pytest.mark.asyncio
+async def test_readonly_diagnostics_redact_historical_write_tool_failures() -> None:
+    from pubtator_link.mcp.profiles import tool_names_for_profile
+    from pubtator_link.mcp.tools.diagnostics import _diagnostics_impl
+    from pubtator_link.models.responses import DiagnosticsResponse
+
+    class Service:
+        async def get_diagnostics(self) -> DiagnosticsResponse:
+            return DiagnosticsResponse(
+                success=True,
+                status="degraded",
+                subsystems={
+                    "recent_mcp_errors": {
+                        "count": 2,
+                        "latest": [
+                            {
+                                "tool_name": "index_review_evidence",
+                                "message": "index_review_evidence review store was unavailable",
+                            },
+                            {
+                                "tool_name": "inspect_review_index",
+                                "message": "read-only index probe timed out",
+                            },
+                        ],
+                    }
+                },
+                recovery=[
+                    "Recent MCP tool failure in index_review_evidence: "
+                    "index_review_evidence review store was unavailable",
+                    "Recent MCP tool failure in inspect_review_index: read-only index probe timed out",
+                ],
+                minimum_workflow={
+                    "grounded_review": ["index_review_evidence", "inspect_review_index"],
+                    "one_call": "ground_question",
+                },
+            )
+
+    result = await _diagnostics_impl(Service(), profile="readonly")
+
+    serialized = json.dumps(result, sort_keys=True)
+    unavailable = tool_names_for_profile("full") - tool_names_for_profile("readonly")
+    assert not any(tool_name in serialized for tool_name in unavailable)
+    assert "index_review_evidence" not in serialized
+    assert "ground_question" not in serialized
+    assert "review store was unavailable" in serialized
+    assert "inspect_review_index" in serialized
+    assert "read-only index probe timed out" in serialized
+
+
+@pytest.mark.asyncio
+async def test_lean_diagnostics_redact_unavailable_tool_in_allowed_error_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastmcp import Client
+
+    import pubtator_link.mcp.tools.diagnostics as diagnostics_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+    from pubtator_link.models.responses import DiagnosticsResponse
+
+    class Service:
+        async def get_diagnostics(self) -> DiagnosticsResponse:
+            return DiagnosticsResponse(
+                success=True,
+                status="degraded",
+                subsystems={
+                    "recent_mcp_errors": {
+                        "count": 1,
+                        "latest": [
+                            {
+                                "tool_name": "inspect_review_index",
+                                "message": "Use stage_research_session before retrying.",
+                            }
+                        ],
+                    }
+                },
+            )
+
+    async def fake_get_diagnostics_service() -> Service:
+        return Service()
+
+    monkeypatch.setattr(
+        diagnostics_tools,
+        "get_diagnostics_service",
+        fake_get_diagnostics_service,
+    )
+    async with Client(create_pubtator_mcp(profile="lean")) as client:
+        result = await client.call_tool("diagnostics", {}, raise_on_error=False)
+
+    assert result.is_error is False
+    payload = result.structured_content
+    assert isinstance(payload, dict)
+    error = payload["subsystems"]["recent_mcp_errors"]["latest"][0]
+    assert error["tool_name"] == "inspect_review_index"
+    assert "stage_research_session" not in json.dumps(payload, sort_keys=True)
+    assert "an unavailable tool" in error["message"]
+    assert "before retrying" in error["message"]
 
 
 def test_research_session_tools_are_registered(mcp_tool_names) -> None:

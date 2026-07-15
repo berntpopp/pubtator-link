@@ -9,6 +9,7 @@ from typing import Protocol
 import httpx
 
 from pubtator_link.api.retry import RetryPolicy, call_with_retries
+from pubtator_link.mcp.profiles import MCPToolProfile, reachable_tools
 from pubtator_link.models.discovery import (
     ArticleIdConversionRecord,
     ArticleIdConversionResponse,
@@ -365,6 +366,8 @@ class DiscoveryService:
         self,
         ids: Sequence[str],
         source: ArticleIdKind = "auto",
+        *,
+        profile: MCPToolProfile = "full",
     ) -> ArticleIdConversionResponse:
         records = await self.client.convert_article_ids(ids, source)
         candidate_pmids = _dedupe(record.pmid for record in records if record.pmid is not None)
@@ -373,7 +376,7 @@ class DiscoveryService:
             records=records,
             candidate_pmids=candidate_pmids,
             unresolved=unresolved,
-            _meta=_candidate_meta(candidate_pmids),
+            _meta=_candidate_meta(candidate_pmids, profile=profile),
         )
 
     async def find_pmid_by_doi(self, doi: str) -> str | None:
@@ -406,7 +409,12 @@ class DiscoveryService:
             ),
         )
 
-    async def lookup_citation(self, citations: Sequence[str]) -> CitationLookupResponse:
+    async def lookup_citation(
+        self,
+        citations: Sequence[str],
+        *,
+        profile: MCPToolProfile = "full",
+    ) -> CitationLookupResponse:
         lookup_values = _citation_lookup_values(citations)
         records = await self.client.lookup_citations(lookup_values)
         records = [
@@ -431,7 +439,7 @@ class DiscoveryService:
                 *(record.pmid for record in nbk_conversion_records if record.pmid is not None),
             ]
         )
-        meta = _candidate_meta(candidate_pmids)
+        meta = _candidate_meta(candidate_pmids, profile=profile)
         if nbk_ids:
             meta.next_commands = [
                 {
@@ -511,6 +519,8 @@ class DiscoveryService:
         pmids: Sequence[str],
         mode: RelatedArticleMode = "similar",
         limit: int = 20,
+        *,
+        profile: MCPToolProfile = "full",
     ) -> RelatedArticlesResponse:
         related_articles = await self.client.find_related_articles(pmids, mode, limit)
         related_articles, metadata_status = await enrich_related_article_records(
@@ -528,7 +538,7 @@ class DiscoveryService:
             unresolved=unresolved,
             metadata_status=metadata_status,
             _meta=add_related_metadata_next_command(
-                _candidate_meta(candidate_pmids),
+                _candidate_meta(candidate_pmids, profile=profile),
                 candidate_pmids,
                 metadata_status,
             ),
@@ -632,20 +642,20 @@ def _link_id_and_score(link: object) -> tuple[str | None, int]:
     return linked_id, score
 
 
-def _candidate_meta(candidate_pmids: list[str]) -> DiscoveryMeta:
+def _candidate_meta(
+    candidate_pmids: list[str],
+    *,
+    profile: MCPToolProfile,
+) -> DiscoveryMeta:
     next_commands: list[dict[str, object]] = []
     if candidate_pmids:
+        preferred = (
+            ("preflight_review_sources", "get_publication_passages")
+            if profile == "readonly"
+            else ("stage_research_session", "index_review_evidence")
+        )
         next_commands = [
-            {
-                "tool": "stage_research_session",
-                "arguments": {"pmids": candidate_pmids},
-            },
-            {
-                "tool": "index_review_evidence",
-                "arguments": {"pmids": candidate_pmids},
-            },
+            {"tool": tool, "arguments": {"pmids": candidate_pmids}}
+            for tool in reachable_tools(profile, preferred)
         ]
-    return DiscoveryMeta(
-        source_urls=[NCBI_EUTILS_SOURCE_URL],
-        next_commands=next_commands,
-    )
+    return DiscoveryMeta(source_urls=[NCBI_EUTILS_SOURCE_URL], next_commands=next_commands)

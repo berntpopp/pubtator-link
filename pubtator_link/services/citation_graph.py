@@ -7,6 +7,7 @@ import time
 from collections.abc import Awaitable, Mapping, Sequence
 from typing import Any, Literal, Protocol
 
+from pubtator_link.mcp.profiles import MCPToolProfile, reachable_tools
 from pubtator_link.models.literature_graph import (
     CitationGraphDirection,
     LiteratureAvailability,
@@ -125,9 +126,8 @@ class CitationGraphService:
         )
 
     async def get_citation_graph(
-        self, request: PublicationCitationGraphRequest
+        self, request: PublicationCitationGraphRequest, *, profile: MCPToolProfile = "full"
     ) -> PublicationCitationGraphResponse:
-        """Return citation neighbors for one PMID or DOI source."""
         warnings: list[ProviderWarning] = []
         source, source_resolution_result = await self._source_paper(request)
         references: list[LiteraturePaper] = []
@@ -376,7 +376,7 @@ class CitationGraphService:
                 "omitted_counts": compact_omitted_counts,
                 "warnings": coalesced_provider_warnings(warnings),
                 "next_commands": [
-                    *_next_commands(candidate_pmids),
+                    *_next_commands(candidate_pmids, profile=profile),
                     *graph_detail_next_commands(
                         tool_name="get_publication_citation_graph",
                         request=request,
@@ -1058,18 +1058,19 @@ def _metadata_only(papers: Sequence[LiteraturePaper]) -> list[LiteraturePaper]:
     return [paper for paper in dedupe_papers(list(papers)) if paper.status in metadata_statuses]
 
 
-def _next_commands(candidate_pmids: list[str]) -> list[dict[str, Any]]:
+def _next_commands(
+    candidate_pmids: list[str],
+    *,
+    profile: MCPToolProfile,
+) -> list[dict[str, Any]]:
     if not candidate_pmids:
         return []
     return [
-        {
-            "tool": "get_publication_passages",
-            "arguments": {"pmids": candidate_pmids},
-        },
-        {
-            "tool": "index_review_evidence",
-            "arguments": {"pmids": candidate_pmids},
-        },
+        {"tool": tool, "arguments": {"pmids": candidate_pmids}}
+        for tool in reachable_tools(
+            profile,
+            ("get_publication_passages", "index_review_evidence"),
+        )
     ]
 
 

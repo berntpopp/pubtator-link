@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 
+from pubtator_link.mcp.profiles import MCPToolProfile, tool_names_for_profile
 from pubtator_link.mcp.review_resources import get_tool_detail_resource
 
 EXPECTED_REVIEW_RESOURCE_TEMPLATES = {
@@ -17,6 +19,23 @@ EXPECTED_REVIEW_RESOURCE_TEMPLATES = {
     "pubtator://reviews/{review_id}/llm-context/latest",
     "pubtator://capabilities/tools/{tool_name}",
 }
+
+
+def _tool_tokens(value: object) -> set[str]:
+    if isinstance(value, str):
+        return set(re.findall(r"[a-z][a-z0-9_]*", value))
+    if isinstance(value, dict):
+        tokens: set[str] = set()
+        for key, item in value.items():
+            tokens |= _tool_tokens(key)
+            tokens |= _tool_tokens(item)
+        return tokens
+    if isinstance(value, list):
+        tokens = set()
+        for item in value:
+            tokens |= _tool_tokens(item)
+        return tokens
+    return set()
 
 
 class _Dumpable:
@@ -126,6 +145,12 @@ def test_tool_detail_resource_returns_not_found_for_unknown_tool() -> None:
     # The caller-supplied tool name is not echoed back into the message (it could
     # carry hostile prose / code points); a fixed message is returned instead.
     payload = get_tool_detail_resource("pubtator.nope")
+
+    assert payload == {"error": "not_found", "message": "Unknown tool."}
+
+
+def test_readonly_tool_detail_resource_hides_unregistered_write_tools() -> None:
+    payload = get_tool_detail_resource("index_review_evidence", profile="readonly")
 
     assert payload == {"error": "not_found", "message": "Unknown tool."}
 
@@ -398,6 +423,91 @@ async def test_llm_context_resource_returns_latest_snapshot_or_empty_context() -
 
 
 @pytest.mark.asyncio
+async def test_readonly_llm_context_resource_filters_persisted_write_hints() -> None:
+    from pubtator_link.mcp.service_adapters import review_llm_context_resource_impl
+    from pubtator_link.models.review_rerag import ReviewLlmContext
+
+    class FakeService:
+        async def get_latest_context(
+            self, review_id: str, *, session_id: str | None = None
+        ) -> ReviewLlmContext:
+            return ReviewLlmContext(
+                context_id="ctx-1",
+                review_id=review_id,
+                session_id=session_id,
+                last_next_commands=[
+                    {"tool": "index_review_evidence", "arguments": {"pmids": ["1"]}},
+                    {"tool": "get_publication_passages", "arguments": {"pmids": ["1"]}},
+                ],
+                created_at="2026-05-03T00:00:00Z",
+                updated_at="2026-05-03T00:00:00Z",
+            )
+
+    result = await review_llm_context_resource_impl(
+        service=FakeService(),
+        review_id="rev-1",
+        profile="readonly",
+    )
+
+    assert result["context"]["last_next_commands"] == [
+        {"tool": "get_publication_passages", "arguments": {"pmids": ["1"]}}
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("profile", ["lean", "readonly"])
+async def test_llm_context_resource_redacts_inaccessible_tools_from_persisted_text(
+    profile: MCPToolProfile,
+) -> None:
+    from pubtator_link.mcp.service_adapters import review_llm_context_resource_impl
+    from pubtator_link.models.review_rerag import ReviewLlmContext
+
+    workflow = {
+        "stage_research_session": {
+            "instruction": "Use index_review_evidence before calling stage_research_session.",
+        },
+        "safe_value": "retain this request detail",
+    }
+    if profile == "lean":
+        workflow["get_publication_annotations"] = (
+            "get_publication_annotations is unavailable in this profile."
+        )
+    context = ReviewLlmContext(
+        context_id="ctx-1",
+        review_id="rev-1",
+        request={"workflow": workflow},
+        response_summary={
+            "message": "stage_research_session reported a resumable backend failure."
+        },
+        open_questions=[{"hint": "Can index_review_evidence be retried after retrieval?"}],
+        created_at="2026-05-03T00:00:00Z",
+        updated_at="2026-05-03T00:00:00Z",
+    )
+    source_payload = context.model_dump(mode="json")
+
+    class FakeService:
+        async def get_latest_context(
+            self, review_id: str, *, session_id: str | None = None
+        ) -> ReviewLlmContext:
+            assert review_id == context.review_id
+            assert session_id is None
+            return context
+
+    result = await review_llm_context_resource_impl(
+        service=FakeService(),
+        review_id="rev-1",
+        profile=profile,
+    )
+
+    unavailable = tool_names_for_profile("full") - tool_names_for_profile(profile)
+    assert not (_tool_tokens(result) & unavailable)
+    assert "request" not in result["context"]
+    assert "response_summary" not in result["context"]
+    assert "open_questions" not in result["context"]
+    assert context.model_dump(mode="json") == source_payload
+
+
+@pytest.mark.asyncio
 async def test_registered_llm_context_resource_reads_session_query_parameter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -437,3 +547,45 @@ async def test_registered_llm_context_resource_reads_session_query_parameter(
 
     assert payload["context"]["context_id"] == "ctx-1"
     assert payload["context"]["selected_passage_ids"] == ["p/1"]
+
+
+@pytest.mark.asyncio
+async def test_readonly_registered_llm_context_resource_filters_persisted_write_hints(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pubtator_link.mcp.metadata as metadata
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+    from pubtator_link.models.review_rerag import ReviewLlmContext
+
+    class FakeService:
+        async def get_latest_context(
+            self, review_id: str, *, session_id: str | None = None
+        ) -> ReviewLlmContext:
+            return ReviewLlmContext(
+                context_id="ctx-1",
+                review_id=review_id,
+                session_id=session_id,
+                last_next_commands=[
+                    {"tool": "index_review_evidence", "arguments": {"pmids": ["1"]}},
+                    {"tool": "get_publication_passages", "arguments": {"pmids": ["1"]}},
+                ],
+                created_at="2026-05-03T00:00:00Z",
+                updated_at="2026-05-03T00:00:00Z",
+            )
+
+    async def fake_get_llm_review_context_service() -> FakeService:
+        return FakeService()
+
+    monkeypatch.setattr(
+        metadata,
+        "get_llm_review_context_service",
+        fake_get_llm_review_context_service,
+    )
+    mcp = create_pubtator_mcp(profile="readonly")
+
+    result = await mcp.read_resource("pubtator://reviews/rev-1/llm-context/latest")
+    payload = json.loads(result.contents[0].content)
+
+    assert payload["context"]["last_next_commands"] == [
+        {"tool": "get_publication_passages", "arguments": {"pmids": ["1"]}}
+    ]
