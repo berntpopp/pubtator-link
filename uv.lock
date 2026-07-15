@@ -1748,7 +1748,7 @@ wheels = [
 
 [[package]]
 name = "pubtator-link"
-version = "6.1.6"
+version = "7.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "asgi-correlation-id" },
