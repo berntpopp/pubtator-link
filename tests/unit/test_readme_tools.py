@@ -66,3 +66,20 @@ async def test_readme_tools_table_matches_registered_tools() -> None:
 async def test_readme_documents_the_default_profile() -> None:
     """The table's profile pin must track the server's actual default."""
     assert DEFAULT_MCP_PROFILE == "readonly"
+
+
+def test_readme_documents_the_safe_readonly_evidence_contract() -> None:
+    """The public README must not reintroduce an unreachable write workflow."""
+    text = " ".join(README.read_text(encoding="utf-8").split())
+
+    expected = (
+        "`search_literature` → `preflight_review_sources` → `get_publication_passages`",
+        "`index_review_evidence` is available only to configured, authenticated "
+        "non-readonly profiles.",
+        "Candidate variants are not classifications for the query.",
+        "compact, cursor-paginated summaries; use "
+        "`get_research_session_status` for one session's details.",
+    )
+
+    for requirement in expected:
+        assert requirement in text

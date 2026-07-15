@@ -14,6 +14,13 @@ single-query review retrieval, quickstart, exports, and maintenance views. Use
 `PUBTATOR_LINK_MCP_PROFILE=readonly` for hosted research deployments that should
 allow read-only discovery and retrieval while excluding write/export tools.
 
+The readonly evidence sequence is `search_literature` -> `preflight_review_sources` ->
+`get_publication_passages`. It deliberately ends in direct passage retrieval: it does not
+stage, index, export, or otherwise mutate a review corpus. `index_review_evidence` is
+available only to configured, authenticated non-readonly profiles. A `lean` or `full`
+deployment may use its registered index workflow after authentication; clients must obtain
+the advertised profile surface rather than reusing a readonly workflow hint.
+
 ## Start The Server
 
 ```bash
@@ -62,7 +69,7 @@ For LLM context economy it defaults to compact results with plain highlights:
 abstract-only hints before indexing, and request NLM/BibTeX citations only for
 the final corpus.
 
-Recommended review workflow:
+Recommended indexed-review workflow (authenticated non-readonly profiles only):
 
 For standard grounded research questions, prefer `ground_question`
 when the server is allowed to index review evidence. It returns selected PMIDs,
@@ -104,6 +111,12 @@ temporary request ID; choose a stable project slug without PHI. If
 For self-hosted deployments, run `make db-migrate` and retry. While the review
 index is unavailable, use `get_publication_passages` with the same
 PMIDs to preserve deterministic fallback behavior.
+
+`get_variant_evidence` returns exact/equivalent source classifications separately from
+`candidate_variants`; candidates are lookup leads, not classifications for the query.
+`list_research_sessions` returns bounded compact summaries and a cursor when more pages
+exist. Echo the cursor for the next page; call `get_research_session_status` for details
+of one selected session rather than treating a list row as a full session record.
 
 When search coverage preflight fails, inspect `preflight_error`. Retry only when
 `preflight_error.retryable` is true. In particular,
