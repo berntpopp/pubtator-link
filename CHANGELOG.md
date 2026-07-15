@@ -1,6 +1,30 @@
 # Changelog
 
-## [Unreleased]
+## [7.1.0] - 2026-07-15
+
+Edge authentication. Adds an optional Keycloak-OAuth mode so a single `/mcp` can serve both
+standalone OAuth users (claude.ai connectors, Claude Code, scripts) and the router — the latter
+with its own static service token, never the caller's — both reaching the full writeable tool
+surface. The default (`AUTH_MODE=none`) is unchanged and backwards-compatible, so the released
+image is safe to publish before Keycloak exists.
+
+### Added
+
+- **`PUBTATOR_LINK_AUTH_MODE=oauth`** — one `/mcp` accepts a Keycloak JWT **or** the router's
+  static service token via FastMCP `MultiAuth`. The JWT verifier is audience-bound to the
+  resource URI, and Protected-Resource-Metadata is served so the claude.ai OAuth flow completes.
+- **Write-scope authorization** — `PUBTATOR_LINK_REQUIRE_WRITE_SCOPE` (default `false` =
+  write-for-all-authenticated) gates the authoritative `WRITE_TOOLS` on the `pubtator:write` scope.
+- **Deployment** — a commented oauth+full go-live block and a `FASTMCP_HOME` client-store volume
+  in the production overlay; `docs/SECURITY.md` documents the model and a Keycloak operator runbook.
+
+### Security
+
+- In `oauth` mode the mutating REST review routes (`/api/reviews/*`) are **not registered**,
+  closing an unauthenticated write path to the review database that lives outside the MCP mount.
+- Audience binding rejects tokens minted for other backends; `PUBLIC_BASE_URL` is validated as a
+  bare origin and `JWT_AUDIENCE` must equal `PUBLIC_BASE_URL + /mcp`, preventing a doubled
+  `/mcp/mcp` protected-resource advertisement.
 
 ### Changed
 
