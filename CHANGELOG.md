@@ -58,6 +58,31 @@ fails at schema validation instead).
   matched nothing (with `success: true`) for a mis-cased or unknown value; the declared enums now
   reject it.
 
+### Fixed (re-review round)
+
+- **No advertised call form is uncallable.** The now-redundant alias parameters (`query`/`text`
+  synonyms, singular `pmid`, citation-graph `doi`/`query`, topic-map `topic`/`question`/`seed_pmids`)
+  are **removed** rather than left in the schema as documented-but-uncallable alternatives. Pass the
+  canonical primary parameter; a single PMID goes in the `pmids` list.
+- **Silently-empty filter, closed at the class level.** The advanced `filters` JSON `type` is now
+  validated against the same publication-type vocabulary as the flat `publication_types` enum, so
+  `{"type":["review"]}` is rejected as `invalid_input` instead of bypassing the enum and returning
+  an empty success. `find_entity_relations.relation_type`/`target_entity_type` and
+  `get_server_capabilities.details` are now declared enums (subset of the runtime vocabulary).
+- **Error canonicalization at the egress.** A tool error raised *outside* `run_mcp_tool` (and the
+  tool-storage layout a fresh server uses) previously reached the wire as `isError:true` with
+  `structuredContent:null`; the handler now wraps tools from both FastMCP registries and re-shapes
+  any raised error into a flat envelope with a six-value `error_code` (original under
+  `error_subtype`). `text_annotation_degraded` and the audit-export path now carry a canonical
+  top-level `error_code`.
+- **Honest filtered pagination.** A PMID-filtered `inspect_review_index` computed remaining counts
+  and the next cursor from GLOBAL totals — over-reporting remaining and repeating cursors after an
+  empty filtered page (a loop). It is now bounded by page fullness under a filter, with remaining
+  reported as unknown rather than a global number.
+- **Honest fallback totals.** The local single-page search fallback no longer overwrites `total`
+  with one page's match count and `total_pages` with 1; it reports a lower bound plus `has_more` so
+  the client is never falsely told retrieval is complete.
+
 ### Migration
 
 - `search_literature.text`, `search_guidelines.text`, `search_biomedical_entities.query`,
@@ -66,8 +91,10 @@ fails at schema validation instead).
   `get_publication_annotations.pmids`, `estimate_publication_context.pmids`,
   `find_related_articles.pmids`, `preflight_review_sources.pmids`,
   `get_publication_citation_graph.pmid`, `get_variant_evidence.variant`, and
-  `get_review_context.question` are now **required** (they were always required at runtime). Pass
-  the canonical primary parameter; the singular/synonym aliases remain optional.
+  `get_review_context.question`/`get_review_context_batch.queries` are now **required** (they were
+  always required at runtime), and the redundant singular/synonym alias parameters have been
+  **removed**. Resolve a DOI or free-text to a PMID first (`convert_article_ids` / `search_literature`)
+  for `get_publication_citation_graph`.
 - Section filters on `get_publication_passages` / `estimate_publication_context` now accept the
   canonical uppercase BioC labels; publication-type and search-section filters accept the declared
   case-sensitive vocabularies.

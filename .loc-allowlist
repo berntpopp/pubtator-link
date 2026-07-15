@@ -11,10 +11,10 @@
 # Grew when the MCP contract-hardening (genefoundry-router#126) documented every input property
 # (Tool-Schema Documentation Standard v1). Decomposition: split build_topic_literature_map into
 # its own module (publications.py) and extract the error-code canon into error_codes.py (errors.py).
-pubtator_link/mcp/tools/publications.py:691
-pubtator_link/mcp/errors.py:653
+pubtator_link/mcp/tools/publications.py:628
+pubtator_link/mcp/errors.py:691
 pubtator_link/repositories/review_rerag.py:2393
-pubtator_link/mcp/service_adapters.py:1938
+pubtator_link/mcp/service_adapters.py:1944
 pubtator_link/services/topic_literature_map.py:1821
 pubtator_link/models/review_rerag.py:1253
 pubtator_link/services/citation_graph.py:1244
