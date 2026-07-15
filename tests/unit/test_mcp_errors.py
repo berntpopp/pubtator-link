@@ -9,6 +9,7 @@ from pubtator_link.api.client import PubTatorAPIError
 from pubtator_link.mcp.errors import (
     McpErrorContext,
     error_code_for_exception,
+    error_reason_for_exception,
     mcp_tool_error,
     run_mcp_tool,
     sanitize_error_message,
@@ -61,7 +62,7 @@ def test_mcp_tool_error_serializes_recovery_envelope() -> None:
         ),
     )
 
-    assert payload["error_code"] == "review_schema_not_current"
+    assert payload["error_code"] == "upstream_unavailable"
     assert payload["fallback_tool"] == "get_publication_passages"
     assert payload["fallback_args"]["pmids"] == ["39540697"]
     assert "updated_at" not in payload["message"]
@@ -105,7 +106,7 @@ def test_mcp_tool_error_does_not_leak_raw_exception_to_logs(
     # The failure log still exists and carries only sanitized structured fields.
     warning_records = [r for r in caplog.records if r.message == "MCP tool execution failed"]
     assert warning_records
-    assert warning_records[-1].error_code == "internal_error"
+    assert warning_records[-1].error_code == "internal"
     assert warning_records[-1].exception_type == "RuntimeError"
 
 
@@ -118,7 +119,7 @@ def test_preflight_review_sources_error_points_to_publication_passages() -> None
         ),
     )
 
-    assert payload["error_code"] == "internal_error"
+    assert payload["error_code"] == "internal"
     assert payload["fallback_tool"] == "get_publication_passages"
     assert payload["fallback_args"] == {
         "pmids": ["10490564", "10927144"],
@@ -139,19 +140,32 @@ def test_preflight_review_sources_error_points_to_publication_passages() -> None
     }
 
 
-def test_error_code_for_typed_review_errors() -> None:
-    assert error_code_for_exception(ReviewSchemaStaleError("schema stale")) == (
+def test_error_reason_for_typed_review_errors() -> None:
+    assert error_reason_for_exception(ReviewSchemaStaleError("schema stale")) == (
         "review_schema_not_current"
     )
-    assert error_code_for_exception(ReviewIndexUnavailableError("db unavailable")) == (
+    assert error_reason_for_exception(ReviewIndexUnavailableError("db unavailable")) == (
         "review_index_unavailable"
     )
+    assert error_reason_for_exception(UpstreamUnavailableError("timeout")) == (
+        "upstream_unavailable"
+    )
+    assert error_reason_for_exception(ValidationFailureError("bad input")) == ("validation_failed")
+
+
+def test_error_code_maps_typed_review_reasons_onto_closed_wire_enum() -> None:
+    assert error_code_for_exception(ReviewSchemaStaleError("schema stale")) == (
+        "upstream_unavailable"
+    )
+    assert error_code_for_exception(ReviewIndexUnavailableError("db unavailable")) == (
+        "upstream_unavailable"
+    )
     assert error_code_for_exception(UpstreamUnavailableError("timeout")) == ("upstream_unavailable")
-    assert error_code_for_exception(ValidationFailureError("bad input")) == ("validation_failed")
+    assert error_code_for_exception(ValidationFailureError("bad input")) == ("invalid_input")
 
 
-def test_error_code_legacy_schema_text_fallback_still_works() -> None:
-    assert error_code_for_exception(RuntimeError("column updated_at missing from reviews")) == (
+def test_error_reason_legacy_schema_text_fallback_still_works() -> None:
+    assert error_reason_for_exception(RuntimeError("column updated_at missing from reviews")) == (
         "review_schema_not_current"
     )
 
@@ -166,7 +180,7 @@ def test_mcp_tool_error_sanitizes_typed_review_schema_message() -> None:
         McpErrorContext(tool_name="index_review_evidence"),
     )
 
-    assert payload["error_code"] == "review_schema_not_current"
+    assert payload["error_code"] == "upstream_unavailable"
     assert payload["message"] == "Review database schema is not current."
 
 
@@ -214,7 +228,7 @@ def test_generic_internal_error_does_not_claim_schema_is_stale() -> None:
         McpErrorContext(tool_name="pubtator_unknown_tool"),
     )
 
-    assert payload["error_code"] == "internal_error"
+    assert payload["error_code"] == "internal"
     assert "review schema" not in payload["recovery_action"].lower()
     assert "recent_mcp_errors" in payload["recovery_action"]
 
@@ -225,7 +239,7 @@ def test_schema_stale_recovery_is_reserved_for_schema_errors() -> None:
         McpErrorContext(tool_name="index_review_evidence"),
     )
 
-    assert payload["error_code"] == "review_schema_not_current"
+    assert payload["error_code"] == "upstream_unavailable"
     assert "review schema is stale" in payload["recovery_action"].lower()
 
 
@@ -415,12 +429,12 @@ def test_mcp_output_validation_error_is_actionable_and_recorded() -> None:
 
     errors = get_recent_mcp_errors()
     assert payload["success"] is False
-    assert payload["error_code"] == "output_validation_failed"
+    assert payload["error_code"] == "internal"
     assert payload["error_field"] == "explanation"
     assert payload["fallback_response_mode"] == "quotes"
     assert payload["suggested_action"].startswith("Retry")
     assert errors[-1]["tool_name"] == "get_review_context_batch"
-    assert errors[-1]["error_code"] == "output_validation_failed"
+    assert errors[-1]["error_code"] == "internal"
     assert (
         errors[-1]["message"] == "The tool response did not match its declared MCP output schema."
     )
@@ -462,10 +476,10 @@ async def test_installed_mcp_output_validation_handler_replaces_bare_sdk_error()
     payload = json.loads(result.root.content[0].text)
 
     assert result.root.isError is True
-    assert payload["error_code"] == "output_validation_failed"
+    assert payload["error_code"] == "internal"
     assert payload["error_field"] == "explanation"
     assert payload["fallback_response_mode"] == "quotes"
-    assert get_recent_mcp_errors()[-1]["error_code"] == "output_validation_failed"
+    assert get_recent_mcp_errors()[-1]["error_code"] == "internal"
 
 
 @pytest.mark.asyncio
@@ -482,7 +496,7 @@ async def test_mcp_error_wrapper_returns_flat_envelope_without_raising() -> None
     )
 
     assert payload["success"] is False
-    assert payload["error_code"] == "review_schema_not_current"
+    assert payload["error_code"] == "upstream_unavailable"
     assert payload["_meta"]["tool"] == "index_review_evidence"
 
 
@@ -505,7 +519,7 @@ async def test_mcp_error_wrapper_preserves_input_normalization_details() -> None
     payload = await run_mcp_tool("get_review_context_batch", failing)
 
     assert payload["success"] is False
-    assert payload["error_code"] == "validation_failed"
+    assert payload["error_code"] == "invalid_input"
     assert payload["field_errors"] == field_errors
     assert payload["recovery_hint"] == recovery_hint
     assert payload["message"] == "Invalid MCP arguments."
@@ -535,11 +549,11 @@ async def test_mcp_tool_wrapper_preserves_error_code_in_recent_errors_and_metric
     failed_records = [record for record in caplog.records if record.message == "mcp_tool_failed"]
     metrics = metrics_payload().decode()
 
-    assert errors[-1]["error_code"] == "review_schema_not_current"
+    assert errors[-1]["error_code"] == "upstream_unavailable"
     assert errors[-1]["message"] == "Review database schema is not current."
-    assert failed_records[-1].error_code == "review_schema_not_current"
+    assert failed_records[-1].error_code == "upstream_unavailable"
     assert (
-        'mcp_tool_calls_total{error_code="review_schema_not_current",'
+        'mcp_tool_calls_total{error_code="upstream_unavailable",'
         'outcome="failure",tool_name="index_review_evidence"}'
     ) in metrics
 

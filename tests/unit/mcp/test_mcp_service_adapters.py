@@ -1021,7 +1021,7 @@ async def test_get_research_session_status_adapter_maps_session_id_only_errors()
     assert not_found["success"] is False
     assert not_found["error_code"] == "not_found"
     assert ambiguous["success"] is False
-    assert ambiguous["error_code"] == "validation_failed"
+    assert ambiguous["error_code"] == "invalid_input"
 
 
 async def _run_ground_question_fixture(service_adapters, **kwargs):

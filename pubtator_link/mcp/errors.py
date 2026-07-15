@@ -33,6 +33,43 @@ logger = logging.getLogger(__name__)
 RECENT_MCP_ERROR_LIMIT = 50
 _RECENT_MCP_ERRORS: list[dict[str, Any]] = []
 
+# Response-Envelope Standard v1: ``error_code`` is a CLOSED enum, harmonized across the fleet.
+# Anything else (however sensible it reads) is a violation, because a client branching on the
+# code sees an unrecognized value. Internally we keep a finer-grained *reason* (used to pick the
+# recovery text and metrics label); this table projects every reason onto the six canonical codes
+# that reach the wire.
+CANONICAL_ERROR_CODES: frozenset[str] = frozenset(
+    {
+        "invalid_input",
+        "not_found",
+        "ambiguous_query",
+        "upstream_unavailable",
+        "rate_limited",
+        "internal",
+    }
+)
+
+_REASON_TO_CANONICAL: dict[str, str] = {
+    # bad argument the caller CAN fix -> invalid_input (never not_found: not_found tells the model
+    # the *tool* does not exist, so it strikes it from its list and never calls it again).
+    "validation_failed": "invalid_input",
+    "curated_url_rejected": "invalid_input",
+    # the review database (an upstream dependency of this server) is unreachable or its schema is
+    # not current -> upstream_unavailable, so the model retries rather than treating it as a bug.
+    "review_index_unavailable": "upstream_unavailable",
+    "review_schema_not_current": "upstream_unavailable",
+    # server-side faults -> internal.
+    "output_validation_failed": "internal",
+    "internal_error": "internal",
+}
+
+
+def canonical_error_code(reason: str) -> str:
+    """Project an internal error *reason* onto the closed wire enum."""
+    if reason in CANONICAL_ERROR_CODES:
+        return reason
+    return _REASON_TO_CANONICAL.get(reason, "internal")
+
 
 def mcp_field_validation_error(
     *,
@@ -41,7 +78,7 @@ def mcp_field_validation_error(
     recovery_hint: str,
 ) -> dict[str, Any]:
     return {
-        "code": "validation_failed",
+        "code": "invalid_input",
         "field_errors": [{"field": field, "reason": reason}],
         "recovery_hint": recovery_hint,
     }
@@ -192,8 +229,12 @@ def clear_recent_mcp_errors() -> None:
     _RECENT_MCP_ERRORS.clear()
 
 
-def error_code_for_exception(exc: Exception) -> str:
-    """Return a stable code suitable for deterministic LLM branching."""
+def error_reason_for_exception(exc: Exception) -> str:
+    """Return a fine-grained internal *reason* (drives recovery text + metrics).
+
+    This is NOT the wire code. Project it with :func:`canonical_error_code` before it reaches a
+    caller-visible envelope, so the wire ``error_code`` stays inside the closed fleet enum.
+    """
     if isinstance(exc, ReviewSchemaStaleError):
         return "review_schema_not_current"
     if isinstance(exc, ReviewIndexUnavailableError):
@@ -216,6 +257,11 @@ def error_code_for_exception(exc: Exception) -> str:
     if isinstance(exc, ValueError):
         return "validation_failed"
     return "internal_error"
+
+
+def error_code_for_exception(exc: Exception) -> str:
+    """Return the closed-enum wire ``error_code`` for an exception."""
+    return canonical_error_code(error_reason_for_exception(exc))
 
 
 def _fallback_for_context(context: McpErrorContext) -> tuple[str | None, dict[str, Any] | None]:
@@ -244,9 +290,9 @@ def _fallback_for_context(context: McpErrorContext) -> tuple[str | None, dict[st
 def _recovery_text_for_context(
     context: McpErrorContext,
     fallback_tool: str | None,
-    error_code: str = "internal_error",
+    reason: str = "internal_error",
 ) -> str:
-    if error_code == "review_schema_not_current":
+    if reason == "review_schema_not_current":
         return (
             "Run diagnostics. If the review schema is stale, apply database migrations and retry."
         )
@@ -256,14 +302,14 @@ def _recovery_text_for_context(
             "Use mode='full_abstract' for article-local answering; run diagnostics only if "
             "passage retrieval also fails."
         )
-    if error_code == "upstream_unavailable":
+    if reason == "upstream_unavailable":
         if context.tool_name == "search_literature":
             return (
                 "Retry later. If optional filters caused the upstream failure, retry without "
                 "filters and post-filter the returned results client-side."
             )
         return "Retry later or run diagnostics if the upstream failure persists."
-    if error_code == "curated_url_rejected":
+    if reason == "curated_url_rejected":
         return "Use curated URLs from the configured public literature source allowlist."
     if context.tool_name == "convert_article_ids":
         return (
@@ -322,24 +368,6 @@ def mcp_validation_tool_error(
 ) -> dict[str, Any]:
     """Build a sanitized flat envelope for a validation failure raised before
     tool execution starts (never raised -- see ``install_validation_error_handler``)."""
-    payload: dict[str, Any] = {
-        "success": False,
-        "error_code": "validation_failed",
-        "message": "Invalid MCP arguments.",
-        "retryable": False,
-        "fallback_tool": None,
-        "fallback_args": None,
-        "recovery_action": _recovery_text_for_context(
-            McpErrorContext(tool_name=tool_name),
-            fallback_tool=None,
-            error_code="validation_failed",
-        ),
-        "_meta": {
-            "tool": tool_name,
-            "next_commands": [{"tool": "diagnostics", "arguments": {}}],
-            "unsafe_for_clinical_use": True,
-        },
-    }
     details = extract_validation_details(parameters, _pydantic_validation_details(exc))
     # ``unexpected_params`` echoes the caller-supplied (arbitrary) argument names;
     # strip forbidden code points before they reach either MCP mirror. The other
@@ -349,16 +377,50 @@ def mcp_validation_tool_error(
             sanitize_message(name) if isinstance(name, str) else name
             for name in details["unexpected_params"]
         ]
+    # The rejected value must produce a message the model can ACT on: a bare "Invalid MCP
+    # arguments." names nothing. Name the accepted parameters (schema-derived, server-authored,
+    # safe to surface) and carry a structured ``field_errors`` frame -- caller-invented argument
+    # names are redacted to "unknown" rather than echoed. (Response-Envelope Standard v1;
+    # MCP 2025-11-25 SEP-1303: "Tool Execution Errors contain actionable feedback".)
+    valid_params = details.get("valid_params") or []
+    message = "Invalid MCP arguments."
+    if valid_params:
+        message += " Accepted parameters: " + ", ".join(valid_params) + "."
+    field_errors: list[dict[str, str]] = []
+    for missing in details.get("missing_params") or []:
+        field_errors.append({"field": missing, "reason": "required parameter is missing"})
+    if details.get("unexpected_params"):
+        field_errors.append({"field": "unknown", "reason": "argument is not accepted by this tool"})
+    payload: dict[str, Any] = {
+        "success": False,
+        "error_code": "invalid_input",
+        "message": message,
+        "retryable": False,
+        "fallback_tool": None,
+        "fallback_args": None,
+        "recovery_action": _recovery_text_for_context(
+            McpErrorContext(tool_name=tool_name),
+            fallback_tool=None,
+            reason="validation_failed",
+        ),
+        "_meta": {
+            "tool": tool_name,
+            "next_commands": [{"tool": "diagnostics", "arguments": {}}],
+            "unsafe_for_clinical_use": True,
+        },
+    }
+    if field_errors:
+        payload["field_errors"] = field_errors
     payload.update(details)
     record_mcp_error(
         tool_name=tool_name,
-        error_code="validation_failed",
+        error_code="invalid_input",
         message=payload["message"],
     )
     record_mcp_tool_call(
         tool_name=tool_name,
         outcome="failure",
-        error_code="validation_failed",
+        error_code="invalid_input",
         latency_seconds=0.0,
     )
     return payload
@@ -426,9 +488,14 @@ def install_validation_error_handler(mcp_server: Any) -> None:
                     exc=exc,
                 )
                 return ToolResult(structured_content=payload, is_error=True)
-            if _is_error_envelope(getattr(result, "structured_content", None)):
+            structured = getattr(result, "structured_content", None)
+            # Response-Envelope Standard v1: every ``success: false`` envelope MUST carry MCP
+            # ``isError: true`` so a client branching on isError surfaces it to the model. This
+            # covers both the flat error frame (recovery_action) and any business payload that sets
+            # success=False on its own (e.g. a partial estimate or a not-found manifest).
+            if isinstance(structured, dict) and structured.get("success") is False:
                 return ToolResult(
-                    structured_content=result.structured_content,
+                    structured_content=structured,
                     meta=result.meta,
                     is_error=True,
                 )
@@ -449,7 +516,8 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> dict[str, Any]:
     # the exception message and traceback (which can carry a Postgres DSN,
     # credentials, host/IP, or free-text PII) into logs despite the sanitized
     # envelope returned to the caller.
-    error_code = error_code_for_exception(exc)
+    reason = error_reason_for_exception(exc)
+    error_code = canonical_error_code(reason)
     logger.warning(
         "MCP tool execution failed",
         extra={
@@ -476,7 +544,7 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> dict[str, Any]:
         "retryable": error_code == "upstream_unavailable",
         "fallback_tool": fallback_tool,
         "fallback_args": fallback_args,
-        "recovery_action": _recovery_text_for_context(context, fallback_tool, error_code),
+        "recovery_action": _recovery_text_for_context(context, fallback_tool, reason),
         "_meta": {
             "tool": context.tool_name,
             "next_commands": next_commands,

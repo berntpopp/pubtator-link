@@ -166,7 +166,7 @@ async def test_unknown_tool_no_reflection_to_caller_or_logs() -> None:
     structured = result.structured_content
     assert structured is not None
     assert structured["success"] is False
-    assert structured["error_code"] in ("not_found", "invalid_input", "validation_failed")
+    assert structured["error_code"] in ("not_found", "invalid_input")
     # The requested name must NOT be echoed back via _meta.tool.
     assert "tool" not in structured["_meta"]
     _assert_clean_node(structured)

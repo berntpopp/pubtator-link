@@ -532,7 +532,7 @@ def test_audit_bundle_response_can_report_field_errors() -> None:
         success=False,
         audit_bundle=None,
         error={
-            "code": "validation_failed",
+            "code": "invalid_input",
             "field_errors": [
                 {"field": "export_path", "reason": "parent directory is not writable"}
             ],

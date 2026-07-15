@@ -337,7 +337,7 @@ class GroundQuestionResponse(BaseModel):
 class ResearchSessionStatusResponse(BaseModel):
     success: bool = True
     manifest: ResearchSessionManifest | None = None
-    error_code: Literal["not_found", "validation_failed"] | None = None
+    error_code: Literal["not_found", "invalid_input"] | None = None
     message: str | None = None
 
 
