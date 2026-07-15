@@ -354,13 +354,28 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 description="Optional review index to list sessions for; omit for recent global sessions.",
             ),
         ] = None,
+        limit: Annotated[
+            int,
+            Field(
+                ge=1,
+                le=20,
+                description="Maximum compact session summaries to return.",
+            ),
+        ] = 10,
+        cursor: Annotated[
+            str | None,
+            Field(
+                min_length=1,
+                description="Opaque cursor returned by a previous session-list page.",
+            ),
+        ] = None,
     ) -> dict[str, Any]:
         """Use this when a user needs staged research sessions for orientation or one review ID."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_research_session_service()
             return await review_tools.list_research_sessions_impl(
-                service=service, review_id=review_id
+                service=service, review_id=review_id, limit=limit, cursor=cursor
             )
 
         return await run_mcp_tool("list_research_sessions", call)

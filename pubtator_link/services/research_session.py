@@ -1,11 +1,21 @@
 from __future__ import annotations
 
+import base64
+import binascii
+import hashlib
+import json
+import re
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
+from pubtator_link.models.research_session_list import (
+    ListResearchSessionsResponse,
+    ResearchSessionSummary,
+)
 from pubtator_link.models.responses import SearchResponse
 from pubtator_link.models.review_rerag import (
-    ListResearchSessionsResponse,
     ResearchSessionCandidate,
     ResearchSessionCandidateStatus,
     ResearchSessionDecisionReason,
@@ -13,6 +23,78 @@ from pubtator_link.models.review_rerag import (
     StageResearchSessionRequest,
     StageResearchSessionResponse,
 )
+
+_CURSOR_TOKEN = re.compile(r"[A-Za-z0-9_-]+")
+
+
+@dataclass(frozen=True)
+class _SessionCursor:
+    updated_at: str | None
+    session_id: str
+    review_id: str
+
+
+def _cursor_scope(review_id: str | None) -> str:
+    material = "global" if review_id is None else f"review:{review_id}"
+    return hashlib.sha256(material.encode()).hexdigest()[:16]
+
+
+def _encode_cursor(*, review_id: str | None, summary: ResearchSessionSummary) -> str:
+    payload = {
+        "v": 1,
+        "scope": _cursor_scope(review_id),
+        "updated_at": summary.updated_at,
+        "session_id": summary.session_id,
+        "review_id": summary.review_id,
+    }
+    encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
+    return base64.urlsafe_b64encode(encoded).decode().rstrip("=")
+
+
+def _invalid_cursor() -> ValueError:
+    return ValueError("cursor is invalid")
+
+
+def _decode_cursor(*, cursor: str, review_id: str | None) -> _SessionCursor:
+    if len(cursor) > 2048 or _CURSOR_TOKEN.fullmatch(cursor) is None or len(cursor) % 4 == 1:
+        raise _invalid_cursor()
+    try:
+        raw = base64.b64decode(cursor + "=" * (-len(cursor) % 4), altchars=b"-_", validate=True)
+        decoded = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, binascii.Error, json.JSONDecodeError):
+        raise _invalid_cursor() from None
+    if not isinstance(decoded, dict) or set(decoded) != {
+        "v",
+        "scope",
+        "updated_at",
+        "session_id",
+        "review_id",
+    }:
+        raise _invalid_cursor()
+    if (
+        type(decoded["v"]) is not int
+        or decoded["v"] != 1
+        or not isinstance(decoded["scope"], str)
+        or decoded["scope"] != _cursor_scope(review_id)
+        or not isinstance(decoded["session_id"], str)
+        or not decoded["session_id"]
+        or not isinstance(decoded["review_id"], str)
+        or not decoded["review_id"]
+        or (decoded["updated_at"] is not None and not isinstance(decoded["updated_at"], str))
+    ):
+        raise _invalid_cursor()
+    if decoded["updated_at"] is not None:
+        try:
+            datetime.fromisoformat(decoded["updated_at"].replace("Z", "+00:00"))
+        except ValueError:
+            raise _invalid_cursor() from None
+    if review_id is not None and decoded["review_id"] != review_id:
+        raise _invalid_cursor()
+    return _SessionCursor(
+        updated_at=decoded["updated_at"],
+        session_id=decoded["session_id"],
+        review_id=decoded["review_id"],
+    )
 
 
 class ResearchSessionSearchProvider:
@@ -181,31 +263,52 @@ class ResearchSessionService:
         await self._reconcile_candidate_statuses(manifest.review_id, manifest)
         return ResearchSessionStatusResponse(manifest=manifest)
 
-    async def list_sessions(self, *, review_id: str | None) -> ListResearchSessionsResponse:
-        if review_id is None:
-            return await self.list_sessions_global()
-        sessions = await self.repository.list_research_sessions(review_id)
-        preparation_status = await self.queue.repository.preparation_status(review_id)
-        for session in sessions:
-            session.preparation_status = preparation_status
-            await self._reconcile_candidate_statuses(review_id, session)
-        return ListResearchSessionsResponse(sessions=sessions)
-
-    async def list_sessions_global(self, *, limit: int = 20) -> ListResearchSessionsResponse:
-        list_global = getattr(self.repository, "list_research_sessions_global", None)
-        if list_global is None:
-            raise ValueError("Research session listing requires review_id for this repository.")
-        sessions = sorted(
-            await list_global(limit=limit),
-            key=lambda session: session.updated_at or "",
-            reverse=True,
-        )[:limit]
-        for session in sessions:
-            session.preparation_status = await self.queue.repository.preparation_status(
-                session.review_id
+    async def list_sessions(
+        self,
+        *,
+        review_id: str | None,
+        limit: int = 10,
+        cursor: str | None = None,
+    ) -> ListResearchSessionsResponse:
+        """Return one compact page without fetching session candidates."""
+        if not 1 <= limit <= 20:
+            raise ValueError("limit must be between 1 and 20")
+        decoded_cursor = (
+            _decode_cursor(cursor=cursor, review_id=review_id) if cursor is not None else None
+        )
+        list_summaries = getattr(self.repository, "list_research_session_summaries", None)
+        if list_summaries is None:
+            raise ValueError("Research session summary paging is unavailable.")
+        rows = await list_summaries(
+            review_id=review_id,
+            limit=limit + 1,
+            before_updated_at=(decoded_cursor.updated_at if decoded_cursor else None),
+            before_session_id=(decoded_cursor.session_id if decoded_cursor else None),
+            before_review_id=(decoded_cursor.review_id if decoded_cursor else None),
+        )
+        summaries = [ResearchSessionSummary.model_validate(row) for row in rows]
+        has_next_page = len(summaries) > limit
+        page = summaries[:limit]
+        for summary in page:
+            summary.preparation_status = await self.queue.repository.preparation_status(
+                summary.review_id
             )
-            await self._reconcile_candidate_statuses(session.review_id, session)
-        return ListResearchSessionsResponse(sessions=sessions)
+        return ListResearchSessionsResponse(
+            sessions=page,
+            limit=limit,
+            next_cursor=(
+                _encode_cursor(review_id=review_id, summary=page[-1])
+                if has_next_page and page
+                else None
+            ),
+            total_returned=len(page),
+        )
+
+    async def list_sessions_global(
+        self, *, limit: int = 10, cursor: str | None = None
+    ) -> ListResearchSessionsResponse:
+        """Compatibility wrapper for callers that request the global page directly."""
+        return await self.list_sessions(review_id=None, limit=limit, cursor=cursor)
 
     async def _reconcile_candidate_statuses(self, review_id: str, manifest: Any) -> None:
         list_review_sources = getattr(self.queue.repository, "list_review_sources", None)

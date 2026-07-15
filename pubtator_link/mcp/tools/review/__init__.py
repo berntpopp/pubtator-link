@@ -53,6 +53,7 @@ from pubtator_link.mcp.tools.review.indexes import register_indexes_tools
 from pubtator_link.mcp.tools.review.passages import register_passages_tools
 from pubtator_link.mcp.tools.review.research import register_research_tools
 from pubtator_link.mcp.tools.review.retrieval import register_retrieval_tools
+from pubtator_link.models.research_session_list import ListResearchSessionsResponse
 from pubtator_link.models.review_rerag import (
     BudgetStrategy,
     EvidenceCertaintyLabel,
@@ -61,7 +62,6 @@ from pubtator_link.models.review_rerag import (
     IndexReviewEvidenceResponse,
     InspectReviewIndexResponse,
     ListEvidenceCertaintyResponse,
-    ListResearchSessionsResponse,
     ListReviewIndexesResponse,
     MaxResponseChars,
     McpReviewAuditBundleResponse,

@@ -1115,8 +1115,12 @@ async def get_research_session_status_impl(
     )
 
 
-async def list_research_sessions_impl(*, service: Any, review_id: str | None) -> dict[str, Any]:
-    return await research_sessions_payload(service=service, review_id=review_id)
+async def list_research_sessions_impl(
+    *, service: Any, review_id: str | None, limit: int = 10, cursor: str | None = None
+) -> dict[str, Any]:
+    return await research_sessions_payload(
+        service=service, review_id=review_id, limit=limit, cursor=cursor
+    )
 
 
 async def review_summary_resource_impl(*, service: Any, review_id: str) -> dict[str, Any]:

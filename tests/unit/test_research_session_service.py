@@ -1,12 +1,13 @@
 import pytest
 
+from pubtator_link.models.research_session_list import ResearchSessionSummary
 from pubtator_link.models.responses import SearchResponse, SearchResult
 from pubtator_link.models.review_rerag import (
     PreparationStatus,
     ReviewSourceSummary,
     SourceCoverageHint,
 )
-from pubtator_link.services.research_session import ResearchSessionService
+from pubtator_link.services.research_session import ResearchSessionService, _encode_cursor
 
 
 class FakeRepository:
@@ -65,6 +66,32 @@ class FakeRepository:
             if session_review_id == review_id:
                 manifests.append(await self.get_research_session(review_id, session_id))
         return manifests
+
+    async def list_research_session_summaries(
+        self,
+        *,
+        review_id,
+        limit,
+        before_updated_at,
+        before_session_id,
+        before_review_id,
+    ):
+        rows = [
+            {
+                "review_id": session_review_id,
+                "session_id": session_id,
+                "query": session.get("query"),
+                "status": session.get("status", "active"),
+                "updated_at": None,
+                "candidate_count": 0,
+            }
+            for (session_review_id, session_id), session in self.sessions.items()
+            if review_id is None or session_review_id == review_id
+        ]
+        rows.sort(key=lambda row: row["session_id"], reverse=True)
+        if before_session_id is not None:
+            rows = [row for row in rows if row["session_id"] < before_session_id]
+        return rows[:limit]
 
     async def list_review_sources(self, review_id, pmids=None, **kwargs):
         return []
@@ -293,13 +320,29 @@ async def test_list_sessions_without_review_id_uses_bounded_global_repository_pa
     class GlobalRepository(FakeRepository):
         def __init__(self) -> None:
             super().__init__()
-            self.global_limit = None
+            self.summary_calls = []
 
-        async def list_research_sessions_global(self, *, limit):
-            self.global_limit = limit
+        async def list_research_session_summaries(
+            self, *, review_id, limit, before_updated_at, before_session_id, before_review_id
+        ):
+            self.summary_calls.append((review_id, limit, before_updated_at, before_session_id))
             return [
-                await self.get_research_session("review-2", "session-2"),
-                await self.get_research_session("review-1", "session-1"),
+                {
+                    "review_id": "review-2",
+                    "session_id": "session-2",
+                    "query": "newer",
+                    "status": "active",
+                    "updated_at": "2026-05-02T00:00:00Z",
+                    "candidate_count": 0,
+                },
+                {
+                    "review_id": "review-1",
+                    "session_id": "session-1",
+                    "query": "older",
+                    "status": "active",
+                    "updated_at": "2026-05-01T00:00:00Z",
+                    "candidate_count": 0,
+                },
             ]
 
     repository = GlobalRepository()
@@ -326,8 +369,213 @@ async def test_list_sessions_without_review_id_uses_bounded_global_repository_pa
 
     response = await service.list_sessions(review_id=None)
 
-    assert repository.global_limit == 20
+    assert repository.summary_calls == [(None, 11, None, None)]
     assert [session.review_id for session in response.sessions] == ["review-2", "review-1"]
+
+
+async def test_list_sessions_returns_compact_cursor_page_without_loading_candidates() -> None:
+    class SummaryRepository(FakeRepository):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls = []
+
+        async def list_research_session_summaries(
+            self,
+            *,
+            review_id,
+            limit,
+            before_updated_at,
+            before_session_id,
+            before_review_id,
+        ):
+            self.calls.append(
+                (review_id, limit, before_updated_at, before_session_id, before_review_id)
+            )
+            rows = [
+                {
+                    "review_id": "review-1",
+                    "session_id": "session-3",
+                    "query": "newest",
+                    "status": "active",
+                    "updated_at": "2026-07-16T12:03:00Z",
+                    "candidate_count": 4,
+                },
+                {
+                    "review_id": "review-1",
+                    "session_id": "session-2",
+                    "query": "middle",
+                    "status": "partial",
+                    "updated_at": "2026-07-16T12:02:00Z",
+                    "candidate_count": 3,
+                },
+                {
+                    "review_id": "review-1",
+                    "session_id": "session-1",
+                    "query": "oldest",
+                    "status": "complete",
+                    "updated_at": "2026-07-16T12:01:00Z",
+                    "candidate_count": 2,
+                },
+            ]
+            if before_session_id is not None:
+                rows = [row for row in rows if row["session_id"] < before_session_id]
+            return rows[:limit]
+
+        async def list_review_sources(self, *args, **kwargs):
+            raise AssertionError("A compact session list must not reconcile candidates")
+
+    class TrackingQueue(FakeQueue):
+        class Repository:
+            def __init__(self) -> None:
+                self.calls = []
+
+            async def preparation_status(self, review_id):
+                self.calls.append(review_id)
+                return PreparationStatus(queued=1)
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.repository = self.Repository()
+
+    repository = SummaryRepository()
+    queue = TrackingQueue()
+    service = ResearchSessionService(
+        repository=repository,
+        search_provider=FakeSearch(),
+        preflight_service=FakePreflight(),
+        queue=queue,
+    )
+
+    first_page = await service.list_sessions(review_id="review-1", limit=2)
+    second_page = await service.list_sessions(
+        review_id="review-1", limit=2, cursor=first_page.next_cursor
+    )
+
+    assert [session.session_id for session in first_page.sessions] == ["session-3", "session-2"]
+    assert [session.session_id for session in second_page.sessions] == ["session-1"]
+    assert first_page.total_returned == 2
+    assert second_page.total_returned == 1
+    assert first_page.next_cursor is not None
+    assert second_page.next_cursor is None
+    assert [call[1] for call in repository.calls] == [3, 3]
+    assert [call[3] for call in repository.calls] == [None, "session-2"]
+    assert queue.repository.calls == ["review-1", "review-1", "review-1"]
+    assert set(first_page.sessions[0].model_dump()) == {
+        "session_id",
+        "review_id",
+        "query",
+        "status",
+        "updated_at",
+        "candidate_count",
+        "preparation_status",
+    }
+
+
+async def test_list_sessions_rejects_malformed_cursor_before_repository_access() -> None:
+    class SummaryRepository(FakeRepository):
+        async def list_research_session_summaries(self, **kwargs):
+            raise AssertionError("An invalid cursor must not reach the repository")
+
+    service = ResearchSessionService(
+        repository=SummaryRepository(),
+        search_provider=FakeSearch(),
+        preflight_service=FakePreflight(),
+        queue=FakeQueue(),
+    )
+
+    with pytest.raises(ValueError, match="cursor"):
+        await service.list_sessions(review_id="review-1", cursor="not/a-cursor")
+
+
+@pytest.mark.parametrize(
+    ("source_review_id", "target_review_id"),
+    [(None, "global"), ("global", None)],
+)
+async def test_list_sessions_rejects_cursor_from_a_different_scope(
+    source_review_id: str | None, target_review_id: str | None
+) -> None:
+    class SummaryRepository(FakeRepository):
+        async def list_research_session_summaries(self, **kwargs):
+            raise AssertionError("A cross-scope cursor must not reach the repository")
+
+    cursor = _encode_cursor(
+        review_id=source_review_id,
+        summary=ResearchSessionSummary(
+            review_id=source_review_id or "review-1",
+            session_id="session-1",
+            updated_at="2026-07-16T12:01:00Z",
+        ),
+    )
+    service = ResearchSessionService(
+        repository=SummaryRepository(),
+        search_provider=FakeSearch(),
+        preflight_service=FakePreflight(),
+        queue=FakeQueue(),
+    )
+
+    with pytest.raises(ValueError, match="cursor"):
+        await service.list_sessions(review_id=target_review_id, cursor=cursor)
+
+
+async def test_global_session_paging_breaks_same_timestamp_and_session_id_ties_by_review_id() -> (
+    None
+):
+    class SummaryRepository(FakeRepository):
+        async def list_research_session_summaries(
+            self,
+            *,
+            review_id,
+            limit,
+            before_updated_at,
+            before_session_id,
+            before_review_id,
+        ):
+            assert review_id is None
+            rows = [
+                {
+                    "review_id": "review-2",
+                    "session_id": "session-1",
+                    "updated_at": "2026-07-16T12:01:00Z",
+                    "candidate_count": 0,
+                },
+                {
+                    "review_id": "review-1",
+                    "session_id": "session-1",
+                    "updated_at": "2026-07-16T12:01:00Z",
+                    "candidate_count": 0,
+                },
+            ]
+            if before_session_id is not None:
+                rows = [
+                    row
+                    for row in rows
+                    if (
+                        row["updated_at"],
+                        row["session_id"],
+                        row["review_id"],
+                    )
+                    < (before_updated_at, before_session_id, before_review_id)
+                ]
+            return rows[:limit]
+
+    service = ResearchSessionService(
+        repository=SummaryRepository(),
+        search_provider=FakeSearch(),
+        preflight_service=FakePreflight(),
+        queue=FakeQueue(),
+    )
+
+    first_page = await service.list_sessions(review_id=None, limit=1)
+    second_page = await service.list_sessions(
+        review_id=None, limit=1, cursor=first_page.next_cursor
+    )
+
+    assert [(item.review_id, item.session_id) for item in first_page.sessions] == [
+        ("review-2", "session-1")
+    ]
+    assert [(item.review_id, item.session_id) for item in second_page.sessions] == [
+        ("review-1", "session-1")
+    ]
 
 
 def test_production_repository_exposes_global_research_session_lookup_contract() -> None:

@@ -932,25 +932,22 @@ async def test_review_quickstart_adapter_honors_wait_until_ready() -> None:
 @pytest.mark.asyncio
 async def test_list_research_sessions_adapter_uses_global_path_without_review_id() -> None:
     from pubtator_link.mcp.service_adapters import list_research_sessions_impl
-    from pubtator_link.models.review_rerag import (
+    from pubtator_link.models.research_session_list import (
         ListResearchSessionsResponse,
-        ResearchSessionManifest,
+        ResearchSessionSummary,
     )
 
     class Service:
-        local_calls = 0
-        global_calls = 0
+        calls = 0
 
-        async def list_sessions(self, *, review_id):
-            self.local_calls += 1
-            raise AssertionError("review-scoped path should not be used")
-
-        async def list_sessions_global(self, *, limit=20):
-            self.global_calls += 1
-            assert limit == 20
+        async def list_sessions(self, *, review_id, limit, cursor):
+            self.calls += 1
+            assert review_id is None
+            assert limit == 10
+            assert cursor is None
             return ListResearchSessionsResponse(
                 sessions=[
-                    ResearchSessionManifest(
+                    ResearchSessionSummary(
                         review_id="review-2",
                         session_id="session-2",
                         updated_at="2026-05-02T00:00:00Z",
@@ -964,8 +961,31 @@ async def test_list_research_sessions_adapter_uses_global_path_without_review_id
 
     assert result["success"] is True
     assert result["sessions"][0]["review_id"] == "review-2"
-    assert service.local_calls == 0
-    assert service.global_calls == 1
+    assert service.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_list_research_sessions_adapter_reports_invalid_cursor_without_echoing_it() -> None:
+    from pubtator_link.mcp.input_normalization import InputNormalizationError
+    from pubtator_link.mcp.service_adapters import list_research_sessions_impl
+
+    class Service:
+        async def list_sessions(self, *, review_id, limit, cursor):
+            assert review_id == "review-1"
+            assert limit == 10
+            assert cursor == "hostile-token"
+            raise ValueError("cursor is invalid")
+
+    with pytest.raises(InputNormalizationError) as error:
+        await list_research_sessions_impl(
+            service=Service(),
+            review_id="review-1",
+            limit=10,
+            cursor="hostile-token",
+        )
+
+    assert error.value.field_errors[0]["field"] == "cursor"
+    assert "hostile-token" not in error.value.field_errors[0]["message"]
 
 
 @pytest.mark.asyncio

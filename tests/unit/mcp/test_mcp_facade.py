@@ -6,6 +6,8 @@ from typing import ClassVar
 import pytest
 
 from pubtator_link.mcp.profiles import READONLY_TOOLS
+from pubtator_link.models.research_session_list import ResearchSessionSummary
+from pubtator_link.services.research_session import _encode_cursor
 
 # Anthropic remote-MCP tool name regex; tool names that fail this break the
 # claude.ai web UI and the MCP connector. See issue #26.
@@ -109,6 +111,60 @@ async def _run_error_tool(tool: object, arguments: dict[str, object]) -> dict[st
     payload = result.structured_content
     assert isinstance(payload, dict)
     return payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("review_id", "cursor"),
+    [
+        (None, "not/a-cursor"),
+        (
+            "global",
+            _encode_cursor(
+                review_id=None,
+                summary=ResearchSessionSummary(
+                    review_id="review-1",
+                    session_id="session-1",
+                    updated_at="2026-07-16T12:01:00Z",
+                ),
+            ),
+        ),
+    ],
+)
+async def test_list_research_sessions_cursor_error_reaches_mcp_wire(
+    monkeypatch: pytest.MonkeyPatch, review_id: str | None, cursor: str
+) -> None:
+    from fastmcp import Client
+
+    import pubtator_link.mcp.tools.review as review_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+    from pubtator_link.services.research_session import ResearchSessionService
+
+    service = ResearchSessionService(
+        repository=object(),
+        search_provider=object(),
+        preflight_service=object(),
+        queue=object(),
+    )
+
+    async def get_service() -> ResearchSessionService:
+        return service
+
+    monkeypatch.setattr(review_tools, "get_research_session_service", get_service)
+    mcp = create_pubtator_mcp(profile="full")
+    arguments: dict[str, object] = {"cursor": cursor}
+    if review_id is not None:
+        arguments["review_id"] = review_id
+
+    async with Client(mcp) as client:
+        result = await client.call_tool("list_research_sessions", arguments, raise_on_error=False)
+
+    payload = result.structured_content
+    assert result.is_error is True
+    assert isinstance(payload, dict)
+    assert payload["error_code"] == "invalid_input"
+    assert payload["field_errors"][0]["field"] == "cursor"
+    assert cursor not in str(payload)
 
 
 def test_all_tool_names_match_anthropic_remote_mcp_regex(
@@ -508,6 +564,23 @@ def test_research_session_tools_allow_orientation_without_review_id() -> None:
     assert "review_id" not in list_schema.get("required", [])
     assert "review_id" not in status_schema.get("required", [])
     assert "session_id" in status_schema.get("required", [])
+
+
+def test_list_research_sessions_schema_exposes_bounded_opaque_pagination() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    schema = (
+        create_pubtator_mcp(profile="full")
+        ._tool_manager._tools["list_research_sessions"]
+        .parameters
+    )
+    properties = schema["properties"]
+
+    assert properties["limit"]["default"] == 10
+    assert properties["limit"]["minimum"] == 1
+    assert properties["limit"]["maximum"] == 20
+    assert "cursor" in properties
+    assert "cursor" not in schema.get("required", [])
 
 
 def test_record_review_context_schema_accepts_note_event_type() -> None:
