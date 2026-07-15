@@ -19,7 +19,7 @@ def register_diagnostics_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
     @mcp.tool(
         name="diagnostics",
         title="PubTator-Link Diagnostics",
-        output_schema=DiagnosticsResponse.model_json_schema(),
+        output_schema=None,
         annotations=READ_ONLY_OPEN_WORLD,
         tags={"meta"},
     )

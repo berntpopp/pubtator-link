@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from fastmcp import FastMCP
 from pydantic import Field
@@ -15,16 +15,11 @@ from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.meta_budget import strip_meta_for_repeated_call
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.tools import review as review_tools
+from pubtator_link.mcp.tools._vocab import PublicationType
 from pubtator_link.mcp.tools.review._helpers import make_mcp_tool_for
 from pubtator_link.models.review_rerag import (
-    GroundQuestionResponse,
-    ListResearchSessionsResponse,
     MaxResponseChars,
-    PreflightReviewSourcesResponse,
-    ResearchSessionStatusResponse,
-    ReviewQuickstartResponse,
     ReviewResponseVerbosity,
-    StageResearchSessionResponse,
 )
 
 
@@ -37,12 +32,22 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         "readonly",
         name="preflight_review_sources",
         title="Preflight Review Sources",
-        output_schema=PreflightReviewSourcesResponse.model_json_schema(),
+        output_schema=None,
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def preflight_review_sources(
-        pmids: list[str] | None = None,
-        pmid: str | None = None,
+        pmids: Annotated[
+            list[str],
+            Field(
+                min_length=1,
+                description="PubMed IDs to check source coverage and full-text availability for.",
+                examples=[["25741868"]],
+            ),
+        ],
+        pmid: Annotated[
+            str | None,
+            Field(min_length=1, description="Single-PMID convenience alias, merged with `pmids`."),
+        ] = None,
     ) -> dict[str, Any]:
         """Use this when a user needs PMID source coverage, PMC fallback availability, and likely full-text versus abstract-only retrieval before indexing review evidence."""
 
@@ -70,25 +75,72 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         "full",
         name="stage_research_session",
         title="Stage Research Session",
-        output_schema=StageResearchSessionResponse.model_json_schema(),
+        output_schema=None,
         annotations=NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
     )
     async def stage_research_session(
-        review_id: Annotated[str, Field(min_length=1)],
-        query: Annotated[str | None, Field(min_length=1)] = None,
-        pmids: list[str] | None = None,
-        pmid: Annotated[str | None, Field(min_length=1)] = None,
-        session_id: Annotated[str | None, Field(min_length=1)] = None,
-        page: Annotated[int, Field(ge=1, le=1000)] = 1,
-        sort: str | None = None,
-        filters: str | None = None,
-        publication_types: list[str] | None = None,
-        year_min: Annotated[int | None, Field(ge=1800, le=2030)] = None,
-        year_max: Annotated[int | None, Field(ge=1800, le=2030)] = None,
-        sections: list[str] | None = None,
-        max_candidates: Annotated[int, Field(ge=1, le=100)] = 20,
-        stage_full_text: bool = True,
-        include_meta: bool = True,
+        review_id: Annotated[
+            str,
+            Field(
+                min_length=1,
+                description="Review index the staged session belongs to.",
+                examples=["demo"],
+            ),
+        ],
+        query: Annotated[
+            str | None,
+            Field(min_length=1, description="Search query used to stage candidate PMIDs."),
+        ] = None,
+        pmids: Annotated[
+            list[str] | None,
+            Field(description="Explicit candidate PMIDs to stage.", examples=[["12345"]]),
+        ] = None,
+        pmid: Annotated[
+            str | None,
+            Field(min_length=1, description="Single-PMID convenience alias, merged with `pmids`."),
+        ] = None,
+        session_id: Annotated[
+            str | None,
+            Field(min_length=1, description="Reuse/extend an existing staged session."),
+        ] = None,
+        page: Annotated[
+            int, Field(ge=1, le=1000, description="1-based search page to stage from.")
+        ] = 1,
+        sort: Annotated[
+            str | None, Field(description="Search sort order (see search_literature.sort).")
+        ] = None,
+        filters: Annotated[
+            str | None, Field(description="Advanced PubTator3 filter JSON string.")
+        ] = None,
+        publication_types: Annotated[
+            list[PublicationType] | None,
+            Field(
+                description="Restrict staged candidates to these PubMed publication types.",
+                examples=[["Review"]],
+            ),
+        ] = None,
+        year_min: Annotated[
+            int | None, Field(ge=1800, le=2030, description="Earliest publication year, inclusive.")
+        ] = None,
+        year_max: Annotated[
+            int | None, Field(ge=1800, le=2030, description="Latest publication year, inclusive.")
+        ] = None,
+        sections: Annotated[
+            list[str] | None,
+            Field(
+                description="Restrict the search to these article sections.",
+                examples=[["title", "abstract"]],
+            ),
+        ] = None,
+        max_candidates: Annotated[
+            int, Field(ge=1, le=100, description="Maximum candidate PMIDs to stage.")
+        ] = 20,
+        stage_full_text: Annotated[
+            bool, Field(description="Queue full-text preparation for staged candidates.")
+        ] = True,
+        include_meta: Annotated[
+            bool, Field(description="Include the _meta orientation block.")
+        ] = True,
     ) -> dict[str, Any]:
         """Use this when a user needs to stage candidate PMIDs with coverage hints and queued review preparation after search planning."""
 
@@ -104,7 +156,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 page=page,
                 sort=sort,
                 filters=filters,
-                publication_types=publication_types,
+                publication_types=cast("list[str] | None", publication_types),
                 year_min=year_min,
                 year_max=year_max,
                 sections=sections,
@@ -128,21 +180,57 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         "full",
         name="ground_question",
         title="Ground Question",
-        output_schema=GroundQuestionResponse.model_json_schema(),
+        output_schema=None,
         annotations=IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
     )
     async def ground_question(
-        question: Annotated[str | None, Field(min_length=1)] = None,
-        query: Annotated[str | None, Field(min_length=1)] = None,
-        max_pmids: Annotated[int, Field(ge=1, le=20)] = 8,
-        max_results: Annotated[int | None, Field(ge=1, le=20)] = None,
-        review_id: Annotated[str | None, Field(min_length=1)] = None,
-        entity_ids: list[str] | None = None,
-        guideline_boost: bool = True,
-        wait_until_ready: bool = True,
-        timeout_ms: Annotated[int, Field(ge=0, le=120_000)] = 30_000,
-        verbosity: ReviewResponseVerbosity = "lean",
-        max_response_chars: MaxResponseChars = "auto",
+        question: Annotated[
+            str,
+            Field(
+                min_length=1,
+                description="Research question to ground in citable literature evidence.",
+                examples=["Does colchicine prevent FMF flares?"],
+            ),
+        ],
+        query: Annotated[
+            str | None,
+            Field(min_length=1, description="Legacy alias for `question`."),
+        ] = None,
+        max_pmids: Annotated[
+            int, Field(ge=1, le=20, description="Maximum PMIDs to search and index.")
+        ] = 8,
+        max_results: Annotated[
+            int | None,
+            Field(ge=1, le=20, description="Alias for `max_pmids`; takes precedence when set."),
+        ] = None,
+        review_id: Annotated[
+            str | None,
+            Field(min_length=1, description="Review index to store/reuse evidence in."),
+        ] = None,
+        entity_ids: Annotated[
+            list[str] | None,
+            Field(
+                description="PubTator entity IDs to anchor the search on.",
+                examples=[["@GENE_MEFV"]],
+            ),
+        ] = None,
+        guideline_boost: Annotated[
+            bool, Field(description="Boost guideline / review articles during the search.")
+        ] = True,
+        wait_until_ready: Annotated[
+            bool, Field(description="Block until preparation completes or times out.")
+        ] = True,
+        timeout_ms: Annotated[
+            int, Field(ge=0, le=120_000, description="Preparation wait budget in milliseconds.")
+        ] = 30_000,
+        verbosity: Annotated[
+            ReviewResponseVerbosity,
+            Field(description="Field verbosity: 'lean' (default), 'standard', or 'full'."),
+        ] = "lean",
+        max_response_chars: Annotated[
+            MaxResponseChars,
+            Field(description="Response character budget: 'auto' (default) or an integer cap."),
+        ] = "auto",
     ) -> dict[str, Any]:
         """Use this when a user wants one compact grounded evidence workflow from a question: search literature, index candidate PMIDs, inspect readiness, and retrieve citable review context. Provide one of question or query."""
 
@@ -172,19 +260,38 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         "full",
         name="review_quickstart",
         title="Review Quickstart",
-        output_schema=ReviewQuickstartResponse.model_json_schema(),
+        output_schema=None,
         annotations=NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
         tags={"meta"},
     )
     async def review_quickstart(
-        topic: Annotated[str | None, Field(min_length=1)] = None,
-        query: Annotated[str | None, Field(min_length=1)] = None,
-        question: Annotated[str | None, Field(min_length=1)] = None,
-        n_pmids: Annotated[int, Field(ge=1, le=20)] = 8,
-        review_id: Annotated[str | None, Field(min_length=1)] = None,
-        session_id: Annotated[str | None, Field(min_length=1)] = None,
-        wait_until_ready: bool = False,
-        timeout_ms: Annotated[int, Field(ge=0, le=120_000)] = 0,
+        topic: Annotated[
+            str | None,
+            Field(
+                min_length=1,
+                description="Topic to spin up a casual review for. Provide one of topic, query, or question.",
+                examples=["EGFR resistance in lung cancer"],
+            ),
+        ] = None,
+        query: Annotated[str | None, Field(min_length=1, description="Alias for `topic`.")] = None,
+        question: Annotated[
+            str | None, Field(min_length=1, description="Alias for `topic`.")
+        ] = None,
+        n_pmids: Annotated[
+            int, Field(ge=1, le=20, description="Number of PMIDs to stage/index.")
+        ] = 8,
+        review_id: Annotated[
+            str | None, Field(min_length=1, description="Reuse an existing review index.")
+        ] = None,
+        session_id: Annotated[
+            str | None, Field(min_length=1, description="Reuse an existing staged session.")
+        ] = None,
+        wait_until_ready: Annotated[
+            bool, Field(description="Block until preparation completes or times out.")
+        ] = False,
+        timeout_ms: Annotated[
+            int, Field(ge=0, le=120_000, description="Preparation wait budget in milliseconds.")
+        ] = 0,
     ) -> dict[str, Any]:
         """Use this when a user wants one-shot casual review setup: search topic, stage/index up to n_pmids, inspect coverage, and return review_id/session_id for get_review_context_batch. Provide one of topic, query, or question."""
 
@@ -210,12 +317,22 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         "readonly",
         name="get_research_session_status",
         title="Get Research Session Status",
-        output_schema=ResearchSessionStatusResponse.model_json_schema(),
+        output_schema=None,
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_research_session_status(
-        session_id: Annotated[str, Field(min_length=1)],
-        review_id: Annotated[str | None, Field(min_length=1)] = None,
+        session_id: Annotated[
+            str,
+            Field(
+                min_length=1,
+                description="Staged research session to report status for.",
+                examples=["session-1"],
+            ),
+        ],
+        review_id: Annotated[
+            str | None,
+            Field(min_length=1, description="Optional review index the session belongs to."),
+        ] = None,
     ) -> dict[str, Any]:
         """Use this when a user needs staged candidate, coverage, and preparation status for a research session."""
 
@@ -234,11 +351,17 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         "readonly",
         name="list_research_sessions",
         title="List Research Sessions",
-        output_schema=ListResearchSessionsResponse.model_json_schema(),
+        output_schema=None,
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def list_research_sessions(
-        review_id: Annotated[str | None, Field(min_length=1)] = None,
+        review_id: Annotated[
+            str | None,
+            Field(
+                min_length=1,
+                description="Optional review index to list sessions for; omit for recent global sessions.",
+            ),
+        ] = None,
     ) -> dict[str, Any]:
         """Use this when a user needs staged research sessions for orientation or one review ID."""
 

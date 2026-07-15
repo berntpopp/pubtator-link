@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Annotated, Any
 
 from fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field
@@ -43,7 +43,6 @@ from pubtator_link.mcp.review_resources import (
     get_tool_detail_resource,
 )
 from pubtator_link.mcp.untrusted_content import FORBIDDEN_CODEPOINTS
-from pubtator_link.models.workflow_help import WorkflowHelpResponse
 from pubtator_link.services.workflow_help import WorkflowHelpService
 
 logger = logging.getLogger(__name__)
@@ -127,10 +126,21 @@ def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
     @mcp.tool(
         name="get_server_capabilities",
         title="Get PubTator-Link Capabilities",
-        output_schema=ServerCapabilitiesResponse.model_json_schema(),
+        output_schema=None,
         annotations=READ_ONLY_CLOSED_WORLD,
     )
-    async def get_server_capabilities(details: list[str] | None = None) -> dict[str, Any]:
+    async def get_server_capabilities(
+        details: Annotated[
+            list[str] | None,
+            Field(
+                description=(
+                    "Optional capability sections to expand (e.g. 'tools', 'workflow_help'); "
+                    "omit for the default summary."
+                ),
+                examples=[["tools", "workflow_help"]],
+            ),
+        ] = None,
+    ) -> dict[str, Any]:
         """Use this when a client needs supported tools, transports, formats, and limitations. Do not use this for task-specific workflow guidance; use workflow_help. Next: workflow_help."""
 
         async def call() -> dict[str, Any]:
@@ -141,12 +151,21 @@ def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
     @mcp.tool(
         name="workflow_help",
         title="Workflow Help",
-        output_schema=WorkflowHelpResponse.model_json_schema(),
+        output_schema=None,
         annotations=READ_ONLY_CLOSED_WORLD,
         tags={"meta"},
     )
     async def workflow_help(
-        task: str = "clinical_genetics_review",
+        task: Annotated[
+            str,
+            Field(
+                description=(
+                    "Workflow to describe; defaults to the canonical "
+                    "'clinical_genetics_review' pipeline."
+                ),
+                examples=["clinical_genetics_review"],
+            ),
+        ] = "clinical_genetics_review",
     ) -> dict[str, Any]:
         """Use this when a fresh context needs the canonical PubTator-Link research workflow."""
 

@@ -13,25 +13,6 @@ from pubtator_link.mcp.service_adapters import (
     get_text_annotation_results_impl,
     submit_text_annotation_impl,
 )
-from pubtator_link.models.responses import (
-    TextAnnotationResultResponse,
-    TextAnnotationSubmitResponse,
-)
-
-
-def _submit_text_annotation_output_schema() -> dict[str, Any]:
-    schema = TextAnnotationSubmitResponse.model_json_schema()
-    properties = schema.setdefault("properties", {})
-    result_properties = TextAnnotationResultResponse.model_json_schema().get("properties", {})
-    if isinstance(properties, dict) and isinstance(result_properties, dict):
-        properties.update(
-            {
-                key: value
-                for key, value in result_properties.items()
-                if key not in {"success", "message", "session_id", "status"}
-            }
-        )
-    return schema
 
 
 def register_text_annotation_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
@@ -40,18 +21,38 @@ def register_text_annotation_tools(mcp: FastMCP, profile: MCPToolProfile = "lean
         @mcp.tool(
             name="submit_text_annotation",
             title="Submit Text Annotation",
-            output_schema=_submit_text_annotation_output_schema(),
+            output_schema=None,
             annotations=REMOTE_JOB_ANNOTATIONS,
         )
         async def submit_text_annotation(
-            text: Annotated[str, Field(min_length=1, max_length=10000)],
+            text: Annotated[
+                str,
+                Field(
+                    min_length=1,
+                    max_length=10000,
+                    description="Free research text to annotate with PubTator named-entity recognition.",
+                    examples=[
+                        "The BRCA1 protein interacts with RAD51 during homologous recombination."
+                    ],
+                ),
+            ],
             bioconcepts: Annotated[
-                str, Field(description="Comma-separated PubTator bioconcepts or 'all'.")
+                str,
+                Field(
+                    description=(
+                        "Comma-separated PubTator bioconcepts to detect, or 'all'. Concepts: "
+                        "Gene, Disease, Chemical, Species, Variant, CellLine."
+                    ),
+                ),
             ] = "Gene",
             wait: Annotated[
-                bool, Field(description="Poll briefly and return results when ready.")
+                bool,
+                Field(description="Poll briefly and return results inline when ready."),
             ] = False,
-            timeout_ms: Annotated[int, Field(ge=1000, le=30000)] = 30000,
+            timeout_ms: Annotated[
+                int,
+                Field(ge=1000, le=30000, description="Inline-wait budget in milliseconds."),
+            ] = 30000,
         ) -> dict[str, Any]:
             """Use this when research text should be submitted for PubTator biomedical named entity recognition. Do not use this for PubMed or PMC IDs; use get_publication_annotations. Next: get_text_annotation_results."""
 
@@ -73,11 +74,18 @@ def register_text_annotation_tools(mcp: FastMCP, profile: MCPToolProfile = "lean
     @mcp.tool(
         name="get_text_annotation_results",
         title="Get Text Annotation Results",
-        output_schema=TextAnnotationResultResponse.model_json_schema(),
+        output_schema=None,
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def get_text_annotation_results(
-        session_id: Annotated[str, Field(min_length=8)],
+        session_id: Annotated[
+            str,
+            Field(
+                min_length=8,
+                description="PubTator text-annotation session ID returned by submit_text_annotation.",
+                examples=["session-12345678"],
+            ),
+        ],
     ) -> dict[str, Any]:
         """Use this when a user has a PubTator text annotation session ID and needs its results. Do not use this for entity lookup from names; use search_biomedical_entities. Next: search_biomedical_entities."""
 

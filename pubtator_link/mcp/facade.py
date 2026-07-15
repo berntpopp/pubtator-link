@@ -15,6 +15,7 @@ from pubtator_link.mcp.notfound_guard import (
 from pubtator_link.mcp.output_validation import install_output_validation_error_handler
 from pubtator_link.mcp.profiles import MCPToolProfile, normalize_mcp_profile
 from pubtator_link.mcp.resources import RESEARCH_USE_NOTICE
+from pubtator_link.mcp.schema_compaction import compact_input_schemas
 from pubtator_link.mcp.tools.diagnostics import register_diagnostics_tools
 from pubtator_link.mcp.tools.discovery import register_discovery_tools
 from pubtator_link.mcp.tools.literature import register_literature_tools
@@ -31,6 +32,11 @@ def create_pubtator_mcp(profile: MCPToolProfile | str | None = None) -> FastMCP:
         name="pubtator-link",
         version=__version__,
         mask_error_details=True,
+        # Tool-Surface Budget Standard v1: do NOT inline every $defs/$ref at each use site.
+        # DereferenceRefsMiddleware (default on) is a ~1.35x amplifier of the tool surface; the
+        # server's input schemas contain no $ref, so turning it off is free and safe. The dominant
+        # cut is output_schema=None on every tool (see the tool modules).
+        dereference_schemas=False,
         instructions=(
             "PubTator-Link grounds biomedical literature work: search PubMed/PubTator, "
             "fetch compact passages or raw BioC, inspect review indexes, retrieve "
@@ -75,4 +81,9 @@ def create_pubtator_mcp(profile: MCPToolProfile | str | None = None) -> FastMCP:
     # error that would echo the requested name/URI (the only layer covering the
     # unknown-prompt surface).
     install_protocol_error_handler(mcp)
+    # Tool-Surface Budget Standard v1: strip the redundant nullable-wrapper / title noise from the
+    # advertised input schemas. Done LAST, after every install_* step, so nothing regenerates the
+    # schemas afterwards. It does not touch descriptions/enums, and runtime validation is unaffected
+    # (FastMCP validates against the signature model, not this advertised dict).
+    compact_input_schemas(mcp)
     return mcp

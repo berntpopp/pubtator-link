@@ -18,15 +18,14 @@ from pubtator_link.mcp.tools.review._helpers import _warn_if_degraded, make_mcp_
 from pubtator_link.models.review_rerag import (
     BudgetStrategy,
     MaxResponseChars,
-    RecordReviewContextResponse,
-    RetrieveReviewContextBatchResponse,
-    RetrieveReviewContextResponse,
     ReviewBatchResponseMode,
     ReviewLlmContextEventType,
     ReviewResponseVerbosity,
     ReviewTableMode,
     SampleSectionPolicy,
 )
+
+_STR_ITEM = Field(min_length=1)
 
 
 def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
@@ -37,29 +36,87 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         "readonly",
         name="get_review_context",
         title="Retrieve Review Context",
-        output_schema=RetrieveReviewContextResponse.model_json_schema(),
+        output_schema=None,
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def retrieve_review_context(
-        review_id: str,
-        question: str | None = None,
-        query: str | None = None,
-        session_id: str | None = None,
-        pmids: list[str] | None = None,
-        pmid: str | None = None,
-        entity_ids: list[str] | None = None,
-        sections: list[str] | None = None,
-        max_passages: int = 8,
-        max_chars: int = 6000,
-        include_diagnostics: bool = False,
-        include_tables: bool = False,
-        include_references: bool = False,
-        table_mode: ReviewTableMode = "preview",
-        section_policy: SampleSectionPolicy = "evidence_first",
-        allow_truncated_passages: bool = True,
-        max_chars_per_passage: int = 2200,
-        include_resolver_trace: bool = False,
-        include_meta: bool = True,
+        review_id: Annotated[
+            str,
+            Field(
+                min_length=1,
+                description="Prepared review index to retrieve citable context from.",
+                examples=["demo"],
+            ),
+        ],
+        question: Annotated[
+            str,
+            Field(
+                min_length=1,
+                description="Short keyword retrieval question or query.",
+                examples=["EGFR resistance"],
+            ),
+        ],
+        query: Annotated[
+            str | None,
+            Field(description="Short keyword query. Alias for `question`."),
+        ] = None,
+        session_id: Annotated[
+            str | None, Field(description="Optional staged session to scope retrieval to.")
+        ] = None,
+        pmids: Annotated[
+            list[str] | None,
+            Field(description="Restrict retrieval to these PMIDs.", examples=[["12345"]]),
+        ] = None,
+        pmid: Annotated[
+            str | None,
+            Field(min_length=1, description="Single-PMID convenience alias, merged with `pmids`."),
+        ] = None,
+        entity_ids: Annotated[
+            list[str] | None,
+            Field(
+                description="Restrict retrieval to these PubTator entity IDs.",
+                examples=[["@GENE_BRCA1"]],
+            ),
+        ] = None,
+        sections: Annotated[
+            list[str] | None,
+            Field(
+                description="Restrict retrieval to these article sections.", examples=[["abstract"]]
+            ),
+        ] = None,
+        max_passages: Annotated[
+            int, Field(ge=1, le=100, description="Maximum passages to return.")
+        ] = 8,
+        max_chars: Annotated[
+            int, Field(ge=200, le=60_000, description="Soft total character budget for passages.")
+        ] = 6000,
+        include_diagnostics: Annotated[
+            bool, Field(description="Include retrieval diagnostics in the response.")
+        ] = False,
+        include_tables: Annotated[bool, Field(description="Include table passages.")] = False,
+        include_references: Annotated[
+            bool, Field(description="Include reference-list passages.")
+        ] = False,
+        table_mode: Annotated[
+            ReviewTableMode,
+            Field(description="Table rendering: 'off', 'preview' (default), or 'full'."),
+        ] = "preview",
+        section_policy: Annotated[
+            SampleSectionPolicy,
+            Field(description="Passage ordering: 'evidence_first' (default) or 'original_order'."),
+        ] = "evidence_first",
+        allow_truncated_passages: Annotated[
+            bool, Field(description="Allow per-passage truncation to fit the char budget.")
+        ] = True,
+        max_chars_per_passage: Annotated[
+            int, Field(ge=100, le=20000, description="Character cap per returned passage.")
+        ] = 2200,
+        include_resolver_trace: Annotated[
+            bool, Field(description="Include the source-resolver trace for auditing.")
+        ] = False,
+        include_meta: Annotated[
+            bool, Field(description="Include the _meta orientation block.")
+        ] = True,
         ctx: Context | None = None,
     ) -> dict[str, Any]:
         """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Provide one of question or query. Use a short keyword query and PMID filters. If zero passages are returned, simplify the query, inspect the review index, or fall back to get_publication_annotations."""
@@ -103,38 +160,119 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         "readonly",
         name="get_review_context_batch",
         title="Retrieve Review Context Batch",
-        output_schema=RetrieveReviewContextBatchResponse.model_json_schema(),
+        output_schema=None,
         annotations=READ_ONLY_OPEN_WORLD,
     )
     async def retrieve_review_context_batch(
-        review_id: str,
-        queries: list[str],
-        session_id: str | None = None,
-        pmids: list[str] | None = None,
-        pmid: str | None = None,
-        entity_ids: list[str] | None = None,
-        sections: list[str] | None = None,
-        response_mode: ReviewBatchResponseMode = "compact",
-        max_passages_per_query: int = 8,
-        max_total_passages: int = 20,
-        max_chars: int | None = None,
-        max_response_chars: MaxResponseChars = "auto",
-        verbosity: ReviewResponseVerbosity = "standard",
-        deduplicate_passages: bool = True,
-        budget_strategy: BudgetStrategy | None = "query_fair",
-        min_passages_per_source: int = 1,
-        min_passages_per_pmid: int = 0,
-        prioritize_pmids: list[str] | None = None,
-        include_diagnostics: bool = False,
-        include_tables: bool = False,
-        include_references: bool = False,
-        table_mode: ReviewTableMode = "preview",
-        section_policy: SampleSectionPolicy = "evidence_first",
-        allow_truncated_passages: bool = True,
-        max_chars_per_passage: int = 2200,
-        dry_run: bool = False,
-        include_resolver_trace: bool = False,
-        include_meta: bool = True,
+        review_id: Annotated[
+            str,
+            Field(
+                min_length=1,
+                description="Prepared review index to retrieve citable context from.",
+                examples=["demo"],
+            ),
+        ],
+        queries: Annotated[
+            list[str],
+            Field(
+                min_length=1,
+                description="Short keyword query variants to retrieve context for in one call.",
+                examples=[["EGFR resistance", "osimertinib resistance"]],
+            ),
+        ],
+        session_id: Annotated[
+            str | None, Field(description="Optional staged session to scope retrieval to.")
+        ] = None,
+        pmids: Annotated[
+            list[str] | None,
+            Field(description="Restrict retrieval to these PMIDs.", examples=[["12345"]]),
+        ] = None,
+        pmid: Annotated[
+            str | None,
+            Field(min_length=1, description="Single-PMID convenience alias, merged with `pmids`."),
+        ] = None,
+        entity_ids: Annotated[
+            list[str] | None,
+            Field(
+                description="Restrict retrieval to these PubTator entity IDs.",
+                examples=[["@GENE_EGFR"]],
+            ),
+        ] = None,
+        sections: Annotated[
+            list[str] | None,
+            Field(
+                description="Restrict retrieval to these article sections.", examples=[["abstract"]]
+            ),
+        ] = None,
+        response_mode: Annotated[
+            ReviewBatchResponseMode,
+            Field(description="Payload shape (default 'compact'); 'quotes' for short snippets."),
+        ] = "compact",
+        max_passages_per_query: Annotated[
+            int, Field(ge=1, le=50, description="Maximum passages per query variant.")
+        ] = 8,
+        max_total_passages: Annotated[
+            int, Field(ge=1, le=200, description="Maximum passages across all queries.")
+        ] = 20,
+        max_chars: Annotated[
+            int | None,
+            Field(ge=200, le=200_000, description="Optional soft total character budget."),
+        ] = None,
+        max_response_chars: Annotated[
+            MaxResponseChars,
+            Field(description="Response character budget: 'auto' (default) or an integer cap."),
+        ] = "auto",
+        verbosity: Annotated[
+            ReviewResponseVerbosity,
+            Field(description="Field verbosity: 'lean', 'standard' (default), or 'full'."),
+        ] = "standard",
+        deduplicate_passages: Annotated[
+            bool, Field(description="Merge duplicate passages across query variants.")
+        ] = True,
+        budget_strategy: Annotated[
+            BudgetStrategy | None,
+            Field(description="Passage budget split (default 'query_fair')."),
+        ] = "query_fair",
+        min_passages_per_source: Annotated[
+            int, Field(ge=0, le=50, description="Guaranteed minimum passages per source.")
+        ] = 1,
+        min_passages_per_pmid: Annotated[
+            int, Field(ge=0, le=50, description="Guaranteed minimum passages per PMID.")
+        ] = 0,
+        prioritize_pmids: Annotated[
+            list[str] | None,
+            Field(description="PMIDs to prioritize in budgeting.", examples=[["12345"]]),
+        ] = None,
+        include_diagnostics: Annotated[
+            bool, Field(description="Include retrieval diagnostics in the response.")
+        ] = False,
+        include_tables: Annotated[bool, Field(description="Include table passages.")] = False,
+        include_references: Annotated[
+            bool, Field(description="Include reference-list passages.")
+        ] = False,
+        table_mode: Annotated[
+            ReviewTableMode,
+            Field(description="Table rendering: 'off', 'preview' (default), or 'full'."),
+        ] = "preview",
+        section_policy: Annotated[
+            SampleSectionPolicy,
+            Field(description="Passage ordering: 'evidence_first' (default) or 'original_order'."),
+        ] = "evidence_first",
+        allow_truncated_passages: Annotated[
+            bool, Field(description="Allow per-passage truncation to fit the char budget.")
+        ] = True,
+        max_chars_per_passage: Annotated[
+            int, Field(ge=100, le=20000, description="Character cap per returned passage.")
+        ] = 2200,
+        dry_run: Annotated[
+            bool, Field(description="Return budgeting diagnostics without passage text.")
+        ] = False,
+        include_resolver_trace: Annotated[
+            bool, Field(description="Include the source-resolver trace for auditing.")
+        ] = False,
+        include_meta: Annotated[
+            bool, Field(description="Include the _meta orientation block.")
+        ] = True,
         ctx: Context | None = None,
     ) -> dict[str, Any]:
         """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode uses query_fair budgeting, merged passages, per-query summaries, and next_steps for zero-result queries. Use response_mode="quotes" for short citable snippets or dry_run for diagnostics without passage text."""
@@ -190,39 +328,131 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         "full",
         name="record_review_context",
         title="Record Review Context",
-        output_schema=RecordReviewContextResponse.model_json_schema(),
+        output_schema=None,
         annotations=NON_IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS,
     )
     async def record_review_context(
-        review_id: Annotated[str, Field(min_length=1)],
-        event_type: ReviewLlmContextEventType,
-        session_id: Annotated[str | None, Field(min_length=1)] = None,
-        summary: Annotated[str | None, Field(max_length=4000)] = None,
-        pmids: list[Annotated[str, Field(min_length=1)]] | None = None,
-        passage_ids: list[Annotated[str, Field(min_length=1)]] | None = None,
-        queries: list[Annotated[str, Field(min_length=1)]] | None = None,
-        decision: dict[str, Any] | None = None,
-        topic: Annotated[str | None, Field(max_length=500)] = None,
-        research_question: Annotated[str | None, Field(max_length=1000)] = None,
-        question_hash: Annotated[str | None, Field(max_length=128)] = None,
-        request: dict[str, Any] | None = None,
-        response_summary: dict[str, Any] | None = None,
-        selected_pmids: list[Annotated[str, Field(min_length=1)]] | None = None,
-        rejected_pmids: list[Annotated[str, Field(min_length=1)]] | None = None,
-        preferred_entity_ids: list[Annotated[str, Field(min_length=1)]] | None = None,
-        selected_passage_ids: list[Annotated[str, Field(min_length=1)]] | None = None,
-        audit_passage_ids: list[Annotated[str, Field(min_length=1)]] | None = None,
-        active_queries: list[Annotated[str, Field(min_length=1)]] | None = None,
-        successful_queries: list[Annotated[str, Field(min_length=1)]] | None = None,
-        failed_queries: list[Annotated[str, Field(min_length=1)]] | None = None,
-        open_questions: list[dict[str, Any]] | None = None,
-        user_decisions: list[dict[str, Any]] | None = None,
-        last_next_commands: list[dict[str, Any]] | None = None,
-        stable_citation_keys: dict[str, str] | None = None,
-        cache_key: Annotated[str | None, Field(max_length=500)] = None,
-        token_estimate: Annotated[int | None, Field(ge=0)] = None,
-        payload: dict[str, Any] | None = None,
-        created_by: Annotated[str | None, Field(max_length=200)] = None,
+        review_id: Annotated[
+            str,
+            Field(
+                min_length=1,
+                description="Review index to persist the LLM context event under.",
+                examples=["demo"],
+            ),
+        ],
+        event_type: Annotated[
+            ReviewLlmContextEventType,
+            Field(
+                description="Kind of context event being recorded.",
+                examples=["passage_selected"],
+            ),
+        ],
+        session_id: Annotated[
+            str | None, Field(min_length=1, description="Staged session this event belongs to.")
+        ] = None,
+        summary: Annotated[
+            str | None,
+            Field(max_length=4000, description="Short human-readable summary of the event."),
+        ] = None,
+        pmids: Annotated[
+            list[Annotated[str, _STR_ITEM]] | None,
+            Field(description="PMIDs referenced by the event.", examples=[["12345"]]),
+        ] = None,
+        passage_ids: Annotated[
+            list[Annotated[str, _STR_ITEM]] | None,
+            Field(description="Prepared passage IDs referenced by the event.", examples=[["p1"]]),
+        ] = None,
+        queries: Annotated[
+            list[Annotated[str, _STR_ITEM]] | None,
+            Field(
+                description="Retrieval queries associated with the event.",
+                examples=[["EGFR resistance"]],
+            ),
+        ] = None,
+        decision: Annotated[
+            dict[str, Any] | None, Field(description="Structured decision payload.")
+        ] = None,
+        topic: Annotated[
+            str | None, Field(max_length=500, description="Topic label for the event.")
+        ] = None,
+        research_question: Annotated[
+            str | None, Field(max_length=1000, description="Research question for the event.")
+        ] = None,
+        question_hash: Annotated[
+            str | None, Field(max_length=128, description="Stable hash of the research question.")
+        ] = None,
+        request: Annotated[
+            dict[str, Any] | None, Field(description="Structured request payload to persist.")
+        ] = None,
+        response_summary: Annotated[
+            dict[str, Any] | None, Field(description="Structured response summary to persist.")
+        ] = None,
+        selected_pmids: Annotated[
+            list[Annotated[str, _STR_ITEM]] | None,
+            Field(description="PMIDs the user/model selected.", examples=[["12345"]]),
+        ] = None,
+        rejected_pmids: Annotated[
+            list[Annotated[str, _STR_ITEM]] | None,
+            Field(description="PMIDs the user/model rejected.", examples=[["67890"]]),
+        ] = None,
+        preferred_entity_ids: Annotated[
+            list[Annotated[str, _STR_ITEM]] | None,
+            Field(description="Preferred PubTator entity IDs.", examples=[["@GENE_EGFR"]]),
+        ] = None,
+        selected_passage_ids: Annotated[
+            list[Annotated[str, _STR_ITEM]] | None,
+            Field(description="Passage IDs used in the answer.", examples=[["p1"]]),
+        ] = None,
+        audit_passage_ids: Annotated[
+            list[Annotated[str, _STR_ITEM]] | None,
+            Field(description="Passage IDs kept for audit.", examples=[["p1"]]),
+        ] = None,
+        active_queries: Annotated[
+            list[Annotated[str, _STR_ITEM]] | None,
+            Field(
+                description="Currently active retrieval queries.", examples=[["EGFR resistance"]]
+            ),
+        ] = None,
+        successful_queries: Annotated[
+            list[Annotated[str, _STR_ITEM]] | None,
+            Field(
+                description="Queries that returned useful passages.", examples=[["EGFR resistance"]]
+            ),
+        ] = None,
+        failed_queries: Annotated[
+            list[Annotated[str, _STR_ITEM]] | None,
+            Field(
+                description="Queries that returned nothing useful.", examples=[["EGFR resistence"]]
+            ),
+        ] = None,
+        open_questions: Annotated[
+            list[dict[str, Any]] | None,
+            Field(description="Structured open questions to persist."),
+        ] = None,
+        user_decisions: Annotated[
+            list[dict[str, Any]] | None,
+            Field(description="Structured user decisions to persist."),
+        ] = None,
+        last_next_commands: Annotated[
+            list[dict[str, Any]] | None,
+            Field(description="The next_commands block last shown to the user."),
+        ] = None,
+        stable_citation_keys: Annotated[
+            dict[str, str] | None,
+            Field(description="Mapping of passage/PMID to stable citation key."),
+        ] = None,
+        cache_key: Annotated[
+            str | None, Field(max_length=500, description="Cache key for the recorded context.")
+        ] = None,
+        token_estimate: Annotated[
+            int | None, Field(ge=0, description="Estimated token size of the recorded context.")
+        ] = None,
+        payload: Annotated[
+            dict[str, Any] | None, Field(description="Arbitrary structured payload to persist.")
+        ] = None,
+        created_by: Annotated[
+            str | None, Field(max_length=200, description="Attribution for the recorded event.")
+        ] = None,
     ) -> dict[str, Any]:
         """Use this when a user needs to persist compact LLM review context, selected evidence IDs, decisions, or next-step state without storing article text."""
 

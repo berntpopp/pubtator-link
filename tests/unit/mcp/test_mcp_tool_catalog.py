@@ -26,7 +26,9 @@ def test_tool_catalog_entries_are_llm_usable() -> None:
         assert entry.category
         assert entry.profiles
         assert entry.example
-        assert entry.has_output_schema is True
+        # Tool-Surface Budget Standard v1: outputSchema is suppressed on every tool
+        # (output_schema=None), so no catalog entry advertises one.
+        assert entry.has_output_schema is False
         assert len(entry.description) <= 420
 
 
