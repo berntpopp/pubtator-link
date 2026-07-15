@@ -73,8 +73,8 @@ services:
       PUBTATOR_LINK_MCP_PROFILE: "${PUBTATOR_LINK_MCP_PROFILE:-readonly}"
       # PUBTATOR_LINK_MCP_SERVICE_TOKEN is deliberately NOT interpolated here.
       # Setting it installs MCPServiceAuthMiddleware, which bearer-gates the whole
-      # /mcp path. The production overlay requires it from the secret store; the
-      # base (readonly) stack must stay open so that (a) a bare `docker compose up`
+      # /mcp path. The production overlay also leaves it unset (public read-only
+      # /mcp); the base (readonly) stack must stay open so that (a) a bare `docker compose up`
       # works and (b) the central container-CI smoke gate — which derives its env
       # from every REQUIRED variable across base+prod and probes /mcp with no
       # Authorization header — is not 401'd by an injected placeholder token.
