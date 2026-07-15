@@ -33,6 +33,46 @@ binding to `127.0.0.1`, `::1`, or `localhost`. Docker binds inside its container
 the base Compose stack stays read-only by default. To exercise writes in Compose, set a random
 service token and explicitly select `PUBTATOR_LINK_MCP_PROFILE=lean` or `full`.
 
+## Direct OAuth access (`PUBTATOR_LINK_AUTH_MODE=oauth`)
+
+`oauth` mode lets PubTator-Link be **published directly** and still serve one `/mcp` to two
+audiences at once: standalone users (claude.ai connectors, Claude Code, scripts) who log in via
+**Keycloak OAuth**, and the **router**, which presents its own static service token (never the
+caller's token — no passthrough). FastMCP `MultiAuth` accepts a valid Keycloak JWT **or** the
+service token; both reach the configured (`full`) tool surface. `/health` stays public.
+
+- **Audience binding is enforced.** The JWT verifier requires `audience == PUBLIC_BASE_URL + /mcp`,
+  and `PUBLIC_BASE_URL` must be a bare origin (no path) — this is validated at startup so the
+  advertised protected-resource URI is never doubled to `/mcp/mcp`, and tokens minted for other
+  backends are rejected.
+- **REST bypass is closed.** In `oauth` mode the mutating REST review routes (`/api/reviews/*`)
+  are **not registered** — they live outside the MCP mount and would otherwise be an unauthenticated
+  write path to the same database. The writable surface is MCP-only.
+- **Client-store persistence.** OAuthProxy stores DCR clients + upstream tokens under
+  `FASTMCP_HOME` (`/home/app/.fastmcp`); mount a persistent volume there or interactive clients
+  break on restart.
+
+### Keycloak operator runbook
+
+1. In the router's realm, create a **confidential client** for PubTator (its own id + secret).
+2. Set `PUBTATOR_LINK_JWT_AUDIENCE` to PubTator's resource URI
+   (`https://pubtator-link.genefoundry.org/mcp`) and add a Keycloak **audience mapper** emitting it.
+3. Register the **OAuthProxy callback** `PUBLIC_BASE_URL/auth/callback` as the client's redirect URI
+   in Keycloak. (claude.ai / loopback redirects are the *downstream* clients — list them in
+   `PUBTATOR_LINK_OAUTH_ALLOWED_CLIENT_REDIRECT_URIS`, **not** in Keycloak.)
+4. Add a Keycloak **scope/claim mapper** that emits `pubtator:read`/`pubtator:write` into the token
+   `scope`/`scp` claim (the JWT verifier reads those, not `realm_access.roles`).
+5. Populate the `oauth`/`jwt` env vars and set `AUTH_MODE=oauth`, `MCP_PROFILE=full`.
+
+### Write authorization and a known risk
+
+By default `PUBTATOR_LINK_REQUIRE_WRITE_SCOPE=false` — **every authenticated caller can write**.
+On a shared review database with no per-subject ownership this means any authenticated user can
+modify or exhaust another user's reviews. This is accepted for a trusted user group. To reserve
+writes for a Keycloak-granted role, set `REQUIRE_WRITE_SCOPE=true` (gates the authoritative
+`WRITE_TOOLS` on `pubtator:write`). **Follow-up:** bind reviews to `AccessToken.subject` + add
+quotas for a genuinely multi-tenant public deployment.
+
 ## Write-surface hardening (issue #85)
 
 - `PUBTATOR_LINK_REVIEW_EXPORT_BASE_DIR` — base directory for server-generated
