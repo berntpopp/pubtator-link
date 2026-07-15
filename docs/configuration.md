@@ -46,7 +46,7 @@ have their own `PUBTATOR_LINK_*` knobs — including polite-pool contact address
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PUBTATOR_LINK_MCP_PROFILE` | `readonly` | `readonly` (full read surface, no write tools) · `lean` (reads + review-index writes) · `full` (complete write surface incl. audit-bundle file export) |
-| `PUBTATOR_LINK_MCP_SERVICE_TOKEN` | unset | Router-owned service bearer token for `/mcp`. Generate with `openssl rand -hex 32`. |
+| `PUBTATOR_LINK_MCP_SERVICE_TOKEN` | unset | Optional bearer token for `/mcp`. Unset (default) leaves `/mcp` open for read-only access; set it to bearer-gate the transport (must match the router's `GF_PUBTATOR_TOKEN`). Generate with `openssl rand -hex 32`. |
 | `PUBTATOR_LINK_ALLOW_UNAUTHENTICATED_WRITES` | `false` | Loopback-only development exception |
 | `PUBTATOR_LINK_ALLOWED_HOSTS` | `localhost,127.0.0.1,::1` | Exact Host allowlist |
 | `PUBTATOR_LINK_ALLOWED_ORIGINS` | empty | Browser Origin allowlist (request admission; distinct from CORS response headers) |

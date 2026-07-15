@@ -114,7 +114,15 @@ services:
       PUBTATOR_LINK_TRANSPORT: unified
       PUBTATOR_LINK_MCP_PROFILE: readonly
       PUBTATOR_LINK_ALLOW_UNAUTHENTICATED_WRITES: "false"
-      PUBTATOR_LINK_MCP_SERVICE_TOKEN: "${PUBTATOR_LINK_MCP_SERVICE_TOKEN:?required}"
+      # PUBTATOR_LINK_MCP_SERVICE_TOKEN is intentionally NOT set in production.
+      # This endpoint serves read-only public PubTator3 literature data
+      # (PUBTATOR_LINK_MCP_PROFILE: readonly, unauthenticated writes disabled
+      # above), so /mcp is left open for direct public access — matching the base
+      # stack. Setting this variable installs MCPServiceAuthMiddleware, which
+      # bearer-gates the whole /mcp path and 401s every unauthenticated client.
+      # To re-enable auth, restore the line below and supply the token via the
+      # server's .env.docker secret store:
+      #   PUBTATOR_LINK_MCP_SERVICE_TOKEN: "${PUBTATOR_LINK_MCP_SERVICE_TOKEN:?required}"
       # F-14: mirror the no-fallback DB secret requirement in the app DSN so a
       # missing PUBTATOR_LINK_POSTGRES_PASSWORD also fails the app service closed
       # (the base overlay's `:-pubtator_link` default is not inherited here).
