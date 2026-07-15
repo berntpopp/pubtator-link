@@ -222,3 +222,55 @@ the §9 Keycloak runbook and the go-live flip from §8.
   each well under budget.
 - **WIP interplay** — the contract-hardening branch touches `facade.py`/`mcp/**`;
   the design deliberately avoids those files so the two efforts don't conflict.
+
+---
+
+## Revision 2 — post-Codex (gpt-5.6-sol, high) adversarial review
+
+One adversarial pass (no cycles). Verdict was RETHINK; findings folded in below.
+Environment correction: pubtator's real venv is **fastmcp 3.4.4** (not 3.4.2) — all
+API re-verified against 3.4.4.
+
+### User decisions
+- **REST surface (finding #1):** in `oauth` mode, **disable the mutating REST review
+  routes** (the writable surface becomes MCP-only). Read-only REST may remain.
+- **Write default (finding #2):** keep write-for-all-authenticated
+  (`require_write_scope=false`); the cross-user-corruption / resource-exhaustion risk on
+  the shared review DB is **documented and accepted**, with per-subject ownership +
+  quotas filed as a follow-up (bind reviews to `AccessToken.subject`).
+
+### Finding resolutions
+1. **[CRITICAL] REST bypass** — `server_manager.py:401-410` registers REST routers
+   (incl. `reviews_router` writes/DELETE) before `app.mount("/", mcp_http_app)`; MCP auth
+   never covers them. Fix: skip the mutating review routes when `auth_mode=="oauth"`;
+   add anonymous-denial tests.
+2. **[CRITICAL] cross-user writes** — accepted per decision above; documented risk +
+   ownership follow-up.
+3. **[CRITICAL] open DCR redirect + `"external"` consent** — set OAuthProxy
+   `allowed_client_redirect_uris` to the approved claude.ai + loopback patterns (the
+   router lacks this too — separate fleet fix). Keep consent configurable.
+4. **[HIGH] fastmcp version** — verified against 3.4.4; `http_app` kwargs are valid there.
+5. **[HIGH] `Settings`→`ServerSettings`** — the class is `ServerSettings` with a global
+   `settings`; all code/tests use those.
+6. **[HIGH] write-tool set** — import the authoritative 8-name `WRITE_TOOLS` from
+   `pubtator_link.mcp.profiles`; never hand-maintain the list.
+7. **[HIGH] `/mcp/mcp`** — `validate_oauth_config` asserts `public_base_url` is an HTTPS
+   origin with no path and `jwt_audience == public_base_url.rstrip('/') + mcp_path`.
+8. **[HIGH] Keycloak redirect** — register the OAuthProxy callback
+   `PUBLIC_BASE_URL/auth/callback` in Keycloak; claude.ai redirects go in
+   `allowed_client_redirect_uris`, not Keycloak.
+9. **[HIGH] FASTMCP_HOME** — use `/home/app/.fastmcp` (image user `app`), created+chowned
+   in the Dockerfile; OAuth-mode smoke test as the real UID.
+10. **[HIGH] ALLOWED_HOSTS** — make configurable; include the public host in the go-live
+    block.
+11. **[HIGH] weak tests** — real `FastMCP` app inside `with TestClient(app)`; assert 200 +
+    valid initialize JSON-RPC result, anonymous 401, fetch `/.well-known/oauth-protected-
+    resource/mcp`, and crypto JWT valid/bad-sig/wrong-audience.
+12. **[HIGH] required inputs** — `oauth` mode requires `oauth_jwt_signing_key` AND
+    `mcp_service_token` (else the router verifier is silently absent and token signing
+    follows the KC client secret).
+13. **[MEDIUM] Keycloak scopes** — JWTVerifier reads `scope`/`scp`, not
+    `realm_access.roles`; pass `valid_scopes=["pubtator:read","pubtator:write"]` and
+    document a Keycloak mapper emitting the scopes.
+14. **[MEDIUM] WIP-leak check** — diff all changed paths from the fixed feature base
+    against an exact allowlist; fail on any unmatched path.
