@@ -45,5 +45,7 @@ async def test_write_tool_allowed_with_scope(monkeypatch: pytest.MonkeyPatch, to
 @pytest.mark.asyncio
 async def test_read_tool_never_gated(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(az, "get_access_token", lambda: None)
-    result = await WriteAuthorizationMiddleware().on_call_tool(_Ctx("search_literature"), _call_next)
+    result = await WriteAuthorizationMiddleware().on_call_tool(
+        _Ctx("search_literature"), _call_next
+    )
     assert result == "ok"

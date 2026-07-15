@@ -9,20 +9,20 @@ from pubtator_link.config import ServerSettings
 
 
 def _oauth_settings(**over: object) -> ServerSettings:
-    base: dict[str, object] = dict(
-        auth_mode="oauth",
-        oauth_authorize_url="https://kc.example.org/realms/gf/protocol/openid-connect/auth",
-        oauth_token_url="https://kc.example.org/realms/gf/protocol/openid-connect/token",
-        oauth_client_id="pubtator-link",
-        oauth_client_secret="secret",
-        oauth_jwt_signing_key="x" * 32,
-        jwt_issuer="https://kc.example.org/realms/gf",
-        jwt_jwks_url="https://kc.example.org/realms/gf/protocol/openid-connect/certs",
-        jwt_audience="https://pubtator-link.genefoundry.org/mcp",
-        public_base_url="https://pubtator-link.genefoundry.org",
-        mcp_service_token="router-secret",
-        mcp_path="/mcp",
-    )
+    base: dict[str, object] = {
+        "auth_mode": "oauth",
+        "oauth_authorize_url": "https://kc.example.org/realms/gf/protocol/openid-connect/auth",
+        "oauth_token_url": "https://kc.example.org/realms/gf/protocol/openid-connect/token",
+        "oauth_client_id": "pubtator-link",
+        "oauth_client_secret": "secret",
+        "oauth_jwt_signing_key": "x" * 32,
+        "jwt_issuer": "https://kc.example.org/realms/gf",
+        "jwt_jwks_url": "https://kc.example.org/realms/gf/protocol/openid-connect/certs",
+        "jwt_audience": "https://pubtator-link.genefoundry.org/mcp",
+        "public_base_url": "https://pubtator-link.genefoundry.org",
+        "mcp_service_token": "router-secret",
+        "mcp_path": "/mcp",
+    }
     base.update(over)
     return ServerSettings(_env_file=None, **base)
 

@@ -7,21 +7,21 @@ from pubtator_link import server_manager as sm
 from pubtator_link.security import MCPServiceAuthMiddleware
 from pubtator_link.server_manager import UnifiedServerManager
 
-_OAUTH = dict(
-    auth_mode="oauth",
-    oauth_authorize_url="https://kc.example.org/realms/gf/protocol/openid-connect/auth",
-    oauth_token_url="https://kc.example.org/realms/gf/protocol/openid-connect/token",
-    oauth_client_id="pubtator-link",
-    oauth_client_secret="secret",
-    oauth_jwt_signing_key="x" * 32,
-    jwt_issuer="https://kc.example.org/realms/gf",
-    jwt_jwks_url="https://kc.example.org/realms/gf/protocol/openid-connect/certs",
-    jwt_audience="https://pubtator-link.genefoundry.org/mcp",
-    public_base_url="https://pubtator-link.genefoundry.org",
-    mcp_service_token="router-secret",
-    mcp_profile="readonly",
-    allowed_hosts=["testserver", "localhost", "127.0.0.1", "::1"],
-)
+_OAUTH = {
+    "auth_mode": "oauth",
+    "oauth_authorize_url": "https://kc.example.org/realms/gf/protocol/openid-connect/auth",
+    "oauth_token_url": "https://kc.example.org/realms/gf/protocol/openid-connect/token",
+    "oauth_client_id": "pubtator-link",
+    "oauth_client_secret": "secret",
+    "oauth_jwt_signing_key": "x" * 32,
+    "jwt_issuer": "https://kc.example.org/realms/gf",
+    "jwt_jwks_url": "https://kc.example.org/realms/gf/protocol/openid-connect/certs",
+    "jwt_audience": "https://pubtator-link.genefoundry.org/mcp",
+    "public_base_url": "https://pubtator-link.genefoundry.org",
+    "mcp_service_token": "router-secret",
+    "mcp_profile": "readonly",
+    "allowed_hosts": ["testserver", "localhost", "127.0.0.1", "::1"],
+}
 
 
 def _apply(monkeypatch: pytest.MonkeyPatch, **kw: object) -> None:
@@ -42,7 +42,7 @@ def _has_reviews_routes(app: object) -> bool:
 
 
 def test_none_mode_no_provider_legacy_gate_reviews_present(monkeypatch: pytest.MonkeyPatch) -> None:
-    _apply(monkeypatch, auth_mode="none", mcp_service_token="tok", mcp_profile="readonly")
+    _apply(monkeypatch, auth_mode="none", mcp_service_token="tok", mcp_profile="readonly")  # noqa: S106
     mgr = UnifiedServerManager()
     app = mgr.create_app(include_mcp=True)
     assert mgr.mcp.auth is None
