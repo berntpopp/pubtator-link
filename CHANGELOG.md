@@ -4,6 +4,13 @@
 
 ### Changed
 
+- **Conformance gate re-vendored** (`tests/conformance/behaviour.py`, byte-identical to
+  genefoundry-router). A `not_found` on a tool's own documented example is now treated as
+  inconclusive rather than a failure: `get_research_session_status` is keyed on a runtime-issued
+  session handle whose example can never resolve against a fresh deployment, so its honest
+  `not_found` (correct, and made cleaner by the 7.0.0 error-egress fix) no longer red-flags the
+  server. A malformed example (`invalid_input`) still fails the gate. Test-only; the released image
+  is unaffected.
 - **The public `/mcp` endpoint is now open for read-only access.** The production
   overlay no longer sets `PUBTATOR_LINK_MCP_SERVICE_TOKEN`, so
   `MCPServiceAuthMiddleware` is not installed and a direct unauthenticated `/mcp`
