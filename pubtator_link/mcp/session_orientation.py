@@ -25,7 +25,7 @@ async def research_session_status_payload(
         return {
             "success": False,
             "manifest": None,
-            "error_code": "validation_failed",
+            "error_code": "invalid_input",
             "message": "Research session request was invalid or ambiguous.",
         }
     return cast(dict[str, Any], response.model_dump(by_alias=True))

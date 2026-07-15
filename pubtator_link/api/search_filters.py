@@ -24,6 +24,50 @@ MAX_SEARCH_YEAR = 2030
 
 _YEAR_RE = re.compile(r"\b(18\d{2}|19\d{2}|20\d{2})\b")
 
+# PubMed publication types PubTator3 indexes, case-sensitive. Advertised as the
+# `publication_types` enum (mcp.tools._vocab.PublicationType); enforced here for the advanced
+# `filters` JSON path too, so `{"type":["review"]}` (mis-cased/unknown) is rejected as invalid
+# input instead of silently matching nothing. Keep in sync with _vocab.PublicationType (a unit
+# test asserts they are identical).
+VALID_PUBLICATION_TYPES: frozenset[str] = frozenset(
+    {
+        "Review",
+        "Journal Article",
+        "Meta-Analysis",
+        "Systematic Review",
+        "Guideline",
+        "Practice Guideline",
+        "Clinical Trial",
+        "Randomized Controlled Trial",
+        "Comparative Study",
+        "Case Reports",
+        "Letter",
+        "Editorial",
+        "Observational Study",
+        "Multicenter Study",
+        "Clinical Study",
+        "Validation Study",
+    }
+)
+
+
+def _validate_filter_types(type_filter: Any) -> None:
+    """Reject a `filters.type` value outside the PubMed publication-type vocabulary.
+
+    Accepts a single string or a list of strings. An unrecognised value raises ``ValueError``
+    (surfaced to the caller as ``invalid_input``) rather than being passed to PubTator3, which
+    would silently return zero results for it.
+    """
+    if type_filter is None:
+        return
+    values = type_filter if isinstance(type_filter, list) else [type_filter]
+    unknown = [v for v in values if v not in VALID_PUBLICATION_TYPES]
+    if unknown:
+        raise ValueError(
+            "filters.type contains unsupported publication type(s); use the exact PubMed "
+            "publication-type spelling (e.g. 'Review', 'Meta-Analysis')."
+        )
+
 
 @dataclass(frozen=True)
 class SearchFilterPlan:
@@ -121,6 +165,10 @@ def build_search_filter_plan(
                 "filters already contains type; use either filters.type or publication_types"
             )
         merged["type"] = publication_types
+
+    # Validate the resolved type filter (from the advanced `filters` JSON as well as the flat
+    # `publication_types`) against the closed vocabulary -- never pass an unknown type to PubTator3.
+    _validate_filter_types(merged.get("type"))
 
     eff_min, eff_max, raw_year_passthrough = _resolve_year_window(
         merged.pop("year", None), year_min, year_max

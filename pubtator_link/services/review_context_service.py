@@ -730,10 +730,27 @@ class ReviewContextService:
             await self._attach_source_metadata(sources, request.metadata)
         next_source_offset = source_offset + len(sources)
         next_failed_source_offset = failed_source_offset + len(failed_sources)
-        remaining_sources = max(0, totals.source_count - next_source_offset)
-        remaining_failed_sources = max(0, totals.failed_source_count - next_failed_source_offset)
+        remaining_sources: int | None
+        remaining_failed_sources: int | None
+        if request.pmids:
+            # `sources`/`failed_sources` are filtered by request.pmids, but `totals` is GLOBAL
+            # (session-scoped at most). Computing remaining/cursor from the global count
+            # over-reports remaining and re-emits a cursor after an empty filtered page -- which
+            # loops. Under a PMID filter, bound pagination by page fullness (a short/empty page is
+            # the end) and report remaining as unknown rather than a global number.
+            more_sources = request.limit is not None and len(sources) == request.limit
+            more_failed = request.limit is not None and len(failed_sources) == request.limit
+            remaining_sources = None
+            remaining_failed_sources = None
+        else:
+            remaining_sources = max(0, totals.source_count - next_source_offset)
+            remaining_failed_sources = max(
+                0, totals.failed_source_count - next_failed_source_offset
+            )
+            more_sources = remaining_sources > 0
+            more_failed = remaining_failed_sources > 0
         next_cursor = None
-        if request.limit is not None and (remaining_sources > 0 or remaining_failed_sources > 0):
+        if request.limit is not None and (more_sources or more_failed):
             next_cursor = encode_inspect_review_index_cursor(
                 InspectReviewIndexCursor(
                     scope_hash=scope_hash,
@@ -747,7 +764,7 @@ class ReviewContextService:
                 "sources": remaining_sources,
                 "failed_sources": remaining_failed_sources,
             }.items()
-            if request.limit is not None and value > 0
+            if request.limit is not None and isinstance(value, int) and value > 0
         }
         coverage_summary = {"full_text": 0, "abstract_only": 0, "title_only": 0, "unknown": 0}
         for source in sources:

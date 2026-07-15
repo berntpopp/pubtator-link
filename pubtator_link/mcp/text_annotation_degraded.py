@@ -10,6 +10,7 @@ def text_annotation_degraded_payload(
 ) -> dict[str, Any]:
     return {
         "success": False,
+        "error_code": "upstream_unavailable",
         "session_id": session_id,
         "status": status,
         "original_text": "",

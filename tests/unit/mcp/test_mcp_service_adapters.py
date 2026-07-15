@@ -710,6 +710,10 @@ async def test_export_review_audit_bundle_oversized_inline_fallback_preserves_fi
     )
 
     assert result["success"] is False
+    # Top-level error_code is in the closed enum; the specific reason is preserved as a subtype
+    # (and, for back-compat, the nested error.code).
+    assert result["error_code"] == "invalid_input"
+    assert result["error_subtype"] == "export_unavailable"
     assert result["error"]["code"] == "export_unavailable"
     assert result["error"]["field_errors"][0]["field"] == "save_to_file"
 
@@ -1021,7 +1025,7 @@ async def test_get_research_session_status_adapter_maps_session_id_only_errors()
     assert not_found["success"] is False
     assert not_found["error_code"] == "not_found"
     assert ambiguous["success"] is False
-    assert ambiguous["error_code"] == "validation_failed"
+    assert ambiguous["error_code"] == "invalid_input"
 
 
 async def _run_ground_question_fixture(service_adapters, **kwargs):

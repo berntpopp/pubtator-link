@@ -62,13 +62,13 @@ def test_retrieve_review_context_batch_schema_uses_auto_fit_budget_defaults() ->
 
     assert "max_chars" not in schema.get("required", [])
     assert "max_response_chars" not in schema.get("required", [])
+    # max_chars is optional (omit -> None -> auto-fit budget). The advertised schema's redundant
+    # nullable wrapper is stripped by the Tool-Surface Budget compaction, so it reads as a plain
+    # optional integer rather than `int | null`; the auto-fit behaviour comes from it not being
+    # required, not from an explicit null option a model would ever pass.
     max_chars_schema = schema["properties"]["max_chars"]
     assert max_chars_schema.get("default") is None
-    any_of = max_chars_schema.get("anyOf", [])
-    assert (
-        any(option.get("type") == "null" for option in any_of)
-        or max_chars_schema.get("type") == "null"
-    )
+    assert max_chars_schema.get("type") == "integer"
     assert schema["properties"]["max_response_chars"]["default"] == "auto"
 
 

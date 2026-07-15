@@ -635,12 +635,27 @@ def _local_single_page(
     base: dict[str, Any],
     items: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    # Filters were applied locally to a SINGLE fetched page (upstream could not do it server-side).
+    # The true filtered total across all upstream pages is unknown, so `total` is reported as a
+    # lower bound and the upstream page count is preserved so the client can see that later pages
+    # exist -- never a fabricated `total_pages: 1` that says retrieval is complete.
+    upstream_pages = base.get("total_pages")
+    current_page = int(base.get("page", 1) or 1)
+    has_more = bool(isinstance(upstream_pages, int) and current_page < upstream_pages)
+    warnings = list(base.get("warnings") or [])
+    warnings.append(
+        "Filters were applied locally to one fetched page; total is a lower bound and more "
+        "matches may exist on later pages (increase page to continue)."
+    )
     return {
         **base,
         "results": items,
         "count": len(items),
         "total": len(items),
-        "total_pages": 1,
+        "total_results": len(items),
+        "total_results_is_lower_bound": True,
+        "has_more": has_more,
+        "warnings": warnings,
     }
 
 
@@ -1677,10 +1692,16 @@ def _inline_audit_bundle_or_error(
         }
         if field_error is not None and "field_errors" in field_error:
             error["field_errors"] = field_error["field_errors"]
-        return McpReviewAuditBundleResponse(
+        payload = McpReviewAuditBundleResponse(
             success=False,
             error=error,
         ).model_dump(mode="json", exclude_none=True)
+        # Response-Envelope Standard v1: surface a closed-enum top-level error_code (the caller
+        # can retry with fallback_inline=True or save_to_file); the specific reason stays under
+        # error_subtype and the nested error.code.
+        payload["error_code"] = "invalid_input"
+        payload["error_subtype"] = "export_unavailable"
+        return payload
     response = McpReviewAuditBundleResponse(inline_bundle=bundle_json).model_dump(
         mode="json",
         exclude_none=True,

@@ -282,7 +282,7 @@ async def test_search_literature_hostile_sort_validation_frame_is_severed(
     mirror = json.loads(result.content[0].text)
     for frame in (payload, mirror):
         assert frame["success"] is False
-        assert frame["error_code"] == "validation_failed"
+        assert frame["error_code"] == "invalid_input"
         # The whole serialized frame must carry neither the hostile value nor code points.
         _assert_severed(json.dumps(frame))
         assert hostile_sort not in json.dumps(frame)

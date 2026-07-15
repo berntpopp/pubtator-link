@@ -82,23 +82,6 @@ def mcp_tool_names() -> set[str]:
     return set(mcp._tool_manager._tools)
 
 
-def _tool_output_schema(tool: object) -> dict[str, object]:
-    schema = getattr(tool, "output_schema", None) or getattr(tool, "outputSchema", None)
-    if schema is None:
-        metadata = getattr(tool, "fn_metadata", None)
-        schema = getattr(metadata, "output_schema", None) if metadata is not None else None
-    assert isinstance(schema, dict), f"{tool!r} did not expose an output schema"
-    return schema
-
-
-def _assert_specific_object_schema(schema: dict[str, object], required: set[str]) -> None:
-    assert schema.get("type") == "object"
-    properties = schema.get("properties")
-    assert isinstance(properties, dict)
-    assert required.issubset(properties)
-    assert properties != {}
-
-
 def _schema_enum_values(schema: dict[str, object]) -> set[object]:
     values: set[object] = set()
     enum = schema.get("enum")
@@ -211,11 +194,8 @@ def test_get_publication_passages_schema_exposes_dry_run_and_verbosity() -> None
 
     assert schema["properties"]["dry_run"]["default"] is False
     assert set(schema["properties"]["verbosity"]["enum"]) == {"lean", "standard", "full"}
-    text_schema = tool.output_schema["$defs"]["MCPPublicationPassage"]["properties"]["text"]
-    untrusted_ref = text_schema["$ref"]
-    untrusted_name = untrusted_ref.rsplit("/", 1)[-1]
-    kind_schema = tool.output_schema["$defs"][untrusted_name]["properties"]["kind"]
-    assert kind_schema["const"] == "untrusted_text"
+    # Tool-Surface Budget Standard v1: outputSchema is suppressed on every tool.
+    assert tool.output_schema is None
 
 
 def test_citation_graph_tool_schema_is_flat() -> None:
@@ -227,9 +207,13 @@ def test_citation_graph_tool_schema_is_flat() -> None:
     properties = tool.parameters["properties"]
 
     assert "pmid" in properties
-    assert "doi" in properties
+    # `doi` and `query` alias resolvers were removed; only the required `pmid` remains.
+    assert "doi" not in properties
+    assert "query" not in properties
     assert "request" not in properties
-    assert tool.output_schema["title"] == "PublicationCitationGraphResponse"
+    # Flat INPUT schema (no $defs indirection); outputSchema is suppressed.
+    assert "$defs" not in tool.parameters
+    assert tool.output_schema is None
 
 
 def test_related_evidence_tool_schema_is_flat() -> None:
@@ -249,7 +233,9 @@ def test_related_evidence_tool_schema_is_flat() -> None:
     assert "year_min" in properties
     assert "year_max" in properties
     assert "request" not in properties
-    assert tool.output_schema["title"] == "RelatedEvidenceCandidatesResponse"
+    # Flat INPUT schema (no $defs indirection); outputSchema is suppressed.
+    assert "$defs" not in tool.parameters
+    assert tool.output_schema is None
 
 
 def test_topic_literature_map_tool_schema_is_flat() -> None:
@@ -259,10 +245,12 @@ def test_topic_literature_map_tool_schema_is_flat() -> None:
     properties = tool.parameters["properties"]
 
     assert "query" in properties
-    assert "topic" in properties
-    assert "question" in properties
+    # `topic`, `question`, and `seed_pmids` alias params were removed; only the
+    # required `query` and optional `pmids` seeds remain.
+    assert "topic" not in properties
+    assert "question" not in properties
     assert "pmids" in properties
-    assert "seed_pmids" in properties
+    assert "seed_pmids" not in properties
     assert "max_seed_papers" in properties
     assert "max_neighbors_per_paper" in properties
     assert "include_authors" in properties
@@ -273,7 +261,9 @@ def test_topic_literature_map_tool_schema_is_flat() -> None:
     assert "year_max" in properties
     assert "prefer_full_text" in properties
     assert "request" not in properties
-    assert tool.output_schema["title"] == "TopicLiteratureMapResponse"
+    # Flat INPUT schema (no $defs indirection); outputSchema is suppressed.
+    assert "$defs" not in tool.parameters
+    assert tool.output_schema is None
 
 
 def test_literature_graph_mcp_schemas_default_to_compact() -> None:
@@ -288,39 +278,6 @@ def test_literature_graph_mcp_schemas_default_to_compact() -> None:
         response_mode = tools[name].parameters["properties"]["response_mode"]
         assert response_mode["default"] == "compact"
         assert "full" in _schema_enum_values(response_mode)
-
-
-@pytest.mark.asyncio
-async def test_topic_literature_map_accepts_topic_and_seed_aliases(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import pubtator_link.mcp.tools.publications as publication_tools
-    from pubtator_link.mcp.facade import create_pubtator_mcp
-    from pubtator_link.models.literature_graph import TopicLiteratureMapResponse
-
-    class FakeService:
-        async def build_map(self, request):
-            assert request.query == "MEFV VUS"
-            assert request.pmids == ["24166952"]
-            return TopicLiteratureMapResponse(
-                query=request.query,
-                seed_pmids=request.pmids or [],
-                response_mode=request.response_mode,
-            )
-
-    async def fake_get_topic_literature_map_service() -> FakeService:
-        return FakeService()
-
-    monkeypatch.setattr(
-        publication_tools,
-        "get_topic_literature_map_service",
-        fake_get_topic_literature_map_service,
-    )
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["build_topic_literature_map"]
-
-    result = await tool.run({"topic": "MEFV VUS", "seed_pmids": ["24166952"]})
-
-    assert result.structured_content["query"] == "MEFV VUS"
 
 
 def test_review_retrieval_schema_hides_resolver_trace_by_default() -> None:
@@ -368,13 +325,13 @@ def test_review_quickstart_schema_is_flat_and_returns_retrieval_handoff() -> Non
 
     tool = create_pubtator_mcp(profile="full")._tool_manager._tools["review_quickstart"]
     schema = tool.parameters
-    output_schema = _tool_output_schema(tool)
 
     assert "topic" in schema["properties"]
     assert "question" in schema["properties"]
     assert schema["properties"]["n_pmids"]["default"] == 8
-    assert output_schema["properties"]["ready_to_retrieve"]
-    assert output_schema["properties"]["next_commands"]
+    # Flat INPUT schema (no $defs indirection); outputSchema is suppressed.
+    assert "$defs" not in schema
+    assert tool.output_schema is None
 
 
 @pytest.mark.asyncio
@@ -420,11 +377,13 @@ def test_ground_question_schema_exposes_one_call_arguments() -> None:
     properties = tool.parameters["properties"]
 
     assert "question" in properties
-    assert "query" in properties
+    # The `query` alias was removed; `question` is the sole required primary.
+    assert "query" not in properties
     assert properties["max_pmids"]["minimum"] == 1
     assert properties["max_pmids"]["maximum"] == 20
     assert properties["wait_until_ready"]["default"] is True
-    assert tool.output_schema["title"] == "GroundQuestionResponse"
+    # outputSchema is suppressed (Tool-Surface Budget Standard v1).
+    assert tool.output_schema is None
 
 
 def test_ground_question_schema_exposes_verbosity_and_auto_budget() -> None:
@@ -484,7 +443,8 @@ def test_get_server_capabilities_accepts_details_argument() -> None:
     properties = tool.parameters["properties"]
 
     assert "details" in properties
-    assert properties["details"]["default"] is None
+    assert properties["details"]["type"] == "array"
+    assert properties["details"]["items"]["type"] == "string"
 
 
 def test_capabilities_expose_tool_categories_and_diagnostics_workflow() -> None:
@@ -664,13 +624,15 @@ def test_diagnostics_tool_is_registered() -> None:
     assert "diagnostics" in mcp._tool_manager._tools
 
 
-def test_diagnostics_schema_exposes_minimum_workflow() -> None:
+def test_diagnostics_output_schema_is_suppressed() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
     tool = create_pubtator_mcp()._tool_manager._tools["diagnostics"]
-    schema = tool.output_schema
 
-    assert "minimum_workflow" in schema["properties"]
+    # Tool-Surface Budget Standard v1: outputSchema is suppressed on every tool.
+    # The minimum_workflow content is verified via the live response in
+    # test_diagnostics_response_includes_minimum_workflow.
+    assert tool.output_schema is None
 
 
 @pytest.mark.asyncio
@@ -748,18 +710,19 @@ def test_variant_evidence_tool_is_registered(mcp_tool_names) -> None:
     assert "get_variant_evidence" in mcp_tool_names
 
 
-def test_full_profile_all_tools_have_output_schemas() -> None:
+def test_full_profile_all_tools_suppress_output_schema() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
+    # Tool-Surface Budget Standard v1: outputSchema was 87% of the tool surface
+    # and no model reads it, so it is suppressed on every registered tool.
     mcp = create_pubtator_mcp(profile="full")
-    missing = []
-    for name, tool in mcp._tool_manager._tools.items():
-        schema = _tool_output_schema(tool)
-        properties = schema.get("properties")
-        if not isinstance(properties, dict) or not properties:
-            missing.append(name)
+    with_output_schema = [
+        name
+        for name, tool in mcp._tool_manager._tools.items()
+        if getattr(tool, "output_schema", None) is not None
+    ]
 
-    assert missing == []
+    assert with_output_schema == []
 
 
 def test_research_session_tool_schema_and_annotations_are_stable() -> None:
@@ -808,30 +771,24 @@ def test_research_session_tool_schema_and_annotations_are_stable() -> None:
         assert tool.annotations.openWorldHint is True
 
 
-def test_discovery_tools_are_registered_with_specific_schemas() -> None:
+def test_discovery_tools_are_registered_and_suppress_output_schema() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
     mcp = create_pubtator_mcp(profile="full")
     tools = mcp._tool_manager._tools
 
-    expected = {
-        "convert_article_ids": {"records", "candidate_pmids", "unresolved", "_meta"},
-        "get_mesh": {"query", "descriptors", "candidate_pmids", "_meta"},
-        "get_citation": {"records", "candidate_pmids", "_meta"},
-        "find_related_articles": {
-            "source_pmids",
-            "mode",
-            "related_articles",
-            "candidate_pmids",
-            "unresolved",
-            "_meta",
-        },
+    expected_tools = {
+        "convert_article_ids",
+        "get_mesh",
+        "get_citation",
+        "find_related_articles",
     }
 
-    for name, required_properties in expected.items():
+    # The discovery tools are registered, and (Tool-Surface Budget Standard v1)
+    # every one suppresses its outputSchema.
+    for name in expected_tools:
         assert name in tools
-        tool = tools[name]
-        _assert_specific_object_schema(_tool_output_schema(tool), required_properties)
+        assert getattr(tools[name], "output_schema", None) is None
 
 
 def test_tool_descriptions_do_not_repeat_long_research_notice() -> None:
@@ -892,7 +849,7 @@ def test_common_mcp_tools_are_flat_and_unversioned() -> None:
     batch_schema = tools["get_review_context_batch"].parameters
     assert batch_schema["properties"]["response_mode"]["default"] == "compact"
     assert batch_schema["properties"]["budget_strategy"]["default"] == "query_fair"
-    assert "scarcity_first" in batch_schema["properties"]["budget_strategy"]["anyOf"][0]["enum"]
+    assert "scarcity_first" in batch_schema["properties"]["budget_strategy"]["enum"]
     assert "min_passages_per_source" in batch_schema["properties"]
     search_schema = tools["search_literature"].parameters
     assert "publication_types" in search_schema["properties"]
@@ -907,11 +864,14 @@ def test_common_mcp_tools_are_flat_and_unversioned() -> None:
     assert search_schema["properties"]["coverage"]["default"] == "none"
     assert "preflight" in _schema_enum_values(search_schema["properties"]["coverage"])
     assert search_schema["properties"]["metadata"]["default"] == "basic"
-    assert "query" in search_schema["properties"]
+    # The `query` alias was removed; `text` is the sole required primary.
+    assert "query" not in search_schema["properties"]
     assert search_schema["properties"]["include_meta"]["default"] is True
 
     passages_schema = tools["get_publication_passages"].parameters
-    assert "pmid" in passages_schema["properties"]
+    # The scalar `pmid` alias was removed; `pmids` is the sole required primary.
+    assert "pmids" in passages_schema["properties"]
+    assert "pmid" not in passages_schema["properties"]
 
     ground_schema = tools["ground_question"].parameters
     assert "max_results" in ground_schema["properties"]
@@ -1020,66 +980,6 @@ async def test_retrieve_review_context_batch_tool_include_meta_false_strips_meta
 
 
 @pytest.mark.asyncio
-async def test_search_literature_accepts_query_alias(monkeypatch: pytest.MonkeyPatch) -> None:
-    import pubtator_link.mcp.tools.literature as literature_tools
-    from pubtator_link.mcp.facade import create_pubtator_mcp
-
-    class FakeClient:
-        async def search_publications(self, **kwargs):
-            assert kwargs["text"] == "MEFV"
-            return {"results": [{"pmid": "1", "title": "FMF"}], "count": 1}
-
-    async def fake_get_api_client() -> FakeClient:
-        return FakeClient()
-
-    monkeypatch.setattr(literature_tools, "get_api_client", fake_get_api_client)
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["search_literature"]
-
-    result = await tool.run({"query": "MEFV"})
-
-    assert result.structured_content["success"] is True
-    assert result.structured_content["query"] == "MEFV"
-
-
-@pytest.mark.asyncio
-async def test_search_guidelines_accepts_query_alias(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import pubtator_link.mcp.tools.literature as literature_tools
-    from pubtator_link.mcp.facade import create_pubtator_mcp
-
-    async def fake_get_api_client() -> object:
-        return object()
-
-    async def fake_get_source_preflight_service() -> object:
-        return object()
-
-    async def fake_search_literature_impl(**kwargs):
-        assert kwargs["text"] == "familial mediterranean fever guidelines"
-        assert kwargs["publication_types"] is None
-        assert kwargs["guideline_boost"] is True
-        return {
-            "success": True,
-            "query": kwargs["text"],
-            "results": [],
-        }
-
-    monkeypatch.setattr(literature_tools, "get_api_client", fake_get_api_client)
-    monkeypatch.setattr(
-        literature_tools,
-        "get_source_preflight_service",
-        fake_get_source_preflight_service,
-    )
-    monkeypatch.setattr(literature_tools, "search_literature_impl", fake_search_literature_impl)
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["search_guidelines"]
-
-    result = await tool.run({"query": " familial mediterranean fever guidelines "})
-
-    assert result.structured_content["success"] is True
-    assert result.structured_content["query"] == "familial mediterranean fever guidelines"
-
-
-@pytest.mark.asyncio
 async def test_find_related_articles_uses_dependency_injected_metadata(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1121,7 +1021,8 @@ async def test_find_related_articles_uses_dependency_injected_metadata(
     )
     tool = create_pubtator_mcp(profile="full")._tool_manager._tools["find_related_articles"]
 
-    result = await tool.run({"pmid": "123"})
+    # `pmids` is now the sole required primary (the scalar `pmid` alias was removed).
+    result = await tool.run({"pmids": ["123"]})
 
     assert result.structured_content["success"] is True
 
@@ -1134,7 +1035,7 @@ async def test_query_alias_missing_all_returns_validation_failed_tool_error() ->
 
     payload = await _run_error_tool(tool, {})
 
-    assert payload["error_code"] == "validation_failed"
+    assert payload["error_code"] == "invalid_input"
     assert payload["success"] is False
 
 
@@ -1144,12 +1045,13 @@ async def test_tool_validation_unknown_argument_reports_valid_and_unexpected_par
 
     tool = create_pubtator_mcp(profile="full")._tool_manager._tools["search_literature"]
 
-    payload = await _run_error_tool(tool, {"query": "familial mediterranean fever", "bogus": "x"})
+    payload = await _run_error_tool(tool, {"text": "familial mediterranean fever", "bogus": "x"})
 
     assert payload["success"] is False
-    assert payload["error_code"] == "validation_failed"
-    assert "query" in payload["valid_params"]
+    assert payload["error_code"] == "invalid_input"
+    # `query` alias was removed; `text` is the current required primary.
     assert "text" in payload["valid_params"]
+    assert "query" not in payload["valid_params"]
     assert payload["unexpected_params"] == ["bogus"]
     assert payload["_meta"]["next_commands"] == [{"tool": "diagnostics", "arguments": {}}]
 
@@ -1169,7 +1071,7 @@ async def test_tool_validation_bad_enum_reports_valid_values() -> None:
     )
 
     assert payload["success"] is False
-    assert payload["error_code"] == "validation_failed"
+    assert payload["error_code"] == "invalid_input"
     assert payload["valid_values_for"]["response_mode"] == [
         "compact",
         "standard",
@@ -1188,7 +1090,7 @@ async def test_tool_validation_failure_records_failure_metrics() -> None:
 
     metrics = metrics_payload().decode()
     assert (
-        'mcp_tool_calls_total{error_code="validation_failed",'
+        'mcp_tool_calls_total{error_code="invalid_input",'
         'outcome="failure",tool_name="search_literature"}'
     ) in metrics
 
@@ -1207,7 +1109,7 @@ async def test_validation_error_handler_is_idempotent() -> None:
     )
 
     assert payload["success"] is False
-    assert payload["error_code"] == "validation_failed"
+    assert payload["error_code"] == "invalid_input"
     assert payload["valid_values_for"]["response_mode"] == [
         "compact",
         "standard",
@@ -1248,67 +1150,8 @@ async def test_query_alias_conflict_returns_validation_failed_tool_error(
         tool, {"text": "MEFV guideline", "query": "colchicine guideline"}
     )
 
-    assert payload["error_code"] == "validation_failed"
+    assert payload["error_code"] == "invalid_input"
     assert payload["success"] is False
-
-
-def test_query_alias_tool_descriptions_document_required_alias_groups() -> None:
-    from pubtator_link.mcp.facade import create_pubtator_mcp
-
-    tools = create_pubtator_mcp(profile="full")._tool_manager._tools
-    expected_fragments = {
-        "search_literature": "Provide one of text or query.",
-        "search_guidelines": "Provide one of text or query.",
-        "suggest_corpus": "Provide one of question or query.",
-        "ground_question": "Provide one of question or query.",
-        "review_quickstart": "Provide one of topic, query, or question.",
-        "get_review_context": "Provide one of question or query.",
-    }
-
-    for tool_name, fragment in expected_fragments.items():
-        assert fragment in (tools[tool_name].description or "")
-
-
-@pytest.mark.asyncio
-async def test_get_publication_passages_accepts_scalar_pmid(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import pubtator_link.mcp.tools.publications as publication_tools
-    from pubtator_link.mcp.facade import create_pubtator_mcp
-    from pubtator_link.models.publication_passages import (
-        PublicationContextEstimate,
-        PublicationPassageResponse,
-    )
-
-    class FakeService:
-        async def get_passages(self, request):
-            assert request.pmids == ["33454820"]
-            return PublicationPassageResponse(
-                pmids=request.pmids,
-                mode=request.mode,
-                passages=[],
-                context_estimate=PublicationContextEstimate(
-                    estimated_passages=0,
-                    estimated_chars=0,
-                    sections_by_pmid={},
-                    recommended_mode=request.mode,
-                ),
-            )
-
-    async def fake_get_publication_passage_service() -> FakeService:
-        return FakeService()
-
-    monkeypatch.setattr(
-        publication_tools,
-        "get_publication_passage_service",
-        fake_get_publication_passage_service,
-    )
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["get_publication_passages"]
-
-    result = await tool.run({"pmid": "33454820"})
-
-    assert result.structured_content["success"] is True
-    assert result.structured_content["pmids"] == ["33454820"]
 
 
 @pytest.mark.asyncio
@@ -1364,7 +1207,7 @@ async def test_get_publication_passages_structured_and_text_mirrors_agree(
     mcp = create_pubtator_mcp(profile="full")
 
     async with Client(mcp) as client:
-        result = await client.call_tool("get_publication_passages", {"pmid": "33454820"})
+        result = await client.call_tool("get_publication_passages", {"pmids": ["33454820"]})
 
     structured = result.structured_content
     mirrored = json.loads(result.content[0].text)
@@ -1374,58 +1217,6 @@ async def test_get_publication_passages_structured_and_text_mirrors_agree(
     assert fenced["raw_sha256"] == hashlib.sha256(raw.encode()).hexdigest()
     assert fenced["provenance"]["record_id"] == "PMID:33454820#abstract-0"
     assert json.dumps(structured).count(raw) == 1
-
-
-def test_pmid_list_tools_expose_scalar_pmid_alias() -> None:
-    from pubtator_link.mcp.facade import create_pubtator_mcp
-
-    tools = create_pubtator_mcp(profile="full")._tool_manager._tools
-    for tool_name in (
-        "preflight_review_sources",
-        "get_publication_metadata",
-        "estimate_publication_context",
-        "find_related_articles",
-    ):
-        properties = tools[tool_name].parameters["properties"]
-        assert "pmids" in properties
-        assert "pmid" in properties
-
-
-@pytest.mark.asyncio
-async def test_get_publication_metadata_accepts_pmid_alias(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import pubtator_link.mcp.tools.publications as publication_tools
-    from pubtator_link.mcp.facade import create_pubtator_mcp
-
-    async def fake_get_publication_metadata_service() -> object:
-        return object()
-
-    async def fake_get_publication_metadata_impl(**kwargs):
-        assert kwargs["pmids"] == ["33454820"]
-        return {
-            "success": True,
-            "metadata": [{"pmid": "33454820", "title": "FMF"}],
-            "failed_pmids": {},
-            "_meta": {},
-        }
-
-    monkeypatch.setattr(
-        publication_tools,
-        "get_publication_metadata_service",
-        fake_get_publication_metadata_service,
-    )
-    monkeypatch.setattr(
-        publication_tools,
-        "get_publication_metadata_impl",
-        fake_get_publication_metadata_impl,
-    )
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["get_publication_metadata"]
-
-    result = await tool.run({"pmid": " 33454820 "})
-
-    assert result.structured_content["success"] is True
-    assert result.structured_content["metadata"][0]["pmid"] == "33454820"
 
 
 @pytest.mark.asyncio
@@ -1461,7 +1252,7 @@ async def test_pmid_limit_rejects_combined_list_and_scalar_alias(
 
     payload = await _run_error_tool(tool, {"pmids": pmids, "pmid": "99999999"})
 
-    assert payload["error_code"] == "validation_failed"
+    assert payload["error_code"] == "invalid_input"
     assert payload["success"] is False
 
 
@@ -1499,68 +1290,6 @@ async def test_ground_question_accepts_max_results_alias(
     result = await tool.run({"question": "MEFV treatment", "max_results": 3})
 
     assert result.structured_content["success"] is True
-
-
-@pytest.mark.asyncio
-async def test_search_biomedical_entities_accepts_text_alias(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import pubtator_link.mcp.tools.literature as literature_tools
-    from pubtator_link.mcp.facade import create_pubtator_mcp
-
-    async def fake_search_biomedical_entities_impl(**kwargs):
-        assert kwargs["query"] == "MEFV"
-        return {
-            "success": True,
-            "query": kwargs["query"],
-            "matches": [],
-            "total_matches": 0,
-            "concept_filter": kwargs["concept"],
-        }
-
-    async def fake_dependency():
-        return object()
-
-    monkeypatch.setattr(
-        literature_tools,
-        "search_biomedical_entities_impl",
-        fake_search_biomedical_entities_impl,
-    )
-    monkeypatch.setattr(literature_tools, "get_api_client", fake_dependency)
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["search_biomedical_entities"]
-
-    result = await tool.run({"text": "MEFV", "concept": "Gene"})
-
-    assert result.structured_content["success"] is True
-    assert result.structured_content["query"] == "MEFV"
-
-
-@pytest.mark.asyncio
-async def test_lookup_mesh_accepts_text_alias(monkeypatch: pytest.MonkeyPatch) -> None:
-    import pubtator_link.mcp.tools.discovery as discovery_tools
-    from pubtator_link.mcp.facade import create_pubtator_mcp
-
-    class FakeService:
-        async def lookup_mesh(self, *, query: str, limit: int, exact: bool):
-            assert query == "familial Mediterranean fever"
-            assert limit == 5
-            assert exact is False
-            return type(
-                "Response",
-                (),
-                {"model_dump": lambda self, by_alias=False: {"success": True, "query": query}},
-            )()
-
-    async def fake_get_discovery_service():
-        return FakeService()
-
-    monkeypatch.setattr(discovery_tools, "get_discovery_service", fake_get_discovery_service)
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["get_mesh"]
-
-    result = await tool.run({"text": "familial Mediterranean fever", "limit": 5})
-
-    assert result.structured_content["success"] is True
-    assert result.structured_content["query"] == "familial Mediterranean fever"
 
 
 def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
@@ -1654,70 +1383,58 @@ def test_export_review_audit_bundle_exposes_export_options() -> None:
     assert properties["response_mode"]["default"] == "compact"
 
 
-def test_high_use_mcp_tools_expose_specific_output_schemas() -> None:
+def test_high_use_mcp_tools_suppress_output_schemas() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
     mcp = create_pubtator_mcp(profile="full")
     tools = mcp._tool_manager._tools
 
-    expected = {
-        "search_literature": {"success", "results"},
-        "workflow_help": {"task", "steps", "fallbacks", "tool_sequence", "_meta"},
-        "convert_article_ids": {"records", "candidate_pmids", "unresolved", "_meta"},
-        "get_mesh": {"query", "descriptors", "candidate_pmids", "_meta"},
-        "get_citation": {"records", "candidate_pmids", "_meta"},
-        "find_related_articles": {
-            "source_pmids",
-            "mode",
-            "related_articles",
-            "candidate_pmids",
-            "unresolved",
-            "_meta",
-        },
-        "suggest_corpus": {"candidate_pmids", "candidates", "searches", "_meta"},
-        "preflight_review_sources": {"success", "coverage_hints"},
-        "index_review_evidence": {"success", "review_id", "preparation_status"},
-        "inspect_review_index": {"success", "review_id", "sources", "totals"},
-        "get_review_context": {"success", "review_id", "context_pack"},
-        "get_review_context_batch": {
-            "success",
-            "review_id",
-            "merged_context_pack",
-            "query_summaries",
-        },
-        "get_review_passages_by_id": {"success", "review_id", "passages"},
-        "get_review_audit_trail": {"success", "review_id", "items", "audit_block"},
-        "get_neighboring_review_passages": {"success", "review_id", "passages"},
-        "export_review_audit_bundle": {"success", "audit_bundle"},
-        "record_review_context": {"success", "context", "event"},
+    # Tool-Surface Budget Standard v1: outputSchema is suppressed on every tool,
+    # including the high-use core-workflow set. structuredContent is unaffected.
+    high_use_tools = {
+        "search_literature",
+        "workflow_help",
+        "convert_article_ids",
+        "get_mesh",
+        "get_citation",
+        "find_related_articles",
+        "suggest_corpus",
+        "preflight_review_sources",
+        "index_review_evidence",
+        "inspect_review_index",
+        "get_review_context",
+        "get_review_context_batch",
+        "get_review_passages_by_id",
+        "get_review_audit_trail",
+        "get_neighboring_review_passages",
+        "export_review_audit_bundle",
+        "record_review_context",
     }
 
-    for name, required in expected.items():
-        _assert_specific_object_schema(_tool_output_schema(tools[name]), required)
+    for name in high_use_tools:
+        assert name in tools
+        assert getattr(tools[name], "output_schema", None) is None
 
 
-def test_submit_text_annotation_output_schema_documents_wait_result() -> None:
+def test_submit_text_annotation_output_schema_is_suppressed() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
+    # Tool-Surface Budget Standard v1: outputSchema is suppressed. The wait-result
+    # payload shape is exercised via the live call in
+    # test_submit_text_annotation_tool_waits_for_result.
     tool = create_pubtator_mcp(profile="full")._tool_manager._tools["submit_text_annotation"]
-    schema = _tool_output_schema(tool)
-    properties = schema.get("properties")
-    assert isinstance(properties, dict)
-    assert "annotations" in properties
-    assert "original_text" in properties
-    assert "session_id" in properties
-    assert "retryable" in properties
-    assert "next_tools" in properties
+
+    assert tool.output_schema is None
 
 
-def test_batch_output_schema_allows_omitted_empty_results() -> None:
+def test_batch_output_schema_is_suppressed() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
+    # Tool-Surface Budget Standard v1: outputSchema is suppressed. Omitted-empty
+    # results behaviour is exercised by the batch include_meta live-call tests.
     tool = create_pubtator_mcp(profile="full")._tool_manager._tools["get_review_context_batch"]
-    schema = _tool_output_schema(tool)
 
-    assert "results" not in schema.get("required", [])
-    assert "results" in schema["properties"]
+    assert tool.output_schema is None
 
 
 def test_capabilities_expose_llm_driver_contract_for_core_workflow() -> None:

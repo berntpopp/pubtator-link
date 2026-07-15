@@ -8,5 +8,5 @@ def test_url_safety_error_maps_to_structured_mcp_error() -> None:
         exc,
         McpErrorContext(tool_name="index_review_evidence"),
     )
-    assert payload["error_code"] == "curated_url_rejected"
+    assert payload["error_code"] == "invalid_input"
     assert "evil.example.com" not in payload["message"]
