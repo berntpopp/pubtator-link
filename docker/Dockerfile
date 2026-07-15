@@ -77,7 +77,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Create non-root user for security
 RUN groupadd --system app && \
     useradd --system --gid app --home /home/app --create-home app && \
-    mkdir -p /var/cache/pubtator-link && \
+    mkdir -p /var/cache/pubtator-link /home/app/.fastmcp && \
     chown -R app:app /var/cache/pubtator-link /home/app
 
 # Copy the virtual environment from builder stage
