@@ -17,11 +17,11 @@ from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from pubtator_link.mcp.argument_aliases import merge_pmids
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.meta_budget import strip_meta_for_repeated_call
+from pubtator_link.mcp.pmc_annotations import fetch_pmc_annotations_impl
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.service_adapters import (
     build_topic_literature_map_impl,
     estimate_publication_context_impl,
-    fetch_pmc_annotations_impl,
     fetch_publication_annotations_impl,
     find_related_evidence_candidates_impl,
     get_publication_citation_graph_impl,

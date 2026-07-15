@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from typing import ClassVar
 
 import pytest
 
@@ -368,6 +369,107 @@ async def test_review_quickstart_accepts_question_alias(
     result = await tool.run({"question": "Does colchicine prevent FMF flares?"})
 
     assert result.structured_content["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_pmc_empty_document_is_an_mcp_not_found_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+
+    from fastmcp import Client
+
+    import pubtator_link.mcp.tools.publications as publication_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+    from pubtator_link.models.publications import BioCDocument
+
+    class Result:
+        format = "biocjson"
+        documents: ClassVar[list[BioCDocument]] = [BioCDocument(id="PMC11911402")]
+
+    class EmptyPmcService:
+        async def export_pmc_publications_list(self, pmcids: list[str], format: str) -> Result:
+            return Result()
+
+    async def fake_get_publication_service() -> EmptyPmcService:
+        return EmptyPmcService()
+
+    monkeypatch.setattr(publication_tools, "get_publication_service", fake_get_publication_service)
+    mcp = create_pubtator_mcp(profile="full")
+
+    async with Client(mcp) as client:
+        result = await client.call_tool(
+            "get_pmc_annotations", {"pmcids": ["PMC11911402"]}, raise_on_error=False
+        )
+
+    assert result.is_error is True
+    payload = result.structured_content
+
+    assert payload["success"] is False
+    assert payload["error_code"] == "not_found"
+    assert payload["message"] == "No PubTator full text is available for PMCID PMC11911402."
+    assert "raw upstream error" not in json.dumps(payload)
+
+
+@pytest.mark.asyncio
+async def test_pmc_upstream_5xx_is_a_sanitized_wire_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+
+    from fastmcp import Client
+
+    import pubtator_link.mcp.tools.publications as publication_tools
+    from pubtator_link.api.client import PubTatorAPIError
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    class FailingPmcService:
+        async def export_pmc_publications_list(self, pmcids: list[str], format: str) -> None:
+            raise PubTatorAPIError("raw upstream error", status_code=503)
+
+    async def fake_get_publication_service() -> FailingPmcService:
+        return FailingPmcService()
+
+    monkeypatch.setattr(publication_tools, "get_publication_service", fake_get_publication_service)
+    mcp = create_pubtator_mcp(profile="full")
+
+    async with Client(mcp) as client:
+        result = await client.call_tool(
+            "get_pmc_annotations", {"pmcids": ["PMC11911402"]}, raise_on_error=False
+        )
+
+    assert result.is_error is True
+    payload = result.structured_content
+    assert payload["success"] is False
+    assert payload["error_code"] == "upstream_unavailable"
+    assert "raw upstream error" not in json.dumps(payload)
+
+
+@pytest.mark.asyncio
+async def test_pmc_invalid_identifier_names_pmcids_on_the_wire(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastmcp import Client
+
+    import pubtator_link.mcp.tools.publications as publication_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async def fake_get_publication_service() -> object:
+        return object()
+
+    monkeypatch.setattr(publication_tools, "get_publication_service", fake_get_publication_service)
+    mcp = create_pubtator_mcp(profile="full")
+
+    async with Client(mcp) as client:
+        result = await client.call_tool(
+            "get_pmc_annotations", {"pmcids": ["12345"]}, raise_on_error=False
+        )
+
+    assert result.is_error is True
+    payload = result.structured_content
+    assert payload["success"] is False
+    assert payload["error_code"] == "invalid_input"
+    assert payload["field_errors"][0]["field"] == "pmcids"
 
 
 def test_ground_question_schema_exposes_one_call_arguments() -> None:

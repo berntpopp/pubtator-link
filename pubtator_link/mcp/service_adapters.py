@@ -20,7 +20,6 @@ from pubtator_link.mcp.input_normalization import (
     attach_normalization_meta,
     normalize_retrieve_review_context_batch_args,
 )
-from pubtator_link.mcp.pmc_export import pmc_export_coverage
 from pubtator_link.mcp.quickstart import (
     query_length_warning,
     quickstart_review_id,
@@ -57,7 +56,6 @@ from pubtator_link.models.responses import (
     AnnotationEntity,
     EntityAutocompleteResponse,
     EntityMatch,
-    PublicationExportResponse,
     TextAnnotationResultResponse,
     TextAnnotationSubmitResponse,
 )
@@ -694,30 +692,6 @@ async def _search_metadata_by_pmid(
         include_coverage=False,
     )
     return {item.pmid: item.model_dump() for item in response.metadata}
-
-
-async def fetch_pmc_annotations_impl(
-    *,
-    service: PublicationService,
-    pmcids: list[str],
-    format: Literal["biocxml", "biocjson"] = "biocjson",
-) -> dict[str, Any]:
-    result = await service.export_pmc_publications_list(
-        pmcids=pmcids,
-        format=format,
-    )
-    documents = [
-        document.model_dump() if hasattr(document, "model_dump") else dict(document)
-        for document in result.documents
-    ]
-    return PublicationExportResponse(
-        format=result.format,
-        pmcids=pmcids,
-        full_text=True,
-        export_data={"documents": documents},
-        count=len(pmcids),
-        **pmc_export_coverage(pmcids, documents),
-    ).model_dump()
 
 
 async def find_entity_relations_impl(

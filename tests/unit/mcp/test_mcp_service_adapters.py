@@ -3263,11 +3263,11 @@ async def test_get_publication_passages_adapter_passes_dry_run_and_verbosity() -
 
 @pytest.mark.asyncio
 async def test_pmc_adapter_returns_publication_export_shape() -> None:
-    from pubtator_link.mcp.service_adapters import fetch_pmc_annotations_impl
+    from pubtator_link.mcp.pmc_annotations import fetch_pmc_annotations_impl
 
     class Document:
         def model_dump(self) -> dict[str, object]:
-            return {"id": "PMC7696669"}
+            return {"id": "7696669", "text": "PubTator full text"}
 
     class Result:
         format = "biocjson"
@@ -3277,16 +3277,18 @@ async def test_pmc_adapter_returns_publication_export_shape() -> None:
         async def export_pmc_publications_list(self, pmcids: list[str], format: str) -> Result:
             return Result()
 
-    result = await fetch_pmc_annotations_impl(service=FakeService(), pmcids=["PMC7696669"])
+    result = await fetch_pmc_annotations_impl(service=FakeService(), pmcids=["pmc7696669"])
 
     assert result["pmcids"] == ["PMC7696669"]
     assert result["full_text"] is True
-    assert result["export_data"]["documents"] == [{"id": "PMC7696669"}]
+    assert result["export_data"]["documents"] == [
+        {"id": "PMC7696669", "text": "PubTator full text"}
+    ]
 
 
 @pytest.mark.asyncio
-async def test_pmc_adapter_reports_empty_document_coverage_reason() -> None:
-    from pubtator_link.mcp.service_adapters import fetch_pmc_annotations_impl
+async def test_pmc_adapter_normalizes_bare_id_and_rejects_empty_document() -> None:
+    from pubtator_link.mcp.pmc_annotations import fetch_pmc_annotations_impl
     from pubtator_link.models.publications import BioCDocument
 
     class Result:
@@ -3299,8 +3301,28 @@ async def test_pmc_adapter_reports_empty_document_coverage_reason() -> None:
 
     result = await fetch_pmc_annotations_impl(service=FakeService(), pmcids=["PMC11911402"])
 
-    assert result["coverage_by_pmcid"] == {"PMC11911402": "unknown"}
-    assert result["coverage_reason_by_pmcid"] == {"PMC11911402": "no_pmc_full_text_retrievable"}
+    assert result["success"] is False
+    assert result["error_code"] == "not_found"
+    assert result["message"] == "No PubTator full text is available for PMCID PMC11911402."
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code", [400, 404])
+async def test_pmc_adapter_maps_not_found_upstream_errors_without_leaking_them(
+    status_code: int,
+) -> None:
+    from pubtator_link.api.client import PubTatorAPIError
+    from pubtator_link.mcp.pmc_annotations import fetch_pmc_annotations_impl
+
+    class FakeService:
+        async def export_pmc_publications_list(self, pmcids: list[str], format: str) -> None:
+            raise PubTatorAPIError("raw upstream error", status_code=status_code)
+
+    result = await fetch_pmc_annotations_impl(service=FakeService(), pmcids=["PMC11911402"])
+
+    assert result["success"] is False
+    assert result["error_code"] == "not_found"
+    assert "raw upstream error" not in result["message"]
 
 
 @pytest.mark.asyncio
@@ -3311,7 +3333,14 @@ async def test_relations_adapter_maps_related_entities() -> None:
         async def find_relations(
             self, e1: str, relation_type: str | None, e2: str | None
         ) -> list[dict[str, object]]:
-            return [{"target": "@DISEASE_COVID-19", "type": "treat", "pmids": ["32511357"]}]
+            return [
+                {
+                    "source": "@CHEMICAL_remdesivir",
+                    "target": "@DISEASE_COVID-19",
+                    "type": "treat",
+                    "pmids": ["32511357"],
+                }
+            ]
 
     result = await find_entity_relations_impl(
         client=FakeClient(),
@@ -3325,6 +3354,37 @@ async def test_relations_adapter_maps_related_entities() -> None:
     assert result["related_entities"][0]["entity_id"] == "@DISEASE_COVID-19"
 
 
+def test_relation_uses_endpoint_opposite_the_query_and_rejects_nonincident_edge() -> None:
+    from pubtator_link.mcp.relations import shape_entity_relations
+
+    payload = shape_entity_relations(
+        entity_id="@GENE_SCN1A",
+        api_results=[
+            {
+                "source": "@DISEASE_Epilepsies_Myoclonic",
+                "target": "@GENE_SCN1A",
+                "type": "associate",
+                "publications": 716,
+            },
+            {
+                "source": "@GENE_BRCA1",
+                "target": "@GENE_BRCA2",
+                "type": "associate",
+            },
+        ],
+        relation_type=None,
+        target_entity_type=None,
+        limit=20,
+        response_mode="standard",
+        max_response_chars=12_000,
+    )
+
+    assert [row["entity_id"] for row in payload["related_entities"]] == [
+        "@DISEASE_Epilepsies_Myoclonic"
+    ]
+    assert payload["total_relations"] == 1
+
+
 @pytest.mark.asyncio
 async def test_relations_adapter_compact_mode_applies_budget_controls() -> None:
     from pubtator_link.mcp.service_adapters import find_entity_relations_impl
@@ -3335,6 +3395,7 @@ async def test_relations_adapter_compact_mode_applies_budget_controls() -> None:
         ) -> list[dict[str, object]]:
             return [
                 {
+                    "source": "@GENE_MEFV",
                     "target": f"@DISEASE_{index}",
                     "type": "associate",
                     "pmids": [str(1000 + index), str(2000 + index)],
