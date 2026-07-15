@@ -131,6 +131,27 @@ services:
       PUBTATOR_LINK_TRUST_PROXY_HEADERS: "true"
       GUNICORN_WORKERS: 4
       GUNICORN_LOG_LEVEL: warning
+      # --- OAuth go-live (enable ONLY after Keycloak is configured; see docs/SECURITY.md) ---
+      # Serves one /mcp to standalone OAuth users AND the router (its static token),
+      # full writeable surface. Flipping these turns the token wall into real auth.
+      #   PUBTATOR_LINK_AUTH_MODE: oauth
+      #   PUBTATOR_LINK_MCP_PROFILE: full
+      #   PUBTATOR_LINK_ALLOWED_HOSTS: '["pubtator-link.genefoundry.org"]'   # MUST include the public host
+      #   PUBTATOR_LINK_OAUTH_AUTHORIZE_URL: "${PUBTATOR_LINK_OAUTH_AUTHORIZE_URL:?}"
+      #   PUBTATOR_LINK_OAUTH_TOKEN_URL: "${PUBTATOR_LINK_OAUTH_TOKEN_URL:?}"
+      #   PUBTATOR_LINK_OAUTH_CLIENT_ID: "${PUBTATOR_LINK_OAUTH_CLIENT_ID:?}"
+      #   PUBTATOR_LINK_OAUTH_CLIENT_SECRET: "${PUBTATOR_LINK_OAUTH_CLIENT_SECRET:?}"
+      #   PUBTATOR_LINK_OAUTH_JWT_SIGNING_KEY: "${PUBTATOR_LINK_OAUTH_JWT_SIGNING_KEY:?}"
+      #   PUBTATOR_LINK_OAUTH_ALLOWED_CLIENT_REDIRECT_URIS: '["https://claude.ai/*","http://127.0.0.1:*"]'
+      #   PUBTATOR_LINK_JWT_ISSUER: "${PUBTATOR_LINK_JWT_ISSUER:?}"
+      #   PUBTATOR_LINK_JWT_JWKS_URL: "${PUBTATOR_LINK_JWT_JWKS_URL:?}"
+      #   PUBTATOR_LINK_JWT_AUDIENCE: "https://pubtator-link.genefoundry.org/mcp"   # == PUBLIC_BASE_URL + /mcp
+      #   PUBTATOR_LINK_PUBLIC_BASE_URL: "https://pubtator-link.genefoundry.org"     # bare origin, no path
+      #   PUBTATOR_LINK_REQUIRE_WRITE_SCOPE: "false"   # write-for-all-authenticated (see risk note in SECURITY.md)
+      #   FASTMCP_HOME: /home/app/.fastmcp
+      # ...and mount a PERSISTENT writable volume at /home/app/.fastmcp (the OAuthProxy
+      # client/token store) by adding to the volumes list below:
+      #   - fastmcp_home:/home/app/.fastmcp
 
     # Remove development volume mounts
     volumes: !reset []

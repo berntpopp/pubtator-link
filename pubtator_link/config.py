@@ -132,6 +132,81 @@ class ServerSettings(BaseSettings):
         description="Explicit loopback-development exception for write-capable profiles",
     )
 
+    # --- Edge auth (AUTH_MODE=none keeps today's behavior; oauth adds Keycloak) ---
+    auth_mode: Literal["none", "oauth"] = Field(
+        default="none",
+        description="Edge auth for /mcp: none (open/token) or oauth (Keycloak + service token)",
+    )
+    oauth_authorize_url: str | None = Field(default=None)
+    oauth_token_url: str | None = Field(default=None)
+    oauth_client_id: str | None = Field(default=None)
+    oauth_client_secret: str | None = Field(default=None)
+    oauth_jwt_signing_key: str | None = Field(
+        default=None,
+        description="Fixed key so OAuthProxy tokens/client store survive restarts + KC secret rotation",
+    )
+    oauth_allowed_client_redirect_uris: list[str] = Field(
+        default_factory=list,
+        description="Downstream MCP-client redirect URI patterns (claude.ai + approved loopback)",
+    )
+    jwt_issuer: str | None = Field(default=None)
+    jwt_jwks_url: str | None = Field(default=None)
+    jwt_audience: str | None = Field(
+        default=None,
+        description="Token audience == PubTator resource URI (MUST for a protected resource)",
+    )
+    public_base_url: str | None = Field(
+        default=None,
+        description="Public ROOT origin (PRM/resource base); bare origin, no path — avoids /mcp/mcp",
+    )
+    require_write_scope: bool = Field(
+        default=False,
+        description="When true, write tools require the pubtator:write scope",
+    )
+
+    def validate_oauth_config(self) -> None:
+        """Fail fast if oauth mode is missing/misconfigured. No-op in none mode."""
+        if self.auth_mode != "oauth":
+            return
+        required = {
+            "PUBTATOR_LINK_OAUTH_AUTHORIZE_URL": self.oauth_authorize_url,
+            "PUBTATOR_LINK_OAUTH_TOKEN_URL": self.oauth_token_url,
+            "PUBTATOR_LINK_OAUTH_CLIENT_ID": self.oauth_client_id,
+            "PUBTATOR_LINK_OAUTH_CLIENT_SECRET": self.oauth_client_secret,
+            "PUBTATOR_LINK_OAUTH_JWT_SIGNING_KEY": self.oauth_jwt_signing_key,
+            "PUBTATOR_LINK_JWT_ISSUER": self.jwt_issuer,
+            "PUBTATOR_LINK_JWT_JWKS_URL": self.jwt_jwks_url,
+            "PUBTATOR_LINK_JWT_AUDIENCE": self.jwt_audience,
+            "PUBTATOR_LINK_PUBLIC_BASE_URL": self.public_base_url,
+            # Required so the router verifier is present and token signing is stable.
+            "PUBTATOR_LINK_MCP_SERVICE_TOKEN": self.mcp_service_token,
+        }
+        missing = [k for k, v in required.items() if not v]
+        if missing:
+            raise ValueError(f"oauth mode requires: {', '.join(missing)}")
+
+        from urllib.parse import urlsplit
+
+        assert self.public_base_url is not None  # narrowed by the missing-check
+        parts = urlsplit(self.public_base_url)
+        if (
+            parts.scheme != "https"
+            or not parts.netloc
+            or parts.path not in ("", "/")
+            or parts.query
+            or parts.fragment
+        ):
+            raise ValueError(
+                "PUBTATOR_LINK_PUBLIC_BASE_URL must be a bare https origin "
+                "(no path/query/fragment) so the advertised resource is not doubled"
+            )
+        expected_audience = self.public_base_url.rstrip("/") + self.mcp_path
+        if self.jwt_audience != expected_audience:
+            raise ValueError(
+                "PUBTATOR_LINK_JWT_AUDIENCE must equal PUBLIC_BASE_URL + mcp_path "
+                f"({expected_audience})"
+            )
+
     # Review-scoped re-RAG POC
     database_url: str | None = Field(default=None, description="PostgreSQL database URL")
     auto_migrate: bool = Field(

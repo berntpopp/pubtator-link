@@ -38,6 +38,7 @@ from .api.routes.dependencies import (
     reset_app_resources,
     resources_from_request,
 )
+from .auth import build_auth
 from .config import review_rerag_config, settings
 from .db.migrate import ReviewSchemaDiagnostics
 from .logging_config import configure_logging
@@ -257,7 +258,15 @@ class UnifiedServerManager:
         """Create FastAPI application."""
         mcp_http_app = None
         if include_mcp:
+            settings.validate_oauth_config()
             mcp = create_pubtator_mcp()
+            # Attach edge auth BEFORE http_app(): it reads self.auth at call time and
+            # installs RequireAuthMiddleware + mounts the PRM well-known routes.
+            mcp.auth = build_auth(settings)
+            if settings.auth_mode == "oauth" and settings.require_write_scope:
+                from .authorization import WriteAuthorizationMiddleware
+
+                mcp.add_middleware(WriteAuthorizationMiddleware())
             mcp_http_app = mcp.http_app(
                 path=settings.mcp_path,
                 json_response=True,
@@ -286,7 +295,10 @@ class UnifiedServerManager:
             redoc_url="/redoc" if settings.enable_docs else None,
         )
 
-        if settings.mcp_service_token:
+        # Legacy path-level token gate applies only in none mode; in oauth mode the
+        # StaticTokenVerifier inside MultiAuth covers the router, and this ASGI gate
+        # would wrongly 401 valid OAuth JWTs.
+        if settings.auth_mode == "none" and settings.mcp_service_token:
             app.add_middleware(
                 MCPServiceAuthMiddleware,
                 token=settings.mcp_service_token,
@@ -406,7 +418,12 @@ class UnifiedServerManager:
         app.include_router(annotations_router)
         if settings.enable_cache_endpoints:
             app.include_router(cache_router)
-        app.include_router(reviews_router)
+        # The review REST routes mutate the same PostgreSQL as the MCP write tools but
+        # live OUTSIDE the MCP mount, so MCP auth never covers them. In oauth mode the
+        # writable surface is MCP-only — drop them rather than expose an unauth REST
+        # bypass on a directly-published backend.
+        if settings.auth_mode != "oauth":
+            app.include_router(reviews_router)
         app.include_router(variants_router)
 
         if mcp_http_app is not None:
