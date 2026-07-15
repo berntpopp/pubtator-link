@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- **The public `/mcp` endpoint is now open for read-only access.** The production
+  overlay no longer sets `PUBTATOR_LINK_MCP_SERVICE_TOKEN`, so
+  `MCPServiceAuthMiddleware` is not installed and a direct unauthenticated `/mcp`
+  request returns `200` instead of `401 {"error":"unauthorized"}`. The endpoint
+  serves only read-only public PubTator3 literature data
+  (`PUBTATOR_LINK_MCP_PROFILE=readonly`, unauthenticated writes disabled), so a
+  service-token gate on the public transport is not warranted. To re-enable bearer
+  auth, restore the (now commented) `PUBTATOR_LINK_MCP_SERVICE_TOKEN` line in
+  `docker-compose.prod.yml` and supply the token from the secret store. Compose-only
+  change; the released image is unaffected.
+
 ## [6.1.6] - 2026-07-14
 
 ### Fixed

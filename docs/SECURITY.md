@@ -15,18 +15,24 @@ reachable **only** through the router/proxy, never published directly to a LAN o
 
 ## Backend service token
 
-Generate a dedicated token with `openssl rand -hex 32`. Configure the same value as
-`PUBTATOR_LINK_MCP_SERVICE_TOKEN` on this backend and `GF_PUBTATOR_TOKEN` on the router. The
-token is a service credential, not a caller credential; do not reuse or forward caller OAuth
-tokens and do not place the value in Compose YAML, logs, issue comments, or source control.
-The service token protects the MCP transport only. REST routes remain dependent on edge
+The production `/mcp` endpoint serves **read-only** public PubTator3 literature data
+(`PUBTATOR_LINK_MCP_PROFILE=readonly`, unauthenticated writes disabled) and is deliberately
+left **open**: a direct unauthenticated `/mcp` request returns `200`, and `/health` remains
+available. Because only public read-only data is exposed, the transport is not bearer-gated by
+default.
+
+`PUBTATOR_LINK_MCP_SERVICE_TOKEN` is an **optional** transport credential. When set, it installs
+`MCPServiceAuthMiddleware`, which bearer-gates the entire `/mcp` path (a request without the
+token then returns `401`). Use it for private deployments, to restrict the transport to a
+trusted caller, or when running a write-capable profile. Generate a dedicated token with
+`openssl rand -hex 32`. It is a service credential, not a caller credential; do not reuse or
+forward caller OAuth tokens and do not place the value in Compose YAML, logs, issue comments, or
+source control. The token protects the MCP transport only; REST routes remain dependent on edge
 authentication, so the reverse proxy must not publish this backend as a general REST origin.
 
-For the initial rollout, configure and deploy the router first while the old backend still
-ignores the header, then deploy the backend that requires it. Rotation of the single configured
-token requires a coordinated router/backend deployment window; verify router read calls after
-rotation and revoke the old value immediately. A direct unauthenticated `/mcp` request must
-return `401`, while `/health` remains available.
+When a token is configured, set the same value as `GF_PUBTATOR_TOKEN` on the router. Rotation of
+the single configured token then requires a coordinated router/backend deployment window; verify
+router read calls after rotation and revoke the old value immediately.
 
 Direct host development may set `PUBTATOR_LINK_ALLOW_UNAUTHENTICATED_WRITES=true` only while
 binding to `127.0.0.1`, `::1`, or `localhost`. Docker binds inside its container to `0.0.0.0`, so

@@ -56,9 +56,13 @@ def test_app_service_publishes_only_to_loopback() -> None:
     assert app["ports"] == ["127.0.0.1:${PUBTATOR_LINK_PORT:-8000}:8000"]
 
 
-def test_merged_production_compose_is_readonly_and_requires_service_token(
+def test_merged_production_compose_is_readonly_and_leaves_mcp_open(
     monkeypatch,
 ) -> None:
+    # Production intentionally leaves /mcp open (public read-only PubTator3 data):
+    # the prod overlay does NOT interpolate PUBTATOR_LINK_MCP_SERVICE_TOKEN, so no
+    # MCPServiceAuthMiddleware is installed. Set the token in the ambient env to
+    # prove the overlay ignores it and never passes it into the container.
     monkeypatch.setenv("PUBTATOR_LINK_MCP_SERVICE_TOKEN", "compose-test-secret")
     # F-14: the prod overlay now requires the DB secret with no fallback, so the
     # merged config only renders once PUBTATOR_LINK_POSTGRES_PASSWORD is set.
@@ -90,9 +94,7 @@ def test_merged_production_compose_is_readonly_and_requires_service_token(
     )
     service = json.loads(result.stdout)["services"]["pubtator-link"]
     assert service["environment"]["PUBTATOR_LINK_MCP_PROFILE"] == "readonly"
-    assert (
-        service["environment"]["PUBTATOR_LINK_MCP_SERVICE_TOKEN"] == "compose-test-secret"  # noqa: S105
-    )
+    assert "PUBTATOR_LINK_MCP_SERVICE_TOKEN" not in service["environment"]
     assert service["environment"]["PUBTATOR_LINK_ALLOW_UNAUTHENTICATED_WRITES"] == "false"
     assert not service.get("ports")
 
