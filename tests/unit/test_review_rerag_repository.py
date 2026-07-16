@@ -2,7 +2,9 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+from pydantic import ValidationError
 
+from pubtator_link.models.research_session_list import ResearchSessionSummary
 from pubtator_link.models.review_rerag import (
     FailedSourceSummary,
     PreparationStatus,
@@ -482,6 +484,50 @@ async def test_list_research_session_summaries_uses_one_cursor_filtered_aggregat
     assert "order by sessions.updated_at desc nulls last, sessions.session_id desc" in sql.lower()
     assert "select review_id, session_id, pmid" not in sql.lower()
     assert args == ("review-1", "2026-07-16T12:02:00Z", "session-2", 3)
+
+
+@pytest.mark.asyncio
+async def test_list_research_session_summaries_converts_asyncpg_record_like_rows() -> None:
+    class AsyncpgRecordLike:
+        """Minimal record shape accepted by ``dict()`` but not Pydantic directly."""
+
+        def __init__(self, values: dict[str, Any]) -> None:
+            self._values = values
+
+        def keys(self) -> object:
+            return self._values.keys()
+
+        def __getitem__(self, key: str) -> Any:
+            return self._values[key]
+
+    row = AsyncpgRecordLike(
+        {
+            "review_id": "review-1",
+            "session_id": "session-1",
+            "query": "FMF",
+            "status": "active",
+            "updated_at": "2026-07-16T12:01:00Z",
+            "candidate_count": 2,
+        }
+    )
+    with pytest.raises(ValidationError, match="valid dictionary"):
+        ResearchSessionSummary.model_validate(row)
+
+    connection = FakeConnection()
+    connection.fetched_row_batches = [[row]]  # type: ignore[list-item]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    summaries = await repository.list_research_session_summaries(
+        review_id=None,
+        limit=3,
+        before_updated_at=None,
+        before_session_id=None,
+        before_review_id=None,
+    )
+
+    assert [
+        (summary.review_id, summary.session_id, summary.candidate_count) for summary in summaries
+    ] == [("review-1", "session-1", 2)]
 
 
 @pytest.mark.asyncio

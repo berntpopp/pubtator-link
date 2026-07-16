@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [7.1.2] - 2026-07-16
+
+### Fixed
+
+- **Research-session paging.** Compact list pages now convert asyncpg record rows before
+  Pydantic validation, so valid bounded requests return their persisted session summaries.
+  Unexpected execution validation errors are no longer reported to callers as invalid
+  `limit` parameters.
+
 ## [7.1.1] - 2026-07-15
 
 ### Fixed

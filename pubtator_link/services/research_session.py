@@ -27,6 +27,10 @@ from pubtator_link.models.review_rerag import (
 _CURSOR_TOKEN = re.compile(r"[A-Za-z0-9_-]+")
 
 
+class ResearchSessionInputError(ValueError):
+    """A caller-correctable research-session paging error."""
+
+
 @dataclass(frozen=True)
 class _SessionCursor:
     updated_at: str | None
@@ -51,8 +55,8 @@ def _encode_cursor(*, review_id: str | None, summary: ResearchSessionSummary) ->
     return base64.urlsafe_b64encode(encoded).decode().rstrip("=")
 
 
-def _invalid_cursor() -> ValueError:
-    return ValueError("cursor is invalid")
+def _invalid_cursor() -> ResearchSessionInputError:
+    return ResearchSessionInputError("cursor is invalid")
 
 
 def _decode_cursor(*, cursor: str, review_id: str | None) -> _SessionCursor:
@@ -272,7 +276,7 @@ class ResearchSessionService:
     ) -> ListResearchSessionsResponse:
         """Return one compact page without fetching session candidates."""
         if not 1 <= limit <= 20:
-            raise ValueError("limit must be between 1 and 20")
+            raise ResearchSessionInputError("limit must be between 1 and 20")
         decoded_cursor = (
             _decode_cursor(cursor=cursor, review_id=review_id) if cursor is not None else None
         )

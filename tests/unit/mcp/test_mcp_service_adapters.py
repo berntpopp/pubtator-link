@@ -1076,13 +1076,14 @@ async def test_list_research_sessions_adapter_uses_global_path_without_review_id
 async def test_list_research_sessions_adapter_reports_invalid_cursor_without_echoing_it() -> None:
     from pubtator_link.mcp.input_normalization import InputNormalizationError
     from pubtator_link.mcp.service_adapters import list_research_sessions_impl
+    from pubtator_link.services.research_session import ResearchSessionInputError
 
     class Service:
         async def list_sessions(self, *, review_id, limit, cursor):
             assert review_id == "review-1"
             assert limit == 10
             assert cursor == "hostile-token"
-            raise ValueError("cursor is invalid")
+            raise ResearchSessionInputError("cursor is invalid")
 
     with pytest.raises(InputNormalizationError) as error:
         await list_research_sessions_impl(
@@ -1094,6 +1095,18 @@ async def test_list_research_sessions_adapter_reports_invalid_cursor_without_ech
 
     assert error.value.field_errors[0]["field"] == "cursor"
     assert "hostile-token" not in error.value.field_errors[0]["message"]
+
+
+@pytest.mark.asyncio
+async def test_list_research_sessions_adapter_propagates_unexpected_value_errors() -> None:
+    from pubtator_link.mcp.service_adapters import list_research_sessions_impl
+
+    class Service:
+        async def list_sessions(self, *, review_id, limit, cursor):
+            raise ValueError("unexpected repository validation failure")
+
+    with pytest.raises(ValueError, match="unexpected repository validation failure"):
+        await list_research_sessions_impl(service=Service(), review_id=None)
 
 
 @pytest.mark.asyncio
