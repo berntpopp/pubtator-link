@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [7.1.3] - 2026-07-16
+
+### Fixed
+
+- **Research-session cursor continuation.** Decoded `updated_at` cursor values are now
+  bound to PostgreSQL as Python datetimes, so valid second and subsequent pages no longer
+  fail asyncpg's `timestamptz` parameter validation.
+
 ## [7.1.2] - 2026-07-16
 
 ### Fixed

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pytest
 
 from pubtator_link.models.research_session_list import ResearchSessionSummary
@@ -459,6 +461,7 @@ async def test_list_sessions_returns_compact_cursor_page_without_loading_candida
     assert second_page.next_cursor is None
     assert [call[1] for call in repository.calls] == [3, 3]
     assert [call[3] for call in repository.calls] == [None, "session-2"]
+    assert repository.calls[1][2] == datetime.fromisoformat("2026-07-16T12:02:00+00:00")
     assert queue.repository.calls == ["review-1", "review-1", "review-1"]
     assert set(first_page.sessions[0].model_dump()) == {
         "session_id",
@@ -485,6 +488,30 @@ async def test_list_sessions_rejects_malformed_cursor_before_repository_access()
 
     with pytest.raises(ValueError, match="cursor"):
         await service.list_sessions(review_id="review-1", cursor="not/a-cursor")
+
+
+async def test_list_sessions_rejects_timezone_naive_cursor_before_repository_access() -> None:
+    class SummaryRepository(FakeRepository):
+        async def list_research_session_summaries(self, **kwargs):
+            raise AssertionError("A timezone-naive cursor must not reach the repository")
+
+    cursor = _encode_cursor(
+        review_id="review-1",
+        summary=ResearchSessionSummary(
+            review_id="review-1",
+            session_id="session-1",
+            updated_at="2026-07-16T12:01:00",
+        ),
+    )
+    service = ResearchSessionService(
+        repository=SummaryRepository(),
+        search_provider=FakeSearch(),
+        preflight_service=FakePreflight(),
+        queue=FakeQueue(),
+    )
+
+    with pytest.raises(ValueError, match="cursor"):
+        await service.list_sessions(review_id="review-1", cursor=cursor)
 
 
 @pytest.mark.parametrize(
@@ -550,7 +577,7 @@ async def test_global_session_paging_breaks_same_timestamp_and_session_id_ties_b
                     row
                     for row in rows
                     if (
-                        row["updated_at"],
+                        datetime.fromisoformat(row["updated_at"].replace("Z", "+00:00")),
                         row["session_id"],
                         row["review_id"],
                     )
