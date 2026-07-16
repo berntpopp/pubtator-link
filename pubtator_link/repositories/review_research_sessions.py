@@ -219,7 +219,7 @@ async def list_research_session_summaries(
         connection.transaction(isolation="repeatable_read", readonly=True),
     ):
         rows = await connection.fetch(sql, *args)
-    return [ResearchSessionSummary.model_validate(row) for row in rows]
+    return [ResearchSessionSummary.model_validate(dict(row)) for row in rows]
 
 
 async def find_research_sessions_by_session_id(

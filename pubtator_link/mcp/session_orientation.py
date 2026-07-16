@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 from pubtator_link.mcp.input_normalization import InputNormalizationError
+from pubtator_link.services.research_session import ResearchSessionInputError
 
 
 async def research_session_status_payload(
@@ -38,7 +39,7 @@ async def research_sessions_payload(
 ) -> dict[str, Any]:
     try:
         response = await service.list_sessions(review_id=review_id, limit=limit, cursor=cursor)
-    except ValueError:
+    except ResearchSessionInputError:
         field = "cursor" if cursor is not None else "limit"
         raise InputNormalizationError(
             field_errors=[{"field": field, "message": f"Invalid {field} parameter."}],
