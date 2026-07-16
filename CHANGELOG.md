@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [7.1.4] - 2026-07-16
+
+### Fixed
+
+- **Release publication.** Reissued the verified v7.1.3 cursor-continuation fix as a
+  clean immutable release after the earlier GitHub release record could not be republished.
+  There are no runtime changes beyond the reported package version.
+
 ## [7.1.3] - 2026-07-16
 
 ### Fixed
