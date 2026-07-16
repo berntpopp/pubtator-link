@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Literal, cast
+from collections.abc import Mapping, Sequence
+from typing import Any, Literal, cast
 
 MCPToolProfile = Literal["lean", "full", "readonly"]
 
@@ -72,6 +73,27 @@ READONLY_TOOLS: tuple[str, ...] = tuple(
     name for name in (*LEAN_TOOLS, *FULL_ONLY_TOOLS) if name not in WRITE_TOOLS
 )
 
+_PROFILE_SAFE_LLM_CONTEXT_FIELDS = frozenset(
+    {
+        "context_id",
+        "review_id",
+        "session_id",
+        "kind",
+        "question_hash",
+        "selected_pmids",
+        "rejected_pmids",
+        "preferred_entity_ids",
+        "selected_passage_ids",
+        "audit_passage_ids",
+        "last_next_commands",
+        "stable_citation_keys",
+        "cache_key",
+        "token_estimate",
+        "created_at",
+        "updated_at",
+    }
+)
+
 
 def normalize_mcp_profile(value: str | None) -> MCPToolProfile:
     if value is None or value == "":
@@ -87,3 +109,86 @@ def tool_names_for_profile(profile: MCPToolProfile) -> set[str]:
     if profile == "readonly":
         return set(READONLY_TOOLS)
     return {*LEAN_TOOLS, *FULL_ONLY_TOOLS}
+
+
+def reachable_tools(profile: MCPToolProfile, preferred: Sequence[str]) -> list[str]:
+    """Keep preferred tool order while removing tools absent from a profile.
+
+    This is intentionally based on the profile inventory instead of a second,
+    hand-maintained list of writes. Callers use it while constructing a
+    workflow or a follow-up hint, before exposing the hint to an MCP client.
+    """
+    available = tool_names_for_profile(profile)
+    return [tool for tool in preferred if tool in available]
+
+
+def filter_reachable_hints[T](
+    profile: MCPToolProfile,
+    payload: T,
+    *,
+    scope: Literal["hints", "llm_context"] = "hints",
+) -> T:
+    """Remove unavailable MCP tool references from structured follow-up hints.
+
+    Workflows must be built from :func:`reachable_tools` before their steps are
+    numbered. This helper only filters typed ``next_tools``/``next_commands``
+    fields, never arbitrary user or retrieved evidence text. The LLM-context
+    scope projects persisted free-form fields away for non-full profiles before
+    applying the same typed hint filter.
+    """
+    available = tool_names_for_profile(profile)
+    known_tools = tool_names_for_profile("full")
+
+    if scope == "llm_context" and profile != "full" and isinstance(payload, Mapping):
+        payload = cast(
+            T,
+            {
+                key: value
+                for key, value in payload.items()
+                if key in _PROFILE_SAFE_LLM_CONTEXT_FIELDS
+            },
+        )
+
+    def command_tool_name(value: str) -> str | None:
+        candidate = value.partition("(")[0]
+        return candidate if candidate in known_tools else None
+
+    def visit(value: Any) -> Any:
+        if isinstance(value, Mapping):
+            filtered = dict(value)
+            for key, item in value.items():
+                if key in {
+                    "last_next_commands",
+                    "next_tools",
+                    "next_commands",
+                    "next_steps",
+                } and isinstance(item, list):
+                    filtered[key] = filter_hints(item)
+                    continue
+                filtered[key] = visit(item)
+            return filtered
+        if isinstance(value, list):
+            return [visit(item) for item in value]
+        return value
+
+    def filter_hints(values: list[Any]) -> list[Any]:
+        filtered: list[Any] = []
+        for value in values:
+            if isinstance(value, str):
+                tool = command_tool_name(value)
+                if tool is not None and tool not in available:
+                    continue
+                if value in known_tools and value not in available:
+                    continue
+                if any(tool not in available and tool in value for tool in known_tools):
+                    continue
+                filtered.append(value)
+                continue
+            if isinstance(value, Mapping):
+                tool = value.get("tool")
+                if isinstance(tool, str) and tool in known_tools and tool not in available:
+                    continue
+            filtered.append(visit(value))
+        return filtered
+
+    return cast(T, visit(payload))

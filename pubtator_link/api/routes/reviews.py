@@ -4,6 +4,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 
+from ...models.research_session_list import ListResearchSessionsResponse
 from ...models.review_rerag import (
     CleanupExpiredReviewIndexesResponse,
     DeleteReviewIndexResponse,
@@ -13,7 +14,6 @@ from ...models.review_rerag import (
     InspectReviewIndexRequest,
     InspectReviewIndexResponse,
     ListEvidenceCertaintyResponse,
-    ListResearchSessionsResponse,
     ListReviewIndexesResponse,
     PreflightReviewSourcesRequest,
     PreflightReviewSourcesResponse,
@@ -211,8 +211,10 @@ async def get_research_session_status(
 async def list_research_sessions(
     review_id: str,
     service: ResearchSessionServiceDep,
+    limit: int = Query(default=10, ge=1, le=20),
+    cursor: str | None = Query(default=None, min_length=1),
 ) -> ListResearchSessionsResponse:
-    return await service.list_sessions(review_id=review_id)
+    return await service.list_sessions(review_id=review_id, limit=limit, cursor=cursor)
 
 
 @router.post(

@@ -83,6 +83,38 @@ async def test_corpus_suggestion_service_deduplicates_and_assigns_roles() -> Non
 
 
 @pytest.mark.asyncio
+async def test_readonly_corpus_suggestion_ends_in_direct_passage_retrieval() -> None:
+    class FakeSearch:
+        async def search(self, query: str, *, limit: int, sort: str | None):
+            return {"results": [{"pmid": "1", "title": "FMF cohort"}]}
+
+    class FakeMetadata:
+        async def get_metadata(self, request):
+            return PublicationMetadataResponse(metadata=[], failed_pmids={}, _meta={})
+
+    class FakePreflight:
+        async def preflight_pmids(self, pmids: list[str]) -> list[SourceCoverageHint]:
+            return []
+
+    service = CorpusSuggestionService(
+        search_client=FakeSearch(),
+        metadata_service=FakeMetadata(),
+        source_preflight_service=FakePreflight(),
+    )
+
+    response = await service.suggest(
+        CorpusSuggestionRequest(question="FMF cohort", max_pmids=1),
+        profile="readonly",
+    )
+
+    assert response.meta["next_commands"] == [
+        "get_publication_metadata(pmids=['1'])",
+        "preflight_review_sources(pmids=['1'])",
+        "get_publication_passages(pmids=['1'])",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_corpus_suggestion_caps_must_include_pmids() -> None:
     class FakeSearch:
         async def search(self, query: str, *, limit: int, sort: str | None):

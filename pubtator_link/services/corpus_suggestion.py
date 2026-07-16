@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, Protocol
 
+from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.models.corpus_suggestion import (
     CorpusCandidate,
     CorpusCandidateRole,
@@ -62,7 +63,12 @@ class CorpusSuggestionService:
         self._metadata_service = metadata_service
         self._source_preflight_service = source_preflight_service
 
-    async def suggest(self, request: CorpusSuggestionRequest) -> CorpusSuggestionResponse:
+    async def suggest(
+        self,
+        request: CorpusSuggestionRequest,
+        *,
+        profile: MCPToolProfile = "full",
+    ) -> CorpusSuggestionResponse:
         searches = await self._run_searches(request)
         candidate_pmids = _select_pmids(request, searches)
         metadata_by_pmid = await self._metadata_by_pmid(
@@ -98,7 +104,7 @@ class CorpusSuggestionService:
             candidate_pmids=candidate_pmids,
             candidates=candidates,
             searches=searches,
-            _meta={"next_commands": _next_commands(request, candidate_pmids)},
+            _meta={"next_commands": _next_commands(request, candidate_pmids, profile=profile)},
         )
 
     async def _run_searches(self, request: CorpusSuggestionRequest) -> list[CorpusSearchTrace]:
@@ -334,8 +340,19 @@ def _rationale_for(role: CorpusCandidateRole) -> str:
     return "Selected from ranked literature search results."
 
 
-def _next_commands(request: CorpusSuggestionRequest, pmids: list[str]) -> list[str]:
+def _next_commands(
+    request: CorpusSuggestionRequest,
+    pmids: list[str],
+    *,
+    profile: MCPToolProfile,
+) -> list[str]:
     review_id = _review_id_for(request.question)
+    if profile == "readonly":
+        return [
+            f"get_publication_metadata(pmids={pmids!r})",
+            f"preflight_review_sources(pmids={pmids!r})",
+            f"get_publication_passages(pmids={pmids!r})",
+        ]
     return [
         f"get_publication_metadata(pmids={pmids!r})",
         f"index_review_evidence(review_id='{review_id}', pmids={pmids!r})",

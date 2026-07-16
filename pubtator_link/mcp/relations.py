@@ -18,16 +18,22 @@ def shape_entity_relations(
     response_mode: RelationResponseMode,
     max_response_chars: int,
 ) -> dict[str, Any]:
-    related_entities = [
-        _related_entity(item, response_mode=response_mode) for item in api_results[:limit]
+    incident_entities = [
+        related
+        for item in api_results
+        if (
+            related := _related_entity(item, query_entity_id=entity_id, response_mode=response_mode)
+        )
+        is not None
     ]
+    related_entities = incident_entities[:limit]
     response_size_class: str = response_mode
-    omitted_count = max(0, len(api_results) - len(related_entities))
+    omitted_count = max(0, len(incident_entities) - len(related_entities))
     while related_entities:
         projected = _relations_response(
             entity_id=entity_id,
             related_entities=related_entities,
-            total_relations=len(api_results),
+            total_relations=len(incident_entities),
             relation_type=relation_type,
             target_entity_type=target_entity_type,
             omitted_count=omitted_count,
@@ -41,7 +47,7 @@ def shape_entity_relations(
     return _relations_response(
         entity_id=entity_id,
         related_entities=related_entities,
-        total_relations=len(api_results),
+        total_relations=len(incident_entities),
         relation_type=relation_type,
         target_entity_type=target_entity_type,
         omitted_count=omitted_count,
@@ -49,16 +55,26 @@ def shape_entity_relations(
     ).model_dump()
 
 
-def _related_entity(item: dict[str, Any], *, response_mode: RelationResponseMode) -> RelatedEntity:
+def _related_entity(
+    item: dict[str, Any], *, query_entity_id: str, response_mode: RelationResponseMode
+) -> RelatedEntity | None:
+    source = str(item.get("source") or "")
+    target = str(item.get("target") or "")
+    if source == query_entity_id and target and target != query_entity_id:
+        related = target
+    elif target == query_entity_id and source and source != query_entity_id:
+        related = source
+    else:
+        return None
     return RelatedEntity(
-        entity_id=item.get("target", ""),
-        entity_name=item.get("entity_name"),
-        entity_type=item.get("entity_type"),
-        relation_type=item.get("type", ""),
+        entity_id=related,
+        entity_name=item.get("entity_name") or item.get("name"),
+        entity_type=item.get("entity_type") or item.get("type_name"),
+        relation_type=str(item.get("type") or ""),
         confidence=item.get("confidence"),
-        pmids=[] if response_mode == "compact" else item.get("pmids", []),
-        source=item.get("source"),
-        target=item.get("target", ""),
+        pmids=[] if response_mode == "compact" else list(item.get("pmids") or []),
+        source=source,
+        target=target,
         publications=item.get("publications"),
     )
 

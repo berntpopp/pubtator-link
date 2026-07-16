@@ -480,7 +480,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"review_id":"demo"}`
 - Next tools by profile: full: `get_research_session_status`; readonly: `get_research_session_status`
 - Resource links: `pubtator://reviews/{review_id}/sessions`
-- Input schema: `review_id` (string)
+- Input schema: `review_id` (string); `limit` (integer; default: `10`); `cursor` (string)
 - Output schema: `None`; has_output_schema: `no`
 
 ## `list_review_indexes`

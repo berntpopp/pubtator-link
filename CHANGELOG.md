@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [7.1.1] - 2026-07-15
+
+### Fixed
+
+- **Safe evidence contracts.** Variant evidence now keeps exact/equivalent source
+  classifications separate from broad candidate variants; relation endpoints select the
+  opposite endpoint; PMC annotations consistently classify missing IDs; and persisted
+  research-session lists are compact, cursor-paginated summaries with deterministic
+  scope-aware cursors.
+- **Profile-reachable workflows.** `readonly` only advertises its direct retrieval chain
+  ending in `get_publication_passages`; `lean` and `full` expose only tools available in
+  their authenticated profiles. Capability payloads, prompts, persisted review context,
+  and diagnostics no longer leak unreachable tool guidance.
+
 ### Changed
 
 - Re-vendored the behaviour conformance gate from genefoundry-router `56db958`

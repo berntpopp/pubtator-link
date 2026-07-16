@@ -341,11 +341,6 @@ class ResearchSessionStatusResponse(BaseModel):
     message: str | None = None
 
 
-class ListResearchSessionsResponse(BaseModel):
-    success: bool = True
-    sessions: list[ResearchSessionManifest] = Field(default_factory=list)
-
-
 class RetrieveReviewContextRequest(BaseModel):
     """Request for a fresh review-scoped context pack."""
 

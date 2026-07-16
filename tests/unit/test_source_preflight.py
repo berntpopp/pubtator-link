@@ -50,6 +50,32 @@ async def test_preflight_reports_full_text_when_pmc_bioc_is_available() -> None:
 
 
 @pytest.mark.asyncio
+async def test_audit_pmids_are_full_text_when_the_injected_resolver_proves_it() -> None:
+    pmcids = {
+        "36644199": "PMC10000001",
+        "38034271": "PMC10000002",
+    }
+
+    async def id_converter(pmid: str) -> dict[str, str]:
+        return {"pmcid": pmcids[pmid]}
+
+    async def pmc_bioc_available(_pmcid: str) -> bool:
+        return True
+
+    service = SourcePreflightService(
+        id_converter=id_converter,
+        pmc_bioc_available=pmc_bioc_available,
+    )
+
+    hints = await service.preflight_pmids(list(pmcids))
+
+    assert [(hint.expected_coverage, hint.coverage_reason) for hint in hints] == [
+        ("full_text", "pmc_oa_bioc"),
+        ("full_text", "pmc_oa_bioc"),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_preflight_uses_abstract_hint_when_no_pmcid_exists() -> None:
     async def id_converter(_pmid: str) -> dict[str, str]:
         return {}

@@ -133,6 +133,21 @@ async def test_convert_article_ids_adds_candidates_and_next_commands() -> None:
 
 
 @pytest.mark.asyncio
+async def test_readonly_article_id_conversion_uses_direct_retrieval_follow_up() -> None:
+    service = DiscoveryService(FakeDiscoveryClient())
+
+    response = await service.convert_article_ids(
+        ["PMC123", "bad"],
+        profile="readonly",
+    )
+
+    assert response.meta.next_commands == [
+        {"tool": "preflight_review_sources", "arguments": {"pmids": ["123"]}},
+        {"tool": "get_publication_passages", "arguments": {"pmids": ["123"]}},
+    ]
+
+
+@pytest.mark.asyncio
 async def test_lookup_citation_extracts_nbk_and_adds_recovery_hint() -> None:
     class Client(FakeDiscoveryClient):
         async def lookup_citations(self, citations):

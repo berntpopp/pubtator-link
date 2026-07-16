@@ -135,6 +135,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 allow_truncated_passages=allow_truncated_passages,
                 max_chars_per_passage=max_chars_per_passage,
                 include_resolver_trace=include_resolver_trace,
+                profile=profile,
             )
             await _warn_if_degraded(ctx, result)
             return result
@@ -296,6 +297,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 max_chars_per_passage=max_chars_per_passage,
                 dry_run=dry_run,
                 include_resolver_trace=include_resolver_trace,
+                profile=profile,
             )
             await _warn_if_degraded(ctx, result)
             return result

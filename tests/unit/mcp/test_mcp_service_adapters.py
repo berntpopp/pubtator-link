@@ -261,6 +261,81 @@ async def test_get_publication_metadata_impl_returns_typed_payload() -> None:
 
 
 @pytest.mark.asyncio
+async def test_readonly_metadata_hides_textual_indexing_follow_up() -> None:
+    from pubtator_link.mcp.profiles import tool_names_for_profile
+    from pubtator_link.mcp.service_adapters import get_publication_metadata_impl
+    from pubtator_link.models.publication_metadata import PublicationMetadataResponse
+
+    class FakeService:
+        async def get_metadata(self, request):
+            return PublicationMetadataResponse(
+                metadata=[],
+                _meta={
+                    "next_commands": [
+                        "Use get_publication_passages for citable passage text.",
+                        "Use index_review_evidence after selecting the final PMID corpus.",
+                        "Use stage_research_session to prepare a live research session.",
+                    ]
+                },
+            )
+
+    result = await get_publication_metadata_impl(
+        service=FakeService(),
+        pmids=["1"],
+        profile="readonly",
+    )
+
+    assert result["_meta"]["next_commands"] == [
+        "Use get_publication_passages for citable passage text."
+    ]
+    unavailable = tool_names_for_profile("full") - tool_names_for_profile("readonly")
+    assert not any(
+        tool_name in command
+        for command in result["_meta"]["next_commands"]
+        for tool_name in unavailable
+    )
+
+
+@pytest.mark.asyncio
+async def test_lean_metadata_preserves_title_matching_an_unavailable_tool() -> None:
+    from pubtator_link.mcp.profiles import tool_names_for_profile
+    from pubtator_link.mcp.service_adapters import get_publication_metadata_impl
+    from pubtator_link.models.publication_metadata import (
+        PublicationMetadata,
+        PublicationMetadataResponse,
+    )
+
+    title = "get_review_context identifies a BRCA1 evidence gap"
+
+    class FakeService:
+        async def get_metadata(self, request):
+            return PublicationMetadataResponse(
+                metadata=[PublicationMetadata(pmid="1", title=title)],
+                _meta={
+                    "next_commands": [
+                        "Use get_publication_passages for evidence.",
+                        "Use get_review_context for a single-query review result.",
+                    ]
+                },
+            )
+
+    result = await get_publication_metadata_impl(
+        service=FakeService(),
+        pmids=["1"],
+        profile="lean",
+    )
+
+    assert result["metadata"][0]["title"] == title
+    assert result["_meta"]["next_commands"] == ["Use get_publication_passages for evidence."]
+    unavailable = tool_names_for_profile("full") - tool_names_for_profile("lean")
+    assert not any(
+        tool_name in command
+        for command in result["_meta"]["next_commands"]
+        for tool_name in unavailable
+    )
+
+
+@pytest.mark.asyncio
 async def test_get_publication_metadata_impl_preserves_public_100_pmid_cap() -> None:
     from pydantic import ValidationError
 
@@ -300,7 +375,7 @@ async def test_graph_adapters_default_omitted_response_mode_to_compact() -> None
     class CitationService:
         request = None
 
-        async def get_citation_graph(self, request):
+        async def get_citation_graph(self, request, *, profile="full"):
             self.request = request
             return PublicationCitationGraphResponse(
                 source=LiteraturePaper(pmid="1"),
@@ -361,6 +436,38 @@ async def test_graph_adapters_default_omitted_response_mode_to_compact() -> None
     assert "response_mode_deprecation" not in str(citation_result)
     assert "response_mode_deprecation" not in str(related_result)
     assert "response_mode_deprecation" not in str(topic_result)
+
+
+@pytest.mark.asyncio
+async def test_readonly_citation_graph_hides_indexing_follow_up() -> None:
+    from pubtator_link.mcp.service_adapters import get_publication_citation_graph_impl
+    from pubtator_link.models.literature_graph import (
+        LiteraturePaper,
+        PublicationCitationGraphResponse,
+    )
+
+    class CitationService:
+        async def get_citation_graph(self, request, *, profile="full"):
+            return PublicationCitationGraphResponse(
+                source=LiteraturePaper(pmid="1"),
+                response_mode=request.response_mode,
+                _meta={
+                    "next_commands": [
+                        {"tool": "get_publication_passages", "arguments": {"pmids": ["2"]}},
+                        {"tool": "index_review_evidence", "arguments": {"pmids": ["2"]}},
+                    ]
+                },
+            )
+
+    result = await get_publication_citation_graph_impl(
+        service=CitationService(),
+        pmid="1",
+        profile="readonly",
+    )
+
+    assert result["_meta"]["next_commands"] == [
+        {"tool": "get_publication_passages", "arguments": {"pmids": ["2"]}}
+    ]
 
 
 @pytest.mark.asyncio
@@ -762,8 +869,9 @@ async def test_suggest_corpus_impl_returns_candidate_pmids() -> None:
     from pubtator_link.models.corpus_suggestion import CorpusSuggestionResponse
 
     class FakeService:
-        async def suggest(self, request):
+        async def suggest(self, request, *, profile="full"):
             assert request.question == "FMF MEFV VUS colchicine"
+            assert profile == "full"
             return CorpusSuggestionResponse(
                 candidate_pmids=["26802180"],
                 candidates=[],
@@ -932,25 +1040,22 @@ async def test_review_quickstart_adapter_honors_wait_until_ready() -> None:
 @pytest.mark.asyncio
 async def test_list_research_sessions_adapter_uses_global_path_without_review_id() -> None:
     from pubtator_link.mcp.service_adapters import list_research_sessions_impl
-    from pubtator_link.models.review_rerag import (
+    from pubtator_link.models.research_session_list import (
         ListResearchSessionsResponse,
-        ResearchSessionManifest,
+        ResearchSessionSummary,
     )
 
     class Service:
-        local_calls = 0
-        global_calls = 0
+        calls = 0
 
-        async def list_sessions(self, *, review_id):
-            self.local_calls += 1
-            raise AssertionError("review-scoped path should not be used")
-
-        async def list_sessions_global(self, *, limit=20):
-            self.global_calls += 1
-            assert limit == 20
+        async def list_sessions(self, *, review_id, limit, cursor):
+            self.calls += 1
+            assert review_id is None
+            assert limit == 10
+            assert cursor is None
             return ListResearchSessionsResponse(
                 sessions=[
-                    ResearchSessionManifest(
+                    ResearchSessionSummary(
                         review_id="review-2",
                         session_id="session-2",
                         updated_at="2026-05-02T00:00:00Z",
@@ -964,8 +1069,31 @@ async def test_list_research_sessions_adapter_uses_global_path_without_review_id
 
     assert result["success"] is True
     assert result["sessions"][0]["review_id"] == "review-2"
-    assert service.local_calls == 0
-    assert service.global_calls == 1
+    assert service.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_list_research_sessions_adapter_reports_invalid_cursor_without_echoing_it() -> None:
+    from pubtator_link.mcp.input_normalization import InputNormalizationError
+    from pubtator_link.mcp.service_adapters import list_research_sessions_impl
+
+    class Service:
+        async def list_sessions(self, *, review_id, limit, cursor):
+            assert review_id == "review-1"
+            assert limit == 10
+            assert cursor == "hostile-token"
+            raise ValueError("cursor is invalid")
+
+    with pytest.raises(InputNormalizationError) as error:
+        await list_research_sessions_impl(
+            service=Service(),
+            review_id="review-1",
+            limit=10,
+            cursor="hostile-token",
+        )
+
+    assert error.value.field_errors[0]["field"] == "cursor"
+    assert "hostile-token" not in error.value.field_errors[0]["message"]
 
 
 @pytest.mark.asyncio
@@ -1578,6 +1706,51 @@ async def test_retrieve_review_context_batch_adapter_calls_service() -> None:
 
 
 @pytest.mark.asyncio
+async def test_readonly_review_context_batch_hides_indexing_recovery_hints() -> None:
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        PreparationStatus,
+        QueryDiagnosticsSummary,
+        RecoveryHint,
+        RetrieveReviewContextBatchResponse,
+    )
+
+    class FakeService:
+        async def retrieve_context_batch(self, review_id, request):
+            return RetrieveReviewContextBatchResponse(
+                review_id=review_id,
+                results=[],
+                merged_context_pack=ContextPack(question="MEFV", passages=[], citation_map={}),
+                preparation_status=PreparationStatus(),
+                response_mode=request.response_mode,
+                query_summaries=[
+                    QueryDiagnosticsSummary(
+                        query="MEFV",
+                        query_tokens=["mefv"],
+                        next_steps=["index_review_evidence", "inspect_review_index"],
+                    )
+                ],
+                recovery=RecoveryHint(
+                    reason="review_not_indexed",
+                    message="No passages returned.",
+                    next_steps=["index_review_evidence", "inspect_review_index"],
+                ),
+            )
+
+    result = await retrieve_review_context_batch_impl(
+        service=FakeService(),
+        review_id="rev-1",
+        queries=["MEFV"],
+        response_mode="diagnostics",
+        profile="readonly",
+    )
+
+    assert result["query_summaries"][0]["next_steps"] == ["inspect_review_index"]
+    assert result["recovery"]["next_steps"] == ["inspect_review_index"]
+
+
+@pytest.mark.asyncio
 async def test_retrieve_review_context_batch_adapter_accepts_auto_budget_and_verbosity() -> None:
     from pubtator_link.mcp.service_adapters import retrieve_review_context_batch_impl
     from pubtator_link.models.review_rerag import (
@@ -2163,6 +2336,60 @@ async def test_retrieve_review_context_adapter_builds_request_from_flat_args() -
 
 
 @pytest.mark.asyncio
+async def test_readonly_retrieval_preserves_tool_named_query_and_passage_quote() -> None:
+    from pubtator_link.mcp.service_adapters import retrieve_review_context_impl
+    from pubtator_link.models.review_rerag import (
+        ContextPack,
+        ContextPassage,
+        PassageQuote,
+        PreparationStatus,
+        RetrieveReviewContextResponse,
+    )
+
+    query = "index_review_evidence BRCA1"
+    quote = "The article states index_review_evidence was not performed."
+
+    class FakeService:
+        async def retrieve_context(self, review_id, request):
+            return RetrieveReviewContextResponse(
+                review_id=review_id,
+                context_pack=ContextPack(
+                    question=request.question,
+                    passages=[
+                        ContextPassage(
+                            citation_key="S1",
+                            passage_id="PMID:1:abstract:0",
+                            pmid="1",
+                            section="abstract",
+                            text=quote,
+                            quote=PassageQuote(
+                                text=quote,
+                                returned_start_offset=0,
+                                returned_end_offset=len(quote),
+                                passage_start_char=0,
+                                passage_end_char=len(quote),
+                            ),
+                        )
+                    ],
+                    citation_map={"S1": "PMID:1:abstract:0"},
+                ),
+                preparation_status=PreparationStatus(),
+            )
+
+    result = await retrieve_review_context_impl(
+        service=FakeService(),
+        review_id="review-1",
+        question=query,
+        profile="readonly",
+    )
+
+    passage = result["context_pack"]["passages"][0]
+    assert result["context_pack"]["question"] == query
+    assert passage["text"] == quote
+    assert passage["quote"]["text"] == quote
+
+
+@pytest.mark.asyncio
 async def test_inspect_review_index_adapter_builds_request_from_flat_args() -> None:
     from pubtator_link.mcp.service_adapters import inspect_review_index_impl
     from pubtator_link.models.review_rerag import (
@@ -2266,6 +2493,27 @@ async def test_search_literature_meta_uses_short_next_tool_hints() -> None:
     assert meta["workflow"] == "search -> preflight -> index -> inspect -> retrieve"
     assert meta["details_resource"] == "pubtator://workflow-help"
     assert "next_commands" not in meta
+
+
+@pytest.mark.asyncio
+async def test_readonly_search_literature_meta_ends_in_direct_passage_retrieval() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {"results": [{"pmid": "1", "title": "FMF guideline"}], "count": 1}
+
+    result = await search_literature_impl(
+        client=FakeClient(),
+        text="FMF",
+        profile="readonly",
+    )
+
+    assert result["_meta"]["next_tools"] == [
+        "preflight_review_sources",
+        "get_publication_passages",
+    ]
+    assert result["_meta"]["workflow"] == "search -> preflight -> direct passages"
 
 
 @pytest.mark.asyncio
@@ -3263,11 +3511,11 @@ async def test_get_publication_passages_adapter_passes_dry_run_and_verbosity() -
 
 @pytest.mark.asyncio
 async def test_pmc_adapter_returns_publication_export_shape() -> None:
-    from pubtator_link.mcp.service_adapters import fetch_pmc_annotations_impl
+    from pubtator_link.mcp.pmc_annotations import fetch_pmc_annotations_impl
 
     class Document:
         def model_dump(self) -> dict[str, object]:
-            return {"id": "PMC7696669"}
+            return {"id": "7696669", "text": "PubTator full text"}
 
     class Result:
         format = "biocjson"
@@ -3277,16 +3525,18 @@ async def test_pmc_adapter_returns_publication_export_shape() -> None:
         async def export_pmc_publications_list(self, pmcids: list[str], format: str) -> Result:
             return Result()
 
-    result = await fetch_pmc_annotations_impl(service=FakeService(), pmcids=["PMC7696669"])
+    result = await fetch_pmc_annotations_impl(service=FakeService(), pmcids=["pmc7696669"])
 
     assert result["pmcids"] == ["PMC7696669"]
     assert result["full_text"] is True
-    assert result["export_data"]["documents"] == [{"id": "PMC7696669"}]
+    assert result["export_data"]["documents"] == [
+        {"id": "PMC7696669", "text": "PubTator full text"}
+    ]
 
 
 @pytest.mark.asyncio
-async def test_pmc_adapter_reports_empty_document_coverage_reason() -> None:
-    from pubtator_link.mcp.service_adapters import fetch_pmc_annotations_impl
+async def test_pmc_adapter_normalizes_bare_id_and_rejects_empty_document() -> None:
+    from pubtator_link.mcp.pmc_annotations import fetch_pmc_annotations_impl
     from pubtator_link.models.publications import BioCDocument
 
     class Result:
@@ -3299,8 +3549,28 @@ async def test_pmc_adapter_reports_empty_document_coverage_reason() -> None:
 
     result = await fetch_pmc_annotations_impl(service=FakeService(), pmcids=["PMC11911402"])
 
-    assert result["coverage_by_pmcid"] == {"PMC11911402": "unknown"}
-    assert result["coverage_reason_by_pmcid"] == {"PMC11911402": "no_pmc_full_text_retrievable"}
+    assert result["success"] is False
+    assert result["error_code"] == "not_found"
+    assert result["message"] == "No PubTator full text is available for PMCID PMC11911402."
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code", [400, 404])
+async def test_pmc_adapter_maps_not_found_upstream_errors_without_leaking_them(
+    status_code: int,
+) -> None:
+    from pubtator_link.api.client import PubTatorAPIError
+    from pubtator_link.mcp.pmc_annotations import fetch_pmc_annotations_impl
+
+    class FakeService:
+        async def export_pmc_publications_list(self, pmcids: list[str], format: str) -> None:
+            raise PubTatorAPIError("raw upstream error", status_code=status_code)
+
+    result = await fetch_pmc_annotations_impl(service=FakeService(), pmcids=["PMC11911402"])
+
+    assert result["success"] is False
+    assert result["error_code"] == "not_found"
+    assert "raw upstream error" not in result["message"]
 
 
 @pytest.mark.asyncio
@@ -3311,7 +3581,14 @@ async def test_relations_adapter_maps_related_entities() -> None:
         async def find_relations(
             self, e1: str, relation_type: str | None, e2: str | None
         ) -> list[dict[str, object]]:
-            return [{"target": "@DISEASE_COVID-19", "type": "treat", "pmids": ["32511357"]}]
+            return [
+                {
+                    "source": "@CHEMICAL_remdesivir",
+                    "target": "@DISEASE_COVID-19",
+                    "type": "treat",
+                    "pmids": ["32511357"],
+                }
+            ]
 
     result = await find_entity_relations_impl(
         client=FakeClient(),
@@ -3325,6 +3602,37 @@ async def test_relations_adapter_maps_related_entities() -> None:
     assert result["related_entities"][0]["entity_id"] == "@DISEASE_COVID-19"
 
 
+def test_relation_uses_endpoint_opposite_the_query_and_rejects_nonincident_edge() -> None:
+    from pubtator_link.mcp.relations import shape_entity_relations
+
+    payload = shape_entity_relations(
+        entity_id="@GENE_SCN1A",
+        api_results=[
+            {
+                "source": "@DISEASE_Epilepsies_Myoclonic",
+                "target": "@GENE_SCN1A",
+                "type": "associate",
+                "publications": 716,
+            },
+            {
+                "source": "@GENE_BRCA1",
+                "target": "@GENE_BRCA2",
+                "type": "associate",
+            },
+        ],
+        relation_type=None,
+        target_entity_type=None,
+        limit=20,
+        response_mode="standard",
+        max_response_chars=12_000,
+    )
+
+    assert [row["entity_id"] for row in payload["related_entities"]] == [
+        "@DISEASE_Epilepsies_Myoclonic"
+    ]
+    assert payload["total_relations"] == 1
+
+
 @pytest.mark.asyncio
 async def test_relations_adapter_compact_mode_applies_budget_controls() -> None:
     from pubtator_link.mcp.service_adapters import find_entity_relations_impl
@@ -3335,6 +3643,7 @@ async def test_relations_adapter_compact_mode_applies_budget_controls() -> None:
         ) -> list[dict[str, object]]:
             return [
                 {
+                    "source": "@GENE_MEFV",
                     "target": f"@DISEASE_{index}",
                     "type": "associate",
                     "pmids": [str(1000 + index), str(2000 + index)],
@@ -3504,8 +3813,9 @@ async def test_citation_graph_adapter_accepts_compact_response_mode() -> None:
     )
 
     class Service:
-        async def get_citation_graph(self, request):
+        async def get_citation_graph(self, request, *, profile="full"):
             assert request.response_mode == "compact"
+            assert profile == "full"
             return PublicationCitationGraphResponse(
                 source=LiteraturePaper(pmid="1"),
                 response_mode="compact",

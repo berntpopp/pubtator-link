@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Protocol
 
 import httpx
@@ -10,6 +11,16 @@ from pydantic import BaseModel, Field
 from pubtator_link.models.variants import NormalizedVariant, SourceClassification
 
 CLINVAR_EUTILS_BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+_HGVS_FIELDS = ("title", "variation_name", "cdna_change", "protein_change", "aliases")
+_TRANSCRIPT_ACCESSION = (
+    r"(?:N[MRP]_[0-9]+(?:\.[0-9]+)?|NC_[0-9]+(?:\.[0-9]+)?|"
+    r"NG_[0-9]+(?:\.[0-9]+)?|ENST[0-9]+(?:\.[0-9]+)?|LRG_[0-9]+(?:t[0-9]+)?)"
+)
+_HGVS_EXPRESSION = re.compile(
+    rf"(?<![A-Za-z0-9_.])(?:{_TRANSCRIPT_ACCESSION}(?:\([^)]+\))?:)?"
+    r"(?:[cgmnr]\.[A-Za-z0-9_+*?=>-]+|p\.[A-Za-z*?]+[0-9][A-Za-z0-9_*?=>-]*)(?![A-Za-z0-9_])",
+    flags=re.IGNORECASE,
+)
 
 
 class ClinVarHttpClient(Protocol):
@@ -119,7 +130,7 @@ def parse_clinvar_summary(document: dict[str, Any]) -> ClinVarRecord:
         allele_id=_optional_str(document.get("allele_id")),
         preferred_name=_optional_str(document.get("title"))
         or _optional_str(document.get("variation_name")),
-        hgvs=_list_values(document.get("hgvs")),
+        hgvs=_summary_hgvs(document),
         classification=_clinical_significance(document),
         review_status=_optional_str(document.get("review_status"))
         or _optional_str(_germline_classification(document).get("review_status")),
@@ -177,10 +188,34 @@ def _germline_classification(document: dict[str, Any]) -> dict[str, Any]:
 
 def _list_values(value: Any) -> list[str]:
     if isinstance(value, list):
-        return [str(item) for item in value if item]
+        return [item for item in value if isinstance(item, str) and item]
     if isinstance(value, str) and value:
         return [value]
     return []
+
+
+def _summary_hgvs(document: dict[str, Any]) -> list[str]:
+    """Extract HGVS expressions from ESummary structured fields and titles.
+
+    ClinVar ESummary records do not consistently expose a top-level ``hgvs``
+    field.  Prefer it when present, then recover explicit expressions from the
+    documented title and variation-set fields without treating arbitrary names
+    as a match.
+    """
+
+    values = _list_values(document.get("hgvs"))
+    for field in _HGVS_FIELDS:
+        values.extend(_list_values(document.get(field)))
+    variation_set = document.get("variation_set")
+    if isinstance(variation_set, list):
+        for variation in variation_set:
+            if not isinstance(variation, dict):
+                continue
+            for field in _HGVS_FIELDS:
+                values.extend(_list_values(variation.get(field)))
+
+    expressions = [expression for value in values for expression in _HGVS_EXPRESSION.findall(value)]
+    return list(dict.fromkeys(expressions))
 
 
 def _optional_str(value: Any) -> str | None:

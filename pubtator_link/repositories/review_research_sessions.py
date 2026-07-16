@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from pubtator_link.models.research_session_list import ResearchSessionSummary
 from pubtator_link.models.review_rerag import (
     ResearchSessionCandidate,
     ResearchSessionManifest,
@@ -130,6 +131,95 @@ async def list_research_sessions_for_review(
             review_id,
         )
     return _manifests_from_rows(sessions, candidate_rows, default_review_id=review_id)
+
+
+async def list_research_session_summaries(
+    acquire: Callable[[], Any],
+    *,
+    review_id: str | None,
+    limit: int,
+    before_updated_at: str | None,
+    before_session_id: str | None,
+    before_review_id: str | None,
+) -> list[ResearchSessionSummary]:
+    """Fetch a compact page without reading session candidate rows."""
+    base_sql = """
+        select sessions.review_id, sessions.session_id, sessions.query, sessions.status,
+               sessions.updated_at::text as updated_at,
+               count(candidates.pmid)::integer as candidate_count
+        from review_research_sessions as sessions
+        left join review_research_session_candidates as candidates
+          on candidates.review_id = sessions.review_id
+         and candidates.session_id = sessions.session_id
+    """
+    if review_id is not None:
+        scope_sql = "where sessions.review_id = $1"
+        if before_session_id is None:
+            cursor_sql = ""
+            args: tuple[Any, ...] = (review_id, limit)
+            limit_param = "$2"
+        elif before_updated_at is None:
+            cursor_sql = "and sessions.updated_at is null and sessions.session_id < $2"
+            args = (review_id, before_session_id, limit)
+            limit_param = "$3"
+        else:
+            cursor_sql = """
+                and (
+                    sessions.updated_at < $2::timestamptz
+                    or (sessions.updated_at = $2::timestamptz and sessions.session_id < $3)
+                    or sessions.updated_at is null
+                )
+            """
+            args = (review_id, before_updated_at, before_session_id, limit)
+            limit_param = "$4"
+    elif before_session_id is None:
+        scope_sql = ""
+        cursor_sql = ""
+        args = (limit,)
+        limit_param = "$1"
+    elif before_updated_at is None:
+        scope_sql = """
+            where sessions.updated_at is null
+              and (
+                  sessions.session_id < $1
+                  or (sessions.session_id = $1 and sessions.review_id < $2)
+              )
+        """
+        cursor_sql = ""
+        args = (before_session_id, before_review_id, limit)
+        limit_param = "$3"
+    else:
+        scope_sql = """
+            where (
+                sessions.updated_at < $1::timestamptz
+                or (
+                    sessions.updated_at = $1::timestamptz
+                    and (
+                        sessions.session_id < $2
+                        or (sessions.session_id = $2 and sessions.review_id < $3)
+                    )
+                )
+                or sessions.updated_at is null
+            )
+        """
+        cursor_sql = ""
+        args = (before_updated_at, before_session_id, before_review_id, limit)
+        limit_param = "$4"
+    sql = f"""
+        {base_sql}
+        {scope_sql}
+        {cursor_sql}
+        group by sessions.review_id, sessions.session_id, sessions.query, sessions.status,
+                 sessions.updated_at
+        order by sessions.updated_at desc nulls last, sessions.session_id desc, sessions.review_id desc
+        limit {limit_param}
+    """
+    async with (
+        acquire() as connection,
+        connection.transaction(isolation="repeatable_read", readonly=True),
+    ):
+        rows = await connection.fetch(sql, *args)
+    return [ResearchSessionSummary.model_validate(row) for row in rows]
 
 
 async def find_research_sessions_by_session_id(

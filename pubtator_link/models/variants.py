@@ -40,6 +40,7 @@ class NormalizedVariant(BaseModel):
     allele_id: str | None = None
     hgvs: list[str] = Field(default_factory=list)
     url: str | None = None
+    match_confidence: Literal["exact", "equivalent"] = "exact"
 
 
 class SourceClassification(BaseModel):
@@ -53,6 +54,23 @@ class SourceClassification(BaseModel):
     variation_id: str | None = None
     allele_id: str | None = None
     url: str | None = None
+    match_confidence: Literal["exact", "equivalent"] = "exact"
+
+
+class CandidateVariant(BaseModel):
+    """A broad ClinVar search hit that is not evidence for the requested variant."""
+
+    source: VariantEvidenceSource
+    name: str
+    variation_id: str | None = None
+    allele_id: str | None = None
+    hgvs: list[str] = Field(default_factory=list)
+    url: str | None = None
+    classification: str | None = None
+    review_status: str | None = None
+    condition: str | None = None
+    last_evaluated: str | None = None
+    match_confidence: Literal["broad_candidate"] = "broad_candidate"
 
 
 class VariantLiteratureEvidence(BaseModel):
@@ -79,6 +97,7 @@ class VariantEvidenceResponse(BaseModel):
     query: dict[str, Any]
     normalized_variants: list[NormalizedVariant] = Field(default_factory=list)
     source_classifications: list[SourceClassification] = Field(default_factory=list)
+    candidate_variants: list[CandidateVariant] = Field(default_factory=list)
     literature: list[VariantLiteratureEvidence] = Field(default_factory=list)
     conflicts: list[VariantConflict] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

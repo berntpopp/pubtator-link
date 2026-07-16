@@ -191,6 +191,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 metadata=metadata,
                 metadata_service=metadata_service,
                 include_meta=include_meta,
+                profile=profile,
             )
 
         return await run_mcp_tool("search_literature", call)
@@ -277,6 +278,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 guideline_boost=True,
                 coverage=coverage,
                 preflight_service=preflight_service,
+                profile=profile,
             )
 
         return await run_mcp_tool("search_guidelines", call)

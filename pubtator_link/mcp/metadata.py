@@ -305,6 +305,7 @@ def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
                 service=service,
                 review_id=review_id,
                 session_id=session_id,
+                profile=profile,
             )
 
         return await _safe_review_resource(review_id, build)
@@ -322,13 +323,14 @@ def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
                 review_id=review_id,
                 latest=True,
                 session_id=session_id,
+                profile=profile,
             )
 
         return await _safe_review_resource(review_id, build)
 
     @mcp.resource("pubtator://capabilities/tools/{tool_name}")
     def tool_detail(tool_name: str) -> dict[str, Any]:
-        return get_tool_detail_resource(tool_name)
+        return get_tool_detail_resource(tool_name, profile=profile)
 
     @mcp.prompt(name="search_biomedical_literature", title="Search Biomedical Literature")
     def search_literature_prompt() -> str:
@@ -336,7 +338,7 @@ def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
 
     @mcp.prompt(name="annotate_research_text", title="Annotate Research Text")
     def annotate_text_prompt() -> str:
-        return annotate_research_text_prompt()
+        return annotate_research_text_prompt(profile)
 
     @mcp.prompt(name="review_pubtator_annotations", title="Review PubTator Annotations")
     def review_annotations_prompt() -> str:
@@ -344,4 +346,4 @@ def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
 
     @mcp.prompt(name="review_rerag_workflow", title="Review Re-RAG Workflow")
     def review_rerag_prompt() -> str:
-        return review_rerag_workflow_prompt()
+        return review_rerag_workflow_prompt(profile)

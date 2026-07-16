@@ -72,6 +72,18 @@ def test_parse_clinvar_summary_reads_germline_classification() -> None:
     assert record.condition == "Familial Mediterranean fever"
 
 
+def test_parse_clinvar_summary_ignores_non_hgvs_text_and_non_string_aliases() -> None:
+    record = parse_clinvar_summary(
+        {
+            "uid": "12345",
+            "title": "ABC.123 is a label, not an HGVS expression",
+            "aliases": [{"display": "c.181T>G"}],
+        }
+    )
+
+    assert record.hgvs == []
+
+
 def _summary_doc() -> dict[str, object]:
     return {
         "uid": "12345",

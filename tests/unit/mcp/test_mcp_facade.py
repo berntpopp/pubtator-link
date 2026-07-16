@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import json
 import re
+from typing import ClassVar
 
 import pytest
 
 from pubtator_link.mcp.profiles import READONLY_TOOLS
+from pubtator_link.models.research_session_list import ResearchSessionSummary
+from pubtator_link.services.research_session import _encode_cursor
 
 # Anthropic remote-MCP tool name regex; tool names that fail this break the
 # claude.ai web UI and the MCP connector. See issue #26.
@@ -108,6 +112,60 @@ async def _run_error_tool(tool: object, arguments: dict[str, object]) -> dict[st
     payload = result.structured_content
     assert isinstance(payload, dict)
     return payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("review_id", "cursor"),
+    [
+        (None, "not/a-cursor"),
+        (
+            "global",
+            _encode_cursor(
+                review_id=None,
+                summary=ResearchSessionSummary(
+                    review_id="review-1",
+                    session_id="session-1",
+                    updated_at="2026-07-16T12:01:00Z",
+                ),
+            ),
+        ),
+    ],
+)
+async def test_list_research_sessions_cursor_error_reaches_mcp_wire(
+    monkeypatch: pytest.MonkeyPatch, review_id: str | None, cursor: str
+) -> None:
+    from fastmcp import Client
+
+    import pubtator_link.mcp.tools.review as review_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+    from pubtator_link.services.research_session import ResearchSessionService
+
+    service = ResearchSessionService(
+        repository=object(),
+        search_provider=object(),
+        preflight_service=object(),
+        queue=object(),
+    )
+
+    async def get_service() -> ResearchSessionService:
+        return service
+
+    monkeypatch.setattr(review_tools, "get_research_session_service", get_service)
+    mcp = create_pubtator_mcp(profile="full")
+    arguments: dict[str, object] = {"cursor": cursor}
+    if review_id is not None:
+        arguments["review_id"] = review_id
+
+    async with Client(mcp) as client:
+        result = await client.call_tool("list_research_sessions", arguments, raise_on_error=False)
+
+    payload = result.structured_content
+    assert result.is_error is True
+    assert isinstance(payload, dict)
+    assert payload["error_code"] == "invalid_input"
+    assert payload["field_errors"][0]["field"] == "cursor"
+    assert cursor not in str(payload)
 
 
 def test_all_tool_names_match_anthropic_remote_mcp_regex(
@@ -370,6 +428,107 @@ async def test_review_quickstart_accepts_question_alias(
     assert result.structured_content["success"] is True
 
 
+@pytest.mark.asyncio
+async def test_pmc_empty_document_is_an_mcp_not_found_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+
+    from fastmcp import Client
+
+    import pubtator_link.mcp.tools.publications as publication_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+    from pubtator_link.models.publications import BioCDocument
+
+    class Result:
+        format = "biocjson"
+        documents: ClassVar[list[BioCDocument]] = [BioCDocument(id="PMC11911402")]
+
+    class EmptyPmcService:
+        async def export_pmc_publications_list(self, pmcids: list[str], format: str) -> Result:
+            return Result()
+
+    async def fake_get_publication_service() -> EmptyPmcService:
+        return EmptyPmcService()
+
+    monkeypatch.setattr(publication_tools, "get_publication_service", fake_get_publication_service)
+    mcp = create_pubtator_mcp(profile="full")
+
+    async with Client(mcp) as client:
+        result = await client.call_tool(
+            "get_pmc_annotations", {"pmcids": ["PMC11911402"]}, raise_on_error=False
+        )
+
+    assert result.is_error is True
+    payload = result.structured_content
+
+    assert payload["success"] is False
+    assert payload["error_code"] == "not_found"
+    assert payload["message"] == "No PubTator full text is available for PMCID PMC11911402."
+    assert "raw upstream error" not in json.dumps(payload)
+
+
+@pytest.mark.asyncio
+async def test_pmc_upstream_5xx_is_a_sanitized_wire_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+
+    from fastmcp import Client
+
+    import pubtator_link.mcp.tools.publications as publication_tools
+    from pubtator_link.api.client import PubTatorAPIError
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    class FailingPmcService:
+        async def export_pmc_publications_list(self, pmcids: list[str], format: str) -> None:
+            raise PubTatorAPIError("raw upstream error", status_code=503)
+
+    async def fake_get_publication_service() -> FailingPmcService:
+        return FailingPmcService()
+
+    monkeypatch.setattr(publication_tools, "get_publication_service", fake_get_publication_service)
+    mcp = create_pubtator_mcp(profile="full")
+
+    async with Client(mcp) as client:
+        result = await client.call_tool(
+            "get_pmc_annotations", {"pmcids": ["PMC11911402"]}, raise_on_error=False
+        )
+
+    assert result.is_error is True
+    payload = result.structured_content
+    assert payload["success"] is False
+    assert payload["error_code"] == "upstream_unavailable"
+    assert "raw upstream error" not in json.dumps(payload)
+
+
+@pytest.mark.asyncio
+async def test_pmc_invalid_identifier_names_pmcids_on_the_wire(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastmcp import Client
+
+    import pubtator_link.mcp.tools.publications as publication_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async def fake_get_publication_service() -> object:
+        return object()
+
+    monkeypatch.setattr(publication_tools, "get_publication_service", fake_get_publication_service)
+    mcp = create_pubtator_mcp(profile="full")
+
+    async with Client(mcp) as client:
+        result = await client.call_tool(
+            "get_pmc_annotations", {"pmcids": ["12345"]}, raise_on_error=False
+        )
+
+    assert result.is_error is True
+    payload = result.structured_content
+    assert payload["success"] is False
+    assert payload["error_code"] == "invalid_input"
+    assert payload["field_errors"][0]["field"] == "pmcids"
+
+
 def test_ground_question_schema_exposes_one_call_arguments() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
@@ -406,6 +565,23 @@ def test_research_session_tools_allow_orientation_without_review_id() -> None:
     assert "review_id" not in list_schema.get("required", [])
     assert "review_id" not in status_schema.get("required", [])
     assert "session_id" in status_schema.get("required", [])
+
+
+def test_list_research_sessions_schema_exposes_bounded_opaque_pagination() -> None:
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    schema = (
+        create_pubtator_mcp(profile="full")
+        ._tool_manager._tools["list_research_sessions"]
+        .parameters
+    )
+    properties = schema["properties"]
+
+    assert properties["limit"]["default"] == 10
+    assert properties["limit"]["minimum"] == 1
+    assert properties["limit"]["maximum"] == 20
+    assert "cursor" in properties
+    assert "cursor" not in schema.get("required", [])
 
 
 def test_record_review_context_schema_accepts_note_event_type() -> None:
@@ -669,8 +845,7 @@ async def test_diagnostics_response_includes_minimum_workflow() -> None:
 
 
 @pytest.mark.asyncio
-async def test_readonly_diagnostics_minimum_workflow_only_advertises_registered_tools() -> None:
-    from pubtator_link.mcp.profiles import tool_names_for_profile
+async def test_readonly_diagnostics_minimum_workflow_uses_direct_passage_retrieval() -> None:
     from pubtator_link.mcp.tools.diagnostics import _diagnostics_impl
     from pubtator_link.models.responses import DiagnosticsResponse
 
@@ -694,10 +869,110 @@ async def test_readonly_diagnostics_minimum_workflow_only_advertises_registered_
 
     result = await _diagnostics_impl(Service(), profile="readonly")
 
-    readonly_tools = tool_names_for_profile("readonly")
-    assert set(result["minimum_workflow"]["grounded_review"]) <= readonly_tools
-    assert "index_review_evidence" not in result["minimum_workflow"]["grounded_review"]
+    assert result["minimum_workflow"]["grounded_review"] == [
+        "search_literature",
+        "preflight_review_sources",
+        "get_publication_passages",
+    ]
     assert "one_call" not in result["minimum_workflow"]
+
+
+@pytest.mark.asyncio
+async def test_readonly_diagnostics_redact_historical_write_tool_failures() -> None:
+    from pubtator_link.mcp.profiles import tool_names_for_profile
+    from pubtator_link.mcp.tools.diagnostics import _diagnostics_impl
+    from pubtator_link.models.responses import DiagnosticsResponse
+
+    class Service:
+        async def get_diagnostics(self) -> DiagnosticsResponse:
+            return DiagnosticsResponse(
+                success=True,
+                status="degraded",
+                subsystems={
+                    "recent_mcp_errors": {
+                        "count": 2,
+                        "latest": [
+                            {
+                                "tool_name": "index_review_evidence",
+                                "message": "index_review_evidence review store was unavailable",
+                            },
+                            {
+                                "tool_name": "inspect_review_index",
+                                "message": "read-only index probe timed out",
+                            },
+                        ],
+                    }
+                },
+                recovery=[
+                    "Recent MCP tool failure in index_review_evidence: "
+                    "index_review_evidence review store was unavailable",
+                    "Recent MCP tool failure in inspect_review_index: read-only index probe timed out",
+                ],
+                minimum_workflow={
+                    "grounded_review": ["index_review_evidence", "inspect_review_index"],
+                    "one_call": "ground_question",
+                },
+            )
+
+    result = await _diagnostics_impl(Service(), profile="readonly")
+
+    serialized = json.dumps(result, sort_keys=True)
+    unavailable = tool_names_for_profile("full") - tool_names_for_profile("readonly")
+    assert not any(tool_name in serialized for tool_name in unavailable)
+    assert "index_review_evidence" not in serialized
+    assert "ground_question" not in serialized
+    assert "review store was unavailable" in serialized
+    assert "inspect_review_index" in serialized
+    assert "read-only index probe timed out" in serialized
+
+
+@pytest.mark.asyncio
+async def test_lean_diagnostics_redact_unavailable_tool_in_allowed_error_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastmcp import Client
+
+    import pubtator_link.mcp.tools.diagnostics as diagnostics_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+    from pubtator_link.models.responses import DiagnosticsResponse
+
+    class Service:
+        async def get_diagnostics(self) -> DiagnosticsResponse:
+            return DiagnosticsResponse(
+                success=True,
+                status="degraded",
+                subsystems={
+                    "recent_mcp_errors": {
+                        "count": 1,
+                        "latest": [
+                            {
+                                "tool_name": "inspect_review_index",
+                                "message": "Use stage_research_session before retrying.",
+                            }
+                        ],
+                    }
+                },
+            )
+
+    async def fake_get_diagnostics_service() -> Service:
+        return Service()
+
+    monkeypatch.setattr(
+        diagnostics_tools,
+        "get_diagnostics_service",
+        fake_get_diagnostics_service,
+    )
+    async with Client(create_pubtator_mcp(profile="lean")) as client:
+        result = await client.call_tool("diagnostics", {}, raise_on_error=False)
+
+    assert result.is_error is False
+    payload = result.structured_content
+    assert isinstance(payload, dict)
+    error = payload["subsystems"]["recent_mcp_errors"]["latest"][0]
+    assert error["tool_name"] == "inspect_review_index"
+    assert "stage_research_session" not in json.dumps(payload, sort_keys=True)
+    assert "an unavailable tool" in error["message"]
+    assert "before retrying" in error["message"]
 
 
 def test_research_session_tools_are_registered(mcp_tool_names) -> None:

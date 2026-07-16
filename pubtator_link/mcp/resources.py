@@ -3,15 +3,22 @@ from __future__ import annotations
 import re
 from typing import Any
 
+import pubtator_link.mcp.review_resources as review_resources
 from pubtator_link.config import api_config, review_rerag_config, text_processing_config
 from pubtator_link.mcp.contracts import (
     CORE_WORKFLOW_TOOLS,
+    LEAN_REVIEW_WORKFLOW_TOOLS,
     PREFERRED_TOOL_NAMES,
+    READONLY_RETRIEVAL_WORKFLOW_TOOLS,
     SAMPLE_CALLS,
     SCHEMA_POLICY,
     TOOL_CATEGORIES,
+    get_llm_driver_contract,
 )
-from pubtator_link.mcp.profiles import MCPToolProfile, tool_names_for_profile
+from pubtator_link.mcp.profiles import (
+    MCPToolProfile,
+    tool_names_for_profile,
+)
 from pubtator_link.services.workflow_help import WorkflowHelpService
 
 RESEARCH_USE_NOTICE = (
@@ -22,7 +29,9 @@ RESEARCH_USE_NOTICE = (
 GROUND_QUESTION_TOOL = "ground_question"
 
 
-def _core_workflow_tools() -> list[str]:
+def _core_workflow_tools(profile: MCPToolProfile | None = None) -> list[str]:
+    if profile == "readonly":
+        return list(READONLY_RETRIEVAL_WORKFLOW_TOOLS)
     tools = list(CORE_WORKFLOW_TOOLS)
     if GROUND_QUESTION_TOOL not in tools:
         tools.insert(tools.index("get_review_context_batch"), GROUND_QUESTION_TOOL)
@@ -37,17 +46,21 @@ def _tool_categories() -> dict[str, list[str]]:
     return categories
 
 
-def _workflow_bundles() -> dict[str, Any]:
+def _workflow_bundles(profile: MCPToolProfile | None = None) -> dict[str, Any]:
+    tools = [
+        "search_literature",
+        "build_topic_literature_map",
+        "get_publication_citation_graph",
+        "find_related_evidence_candidates",
+    ]
+    tools.extend(
+        ["preflight_review_sources", "get_publication_passages"]
+        if profile == "readonly"
+        else ["index_review_evidence", "get_review_context_batch"]
+    )
     return {
         "literature_graph": {
-            "tools": [
-                "search_literature",
-                "build_topic_literature_map",
-                "get_publication_citation_graph",
-                "find_related_evidence_candidates",
-                "index_review_evidence",
-                "get_review_context_batch",
-            ],
+            "tools": tools,
             "compact_mode_contract": (
                 "Graph compact mode returns candidate lanes, bounded summary papers, "
                 "machine-readable compact_status, omitted_counts, and response_size_class."
@@ -72,10 +85,7 @@ def _sample_calls() -> dict[str, dict[str, Any]]:
     return calls
 
 
-def get_tool_detail_resource(tool_name: str) -> dict[str, Any]:
-    from pubtator_link.mcp.review_resources import get_tool_detail_resource as get_detail
-
-    return get_detail(tool_name)
+get_tool_detail_resource = review_resources.get_tool_detail_resource
 
 
 def _tool_key_name(value: str) -> str:
@@ -83,11 +93,7 @@ def _tool_key_name(value: str) -> str:
 
 
 def _filter_tool_names(values: list[Any], allowed_tools: set[str]) -> list[Any]:
-    return [
-        value
-        for value in values
-        if not isinstance(value, str) or _tool_key_name(value) in allowed_tools
-    ]
+    return [v for v in values if not isinstance(v, str) or _tool_key_name(v) in allowed_tools]
 
 
 def _filter_tool_mapping(values: dict[str, Any], allowed_tools: set[str]) -> dict[str, Any]:
@@ -132,9 +138,13 @@ def _filter_capabilities_for_profile(value: Any, allowed_tools: set[str]) -> Any
     for key, item in value.items():
         if key == "tool_name" and isinstance(item, str) and item not in allowed_tools:
             return {}
-        if key in {"tools", "core_workflow_tools", "core_tools", "advanced_tools"} and isinstance(
-            item, list
-        ):
+        if key in {
+            "tools",
+            "core_workflow_tools",
+            "core_tools",
+            "advanced_tools",
+            "recommended_tools",
+        } and isinstance(item, list):
             filtered[key] = _filter_tool_names(item, allowed_tools)
         elif key in {"tool_categories", "tool_groups"} and isinstance(item, dict):
             filtered[key] = {
@@ -143,66 +153,21 @@ def _filter_capabilities_for_profile(value: Any, allowed_tools: set[str]) -> Any
                 if isinstance(group_tools, list)
                 and (tools := _filter_tool_names(group_tools, allowed_tools))
             }
-        elif key in {"sample_calls", "schema_bundle"} and isinstance(item, dict):
+        elif key in {"sample_calls", "schema_bundle", "preferred_tool_names"} and isinstance(
+            item, dict
+        ):
             filtered[key] = _filter_tool_mapping(item, allowed_tools)
         else:
             filtered[key] = _filter_capabilities_for_profile(item, allowed_tools)
     return filtered
 
 
-def get_llm_driver_contract() -> dict[str, Any]:
-    return {
-        "version": "2026-05-02",
-        "recommended_entrypoint": "workflow_help",
-        "discovery_policy": {
-            "strategy": "progressive_discovery",
-            "rationale": "Full tool schemas are large; inspect core workflow tools as needed.",
-        },
-        "core_workflow_tools": [
-            "search_biomedical_entities",
-            "search_literature",
-            "preflight_review_sources",
-            "index_review_evidence",
-            "inspect_review_index",
-            "ground_question",
-            "get_review_context_batch",
-            "get_review_context",
-            "get_review_passages_by_id",
-            "get_review_audit_trail",
-        ],
-        "detail_levels": ["catalog", "schemas", "examples"],
-        "schema_bundle": {
-            "index_review_evidence": {
-                "input_schema": "tools/list.parameters.index_review_evidence",
-                "output_schema": "IndexReviewEvidenceResponse",
-            },
-            "get_review_context_batch": {
-                "input_schema": "tools/list.parameters.get_review_context_batch",
-                "output_schema": "RetrieveReviewContextBatchResponse",
-            },
-            "get_review_audit_trail": {
-                "input_schema": "tools/list.parameters.get_review_audit_trail",
-                "output_schema": "ReviewAuditTrailResponse",
-            },
-        },
-        "response_contracts": {
-            "recovery": "Top-level recovery hints appear on empty, degraded, or high-drop retrievals.",
-            "quote": "Context passages include optional quote offsets for returned text and original passage text.",
-            "confidence_for_grounding": (
-                "Deterministic retrieval confidence for source grounding, not clinical "
-                "certainty. Serialized passages expose level plus compact basis codes."
-            ),
-            "dropped_summary": "Structured dropped-passage reason counts plus bounded filter and budget advice.",
-        },
-    }
-
-
-def _get_capabilities_details_resource() -> dict[str, Any]:
-    return {
+def _get_capabilities_details_resource(profile: MCPToolProfile | None = None) -> dict[str, Any]:
+    details: dict[str, Any] = {
         "server": "pubtator-link",
         "transport": "streamable_http",
         "endpoint": "/mcp",
-        "llm_driver_contract": get_llm_driver_contract(),
+        "llm_driver_contract": get_llm_driver_contract(profile),
         "tools": [
             "workflow_help",
             "review_quickstart",
@@ -701,8 +666,42 @@ def _get_capabilities_details_resource() -> dict[str, Any]:
                 "no clinical decision support",
             ],
         },
-        "workflow_help": get_workflow_help_resource(),
+        "workflow_help": get_workflow_help_resource(profile=profile or "full"),
     }
+    if profile == "readonly":
+        details["workflow"] = {
+            "recommended_tools": list(READONLY_RETRIEVAL_WORKFLOW_TOOLS),
+        }
+        details["recommended_workflows"] = [
+            "Call workflow_help for the canonical task-specific sequence.",
+            "search_literature -> preflight_review_sources -> get_publication_passages "
+            "for direct citable retrieval.",
+            "Use get_publication_metadata when citation-grade PMID metadata is needed.",
+            "If preparation is unavailable, use get_publication_passages with the same PMIDs.",
+        ]
+        details["review_rerag"]["workflow"] = [
+            "search_literature for candidate PMIDs.",
+            "preflight_review_sources to estimate source coverage.",
+            "get_publication_passages for direct citable retrieval.",
+        ]
+    elif profile == "lean":
+        details["workflow"] = {
+            "recommended_tools": list(LEAN_REVIEW_WORKFLOW_TOOLS),
+        }
+        details["recommended_workflows"] = [
+            "Call workflow_help for the canonical task-specific sequence.",
+            "search_literature -> preflight_review_sources -> index_review_evidence -> "
+            "inspect_review_index -> get_review_context_batch for review-scoped retrieval.",
+            "Use get_publication_metadata when citation-grade PMID metadata is needed.",
+        ]
+        details["review_rerag"]["workflow"] = [
+            "search_literature for candidate PMIDs.",
+            "preflight_review_sources to estimate source coverage.",
+            "index_review_evidence to prepare selected sources.",
+            "inspect_review_index to confirm preparation status.",
+            "get_review_context_batch for citable context across query variants.",
+        ]
+    return details
 
 
 def get_capabilities_resource(
@@ -715,9 +714,9 @@ def get_capabilities_resource(
         "transport": "streamable_http",
         "endpoint": "/mcp",
         "research_use_only": True,
-        "core_workflow_tools": _core_workflow_tools(),
+        "core_workflow_tools": _core_workflow_tools(profile),
         "tool_categories": _tool_categories(),
-        "workflow_bundles": _workflow_bundles(),
+        "workflow_bundles": _workflow_bundles(profile),
         "next_tool": "workflow_help",
     }
     allowed_tools = tool_names_for_profile(profile) if profile is not None else None
@@ -726,7 +725,7 @@ def get_capabilities_resource(
     if not details:
         return payload
 
-    rich_details = _get_capabilities_details_resource()
+    rich_details = _get_capabilities_details_resource(profile)
     if profile is not None:
         rich_details["workflow_help"] = get_workflow_help_resource(profile=profile)
     detail_overrides: dict[str, Any] = {

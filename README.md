@@ -36,8 +36,10 @@ which owns edge auth; tools surface there as `pubtator_<tool>`:
 claude mcp add --transport http genefoundry https://genefoundry.org/mcp
 ```
 
-The backend itself (`https://pubtator-link.genefoundry.org/mcp`) is deliberately not a
-public origin: it requires the router's service bearer token (see [Security](docs/SECURITY.md)).
+The backend itself (`https://pubtator-link.genefoundry.org/mcp`) serves the `readonly`
+research surface directly. Use the router for the fleet namespace and edge-authenticated
+non-readonly access; never send a caller token onward to the backend (see
+[Security](docs/SECURITY.md)).
 
 To run it locally (Python 3.12+, [uv](https://github.com/astral-sh/uv)):
 
@@ -59,6 +61,18 @@ make db-migrate                      # PUBTATOR_LINK_DATABASE_URL must be set
 Without a database the review tools degrade: call `diagnostics`, then fall back to
 `get_publication_passages` for the same PMIDs. The default tool profile is `readonly`
 (full read surface, no write tools) — see [Configuration](docs/configuration.md).
+
+### Readonly evidence workflow
+
+The readonly evidence workflow is `search_literature` → `preflight_review_sources` →
+`get_publication_passages`; it ends in direct passage retrieval and never asks a public
+caller to stage or index a corpus. `index_review_evidence` is available only to
+configured, authenticated non-readonly profiles.
+
+`get_variant_evidence` keeps exact/equivalent source classifications separate from
+broader lookup candidates. Candidate variants are not classifications for the query.
+`list_research_sessions` returns compact, cursor-paginated summaries; use
+`get_research_session_status` for one session's details.
 
 ## Tools
 
@@ -84,7 +98,7 @@ Without a database the review tools degrade: call `diagnostics`, then fall back 
 | `estimate_publication_context` | Estimate passage count and context size before fetching |
 | `get_publication_annotations` | Raw PubTator BioC annotation export for PMIDs |
 | `get_pmc_annotations` | Raw full-text BioC annotation export for PMC IDs |
-| `get_variant_evidence` | Source-attributed variant records and literature evidence for a gene |
+| `get_variant_evidence` | Exact/equivalent source classifications, distinct from non-classifying candidates |
 | `get_text_annotation_results` | Results for an asynchronous text-annotation session |
 | `preflight_review_sources` | Source coverage and full-text vs abstract-only outlook before indexing |
 | `inspect_review_index` | Indexed PMIDs, sections, passage counts, and failures for a `review_id` |
@@ -98,7 +112,7 @@ Without a database the review tools degrade: call `diagnostics`, then fall back 
 | `get_evidence_certainty` | One user-supplied evidence-certainty judgment |
 | `list_evidence_certainty` | User-supplied evidence-certainty judgments for a review |
 | `get_research_session_status` | Staged candidate, coverage, and preparation status |
-| `list_research_sessions` | Staged research sessions for a review ID |
+| `list_research_sessions` | Compact cursor-paginated session summaries; status provides details |
 
 That is the default `readonly` surface. The `lean` and `full` profiles add write tools
 (indexing, staging, recording, audit-bundle export) and require service auth —

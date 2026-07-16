@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from pubtator_link.mcp.input_normalization import InputNormalizationError
+
 
 async def research_session_status_payload(
     *, service: Any, review_id: str | None, session_id: str
@@ -31,10 +33,19 @@ async def research_session_status_payload(
     return cast(dict[str, Any], response.model_dump(by_alias=True))
 
 
-async def research_sessions_payload(*, service: Any, review_id: str | None) -> dict[str, Any]:
-    response = (
-        await service.list_sessions(review_id=review_id)
-        if review_id
-        else await service.list_sessions_global(limit=20)
-    )
+async def research_sessions_payload(
+    *, service: Any, review_id: str | None, limit: int, cursor: str | None
+) -> dict[str, Any]:
+    try:
+        response = await service.list_sessions(review_id=review_id, limit=limit, cursor=cursor)
+    except ValueError:
+        field = "cursor" if cursor is not None else "limit"
+        raise InputNormalizationError(
+            field_errors=[{"field": field, "message": f"Invalid {field} parameter."}],
+            recovery_hint=(
+                "Request the first page without cursor."
+                if cursor is not None
+                else "Use a limit between 1 and 20."
+            ),
+        ) from None
     return cast(dict[str, Any], response.model_dump(by_alias=True))

@@ -449,6 +449,65 @@ async def test_list_research_sessions_global_orders_and_groups_candidates() -> N
 
 
 @pytest.mark.asyncio
+async def test_list_research_session_summaries_uses_one_cursor_filtered_aggregate_query() -> None:
+    connection = FakeConnection()
+    connection.fetched_row_batches = [
+        [
+            {
+                "review_id": "review-1",
+                "session_id": "session-1",
+                "query": "FMF",
+                "status": "active",
+                "updated_at": "2026-07-16T12:01:00Z",
+                "candidate_count": 2,
+            }
+        ]
+    ]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    summaries = await repository.list_research_session_summaries(
+        review_id="review-1",
+        limit=3,
+        before_updated_at="2026-07-16T12:02:00Z",
+        before_session_id="session-2",
+        before_review_id="review-1",
+    )
+
+    assert [summary.session_id for summary in summaries] == ["session-1"]
+    assert summaries[0].candidate_count == 2
+    assert len(connection.executed) == 1
+    sql, args = connection.executed[0]
+    assert "count(candidates.pmid)" in sql.lower()
+    assert "sessions.updated_at < $2::timestamptz" in sql.lower()
+    assert "order by sessions.updated_at desc nulls last, sessions.session_id desc" in sql.lower()
+    assert "select review_id, session_id, pmid" not in sql.lower()
+    assert args == ("review-1", "2026-07-16T12:02:00Z", "session-2", 3)
+
+
+@pytest.mark.asyncio
+async def test_global_session_summary_page_uses_review_id_to_break_cursor_ties() -> None:
+    connection = FakeConnection()
+    connection.fetched_row_batches = [[]]
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    await repository.list_research_session_summaries(
+        review_id=None,
+        limit=2,
+        before_updated_at="2026-07-16T12:02:00Z",
+        before_session_id="session-2",
+        before_review_id="review-2",
+    )
+
+    sql, args = connection.executed[0]
+    assert "sessions.session_id = $2 and sessions.review_id < $3" in sql.lower()
+    assert (
+        "sessions.updated_at desc nulls last, sessions.session_id desc, sessions.review_id desc"
+        in sql.lower()
+    )
+    assert args == ("2026-07-16T12:02:00Z", "session-2", "review-2", 2)
+
+
+@pytest.mark.asyncio
 async def test_find_research_sessions_by_session_id_returns_all_matches() -> None:
     connection = FakeConnection()
     connection.fetched_row_batches = [

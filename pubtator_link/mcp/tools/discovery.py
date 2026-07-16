@@ -77,6 +77,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
                 must_include_pmids=must_include_pmids,
                 prefer_guidelines=prefer_guidelines,
                 include_metadata=include_metadata,
+                profile=profile,
             )
 
         return await run_mcp_tool("suggest_corpus", call)
@@ -110,7 +111,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
 
         async def call() -> dict[str, Any]:
             service = await get_discovery_service()
-            response = await service.convert_article_ids(ids=ids, source=source)
+            response = await service.convert_article_ids(ids=ids, source=source, profile=profile)
             return response.model_dump(by_alias=True)
 
         return await run_mcp_tool("convert_article_ids", call)
@@ -171,7 +172,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
 
         async def call() -> dict[str, Any]:
             service = await get_discovery_service()
-            response = await service.lookup_citation(citations=citations)
+            response = await service.lookup_citation(citations=citations, profile=profile)
             return response.model_dump(by_alias=True)
 
         return await run_mcp_tool("get_citation", call)
@@ -214,6 +215,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
                 pmids=selected_pmids,
                 mode=mode,
                 limit=limit,
+                profile=profile,
             )
             return response.model_dump(by_alias=True)
 

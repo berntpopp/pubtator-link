@@ -13,13 +13,16 @@ from pubtator_link.api.routes.dependencies import (
     get_review_queue,
     get_source_preflight_service,
 )
+from pubtator_link.models.research_session_list import (
+    ListResearchSessionsResponse,
+    ResearchSessionSummary,
+)
 from pubtator_link.models.review_rerag import (
     ContextPack,
     EvidenceCertaintyRecord,
     EvidenceCertaintyResponse,
     InspectReviewIndexResponse,
     ListEvidenceCertaintyResponse,
-    ListResearchSessionsResponse,
     ListReviewIndexesResponse,
     PreparationStatus,
     QueryDiagnosticsSummary,
@@ -116,7 +119,7 @@ async def test_list_research_sessions_route_calls_service() -> None:
     service = AsyncMock()
     service.list_sessions.return_value = ListResearchSessionsResponse(
         sessions=[
-            ResearchSessionManifest(
+            ResearchSessionSummary(
                 review_id="review-1",
                 session_id="session-1",
                 query="FMF",
@@ -133,7 +136,7 @@ async def test_list_research_sessions_route_calls_service() -> None:
     data = response.json()
     assert data["sessions"][0]["session_id"] == "session-1"
     assert data["sessions"][0]["preparation_status"]["running"] == 1
-    service.list_sessions.assert_awaited_once_with(review_id="review-1")
+    service.list_sessions.assert_awaited_once_with(review_id="review-1", limit=10, cursor=None)
 
 
 @pytest.mark.asyncio
