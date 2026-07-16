@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Protocol
 from uuid import uuid4
 
@@ -384,7 +385,7 @@ class ReviewReragRepository(Protocol):
         *,
         review_id: str | None,
         limit: int,
-        before_updated_at: str | None,
+        before_updated_at: datetime | None,
         before_session_id: str | None,
         before_review_id: str | None,
     ) -> list[ResearchSessionSummary]:

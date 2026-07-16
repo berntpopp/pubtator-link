@@ -33,7 +33,7 @@ class ResearchSessionInputError(ValueError):
 
 @dataclass(frozen=True)
 class _SessionCursor:
-    updated_at: str | None
+    updated_at: datetime | None
     session_id: str
     review_id: str
 
@@ -87,15 +87,19 @@ def _decode_cursor(*, cursor: str, review_id: str | None) -> _SessionCursor:
         or (decoded["updated_at"] is not None and not isinstance(decoded["updated_at"], str))
     ):
         raise _invalid_cursor()
-    if decoded["updated_at"] is not None:
+    serialized_updated_at: str | None = decoded["updated_at"]
+    updated_at: datetime | None = None
+    if serialized_updated_at is not None:
         try:
-            datetime.fromisoformat(decoded["updated_at"].replace("Z", "+00:00"))
+            updated_at = datetime.fromisoformat(serialized_updated_at.replace("Z", "+00:00"))
         except ValueError:
             raise _invalid_cursor() from None
+        if updated_at.tzinfo is None or updated_at.utcoffset() is None:
+            raise _invalid_cursor()
     if review_id is not None and decoded["review_id"] != review_id:
         raise _invalid_cursor()
     return _SessionCursor(
-        updated_at=decoded["updated_at"],
+        updated_at=updated_at,
         session_id=decoded["session_id"],
         review_id=decoded["review_id"],
     )

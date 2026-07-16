@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 from pubtator_link.models.research_session_list import ResearchSessionSummary
@@ -157,7 +158,7 @@ class ReviewResearchSessionRepositoryMixin:
         *,
         review_id: str | None,
         limit: int,
-        before_updated_at: str | None,
+        before_updated_at: datetime | None,
         before_session_id: str | None,
         before_review_id: str | None,
     ) -> list[ResearchSessionSummary]:
