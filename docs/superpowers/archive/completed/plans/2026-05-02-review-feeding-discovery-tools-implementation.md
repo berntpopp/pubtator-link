@@ -1,5 +1,8 @@
 # Review-Feeding Discovery Tools Implementation Plan
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add NCBI-backed discovery tools for article ID conversion, MeSH lookup, citation lookup, and related-article expansion that feed PubTator-Link review staging and indexing.

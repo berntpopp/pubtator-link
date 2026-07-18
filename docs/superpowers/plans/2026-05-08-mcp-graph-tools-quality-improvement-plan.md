@@ -1,5 +1,8 @@
 # MCP Graph Tools Quality Improvement Plan
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Raise the new graph-oriented MCP tools to >9/10 LLM-client quality by improving topic-map relevance, compact-mode signal retention, retryability, pagination-like continuation, and diagnostics without weakening existing grounded review workflows.

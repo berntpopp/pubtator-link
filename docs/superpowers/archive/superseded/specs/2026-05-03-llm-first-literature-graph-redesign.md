@@ -1,5 +1,8 @@
 # LLM-First Literature Graph Redesign
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 ## Status
 
 Draft design for review on 2026-05-03.

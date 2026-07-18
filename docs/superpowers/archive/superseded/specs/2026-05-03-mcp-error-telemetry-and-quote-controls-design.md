@@ -1,5 +1,8 @@
 # MCP Error Telemetry and Quote Controls Design
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 ## Goal
 
 Make `pubtator.diagnostics` truthful across multi-worker deployments and give

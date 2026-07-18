@@ -1,5 +1,8 @@
 # Research MCP Grounding Upgrade Design
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 ## Purpose
 
 Upgrade PubTator-Link from a useful biomedical MCP server into a more discoverable, context-safe research grounding server for LLM clients. The target is to raise the Claude Code user assessment toward 4/5 or better across discoverability, usability, speed, and understandability for publication-grounded literature work.

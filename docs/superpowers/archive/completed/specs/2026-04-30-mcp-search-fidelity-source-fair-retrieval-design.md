@@ -1,5 +1,8 @@
 # MCP Search Fidelity And Source-Fair Retrieval Design
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 ## Goal
 
 Improve PubTator-Link MCP quality for LLM-driven biomedical literature review by fixing search metadata fidelity, making review retrieval budget allocation fair across sources as well as queries, and strengthening citation stability, preparation lifecycle visibility, and prompt-injection guidance.

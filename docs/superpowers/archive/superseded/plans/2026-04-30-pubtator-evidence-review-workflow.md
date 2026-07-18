@@ -1,5 +1,8 @@
 # PubTator Evidence Review Workflow Implementation Plan
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **POC split:** The fast review-scoped re-RAG POC is specified in `docs/superpowers/archive/completed/specs/2026-04-30-review-scoped-rerag-poc-design.md` and implemented by `docs/superpowers/archive/completed/plans/2026-04-30-review-scoped-rerag-poc-implementation.md`. Keep deferred items from that POC backlog tracked before continuing the broader workflow plan.

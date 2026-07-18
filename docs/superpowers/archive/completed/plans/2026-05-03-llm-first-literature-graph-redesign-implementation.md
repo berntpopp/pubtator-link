@@ -1,5 +1,8 @@
 # LLM-First Literature Graph Redesign Implementation Plan
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make `build_topic_literature_map`, `get_publication_citation_graph`, and `find_related_evidence_candidates` compact, ranked, provider-transparent, and directly usable by LLMs.

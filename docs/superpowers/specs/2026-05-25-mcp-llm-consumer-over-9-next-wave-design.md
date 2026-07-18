@@ -1,5 +1,8 @@
 # MCP LLM Consumer Over 9 Next Wave Design
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 ## Goal
 
 Raise the PubTator-Link MCP LLM-consumer experience from the current high-7/8

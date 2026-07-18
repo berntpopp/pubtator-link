@@ -1,5 +1,8 @@
 # Foundation Quality Gate Design
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 ## Goal
 
 Create a fast, enforceable development quality gate for PubTator-Link before larger architecture refactors. The first iteration should make local and remote validation trustworthy, remove current test lifecycle warnings, establish a coverage baseline, and reduce dependency cleanup risk without changing public REST or MCP behavior.

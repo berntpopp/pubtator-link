@@ -1,5 +1,8 @@
 # MCP Canonical Tool Surface Cleanup Design
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 ## Goal
 
 Reduce PubTator-Link MCP context overhead and caller confusion by exposing one canonical tool per user-facing operation. The canonical tools should keep the LLM-friendly flat argument schemas from the current `_v2` tools, while removing duplicate `_v2` public registrations, capability entries, documentation examples, and adapter dead code.

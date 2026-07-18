@@ -1,5 +1,8 @@
 # Review-Scoped Re-RAG POC Design
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 ## Purpose
 
 Build a fast proof of concept for review-scoped evidence preparation and retrieval in PubTator-Link. The POC should let a reviewer or MCP client add candidate PMIDs to a review, start bounded background full-text preparation, and request compact citable context packs while preparation continues.
