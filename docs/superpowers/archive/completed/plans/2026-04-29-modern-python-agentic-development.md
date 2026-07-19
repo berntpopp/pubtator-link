@@ -1,5 +1,8 @@
 # Modern Python Agentic Development Tooling Implementation Plan
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a modern, reproducible Python development workflow for PubTator-Link with `uv`, `Makefile` commands, Ruff, mypy, pre-commit, and shared agent instructions for Codex, Claude Code, and other agentic coding tools.

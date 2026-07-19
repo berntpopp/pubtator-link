@@ -2,6 +2,9 @@
 
 **Date:** 2026-07-15
 **Status:** Draft for review
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 **Author:** Bernt Popp (with Claude)
 **Repo:** `pubtator-link`
 

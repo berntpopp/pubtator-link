@@ -1,5 +1,8 @@
 # MCP LLM Performance And Maintainability Consolidation Implementation Plan
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the superseded May 2026 MCP/review-retrieval plans with one prioritized implementation path that improves LLM tool performance, payload economics, trust, maintainability, and retrieval quality without breaking the current deterministic PubTator-Link backend.

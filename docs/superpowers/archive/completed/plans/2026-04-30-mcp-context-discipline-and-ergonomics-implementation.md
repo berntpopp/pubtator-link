@@ -1,5 +1,8 @@
 # MCP Context Discipline and Ergonomics Implementation Plan
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make PubTator-Link MCP review retrieval context-safe by default, add diagnostics and budgeting metadata, and expose flat v2 MCP tools for LLM-friendly calls.

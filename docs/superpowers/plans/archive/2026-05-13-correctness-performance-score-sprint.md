@@ -1,5 +1,8 @@
 # Correctness Performance Score Sprint Implementation Plan
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 > **Status:** Completed and merged via PR #37 on 2026-05-13. Archived after the
 > merged implementation and Dependabot rollups were verified on `main`.
 

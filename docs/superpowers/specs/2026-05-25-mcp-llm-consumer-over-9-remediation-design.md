@@ -1,5 +1,8 @@
 # MCP LLM Consumer Over 9 Remediation Design
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 ## Goal
 
 Raise PubTator-Link MCP from the current 7.7-8.5 LLM-consumer rating band to

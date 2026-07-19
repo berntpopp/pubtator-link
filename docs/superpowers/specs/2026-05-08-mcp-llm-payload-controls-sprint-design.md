@@ -1,5 +1,8 @@
 # MCP LLM Payload Controls Sprint Design
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 ## Purpose
 
 This spec defines the first sprint for MCP-facing payload controls in PubTator-Link. The sprint implemented the top three priorities from `docs/superpowers/plans/2026-05-08-mcp-llm-performance-maintainability-consolidation.md`:

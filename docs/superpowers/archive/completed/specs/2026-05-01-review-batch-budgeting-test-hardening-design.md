@@ -1,5 +1,8 @@
 # Review Batch Budgeting Test Hardening Design
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 Date: 2026-05-01
 
 ## Goal

@@ -1,5 +1,8 @@
 # Variant Evidence Lookup Implementation Plan
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a research-scoped variant evidence lookup tool that returns source-attributed ClinVar records and PubTator literature evidence without computing clinical classification.

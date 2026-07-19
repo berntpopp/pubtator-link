@@ -1,5 +1,8 @@
 # MCP Experience Over 9 Implementation Plan
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Raise every measured LLM MCP-consumer experience dimension above 9.0 while preserving deterministic benchmark separation between scoring and diagnostics.

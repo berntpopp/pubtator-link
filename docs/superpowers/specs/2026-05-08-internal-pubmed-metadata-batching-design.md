@@ -1,5 +1,8 @@
 # Internal PubMed Metadata Batching Design
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 ## Purpose
 
 This sprint adds shared internal PubMed metadata batching so PubTator-Link can

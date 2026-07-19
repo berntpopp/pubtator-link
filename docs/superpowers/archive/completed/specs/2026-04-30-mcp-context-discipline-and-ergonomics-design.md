@@ -1,5 +1,8 @@
 # MCP Context Discipline and Ergonomics Design
 
+> Historical record — this document records the design or plan as of its date. Current behavior is
+> defined by implemented code, standards, release evidence, and tests.
+
 ## Goal
 
 Make PubTator-Link easier and safer for LLM clients to use as a primary
