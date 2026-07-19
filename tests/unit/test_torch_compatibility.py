@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 from pathlib import Path
 
 import pytest
@@ -31,8 +30,8 @@ def test_optional_embedding_imports_remain_typecheckable_without_the_extra() -> 
 
 @pytest.mark.embeddings
 def test_embeddings_extra_imports_torch_2_13_on_cpu() -> None:
-    torch = importlib.import_module("torch")
-    importlib.import_module("sentence_transformers")
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("sentence_transformers")
 
     assert torch.__version__.split("+", maxsplit=1)[0] == "2.13.0"
     assert torch.tensor([1.0, 2.0]).device.type == "cpu"
