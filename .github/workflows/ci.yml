@@ -35,7 +35,7 @@ jobs:
           version: "0.8.7"
 
       - name: Install dependencies
-        run: uv sync --group dev --frozen
+        run: uv sync --group dev --extra embeddings --frozen
 
       # Static checks + a single parallel test run (xdist). Fast feedback on every PR.
       - name: Run CI checks (format, lint, typecheck, tests)

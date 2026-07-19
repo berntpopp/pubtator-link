@@ -206,7 +206,7 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
     quality_job = ci["jobs"]["quality"]
     assert quality_job["name"] == "Format, lint, typecheck, tests, and coverage"
     ci_commands = {step.get("run") for step in quality_job["steps"]}
-    assert "uv sync --group dev --frozen" in ci_commands
+    assert "uv sync --group dev --extra embeddings --frozen" in ci_commands
     assert "make ci-local" in ci_commands
     assert "make test-cov" in ci_commands
 
