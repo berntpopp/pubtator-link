@@ -145,6 +145,8 @@ module = [
     "pydantic.*",
     "pydantic_settings.*",
     "httpx.*",
+    "numpy.*",
+    "sentence_transformers.*",
     "uvicorn.*",
 ]
 ignore_missing_imports = true

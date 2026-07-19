@@ -22,6 +22,13 @@ def test_ci_installs_the_optional_embeddings_runtime() -> None:
     assert "uv sync --group dev --extra embeddings --frozen" in workflow
 
 
+def test_optional_embedding_imports_remain_typecheckable_without_the_extra() -> None:
+    project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert '"numpy.*"' in project
+    assert '"sentence_transformers.*"' in project
+
+
 @pytest.mark.embeddings
 def test_embeddings_extra_imports_torch_2_13_on_cpu() -> None:
     torch = importlib.import_module("torch")
