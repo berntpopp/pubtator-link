@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -15,6 +14,12 @@ def test_embeddings_constraint_requires_torch_2_13() -> None:
     project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
 
     assert '"torch>=2.13.0"' in project
+
+
+def test_ci_installs_the_optional_embeddings_runtime() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "uv sync --group dev --extra embeddings --frozen" in workflow
 
 
 @pytest.mark.embeddings

@@ -90,8 +90,8 @@ class SentenceTransformerEmbeddingProvider:
             return self._model, self._np
 
         try:
-            import numpy as np  # type: ignore[import-not-found]
-            from sentence_transformers import SentenceTransformer  # type: ignore[import-not-found]
+            import numpy as np
+            from sentence_transformers import SentenceTransformer
         except ImportError as exc:
             raise EmbeddingProviderUnavailableError(
                 "Install the 'embeddings' extra to use SentenceTransformer embeddings."
