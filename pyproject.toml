@@ -44,7 +44,7 @@ dependencies = [
     "asyncpg>=0.30.0,<1.0.0",
     "defusedxml>=0.7.1",
     "asgi-correlation-id>=5.0.0,<6.0.0",
-    "prometheus-client>=0.21.0,<1.0.0",
+    "prometheus-client>=0.26.0,<1.0.0",
 ]
 
 [project.optional-dependencies]
