@@ -37,6 +37,7 @@
     "digest": "sha256:e3a508657abbea8cb5a2282459f9313ff4f52aa27506f24d554292f9d2635295",
     "image_allowlist": []
   },
+  "data_identity_contract": "unadopted",
   "definitions": {
     "contract": "data-bound"
   },
