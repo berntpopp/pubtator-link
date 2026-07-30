@@ -7,7 +7,8 @@
   "require_up_to_date_branch": true,
   "postgres_integration_required": false,
   "required_status_checks": [
-    "CI / Format, lint, typecheck, tests, and coverage",
+    "CI / Format, lint, typecheck, tests, and coverage (py3.12)",
+    "CI / Format, lint, typecheck, tests, and coverage (py3.14)",
     "Container CI / container-ci",
     "Security / CodeQL",
     "Security / Dependency review"

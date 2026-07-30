@@ -16,13 +16,16 @@ Recommended branch protection for `main`:
 
 Required status checks:
 
-- `CI / Format, lint, typecheck, tests, and coverage`
+- `CI / Format, lint, typecheck, tests, and coverage (py3.12)`
+- `CI / Format, lint, typecheck, tests, and coverage (py3.14)`
 - `Container CI / container-ci`
 - `Security / CodeQL`
 - `Security / Dependency review`
 
-The CI check runs `make ci-local` and `make test-cov`, including the coverage
-baseline enforced in `pyproject.toml`.
+The CI check runs `make ci-local` once per interpreter — 3.12 is the declared
+`requires-python` floor and 3.14 is the CPython `docker/Dockerfile` actually
+ships — plus `make test-cov` once (on 3.14), including the coverage baseline
+enforced in `pyproject.toml`.
 
 Container CI calls the router-owned reusable container workflow, which validates
 the release config, Compose production config, content policy, SBOM/scan
