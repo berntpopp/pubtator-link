@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## [7.1.5] - 2026-07-30
+
+### Security
+
+- **setuptools 81.0.0 → 83.0.0.** Closes the repository's open Dependabot alert:
+  setuptools < 83.0.0 allows a `MANIFEST.in` exclusion bypass when building an
+  sdist, via a Unicode NFC/NFD normalization collision on normalization-folding
+  filesystems (macOS APFS/HFS+), so an explicitly excluded file could still be
+  packaged. Medium severity, lock-only (setuptools is transitive via `torch`).
+
+### Changed
+
+- **Dependency sweep.** `fastapi` 0.139.0 → 0.141.1, `prometheus-client`
+  0.25.0 → 0.26.0, `typer` 0.26.8 → 0.27.0, `ruff` 0.15.21 → 0.16.0,
+  `pre-commit` 4.6.0 → 4.6.1.
+- **Ruff rule set pinned with `select`.** ruff 0.16 grew its implicit default
+  rule set from 59 to 413 rules, so the previous `extend-select` would have
+  silently enabled ~350 unopted rules. The rule list is unchanged and already
+  supersets ruff's pre-0.16 default, so enforced lint policy is identical.
+- **Pinned GitHub Actions refreshed.** `actions/checkout` 7.0.0 → 7.0.1,
+  `actions/setup-python` 6.3.0 → 7.0.0, `astral-sh/setup-uv` 8.3.2 → 9.0.0.
+  Every pin comment in `.github/workflows/` was verified against the upstream
+  tag its SHA actually resolves to.
+
 ## [7.1.4] - 2026-07-16
 
 ### Fixed
