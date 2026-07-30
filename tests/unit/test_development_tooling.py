@@ -84,8 +84,14 @@ def test_ruff_enforces_modern_rules_with_narrow_fixture_exception() -> None:
     ruff = _pyproject()["tool"]["ruff"]["lint"]
     per_file_ignores = _pyproject()["tool"]["ruff"]["lint"]["per-file-ignores"]
 
-    assert "SIM" in ruff["extend-select"]
-    assert "RUF" in ruff["extend-select"]
+    # `select`, never `extend-select`: ruff 0.16 grew its implicit default rule
+    # set from 59 to 413 rules, so `extend-select` silently enables ~350 rules
+    # this repo never opted into (including PLE2502/PLE2515 on the fixtures that
+    # deliberately embed bidi and zero-width characters to prove they get
+    # stripped). Pinning the policy, not the tool, keeps lint reproducible.
+    assert "extend-select" not in ruff, "use `select` so ruff's defaults cannot leak in"
+    assert "SIM" in ruff["select"]
+    assert "RUF" in ruff["select"]
     assert per_file_ignores["tests/fixtures/test_data.py"] == ["RUF012"]
 
 
