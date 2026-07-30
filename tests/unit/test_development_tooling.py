@@ -23,6 +23,35 @@ def _branch_protection_policy() -> dict[str, Any]:
     return json.loads(Path("docs/development/branch-protection.json").read_text())
 
 
+def _dockerfile_python_version() -> str:
+    """The `<major>.<minor>` CPython the production image actually ships."""
+    match = re.search(
+        r"^FROM python:(\d+\.\d+)-slim", Path("docker/Dockerfile").read_text(), re.MULTILINE
+    )
+    assert match is not None, "docker/Dockerfile must pin a python:<major>.<minor>-slim base"
+    return match.group(1)
+
+
+def _expanded_job_check_names(workflow_name: str, workflow: dict[str, Any]) -> set[str]:
+    """`<workflow> / <job>` status-check names, expanding a python-version matrix.
+
+    GitHub reports one check per matrix leg, so a matrixed job contributes N names
+    (`... (py3.12)`, `... (py3.14)`) rather than one templated name.
+    """
+    names: set[str] = set()
+    for job_name, job in workflow["jobs"].items():
+        base = str(job.get("name", job_name))
+        versions = job.get("strategy", {}).get("matrix", {}).get("python-version")
+        if versions:
+            names.update(
+                f"{workflow_name} / " + base.replace("${{ matrix.python-version }}", str(version))
+                for version in versions
+            )
+        else:
+            names.add(f"{workflow_name} / {base}")
+    return names
+
+
 def _workflow_action_refs(workflow: dict[str, Any]) -> list[str]:
     refs: list[str] = []
     for job in workflow["jobs"].values():
@@ -62,6 +91,34 @@ def test_ruff_targets_python_312_and_core_paths() -> None:
 
     assert ruff["target-version"] == "py312"
     assert ruff["line-length"] == 100
+
+
+def test_ci_tests_both_the_requires_python_floor_and_the_shipped_interpreter() -> None:
+    """The suite must run on the interpreter that actually reaches production.
+
+    `docker/Dockerfile` ships one CPython and CI used to run the suite only on the
+    `requires-python` floor, so a 3.14-only stdlib or typing regression could ship
+    uncaught -- `container-ci`/`conformance` exercise the image, not the tests.
+    Both ends are required: the floor keeps `requires-python` an honest claim, the
+    shipped version keeps the image honest. This guard fails on a base-image bump
+    that is not mirrored into the matrix.
+    """
+    quality_job = _workflow(".github/workflows/ci.yml")["jobs"]["quality"]
+    versions = quality_job["strategy"]["matrix"]["python-version"]
+    floor = str(_pyproject()["project"]["requires-python"]).removeprefix(">=")
+
+    assert floor in versions, f"requires-python floor {floor} is not exercised by CI"
+    assert _dockerfile_python_version() in versions, (
+        "docker/Dockerfile ships a CPython the test matrix never runs"
+    )
+
+    # `.python-version` outranks PATH in uv's interpreter discovery, so without an
+    # explicit `UV_PYTHON` every matrix leg would build a 3.12 environment and the
+    # matrix would silently test the floor twice -- green, and meaningless.
+    assert Path(".python-version").exists()
+    assert quality_job["env"]["UV_PYTHON"] == "${{ matrix.python-version }}", (
+        "CI must override uv's .python-version pin per matrix leg"
+    )
 
 
 def test_mypy_targets_python_312() -> None:
@@ -210,7 +267,10 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
 
     assert ci["permissions"] == {"contents": "read"}
     quality_job = ci["jobs"]["quality"]
-    assert quality_job["name"] == "Format, lint, typecheck, tests, and coverage"
+    assert (
+        quality_job["name"]
+        == "Format, lint, typecheck, tests, and coverage (py${{ matrix.python-version }})"
+    )
     ci_commands = {step.get("run") for step in quality_job["steps"]}
     assert "uv sync --group dev --extra embeddings --frozen" in ci_commands
     assert "make ci-local" in ci_commands
@@ -357,14 +417,16 @@ def test_branch_protection_required_checks_match_workflow_job_names() -> None:
         "Container CI": _workflow(".github/workflows/container-ci.yml"),
         "Security": _workflow(".github/workflows/security.yml"),
     }
-    workflow_checks = {
-        f"{workflow_name} / {job.get('name', job_name)}"
-        for workflow_name, workflow in workflows.items()
-        for job_name, job in workflow["jobs"].items()
-    }
+    workflow_checks = set[str]().union(
+        *(
+            _expanded_job_check_names(workflow_name, workflow)
+            for workflow_name, workflow in workflows.items()
+        )
+    )
 
     assert set(policy["required_status_checks"]) == {
-        "CI / Format, lint, typecheck, tests, and coverage",
+        "CI / Format, lint, typecheck, tests, and coverage (py3.12)",
+        "CI / Format, lint, typecheck, tests, and coverage (py3.14)",
         "Container CI / container-ci",
         "Security / CodeQL",
         "Security / Dependency review",

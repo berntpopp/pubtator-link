@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [7.1.6] - 2026-07-30
+
+### Changed
+
+- **CI tests the interpreter that actually ships.** The `quality` job now runs
+  on a `["3.12", "3.14"]` matrix instead of 3.12 only. `docker/Dockerfile`
+  ships `python:3.14-slim`, so until now the unit and integration suites were
+  never exercised on the interpreter that reaches production — only the image
+  itself was, via `container-ci`/`conformance`. A 3.14-only stdlib or typing
+  regression would have shipped uncaught. 3.12 stays in the matrix because it
+  is the declared `requires-python` floor; dropping it would make that floor a
+  false claim. The coverage gate still runs once (on 3.14, push to `main`), so
+  the change costs one extra fast test run per event, not two coverage runs.
+  `requires-python`, ruff `target-version` and mypy `python_version` are
+  deliberately unchanged at 3.12.
+- **The matrix is forced with `UV_PYTHON`, not just `setup-python`.** `uv`
+  resolves its interpreter from `.python-version` (pinned to 3.12 for local dev)
+  *before* it consults `PATH`, so `actions/setup-python` alone does not move it:
+  both legs would have built a 3.12 environment and the "3.14" leg would have
+  tested the floor twice — green, and meaningless. The job now exports
+  `UV_PYTHON: ${{ matrix.python-version }}`, which outranks `.python-version`
+  and applies to every `uv run` inside `make ci-local`, not only the explicit
+  `uv sync`. `test_ci_tests_both_the_requires_python_floor_and_the_shipped_interpreter`
+  pins all of this so a future base-image bump cannot silently drift out of CI.
+
 ## [7.1.5] - 2026-07-30
 
 ### Security
