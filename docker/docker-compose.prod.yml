@@ -17,7 +17,7 @@ services:
     # `<registry>/<repo>@sha256:<digest>` reference with no mutable tag component.
     # The readable `pgvector/pgvector:0.8.5-pg18-trixie` tag stays in the base file;
     # this is the same multi-arch index digest.
-    image: docker.io/pgvector/pgvector@sha256:9d2e61c7352b9e9f4798df5fd9a498f043f4cda1cdacc707de3d198650f4321e
+    image: docker.io/pgvector/pgvector@sha256:
     pull_policy: missing
     container_name: !reset null
 
