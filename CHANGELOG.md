@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [7.1.7] - 2026-08-10
+
+### Security
+
+- Update `cryptography` to 50.0.0 and retain a production image with zero
+  fixable High or Critical findings under the fleet container policy.
+
+### Changed
+
+- Update Uvicorn to 0.52.1, FastMCP to 3.4.6, sentence-transformers to 5.7.0,
+  and pgvector to the verified 0.8.6 production digest.
+- Refresh pinned CI actions and use the released genefoundry-router v0.7.6
+  reusable container workflows.
+
 ## [7.1.6] - 2026-07-30
 
 ### Changed
