@@ -65,7 +65,7 @@ def test_pgvector_image_keeps_tag_alongside_digest() -> None:
     pgvector = [i for _f, _s, i in _image_refs() if i.startswith("pgvector/pgvector:")]
     assert pgvector, "expected the pgvector postgres image to be present"
     for image in pgvector:
-        assert "0.8.5-pg18-trixie@sha256:" in image
+        assert "0.8.6-pg18-trixie@sha256:" in image
 
 
 @pytest.mark.skipif(shutil.which("docker") is None, reason="docker CLI unavailable")
