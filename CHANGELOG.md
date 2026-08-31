@@ -10,6 +10,9 @@
   FastMCP 3.4.7, and Uvicorn 0.52.3.
 - Refresh `setup-uv` to v10.0.1 and pin both reusable container workflows to
   the immutable genefoundry-router v0.8.2 commit.
+- Refresh the digest-pinned Python runtime and apply its OpenSSL security
+  update; bound text-annotation MCP retrieval so a transient upstream retry
+  returns the standard error envelope before the client deadline.
 
 ## [7.1.7] - 2026-08-10
 
