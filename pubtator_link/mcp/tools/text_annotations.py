@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Awaitable, Callable
 from typing import Annotated, Any
 
 from fastmcp import FastMCP
@@ -13,6 +15,16 @@ from pubtator_link.mcp.service_adapters import (
     get_text_annotation_results_impl,
     submit_text_annotation_impl,
 )
+
+ANNOTATION_RESULT_DEADLINE_SECONDS = 45.0
+
+
+async def retrieve_annotation_result_with_deadline(
+    retrieve: Callable[[], Awaitable[dict[str, Any]]],
+) -> dict[str, Any]:
+    """Keep a transient text-annotation retry from outliving the MCP response."""
+    async with asyncio.timeout(ANNOTATION_RESULT_DEADLINE_SECONDS):
+        return await retrieve()
 
 
 def register_text_annotation_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
@@ -91,6 +103,8 @@ def register_text_annotation_tools(mcp: FastMCP, profile: MCPToolProfile = "lean
 
         async def call() -> dict[str, Any]:
             client = await get_api_client()
-            return await get_text_annotation_results_impl(client=client, session_id=session_id)
+            return await retrieve_annotation_result_with_deadline(
+                lambda: get_text_annotation_results_impl(client=client, session_id=session_id)
+            )
 
         return await run_mcp_tool("get_text_annotation_results", call)

@@ -16,6 +16,18 @@ UV_PINNED_COPY = (
     "/uv /usr/local/bin/uv"
 )
 
+PYTHON_314_SLIM = (
+    "python:3.14-slim@sha256:cae66f2ef0ec51a9891263eeee7f987dacf0a9879e8aa9353d5606e0530619a5"
+)
+
+
+def test_dockerfile_uses_the_verified_python_314_base_in_both_stages() -> None:
+    assert DOCKERFILE.count(f"FROM {PYTHON_314_SLIM}") == 2
+
+
+def test_runtime_stage_installs_openssl_security_updates() -> None:
+    assert "    openssl \\\n" in DOCKERFILE
+
 
 def test_dockerfile_has_no_floating_pip_upgrade() -> None:
     assert "pip install --upgrade" not in DOCKERFILE, (
