@@ -25,6 +25,10 @@ def test_dockerfile_uses_the_verified_python_314_base_in_both_stages() -> None:
     assert DOCKERFILE.count(f"FROM {PYTHON_314_SLIM}") == 2
 
 
+def test_runtime_stage_installs_openssl_security_updates() -> None:
+    assert "    openssl \\\n" in DOCKERFILE
+
+
 def test_dockerfile_has_no_floating_pip_upgrade() -> None:
     assert "pip install --upgrade" not in DOCKERFILE, (
         "floating pip/uv upgrade must be removed; pin the toolchain instead"
