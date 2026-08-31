@@ -10,6 +10,8 @@
   revision, replacing the older v0.8.2 control-plane reference.
 - Preserve exact repository identity in the README gate when verification runs from an isolated
   Git worktree.
+- Upgrade the final image's OpenSSL packages from the current Debian security index and align both
+  production services with the restart policy required by the v0.8.3 container gate.
 
 ## [7.1.8] - 2026-08-31
 

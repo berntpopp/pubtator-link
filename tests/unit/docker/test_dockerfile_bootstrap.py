@@ -27,6 +27,9 @@ def test_dockerfile_uses_the_verified_python_314_base_in_both_stages() -> None:
 
 def test_runtime_stage_installs_openssl_security_updates() -> None:
     assert "    openssl \\\n" in DOCKERFILE
+    assert (
+        "apt-get install -y --only-upgrade openssl libssl3t64 openssl-provider-legacy" in DOCKERFILE
+    )
 
 
 def test_dockerfile_has_no_floating_pip_upgrade() -> None:
