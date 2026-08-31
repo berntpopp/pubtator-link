@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [7.1.8] - 2026-08-31
+
+### Changed
+
+- Consolidate the dependency union: NumPy 2.5.2, Ruff 0.16.3, Typer 0.27.1,
+  FastMCP 3.4.7, and Uvicorn 0.52.3.
+- Refresh `setup-uv` to v10.0.1 and pin both reusable container workflows to
+  the immutable genefoundry-router v0.8.2 commit.
+
 ## [7.1.7] - 2026-08-10
 
 ### Security

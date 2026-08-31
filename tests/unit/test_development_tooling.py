@@ -279,8 +279,10 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
     assert container_ci["permissions"] == {}
     container_ci_job = container_ci["jobs"]["container-ci"]
     assert container_ci_job["permissions"] == {"contents": "read"}
-    assert container_ci_job["uses"].startswith(
-        "berntpopp/genefoundry-router/.github/workflows/_container-ci.yml@"
+    assert (
+        container_ci_job["uses"]
+        == "berntpopp/genefoundry-router/.github/workflows/_container-ci.yml@"
+        "59050ea9d2851335286c73787f3b7769e1014062"
     )
 
     assert container_release["permissions"] == {}
@@ -291,8 +293,10 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
         "id-token": "write",
         "packages": "write",
     }
-    assert container_release_job["uses"].startswith(
-        "berntpopp/genefoundry-router/.github/workflows/_container-release.yml@"
+    assert (
+        container_release_job["uses"]
+        == "berntpopp/genefoundry-router/.github/workflows/_container-release.yml@"
+        "59050ea9d2851335286c73787f3b7769e1014062"
     )
 
     assert security["permissions"] == {"contents": "read"}
@@ -361,7 +365,11 @@ def test_github_actions_are_sha_pinned_with_uv_version() -> None:
         if str(step.get("uses", "")).startswith("astral-sh/setup-uv@")
     ]
     assert setup_uv_steps
-    assert all(step.get("with", {}).get("version") for step in setup_uv_steps)
+    assert all(
+        step.get("uses") == "astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d"
+        for step in setup_uv_steps
+    )
+    assert all(step.get("with", {}).get("version") == "0.8.7" for step in setup_uv_steps)
 
 
 def test_pull_request_template_contains_quality_checklist() -> None:
@@ -440,8 +448,9 @@ def test_container_security_workflow_generates_scan_and_sbom_artifacts() -> None
 
     assert workflow["permissions"] == {}
     assert job["permissions"] == {"contents": "read"}
-    assert job["uses"].startswith(
-        "berntpopp/genefoundry-router/.github/workflows/_container-ci.yml@"
+    assert (
+        job["uses"] == "berntpopp/genefoundry-router/.github/workflows/_container-ci.yml@"
+        "59050ea9d2851335286c73787f3b7769e1014062"
     )
 
 
