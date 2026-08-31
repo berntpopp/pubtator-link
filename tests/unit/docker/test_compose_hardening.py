@@ -70,6 +70,11 @@ def test_prod_compose_has_security_controls() -> None:
     assert "mode=1777" in PROD
 
 
+def test_prod_services_use_the_approved_restart_policy() -> None:
+    assert PROD.count("restart: unless-stopped") == 2
+    assert "restart: on-failure" not in PROD
+
+
 def test_prod_compose_does_not_publish_extra_ports() -> None:
     assert "ports: []" in PROD
 

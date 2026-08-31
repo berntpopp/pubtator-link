@@ -72,6 +72,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     openssl \
+    && apt-get install -y --only-upgrade openssl libssl3t64 openssl-provider-legacy \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
