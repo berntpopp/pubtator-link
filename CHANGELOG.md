@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [7.1.9] - 2026-08-31
+
+### Security
+
+- Pin reusable container CI and release workflows to the released v0.8.3 trusted-builder
+  revision, replacing the older v0.8.2 control-plane reference.
+- Preserve exact repository identity in the README gate when verification runs from an isolated
+  Git worktree.
+
 ## [7.1.8] - 2026-08-31
 
 ### Changed
