@@ -104,6 +104,52 @@ How:
 
 The active decomposition backlog lives in `.planning/reviews/` (latest senior audit, Phase 5).
 
+## Architecture invariants (do not break)
+
+### Fleet deploy contract
+
+- `docker/docker-compose.npm.yml` is the file the fleet controller
+  (`strato_v6_docker_npm`) deploys and validates — as the third file in the
+  `docker-compose.yml` + `docker-compose.prod.yml` + `docker-compose.npm.yml`
+  stack it renders for this repo. Every service there declares
+  `user: "<uid>:<gid>"` numerically: `999:999` for `pubtator-link` (this
+  image's own uid:gid from `docker/Dockerfile`) and `999:999` for the
+  `pubtator-postgres` sidecar (the `pgvector/pgvector` image's own uid:gid) —
+  never copied from a sibling `-link` repo.
+- `user` must be numeric non-root wherever it appears in the Compose files
+  listed in `container-release.json` (`docker/docker-compose.yml`,
+  `docker/docker-compose.prod.yml`). Unlike most sibling repos, this repo's
+  `container-release.json` already contracts an explicit `user: "999:999"` for
+  the `pubtator-postgres` auxiliary service (see `service.auxiliary`), so those
+  files legitimately declare `user` — the shared release gate
+  (`container_release.py validate-compose`) does not forbid it outright here,
+  it only requires the declared value to be numeric non-root and to match the
+  rendered Compose service exactly.
+- Both rules are enforced by `tests/unit/test_deploy_overlay_user.py`.
+- Self-check the rendered projection the way the controller does (from
+  `strato_v6_docker_npm`):
+
+  ```bash
+  export PUBTATOR_LINK_IMAGE="ghcr.io/berntpopp/pubtator-link@sha256:<64 hex>"
+  export PUBTATOR_LINK_POSTGRES_PASSWORD="<any value>"
+  docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml \
+    -f docker/docker-compose.npm.yml config --format json > /tmp/pubtator-link-rendered.json
+  # from strato_v6_docker_npm:
+  uv run python -c "import sys,json; sys.path.insert(0,'scripts'); \
+    from utils.deployment_preflight import canonical_projection; \
+    canonical_projection(json.load(open('/tmp/pubtator-link-rendered.json')), project='pubtator-link'); \
+    print('PROJECTION OK')"
+  ```
+- **Release checklist** (fleet controller pulls a tagged, attested image — it
+  never builds from source): bump `pyproject.toml`, `uv lock`, add a
+  `CHANGELOG.md` heading `## [x.y.z] - YYYY-MM-DD`, bump `CITATION.cff`
+  `version:` (the file is generated — see its header comment; `date-released`
+  is **not** touched by this repo's release process, it is regenerated
+  externally by `genefoundry-router`'s `make citation-write`), tag `vx.y.z`,
+  then approve the `release` environment gate via
+  `gh api repos/berntpopp/pubtator-link/actions/runs/<id>/pending_deployments`
+  (may need approving twice; `status: waiting` is the gate, not a slow build).
+
 ## Testing Notes
 
 - `make test` is the fast default.
