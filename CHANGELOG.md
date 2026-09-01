@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [7.1.10] - 2026-09-02
+
+### Changed
+
+- Deploy: declare the image's numeric uid:gid in docker/docker-compose.npm.yml so the fleet
+  controller can deploy the service; a guard test keeps `user` numeric and non-root wherever it
+  appears in the deployed overlay and the release Compose files.
+
 ## [7.1.9] - 2026-08-31
 
 ### Security
