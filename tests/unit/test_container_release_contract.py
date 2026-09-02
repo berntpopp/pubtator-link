@@ -60,3 +60,25 @@ def test_release_gate_rejects_tags_outside_central_stable_semver_contract() -> N
     assert "refs/tags/v(0|[1-9][0-9]{0,63})\\.(0|[1-9][0-9]{0,63})" in gate_run
     assert "exit 1" in gate_run
     assert workflow["jobs"]["container-release"]["needs"] == "validate-tag"
+
+
+def test_container_release_manifest_declares_the_deployed_overlay() -> None:
+    """The fleet controller deploys this repo layered (base + prod + npm), not the npm
+    overlay standalone. The router's `validate-deployed-overlay` gate can only check what
+    is actually deployed if `container-release.json` says so explicitly; a drift here
+    silently re-validates a stack nobody runs.
+    """
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    service = manifest["service"]
+
+    assert service["deployed_compose_files"] == [
+        "docker/docker-compose.yml",
+        "docker/docker-compose.prod.yml",
+        "docker/docker-compose.npm.yml",
+    ]
+
+    sidecars = {sidecar["name"]: sidecar["image"] for sidecar in service["deployed_sidecars"]}
+    assert sidecars["pubtator-postgres"] == (
+        "docker.io/pgvector/pgvector@"
+        "sha256:1963bc48febf543433baa1ce3edcc6cc08154de722e22495f86681cc9a849026"
+    )

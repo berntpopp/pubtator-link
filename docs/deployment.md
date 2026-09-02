@@ -62,6 +62,17 @@ gate only requires any declared `user` to stay numeric non-root and match the
 rendered service exactly, not that it's absent. `tests/unit/test_deploy_overlay_user.py`
 guards both rules.
 
+`container-release.json` also declares `service.deployed_compose_files` (the same
+three-file set above, in order) and `service.deployed_sidecars` (`pubtator-postgres`'s
+exact pinned `pgvector/pgvector` image; there is no read-only seed bind, so
+`deployed_seed_binds` stays unset). The shared `_container-release.yml` release
+workflow's `validate-deployed-overlay` step, pinned in both
+`.github/workflows/container-release.yml` and `.github/workflows/container-ci.yml`,
+reads that declaration to check the stack actually deployed rather than the npm
+overlay alone. Guarded by
+`test_container_release_manifest_declares_the_deployed_overlay` in
+`tests/unit/test_container_release_contract.py`.
+
 Release checklist enforced by this repo: bump `pyproject.toml`, run `uv lock`,
 add a `CHANGELOG.md` heading `## [x.y.z] - YYYY-MM-DD`, bump `CITATION.cff`
 `version:` (generated file; `date-released` is regenerated externally by
