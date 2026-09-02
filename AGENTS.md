@@ -126,6 +126,16 @@ The active decomposition backlog lives in `.planning/reviews/` (latest senior au
   it only requires the declared value to be numeric non-root and to match the
   rendered Compose service exactly.
 - Both rules are enforced by `tests/unit/test_deploy_overlay_user.py`.
+- **The release gate validates the deployed overlay, not just the release compose
+  files.** `container-release.json` (`service.deployed_compose_files`) declares the
+  exact three-file set the fleet controller renders (base + prod + npm, in that
+  order) and `service.deployed_sidecars` declares `pubtator-postgres`'s exact pinned
+  `pgvector/pgvector` image, so the shared `_container-release.yml` workflow's
+  `validate-deployed-overlay` step (pinned in `.github/workflows/container-release.yml`
+  and `.github/workflows/container-ci.yml`) checks the real deployed stack — this repo
+  has no read-only seed bind, so `deployed_seed_binds` stays unset. Guarded by
+  `test_container_release_manifest_declares_the_deployed_overlay` in
+  `tests/unit/test_container_release_contract.py`.
 - Self-check the rendered projection the way the controller does (from
   `strato_v6_docker_npm`):
 

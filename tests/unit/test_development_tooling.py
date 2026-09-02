@@ -282,7 +282,7 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
     assert (
         container_ci_job["uses"]
         == "berntpopp/genefoundry-router/.github/workflows/_container-ci.yml@"
-        "db47bd3357cebf33e6722615c4f0e7419a64857e"
+        "31ea81cee5475fc3655c047c63a89739948f99a9"
     )
 
     assert container_release["permissions"] == {}
@@ -296,7 +296,7 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
     assert (
         container_release_job["uses"]
         == "berntpopp/genefoundry-router/.github/workflows/_container-release.yml@"
-        "db47bd3357cebf33e6722615c4f0e7419a64857e"
+        "31ea81cee5475fc3655c047c63a89739948f99a9"
     )
 
     assert security["permissions"] == {"contents": "read"}
@@ -450,7 +450,7 @@ def test_container_security_workflow_generates_scan_and_sbom_artifacts() -> None
     assert job["permissions"] == {"contents": "read"}
     assert (
         job["uses"] == "berntpopp/genefoundry-router/.github/workflows/_container-ci.yml@"
-        "db47bd3357cebf33e6722615c4f0e7419a64857e"
+        "31ea81cee5475fc3655c047c63a89739948f99a9"
     )
 
 
