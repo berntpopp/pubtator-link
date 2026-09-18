@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [7.1.11] - 2026-09-18
+
+### Security
+
+- Resolve CVE-2026-9856 by upgrading `transformers` to `>=5.10.0` (and `sentence-transformers` to `>=6.0.1`).
+- Apply security updates to Debian runtime packages with `apt-get upgrade -y`.
+
+### Changed
+
+- Bump dependencies: `pydantic>=2.13.5`, `orjson>=3.12.0`, `gunicorn>=26.2.0`, `mypy>=2.3.1`.
+- Update GitHub Actions pins: `setup-uv` v10.1.0, `codeql-action` v4.38.0, and reusable container workflows to `genefoundry-router` v0.9.1.
+- Add dependabot dependency grouping for `uv` and `github-actions`.
+
 ## [7.1.10] - 2026-09-02
 
 ### Changed
