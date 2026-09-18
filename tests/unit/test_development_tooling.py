@@ -282,7 +282,7 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
     assert (
         container_ci_job["uses"]
         == "berntpopp/genefoundry-router/.github/workflows/_container-ci.yml@"
-        "31ea81cee5475fc3655c047c63a89739948f99a9"
+        "adfc1cffed6530d6453c9dbb40be5f4c5884b8a2"
     )
 
     assert container_release["permissions"] == {}
@@ -296,7 +296,7 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
     assert (
         container_release_job["uses"]
         == "berntpopp/genefoundry-router/.github/workflows/_container-release.yml@"
-        "31ea81cee5475fc3655c047c63a89739948f99a9"
+        "adfc1cffed6530d6453c9dbb40be5f4c5884b8a2"
     )
 
     assert security["permissions"] == {"contents": "read"}
@@ -366,7 +366,7 @@ def test_github_actions_are_sha_pinned_with_uv_version() -> None:
     ]
     assert setup_uv_steps
     assert all(
-        step.get("uses") == "astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d"
+        step.get("uses") == "astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4"
         for step in setup_uv_steps
     )
     assert all(step.get("with", {}).get("version") == "0.8.7" for step in setup_uv_steps)
@@ -450,7 +450,7 @@ def test_container_security_workflow_generates_scan_and_sbom_artifacts() -> None
     assert job["permissions"] == {"contents": "read"}
     assert (
         job["uses"] == "berntpopp/genefoundry-router/.github/workflows/_container-ci.yml@"
-        "31ea81cee5475fc3655c047c63a89739948f99a9"
+        "adfc1cffed6530d6453c9dbb40be5f4c5884b8a2"
     )
 
 

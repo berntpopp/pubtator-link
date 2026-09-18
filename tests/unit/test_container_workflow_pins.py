@@ -3,7 +3,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-TRUSTED_BUILDER_SHA = "31ea81cee5475fc3655c047c63a89739948f99a9"
+TRUSTED_BUILDER_SHA = "adfc1cffed6530d6453c9dbb40be5f4c5884b8a2"
 
 
 def test_all_router_reusable_workflows_use_the_exact_trusted_builder() -> None:

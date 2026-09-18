@@ -68,7 +68,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     TMPDIR=/tmp
 
 # Install runtime dependencies only
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     openssl \
