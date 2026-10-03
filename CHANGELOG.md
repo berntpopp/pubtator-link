@@ -1,11 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
 ## [7.1.13] - 2026-10-03
 
 - Update FastAPI, pytest-mock, and OpenTelemetry; remove unused importlib-metadata/zipp lock entries.
-
-## [Unreleased]
-
 
 ## [7.1.12] - 2026-10-03
 
