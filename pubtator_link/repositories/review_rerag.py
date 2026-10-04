@@ -1713,6 +1713,15 @@ class PostgresReviewReragRepository(ReviewResearchSessionRepositoryMixin):
         async with self._acquire() as connection:
             await connection.execute(
                 """
+                insert into reviews (review_id)
+                values ($1)
+                on conflict (review_id) do update
+                set updated_at = now()
+                """,
+                review_id,
+            )
+            await connection.execute(
+                """
                 insert into review_audit_events (review_id, event_type, payload)
                 values ($1, $2, $3::jsonb)
                 """,
@@ -1720,7 +1729,6 @@ class PostgresReviewReragRepository(ReviewResearchSessionRepositoryMixin):
                 event_type,
                 json.dumps(payload, sort_keys=True),
             )
-            await self._touch_review_on_connection(connection, review_id)
 
     async def list_review_audit_events(
         self, review_id: str, *, limit: int | None = None

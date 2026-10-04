@@ -7,6 +7,11 @@ create table if not exists reviews (
 create index if not exists reviews_updated_at_idx
     on reviews(updated_at);
 
+insert into reviews (review_id)
+values ('demo')
+on conflict (review_id) do nothing;
+
+
 create table if not exists review_preparation_jobs (
     job_id uuid primary key,
     review_id text not null references reviews(review_id),
