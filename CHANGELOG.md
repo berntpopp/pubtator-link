@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [7.1.14] - 2026-10-04
+
+### Fixed
+
+- Ensure parent review exists when recording audit events, preventing foreign key constraint violations on `review_id='demo'` (#208).
+- Add migration `0007_review_demo_fallback.sql` and seed default fallback review in `review_schema.sql` (#208).
+
 ## [7.1.13] - 2026-10-03
 
 - Update FastAPI, pytest-mock, and OpenTelemetry; remove unused importlib-metadata/zipp lock entries.

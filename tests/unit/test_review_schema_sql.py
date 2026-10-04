@@ -178,3 +178,13 @@ def test_bootstrap_schema_matches_first_migration_core_tables() -> None:
     ):
         assert fragment in base
         assert fragment in SCHEMA
+
+
+def test_schema_seeds_demo_review_fallback() -> None:
+    assert "insert into reviews (review_id)" in SCHEMA.lower()
+    assert "values ('demo')" in SCHEMA.lower()
+    migration_path = Path("pubtator_link/db/migrations/0007_review_demo_fallback.sql")
+    assert migration_path.exists()
+    migration_content = migration_path.read_text().lower()
+    assert "insert into reviews" in migration_content
+    assert "'demo'" in migration_content

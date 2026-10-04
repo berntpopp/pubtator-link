@@ -1812,3 +1812,24 @@ async def test_cleanup_expired_review_indexes_deletes_expired_ids(monkeypatch) -
     sql, args = connection.executed[0]
     assert "updated_at < now()" in sql
     assert args == (3600,)
+
+
+@pytest.mark.asyncio
+async def test_record_review_audit_event_ensures_parent_review_exists() -> None:
+    connection = FakeConnection()
+    repository = PostgresReviewReragRepository(FakePool(connection))
+
+    await repository.record_review_audit_event(
+        "demo",
+        "health_check",
+        {"status": "ok"},
+    )
+
+    assert len(connection.executed) >= 2
+    first_sql, first_args = connection.executed[0]
+    assert "insert into reviews" in first_sql.lower()
+    assert first_args == ("demo",)
+    second_sql, second_args = connection.executed[1]
+    assert "insert into review_audit_events" in second_sql.lower()
+    assert second_args[0] == "demo"
+    assert second_args[1] == "health_check"
