@@ -637,7 +637,7 @@ def _link_id_and_score(link: object) -> tuple[str | None, int]:
 
     try:
         score = int(score_value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         score = 0
     return linked_id, score
 

@@ -226,7 +226,7 @@ class UnifiedServerManager:
         self.server: uvicorn.Server | None = None
 
     @asynccontextmanager
-    async def lifespan(self, app: FastAPI) -> AsyncGenerator[None, None]:
+    async def lifespan(self, app: FastAPI) -> AsyncGenerator[None]:
         """Manage FastAPI lifespan context."""
         self.logger.info("Starting PubTator-Link server")
 
@@ -278,7 +278,7 @@ class UnifiedServerManager:
             self.mcp = mcp
 
         @asynccontextmanager
-        async def combined_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+        async def combined_lifespan(app: FastAPI) -> AsyncGenerator[None]:
             async with self.lifespan(app):
                 if mcp_http_app is None:
                     yield

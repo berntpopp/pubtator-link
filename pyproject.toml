@@ -11,7 +11,7 @@ authors = [
     { name = "AI Assistant" }
 ]
 license = { text = "MIT" }
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -19,8 +19,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
     "Topic :: Software Development :: Libraries :: Python Modules",
@@ -82,7 +80,9 @@ packages = ["pubtator_link"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py314"
+# Vendored fleet files: byte-identical copies of genefoundry-router; never reformat them.
+extend-exclude = ["tests/conformance/conformance.py", "tests/conformance/behaviour.py"]
 
 [tool.ruff.lint]
 # `select` (not `extend-select`): ruff 0.16 grew the implicit default rule set
@@ -119,7 +119,7 @@ line-ending = "lf"
 "tests/fixtures/test_data.py" = ["RUF012"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
 strict = true
 warn_return_any = true
 warn_unused_configs = true

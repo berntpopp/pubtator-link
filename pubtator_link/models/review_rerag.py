@@ -312,7 +312,7 @@ class ReviewQuickstartResponse(BaseModel):
     selected_pmids: list[str] = Field(default_factory=list)
     coverage_summary: dict[str, int] = Field(default_factory=dict)
     preparation_status: PreparationStatus
-    indexed_totals: "ReviewIndexTotals"
+    indexed_totals: ReviewIndexTotals
     ready_to_retrieve: bool = False
     next_commands: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
@@ -329,7 +329,7 @@ class GroundQuestionResponse(BaseModel):
     preparation_status: PreparationStatus | None = None
     coverage_summary: dict[str, int] = Field(default_factory=dict)
     ready_to_retrieve: bool = False
-    context: "RetrieveReviewContextBatchResponse | None" = None
+    context: RetrieveReviewContextBatchResponse | None = None
     next_tools: list[str] = Field(default_factory=list)
     recovery: list[str] = Field(default_factory=list)
 
@@ -623,7 +623,7 @@ class RetrieveReviewContextResponse(BaseModel):
     context_pack: ContextPack
     preparation_status: PreparationStatus
     index_snapshot_date: str | None = None
-    diagnostics: "RetrieveReviewDiagnostics | None" = None
+    diagnostics: RetrieveReviewDiagnostics | None = None
     prepared_pmids: list[str] = Field(default_factory=list)
     still_preparing_pmids: list[str] = Field(default_factory=list)
     failed_pmids: list[str] = Field(default_factory=list)
@@ -654,7 +654,7 @@ class RetrieveReviewDiagnostics(BaseModel):
     selected_count: int = Field(default=0, ge=0)
     available_sections: list[str] = Field(default_factory=list)
     indexed_pmids: list[str] = Field(default_factory=list)
-    failed_sources: list["FailedSourceSummary"] = Field(default_factory=list)
+    failed_sources: list[FailedSourceSummary] = Field(default_factory=list)
     filter_summary: dict[str, list[str]] = Field(default_factory=dict)
     suggested_queries: list[str] = Field(default_factory=list)
     embedding_rerank: EmbeddingRerankDiagnostics | None = None
@@ -975,14 +975,14 @@ class ReviewAuditBundle(BaseModel):
     session_id: str | None = None
     generated_at: str
     preparation_status: PreparationStatus
-    totals: "ReviewIndexTotals"
-    sources: list["ReviewSourceSummary"]
-    failed_sources: list["FailedSourceSummary"]
+    totals: ReviewIndexTotals
+    sources: list[ReviewSourceSummary]
+    failed_sources: list[FailedSourceSummary]
     coverage_distribution: dict[str, int]
     resolver_attempts: list[ResolverAttemptSummary]
     search_runs: list[ReviewSearchRun] = Field(default_factory=list)
     retrieval_runs: list[ReviewRetrievalRun] = Field(default_factory=list)
-    evidence_certainty: list["EvidenceCertaintyRecord"] = Field(default_factory=list)
+    evidence_certainty: list[EvidenceCertaintyRecord] = Field(default_factory=list)
     research_sessions: list[ResearchSessionManifest] = Field(default_factory=list)
     passage_ids: list[str]
     stable_citation_keys: dict[str, str]

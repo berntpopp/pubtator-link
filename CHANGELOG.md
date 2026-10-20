@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Unify on Python 3.14 (`requires-python`, `.python-version`, ruff and mypy targets, CI single-version
+  matrix, router reusable workflows v0.10.5); cancel superseded PR runs; Dependabot no longer proposes
+  Python minor jumps.
+
 ## [7.1.17] - 2026-10-20
 
 ### Fixed

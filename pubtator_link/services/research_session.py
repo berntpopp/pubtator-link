@@ -65,7 +65,7 @@ def _decode_cursor(*, cursor: str, review_id: str | None) -> _SessionCursor:
     try:
         raw = base64.b64decode(cursor + "=" * (-len(cursor) % 4), altchars=b"-_", validate=True)
         decoded = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, binascii.Error, json.JSONDecodeError):
+    except UnicodeDecodeError, binascii.Error, json.JSONDecodeError:
         raise _invalid_cursor() from None
     if not isinstance(decoded, dict) or set(decoded) != {
         "v",

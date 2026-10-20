@@ -236,7 +236,7 @@ class SearchResponse(BaseResponse):
     """Response model for search."""
 
     @model_validator(mode="after")
-    def populate_preflight_error_code(self) -> "SearchResponse":
+    def populate_preflight_error_code(self) -> SearchResponse:
         if self.preflight_failure_reason and not self.preflight_error_reason:
             self.preflight_error_reason = self.preflight_failure_reason
         if self.preflight_error_reason and not self.preflight_error_code:

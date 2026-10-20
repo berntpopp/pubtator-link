@@ -25,10 +25,10 @@ from pubtator_link.repositories.review_rerag import (
 
 
 class FakeAcquire:
-    def __init__(self, connection: "FakeConnection") -> None:
+    def __init__(self, connection: FakeConnection) -> None:
         self.connection = connection
 
-    async def __aenter__(self) -> "FakeConnection":
+    async def __aenter__(self) -> FakeConnection:
         return self.connection
 
     async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
@@ -36,7 +36,7 @@ class FakeAcquire:
 
 
 class FakePool:
-    def __init__(self, connection: "FakeConnection") -> None:
+    def __init__(self, connection: FakeConnection) -> None:
         self.connection = connection
 
     def acquire(self, **_kwargs: Any) -> FakeAcquire:

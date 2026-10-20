@@ -44,6 +44,9 @@ updates:
     # sidecar changes, so it moves only by a deliberate PR (compose + container-release.json).
     ignore:
       - dependency-name: "pgvector/pgvector"
+      # Python minor upgrades are a deliberate fleet migration (all repos move together).
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: "docker-compose"
     directory: "/docker"
@@ -59,3 +62,6 @@ updates:
     # sidecar changes, so it moves only by a deliberate PR (compose + container-release.json).
     ignore:
       - dependency-name: "pgvector/pgvector"
+      # Python minor upgrades are a deliberate fleet migration (all repos move together).
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
