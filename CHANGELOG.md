@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [7.1.16] - 2026-10-20
+
+### Security
+
+- Upgrade `fsspec` 2026.4.0 -> 2026.6.0 (Dependabot alert #46; first patched version 2026.6.0).
+
 ## [7.1.15] - 2026-10-20
 
 ### Security
