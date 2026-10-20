@@ -8,7 +8,9 @@ manifest digest makes the deployed bytes reproducible and tamper-evident.
 
 from __future__ import annotations
 
+import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -65,7 +67,7 @@ def test_pgvector_image_keeps_tag_alongside_digest() -> None:
     pgvector = [i for _f, _s, i in _image_refs() if i.startswith("pgvector/pgvector:")]
     assert pgvector, "expected the pgvector postgres image to be present"
     for image in pgvector:
-        assert "0.8.7-pg18-trixie@sha256:" in image
+        assert "0.8.6-pg18-trixie@sha256:" in image
 
 
 @pytest.mark.skipif(shutil.which("docker") is None, reason="docker CLI unavailable")
@@ -110,3 +112,15 @@ def test_rendered_npm_stack_images_are_digest_pinned() -> None:
     assert images, "rendered npm stack should declare at least one image"
     unpinned = [i for i in images if "@sha256:" not in i]
     assert not unpinned, f"rendered npm stack has tag-only images: {unpinned}"
+
+
+def test_pgvector_digest_identical_across_compose_and_release_manifest() -> None:
+    # The fleet controller only deploys a reviewed sidecar digest; compose and
+    # container-release.json must move together, never drift apart.
+    manifest = Path("container-release.json").read_text()
+    texts = [p.read_text() for p in COMPOSE_FILES] + [manifest]
+    digests = {
+        m for t in texts for m in re.findall(r"pgvector/pgvector[^@\s\"]*@(sha256:[0-9a-f]{64})", t)
+    }
+    assert len(digests) == 1, f"pgvector digests diverge: {digests}"
+    assert json.loads(manifest)  # manifest stays valid JSON
