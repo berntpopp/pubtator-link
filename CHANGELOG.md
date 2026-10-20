@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [7.1.18] - 2026-10-20
+
+### Security
+
+- certifi 2026.10.19: drops emSign root CAs whose intermediate CA keys were compromised (critical).
+
 ### Changed
 
 - Unify on Python 3.14 (`requires-python`, `.python-version`, ruff and mypy targets, CI single-version
