@@ -80,5 +80,5 @@ def test_container_release_manifest_declares_the_deployed_overlay() -> None:
     sidecars = {sidecar["name"]: sidecar["image"] for sidecar in service["deployed_sidecars"]}
     assert sidecars["pubtator-postgres"] == (
         "docker.io/pgvector/pgvector@"
-        "sha256:1963bc48febf543433baa1ce3edcc6cc08154de722e22495f86681cc9a849026"
+        "sha256:9d9c930220cb9bf2f956d10a8f909cf9973d9672ca0278aef2c1e6facccad2e0"
     )
