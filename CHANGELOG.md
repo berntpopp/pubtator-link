@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [7.1.15] - 2026-10-20
+
+### Security
+
+- Upgrade `mcp` to 1.30.0 (Dependabot alert on the locked `mcp` version; fixed version 1.30.0).
+
+### Changed
+
+- Dependency bumps: `mcp` 1.30.0, `pydantic` 2.14.1, `pydantic-core` 2.50.1, `pydantic-settings` 2.16.1, `ruff` 0.17.1, `mypy` 2.4.0, `transformers` 5.20.2, `torch` 2.14.1, `fastapi` 0.143.2, `huggingface-hub` 1.33.0, and other dev/runtime transitive packages (Dependabot group sweep).
+- CI actions: `astral-sh/setup-uv` v10.3.0, `github/codeql-action` v4.38.3 (SHA-pinned).
+- Router reusable workflows (`_container-ci.yml`, `_container-release.yml`) pinned to genefoundry-router v0.10.4.
+- `pgvector/pgvector` Compose image 0.8.6-pg18-trixie -> 0.8.7-pg18-trixie (digest-pinned, deployed sidecar manifest updated).
+
 ## [7.1.14] - 2026-10-04
 
 ### Fixed

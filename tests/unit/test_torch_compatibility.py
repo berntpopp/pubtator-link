@@ -33,5 +33,5 @@ def test_embeddings_extra_imports_torch_2_14_on_cpu() -> None:
     torch = pytest.importorskip("torch")
     pytest.importorskip("sentence_transformers")
 
-    assert torch.__version__.split("+", maxsplit=1)[0] == "2.14.0"
+    assert torch.__version__.split("+", maxsplit=1)[0] == "2.14.1"
     assert torch.tensor([1.0, 2.0]).device.type == "cpu"
