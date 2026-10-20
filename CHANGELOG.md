@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [7.1.17] - 2026-10-20
+
+### Fixed
+
+- Revert the `pgvector/pgvector` sidecar to the previously reviewed `0.8.6-pg18-trixie`
+  (`sha256:1963bc48…`) in the Compose files and the `container-release.json` deployed-sidecar
+  manifest. 7.1.15 moved it to 0.8.7, which the fleet deploy controller rejects without a
+  separately reviewed sidecar exception, leaving 7.1.15/7.1.16 undeployable. pgvector 0.8.7 only
+  fixes an IVFFlat index-build buffer overflow and an `avg` aggregate error; pubtator-link builds
+  no IVFFlat index (embeddings use exact scans) and does not aggregate vectors, so nothing is lost.
+- Guard test: the pgvector digest must be identical across every Compose file and the release
+  manifest. Dependabot now ignores `pgvector/pgvector`, so the sidecar moves only by deliberate PR.
+
 ## [7.1.16] - 2026-10-20
 
 ### Security

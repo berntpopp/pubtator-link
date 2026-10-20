@@ -40,6 +40,10 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "deps"
+    # pgvector is a deployed sidecar: the fleet controller rejects unreviewed
+    # sidecar changes, so it moves only by a deliberate PR (compose + container-release.json).
+    ignore:
+      - dependency-name: "pgvector/pgvector"
 
   - package-ecosystem: "docker-compose"
     directory: "/docker"
@@ -51,3 +55,7 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "deps"
+    # pgvector is a deployed sidecar: the fleet controller rejects unreviewed
+    # sidecar changes, so it moves only by a deliberate PR (compose + container-release.json).
+    ignore:
+      - dependency-name: "pgvector/pgvector"
