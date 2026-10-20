@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -362,8 +363,8 @@ async def test_inbound_rate_limit_prunes_stale_client_entries() -> None:
         await send({"type": "http.response.body", "body": b""})
 
     middleware = InboundRateLimitMiddleware(app, requests_per_minute=1)
-    middleware.requests["stale"].append(time_marker := 0.0)
-    assert time_marker == 0.0
+    # Relative to the monotonic clock: 0.0 is not "stale" on a runner booted <60s ago.
+    middleware.requests["stale"].append(time.monotonic() - 3600)
 
     sent: list[dict[str, Any]] = []
 
