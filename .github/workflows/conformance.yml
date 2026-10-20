@@ -5,6 +5,10 @@ on:
     branches: [main, master]
 permissions:
   contents: read
+
+env:
+  UV_PYTHON: "3.14"                   # no setup-python here; without this uv picks 3.15 on the runner
+
 concurrency:
   group: conformance-${{ github.ref }}
   cancel-in-progress: true

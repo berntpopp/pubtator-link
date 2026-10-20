@@ -124,7 +124,7 @@ class DoiPmidResolver:
                     remaining,
                     source="doi",
                 )
-            except (TimeoutError, httpx.TimeoutException):
+            except TimeoutError, httpx.TimeoutException:
                 timeout_count += len(remaining)
                 _increment(provider_timeout_counts, "ncbi_idconv", len(remaining))
                 failed_or_timeout.update(remaining)
@@ -151,7 +151,7 @@ class DoiPmidResolver:
             for doi in remaining:
                 try:
                     paper = await self.openalex_service.get_work_by_doi(doi)
-                except (TimeoutError, httpx.TimeoutException):
+                except TimeoutError, httpx.TimeoutException:
                     timeout_count += 1
                     _increment(provider_timeout_counts, "openalex")
                     failed_or_timeout.add(doi)
@@ -186,7 +186,7 @@ class DoiPmidResolver:
             for doi in remaining:
                 try:
                     pmid = await self.pubmed_service.find_pmid_by_doi(doi)
-                except (TimeoutError, httpx.TimeoutException):
+                except TimeoutError, httpx.TimeoutException:
                     timeout_count += 1
                     _increment(provider_timeout_counts, "pubmed_esearch")
                     failed_or_timeout.add(doi)

@@ -64,8 +64,8 @@ def _workflow_action_refs(workflow: dict[str, Any]) -> list[str]:
 def test_python_baseline_is_modern_and_consistent() -> None:
     project = _pyproject()["project"]
 
-    assert project["requires-python"] == ">=3.12"
-    assert Path(".python-version").read_text().strip() == "3.12"
+    assert project["requires-python"] == ">=3.14"
+    assert Path(".python-version").read_text().strip() == "3.14"
 
 
 def test_dependency_groups_include_dev_tooling() -> None:
@@ -85,23 +85,20 @@ def test_uv_lock_exists() -> None:
     assert Path("uv.lock").exists()
 
 
-def test_ruff_targets_python_312_and_core_paths() -> None:
+def test_ruff_targets_python_314_and_core_paths() -> None:
     data = _pyproject()
     ruff = data["tool"]["ruff"]
 
-    assert ruff["target-version"] == "py312"
+    assert ruff["target-version"] == "py314"
     assert ruff["line-length"] == 100
 
 
 def test_ci_tests_both_the_requires_python_floor_and_the_shipped_interpreter() -> None:
     """The suite must run on the interpreter that actually reaches production.
 
-    `docker/Dockerfile` ships one CPython and CI used to run the suite only on the
-    `requires-python` floor, so a 3.14-only stdlib or typing regression could ship
-    uncaught -- `container-ci`/`conformance` exercise the image, not the tests.
-    Both ends are required: the floor keeps `requires-python` an honest claim, the
-    shipped version keeps the image honest. This guard fails on a base-image bump
-    that is not mirrored into the matrix.
+    The fleet is single-version (Python 3.14): `requires-python`, `.python-version`
+    and `docker/Dockerfile` all name it, and the CI matrix must still exercise it.
+    This guard fails on a base-image bump that is not mirrored into the matrix.
     """
     quality_job = _workflow(".github/workflows/ci.yml")["jobs"]["quality"]
     versions = quality_job["strategy"]["matrix"]["python-version"]
@@ -121,10 +118,10 @@ def test_ci_tests_both_the_requires_python_floor_and_the_shipped_interpreter() -
     )
 
 
-def test_mypy_targets_python_312() -> None:
+def test_mypy_targets_python_314() -> None:
     mypy = _pyproject()["tool"]["mypy"]
 
-    assert mypy["python_version"] == "3.12"
+    assert mypy["python_version"] == "3.14"
     assert mypy["strict"] is True
 
 
@@ -282,7 +279,7 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
     assert (
         container_ci_job["uses"]
         == "berntpopp/genefoundry-router/.github/workflows/_container-ci.yml@"
-        "88b565f1b6047f47fd58138cbf041994bb137c03"
+        "e8931f0114bba3568517d1c7b1f990bea2be31af"
     )
 
     assert container_release["permissions"] == {}
@@ -296,7 +293,7 @@ def test_github_actions_workflows_exist_and_use_make_targets() -> None:
     assert (
         container_release_job["uses"]
         == "berntpopp/genefoundry-router/.github/workflows/_container-release.yml@"
-        "88b565f1b6047f47fd58138cbf041994bb137c03"
+        "e8931f0114bba3568517d1c7b1f990bea2be31af"
     )
 
     assert security["permissions"] == {"contents": "read"}
@@ -433,7 +430,6 @@ def test_branch_protection_required_checks_match_workflow_job_names() -> None:
     )
 
     assert set(policy["required_status_checks"]) == {
-        "CI / Format, lint, typecheck, tests, and coverage (py3.12)",
         "CI / Format, lint, typecheck, tests, and coverage (py3.14)",
         "Container CI / container-ci",
         "Security / CodeQL",
@@ -450,7 +446,7 @@ def test_container_security_workflow_generates_scan_and_sbom_artifacts() -> None
     assert job["permissions"] == {"contents": "read"}
     assert (
         job["uses"] == "berntpopp/genefoundry-router/.github/workflows/_container-ci.yml@"
-        "88b565f1b6047f47fd58138cbf041994bb137c03"
+        "e8931f0114bba3568517d1c7b1f990bea2be31af"
     )
 
 
@@ -490,8 +486,8 @@ def test_readme_quickstart_uses_uv_and_make_not_pip_install() -> None:
     # exactly the kind of derived fact README Standard v1 deletes because it rots.
     # It is now carried by a badge that links out, and enforced by the only source
     # of truth that can actually reject a wrong interpreter.
-    assert "img.shields.io/badge/python-3.12" in readme
-    assert _pyproject()["project"]["requires-python"] == ">=3.12"  # type: ignore[index]
+    assert "img.shields.io/badge/python-3.14" in readme
+    assert _pyproject()["project"]["requires-python"] == ">=3.14"  # type: ignore[index]
 
 
 def test_repo_local_claude_workflows_exist_for_agentic_development() -> None:

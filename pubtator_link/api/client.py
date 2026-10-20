@@ -149,7 +149,7 @@ class PubTator3Client:
         await self.client.aclose()
         await self.text_client.aclose()
 
-    async def __aenter__(self) -> "PubTator3Client":
+    async def __aenter__(self) -> PubTator3Client:
         """Async context manager entry."""
         return self
 

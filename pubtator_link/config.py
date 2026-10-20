@@ -337,7 +337,7 @@ class ServerSettings(BaseSettings):
         return v  # type: ignore[no-any-return]
 
     @model_validator(mode="after")
-    def validate_write_boundary(self) -> "ServerSettings":
+    def validate_write_boundary(self) -> ServerSettings:
         self.validate_write_boundary_for_host(self.host)
         return self
 
@@ -477,7 +477,7 @@ class ReviewReragConfig:
     embedding_device: str = "auto"
 
     @classmethod
-    def from_settings(cls, server_settings: ServerSettings) -> "ReviewReragConfig":
+    def from_settings(cls, server_settings: ServerSettings) -> ReviewReragConfig:
         return cls(
             database_url=server_settings.database_url,
             auto_migrate=server_settings.auto_migrate,

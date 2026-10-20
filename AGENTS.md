@@ -68,7 +68,7 @@ Useful focused commands:
 - Install the locked development environment with `make install` (`uv sync --group dev`).
 - Use modern Python typing: `list[str]`, `dict[str, int]`, `str | None`.
 - Format and lint Python with Ruff.
-- Type check with mypy targeting Python 3.11.
+- Type check with mypy targeting Python 3.14.
 - Keep FastAPI route behavior covered by route tests and service behavior covered by unit tests.
 
 ## Documentation Layout

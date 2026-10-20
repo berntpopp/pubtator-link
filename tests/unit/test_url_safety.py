@@ -142,7 +142,7 @@ async def test_fetch_disables_httpx_environment_proxy_trust(
         def __init__(self, **kwargs: Any) -> None:
             captured_kwargs.update(kwargs)
 
-        async def __aenter__(self) -> "RecordingClient":
+        async def __aenter__(self) -> RecordingClient:
             return self
 
         async def __aexit__(

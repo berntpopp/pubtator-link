@@ -43,7 +43,7 @@ class McpHttpAppDouble:
         self.lifespan_entered = False
 
     @asynccontextmanager
-    async def lifespan(self, app: Any) -> AsyncGenerator[None, None]:
+    async def lifespan(self, app: Any) -> AsyncGenerator[None]:
         self.lifespan_entered = True
         yield
 
