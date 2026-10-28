@@ -136,3 +136,27 @@ def test_plan_is_frozen_dataclass() -> None:
     plan = SearchFilterPlan(server_filters=None, local_year_min=None, local_year_max=None)
     with pytest.raises(FrozenInstanceError):
         plan.server_filters = "x"  # type: ignore[misc]
+
+
+def test_sparsely_indexed_publication_type_warns_that_empty_is_not_absence() -> None:
+    # Issue #230: PubTator3 tags few records as Case Reports, so a 0-hit page must carry a warning.
+    plan = build_search_filter_plan(
+        filters=None,
+        publication_types=["Case Reports"],
+        year_min=None,
+        year_max=None,
+        ignore_malformed_filters=False,
+    )
+    assert json.loads(plan.server_filters or "{}") == {"type": ["Case Reports"]}
+    assert plan.warning is not None
+    assert "Case Reports" in plan.warning
+    assert (
+        build_search_filter_plan(
+            filters=None,
+            publication_types=["Review"],
+            year_min=None,
+            year_max=None,
+            ignore_malformed_filters=False,
+        ).warning
+        is None
+    )
