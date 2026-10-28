@@ -192,7 +192,7 @@ def build_search_filter_plan(
     if sparse:
         sparse_warning = (
             f"PubTator3 tags only a small fraction of PubMed records as {', '.join(sparse)}; "
-            "few or zero results do not mean none exist. Retry without publication_types and "
+            "few or zero results do not mean none exist. Retry without the type filter and "
             "put the type in text instead (e.g. 'case report')."
         )
         warning = f"{warning} {sparse_warning}" if warning else sparse_warning
