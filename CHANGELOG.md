@@ -9,6 +9,15 @@
 - Authlib 1.9.1 (CVE-2026-96760 critical, CVE-2026-114615/114616 high) and dnspython 2.9.0
   (CVE-2026-114605 high); both transitive, lock-only bump.
 
+### Fixed
+
+- `search_literature` warns when a sparsely indexed publication type (Case Reports, Clinical Study,
+  Comparative Study, Observational Study, Validation Study, Systematic Review) is filtered on: PubTator3
+  tags only a few percent of PubMed records with these, so few or zero hits do not mean none exist (#230).
+- MCP argument errors are actionable: `get_publication_annotations` rejects `full=true` with
+  `format=pubtator` up front with a `field_errors` entry, argument errors no longer point to
+  `diagnostics`, and unexpected arguments are named in `field_errors` instead of `"unknown"` (#231).
+
 ## [7.1.18] - 2026-10-20
 
 ### Security
