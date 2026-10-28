@@ -529,6 +529,37 @@ async def test_pmc_invalid_identifier_names_pmcids_on_the_wire(
     assert payload["field_errors"][0]["field"] == "pmcids"
 
 
+@pytest.mark.asyncio
+async def test_pubtator_format_with_full_text_names_full_on_the_wire(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Issue #231: format=pubtator + full=true must be rejected with an actionable field error.
+    from fastmcp import Client
+
+    import pubtator_link.mcp.tools.publications as publication_tools
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async def fake_get_publication_service() -> object:
+        return object()
+
+    monkeypatch.setattr(publication_tools, "get_publication_service", fake_get_publication_service)
+    mcp = create_pubtator_mcp(profile="full")
+
+    async with Client(mcp) as client:
+        result = await client.call_tool(
+            "get_publication_annotations",
+            {"pmids": ["8650545"], "format": "pubtator", "full": True},
+            raise_on_error=False,
+        )
+
+    payload = result.structured_content
+    assert payload["error_code"] == "invalid_input"
+    assert payload["field_errors"][0]["field"] == "full"
+    assert "biocjson" in payload["recovery_hint"]
+    assert "diagnostics will not help" in payload["recovery_action"]
+    assert payload["_meta"]["next_commands"] == []
+
+
 def test_ground_question_schema_exposes_one_call_arguments() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
@@ -1328,7 +1359,11 @@ async def test_tool_validation_unknown_argument_reports_valid_and_unexpected_par
     assert "text" in payload["valid_params"]
     assert "query" not in payload["valid_params"]
     assert payload["unexpected_params"] == ["bogus"]
-    assert payload["_meta"]["next_commands"] == [{"tool": "diagnostics", "arguments": {}}]
+    assert {"field": "bogus", "reason": "argument is not accepted by this tool"} in payload[
+        "field_errors"
+    ]
+    assert "diagnostics will not help" in payload["recovery_action"]
+    assert payload["_meta"]["next_commands"] == []
 
 
 @pytest.mark.asyncio

@@ -287,6 +287,9 @@ def _fallback_for_context(context: McpErrorContext) -> tuple[str | None, dict[st
     return None, None
 
 
+_ARGUMENT_RECOVERY = "Fix the arguments named in field_errors and retry; diagnostics will not help."
+
+
 def _recovery_text_for_context(
     context: McpErrorContext,
     fallback_tool: str | None,
@@ -377,11 +380,9 @@ def mcp_validation_tool_error(
             sanitize_message(name) if isinstance(name, str) else name
             for name in details["unexpected_params"]
         ]
-    # The rejected value must produce a message the model can ACT on: a bare "Invalid MCP
-    # arguments." names nothing. Name the accepted parameters (schema-derived, server-authored,
-    # safe to surface) and carry a structured ``field_errors`` frame -- caller-invented argument
-    # names are redacted to "unknown" rather than echoed. (Response-Envelope Standard v1;
-    # MCP 2025-11-25 SEP-1303: "Tool Execution Errors contain actionable feedback".)
+    # A bare "Invalid MCP arguments." is not actionable: name the accepted (schema-derived)
+    # parameters and every bad argument in ``field_errors``, using the sanitized names above.
+    # (Response-Envelope Standard v1; MCP 2025-11-25 SEP-1303.)
     valid_params = details.get("valid_params") or []
     message = "Invalid MCP arguments."
     if valid_params:
@@ -389,8 +390,8 @@ def mcp_validation_tool_error(
     field_errors: list[dict[str, str]] = []
     for missing in details.get("missing_params") or []:
         field_errors.append({"field": missing, "reason": "required parameter is missing"})
-    if details.get("unexpected_params"):
-        field_errors.append({"field": "unknown", "reason": "argument is not accepted by this tool"})
+    for name in details.get("unexpected_params") or []:
+        field_errors.append({"field": name, "reason": "argument is not accepted by this tool"})
     payload: dict[str, Any] = {
         "success": False,
         "error_code": "invalid_input",
@@ -398,14 +399,10 @@ def mcp_validation_tool_error(
         "retryable": False,
         "fallback_tool": None,
         "fallback_args": None,
-        "recovery_action": _recovery_text_for_context(
-            McpErrorContext(tool_name=tool_name),
-            fallback_tool=None,
-            reason="validation_failed",
-        ),
+        "recovery_action": _ARGUMENT_RECOVERY,
         "_meta": {
             "tool": tool_name,
-            "next_commands": [{"tool": "diagnostics", "arguments": {}}],
+            "next_commands": [],
             "unsafe_for_clinical_use": True,
         },
     }
@@ -574,17 +571,19 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> dict[str, Any]:
     next_commands: list[dict[str, Any]] = []
     if fallback_tool and fallback_args is not None:
         next_commands.append({"tool": fallback_tool, "arguments": fallback_args})
-    next_commands.append({"tool": "diagnostics", "arguments": {}})
+    argument_error = isinstance(exc, InputNormalizationError)
+    if not argument_error:
+        next_commands.append({"tool": "diagnostics", "arguments": {}})
     payload: dict[str, Any] = {
         "success": False,
         "error_code": error_code,
-        "message": "Invalid MCP arguments."
-        if isinstance(exc, InputNormalizationError)
-        else safe_message_for_exception(exc),
+        "message": "Invalid MCP arguments." if argument_error else safe_message_for_exception(exc),
         "retryable": error_code == "upstream_unavailable",
         "fallback_tool": fallback_tool,
         "fallback_args": fallback_args,
-        "recovery_action": _recovery_text_for_context(context, fallback_tool, reason),
+        "recovery_action": _ARGUMENT_RECOVERY
+        if argument_error
+        else _recovery_text_for_context(context, fallback_tool, reason),
         "_meta": {
             "tool": context.tool_name,
             "next_commands": next_commands,

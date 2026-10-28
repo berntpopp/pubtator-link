@@ -16,6 +16,7 @@ from pubtator_link.api.routes.dependencies import (
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from pubtator_link.mcp.argument_aliases import merge_pmids
 from pubtator_link.mcp.errors import run_mcp_tool
+from pubtator_link.mcp.input_normalization import InputNormalizationError
 from pubtator_link.mcp.meta_budget import strip_meta_for_repeated_call
 from pubtator_link.mcp.pmc_annotations import fetch_pmc_annotations_impl
 from pubtator_link.mcp.profiles import MCPToolProfile
@@ -87,6 +88,11 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             """Use this when a user provides PubMed IDs and needs raw PubTator BioC annotation export. Do not use this for compact grounded answers; use get_publication_passages. Next: get_publication_passages."""
 
             async def call() -> dict[str, Any]:
+                if full and format == "pubtator":  # PubTator3 ignores full for this format
+                    raise InputNormalizationError(
+                        field_errors=[{"field": "full", "reason": "needs biocjson or biocxml"}],
+                        recovery_hint="Use format='biocjson' or 'biocxml' with full=true.",
+                    )
                 selected_pmids = merge_pmids(pmids, None, max_items=50)
                 service = await get_publication_service()
                 return await fetch_publication_annotations_impl(

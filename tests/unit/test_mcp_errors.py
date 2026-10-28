@@ -110,6 +110,18 @@ def test_mcp_tool_error_does_not_leak_raw_exception_to_logs(
     assert warning_records[-1].exception_type == "RuntimeError"
 
 
+def test_plain_value_error_keeps_tool_recovery_advice() -> None:
+    # A server-side ValueError is not an argument error: keep the tool's own fallback advice.
+    payload = mcp_tool_error(
+        ValueError("index state mismatch"),
+        McpErrorContext(tool_name="preflight_review_sources", pmids=["10490564"]),
+    )
+
+    assert payload["recovery_action"].startswith("Call get_publication_passages")
+    assert "field_errors" not in payload
+    assert {"tool": "diagnostics", "arguments": {}} in payload["_meta"]["next_commands"]
+
+
 def test_preflight_review_sources_error_points_to_publication_passages() -> None:
     payload = mcp_tool_error(
         RuntimeError("temporary preflight failure"),
