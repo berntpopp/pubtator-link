@@ -296,6 +296,8 @@ def _recovery_text_for_context(
         return (
             "Run diagnostics. If the review schema is stale, apply database migrations and retry."
         )
+    if reason == "validation_failed":
+        return "Fix the arguments named in field_errors and retry; diagnostics will not help."
     if context.tool_name == "preflight_review_sources" and fallback_tool:
         return (
             "Call get_publication_passages with the same PMIDs. "
@@ -377,11 +379,9 @@ def mcp_validation_tool_error(
             sanitize_message(name) if isinstance(name, str) else name
             for name in details["unexpected_params"]
         ]
-    # The rejected value must produce a message the model can ACT on: a bare "Invalid MCP
-    # arguments." names nothing. Name the accepted parameters (schema-derived, server-authored,
-    # safe to surface) and carry a structured ``field_errors`` frame -- caller-invented argument
-    # names are redacted to "unknown" rather than echoed. (Response-Envelope Standard v1;
-    # MCP 2025-11-25 SEP-1303: "Tool Execution Errors contain actionable feedback".)
+    # A bare "Invalid MCP arguments." is not actionable: name the accepted (schema-derived)
+    # parameters and every bad argument in ``field_errors``, using the sanitized names above.
+    # (Response-Envelope Standard v1; MCP 2025-11-25 SEP-1303.)
     valid_params = details.get("valid_params") or []
     message = "Invalid MCP arguments."
     if valid_params:
@@ -389,8 +389,8 @@ def mcp_validation_tool_error(
     field_errors: list[dict[str, str]] = []
     for missing in details.get("missing_params") or []:
         field_errors.append({"field": missing, "reason": "required parameter is missing"})
-    if details.get("unexpected_params"):
-        field_errors.append({"field": "unknown", "reason": "argument is not accepted by this tool"})
+    for name in details.get("unexpected_params") or []:
+        field_errors.append({"field": name, "reason": "argument is not accepted by this tool"})
     payload: dict[str, Any] = {
         "success": False,
         "error_code": "invalid_input",
