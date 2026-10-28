@@ -50,6 +50,20 @@ VALID_PUBLICATION_TYPES: frozenset[str] = frozenset(
     }
 )
 
+# Types PubTator3 tags on only a few percent of the PubMed records carrying them (live 2026-10-28,
+# BRCA1: Case Reports 51 vs PubMed 963, Clinical Study 0 vs 789); a filtered empty page is not
+# evidence of absence, so the response must say so.
+SPARSELY_INDEXED_PUBLICATION_TYPES: frozenset[str] = frozenset(
+    {
+        "Case Reports",
+        "Comparative Study",
+        "Observational Study",
+        "Clinical Study",
+        "Validation Study",
+        "Systematic Review",
+    }
+)
+
 
 def _validate_filter_types(type_filter: Any) -> None:
     """Reject a `filters.type` value outside the PubMed publication-type vocabulary.
@@ -169,6 +183,19 @@ def build_search_filter_plan(
     # Validate the resolved type filter (from the advanced `filters` JSON as well as the flat
     # `publication_types`) against the closed vocabulary -- never pass an unknown type to PubTator3.
     _validate_filter_types(merged.get("type"))
+    requested_types = merged.get("type")
+    sparse = sorted(
+        SPARSELY_INDEXED_PUBLICATION_TYPES.intersection(
+            requested_types if isinstance(requested_types, list) else [requested_types]
+        )
+    )
+    if sparse:
+        sparse_warning = (
+            f"PubTator3 tags only a small fraction of PubMed records as {', '.join(sparse)}; "
+            "few or zero results do not mean none exist. Retry without publication_types and "
+            "put the type in text instead (e.g. 'case report')."
+        )
+        warning = f"{warning} {sparse_warning}" if warning else sparse_warning
 
     eff_min, eff_max, raw_year_passthrough = _resolve_year_window(
         merged.pop("year", None), year_min, year_max
