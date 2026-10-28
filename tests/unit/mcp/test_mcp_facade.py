@@ -557,6 +557,7 @@ async def test_pubtator_format_with_full_text_names_full_on_the_wire(
     assert payload["field_errors"][0]["field"] == "full"
     assert "biocjson" in payload["recovery_hint"]
     assert "diagnostics will not help" in payload["recovery_action"]
+    assert payload["_meta"]["next_commands"] == []
 
 
 def test_ground_question_schema_exposes_one_call_arguments() -> None:
@@ -1362,7 +1363,7 @@ async def test_tool_validation_unknown_argument_reports_valid_and_unexpected_par
         "field_errors"
     ]
     assert "diagnostics will not help" in payload["recovery_action"]
-    assert payload["_meta"]["next_commands"] == [{"tool": "diagnostics", "arguments": {}}]
+    assert payload["_meta"]["next_commands"] == []
 
 
 @pytest.mark.asyncio

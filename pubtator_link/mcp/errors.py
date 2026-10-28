@@ -287,6 +287,9 @@ def _fallback_for_context(context: McpErrorContext) -> tuple[str | None, dict[st
     return None, None
 
 
+_ARGUMENT_RECOVERY = "Fix the arguments named in field_errors and retry; diagnostics will not help."
+
+
 def _recovery_text_for_context(
     context: McpErrorContext,
     fallback_tool: str | None,
@@ -296,8 +299,6 @@ def _recovery_text_for_context(
         return (
             "Run diagnostics. If the review schema is stale, apply database migrations and retry."
         )
-    if reason == "validation_failed":
-        return "Fix the arguments named in field_errors and retry; diagnostics will not help."
     if context.tool_name == "preflight_review_sources" and fallback_tool:
         return (
             "Call get_publication_passages with the same PMIDs. "
@@ -398,14 +399,10 @@ def mcp_validation_tool_error(
         "retryable": False,
         "fallback_tool": None,
         "fallback_args": None,
-        "recovery_action": _recovery_text_for_context(
-            McpErrorContext(tool_name=tool_name),
-            fallback_tool=None,
-            reason="validation_failed",
-        ),
+        "recovery_action": _ARGUMENT_RECOVERY,
         "_meta": {
             "tool": tool_name,
-            "next_commands": [{"tool": "diagnostics", "arguments": {}}],
+            "next_commands": [],
             "unsafe_for_clinical_use": True,
         },
     }
@@ -574,17 +571,19 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> dict[str, Any]:
     next_commands: list[dict[str, Any]] = []
     if fallback_tool and fallback_args is not None:
         next_commands.append({"tool": fallback_tool, "arguments": fallback_args})
-    next_commands.append({"tool": "diagnostics", "arguments": {}})
+    argument_error = isinstance(exc, InputNormalizationError)
+    if not argument_error:
+        next_commands.append({"tool": "diagnostics", "arguments": {}})
     payload: dict[str, Any] = {
         "success": False,
         "error_code": error_code,
-        "message": "Invalid MCP arguments."
-        if isinstance(exc, InputNormalizationError)
-        else safe_message_for_exception(exc),
+        "message": "Invalid MCP arguments." if argument_error else safe_message_for_exception(exc),
         "retryable": error_code == "upstream_unavailable",
         "fallback_tool": fallback_tool,
         "fallback_args": fallback_args,
-        "recovery_action": _recovery_text_for_context(context, fallback_tool, reason),
+        "recovery_action": _ARGUMENT_RECOVERY
+        if argument_error
+        else _recovery_text_for_context(context, fallback_tool, reason),
         "_meta": {
             "tool": context.tool_name,
             "next_commands": next_commands,
