@@ -228,6 +228,9 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
+_LEGACY_ORIGINALS: dict[tuple[Any, str], Any] = {}
+
+
 class _DependenciesModule(_ModuleType):
     def __getattribute__(self, name: str) -> Any:
         if name in {
@@ -246,9 +249,17 @@ class _DependenciesModule(_ModuleType):
         return super().__getattribute__(name)
 
     def __setattr__(self, name: str, value: Any) -> None:
+        for module in _LEGACY_MUTABLE_EXPORTS.get(name, ()):
+            _LEGACY_ORIGINALS.setdefault((module, name), getattr(module, name))
         super().__setattr__(name, value)
         for module in _LEGACY_MUTABLE_EXPORTS.get(name, ()):
             setattr(module, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        # pytest>=9.2 monkeypatch undo deletes names absent from __dict__; restore originals.
+        super().__delattr__(name) if name in self.__dict__ else None
+        for module in _LEGACY_MUTABLE_EXPORTS.get(name, ()):
+            setattr(module, name, _LEGACY_ORIGINALS[(module, name)])
 
 
 sys.modules[__name__].__class__ = _DependenciesModule
