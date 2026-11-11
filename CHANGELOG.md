@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [7.1.20] - 2026-11-11
+
+### Security
+
+- Fleet dependency sweep: joserfc 1.8.0, fastmcp 3.4.11 (floor 3.4.10), opentelemetry-api 1.45.2,
+  filelock 4.2.10, virtualenv 21.15.6, setuptools 84.2.1 and the rest of the lock refreshed
+  (all open Dependabot alerts), GitHub Actions SHA bumps, router reusable workflows re-pinned to v0.10.10.
+
 ## [7.1.19] - 2026-10-28
 
 ### Security
