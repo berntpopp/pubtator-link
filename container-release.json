@@ -47,7 +47,12 @@
     "mode": "restored-database",
     "release_tag": "observed-2026.07.13",
     "digest": "sha256:e3a508657abbea8cb5a2282459f9313ff4f52aa27506f24d554292f9d2635295",
-    "image_allowlist": []
+    "image_allowlist": [
+      "opt/venv/lib/python3.14/site-packages/beartype/_check/cls/hint/data/__init__.py",
+      "opt/venv/lib/python3.14/site-packages/beartype/_check/cls/hint/data/hintdataabc.py",
+      "opt/venv/lib/python3.14/site-packages/beartype/_check/cls/hint/data/hintdatacode.py",
+      "opt/venv/lib/python3.14/site-packages/beartype/_check/cls/hint/data/hintdataerror.py"
+    ]
   },
   "data_identity_contract": "unadopted",
   "definitions": {
