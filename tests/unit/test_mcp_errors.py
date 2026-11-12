@@ -606,3 +606,35 @@ def _is_mcp_tool(node: ast.AsyncFunctionDef | ast.FunctionDef) -> bool:
         ):
             return True
     return False
+
+
+def test_internal_pydantic_validation_error_is_internal_not_invalid_input() -> None:
+    # #248: a pydantic model/shaping failure inside a tool body is a server bug, not
+    # a caller error, even though pydantic's ValidationError subclasses ValueError.
+    from pydantic import BaseModel
+
+    class Shaped(BaseModel):
+        count: int
+
+    try:
+        Shaped.model_validate({"count": "not-a-number"})
+    except ValueError as exc:
+        assert error_code_for_exception(exc) == "internal"
+    else:  # pragma: no cover
+        raise AssertionError("expected a pydantic ValidationError")
+
+
+@pytest.mark.asyncio
+async def test_mcp_tool_failed_log_carries_exception_type(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def failing() -> dict[str, object]:
+        raise RuntimeError("boom")
+
+    caplog.set_level(logging.WARNING, logger="pubtator_link.mcp.errors")
+    await run_mcp_tool("get_publication_passages", failing)
+
+    record = [r for r in caplog.records if r.message == "mcp_tool_failed"][-1]
+    assert record.tool_name == "get_publication_passages"
+    assert record.error_code == "internal"
+    assert record.exception_type == "RuntimeError"

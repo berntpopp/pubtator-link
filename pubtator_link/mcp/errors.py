@@ -254,7 +254,8 @@ def error_reason_for_exception(exc: Exception) -> str:
         return "review_index_unavailable"
     if isinstance(exc, httpx.TimeoutException | TimeoutError):
         return "upstream_unavailable"
-    if isinstance(exc, ValueError):
+    # Args are already bound by FastMCP: a pydantic model failure here is a server bug (#248).
+    if isinstance(exc, ValueError) and not isinstance(exc, PydanticValidationError):
         return "validation_failed"
     return "internal_error"
 
@@ -638,6 +639,7 @@ async def run_mcp_tool(
                 "pmid_count": pmid_count,
                 "latency_ms": round(latency_seconds * 1000, 2),
                 "error_code": error_code,
+                "exception_type": type(exc).__name__,
             },
         )
         # Do NOT retain ``str(exc)``: for an upstream failure it can carry the

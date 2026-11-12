@@ -291,10 +291,10 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             bool, Field(description="Prefer full-text passages where the article is open-access.")
         ] = False,
         max_passages_per_pmid: Annotated[
-            int, Field(ge=1, le=50, description="Maximum passages returned per PMID.")
+            int, Field(ge=1, le=30, description="Maximum passages returned per PMID.")
         ] = 6,
         max_chars: Annotated[
-            int, Field(ge=200, le=60_000, description="Soft total character budget for passages.")
+            int, Field(ge=1000, le=50_000, description="Soft total character budget for passages.")
         ] = 12000,
         include_tables: Annotated[bool, Field(description="Include table passages.")] = True,
         include_references: Annotated[
