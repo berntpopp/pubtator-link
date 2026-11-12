@@ -414,3 +414,65 @@ def test_publication_passage_request_constraints() -> None:
     assert request.full is False
     assert request.include_tables is True
     assert request.include_references is False
+
+
+class BiocjsonGapService:
+    """PubTator3 biocjson 400s (single) or silently drops (batch) PMID 39156164 (#247)."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[list[str], str]] = []
+
+    async def export_publications_list(self, pmids: list[str], format: str, full: bool):
+        from pubtator_link.api.client import PubTatorAPIError
+
+        self.calls.append((pmids, format))
+        if format == "pubtator":
+            docs = []
+            for pmid in pmids:
+                if pmid == "39156164":
+                    docs.append({"pmid": pmid, "sections": {"t": "HNF1B title"}})
+                    docs.append({"pmid": pmid, "sections": {"a": "HNF1B abstract"}})
+            return {"export_data": {"documents": docs}}
+        if pmids == ["39156164"]:
+            raise PubTatorAPIError("PubTator3 API returned HTTP 400.", status_code=400)
+        return {
+            "documents": [
+                {
+                    "id": "42739594",
+                    "passages": [{"infons": {"type": "abstract"}, "text": "Greek cohort"}],
+                }
+            ]
+        }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("pmids", [["39156164"], ["39156164", "42739594"]])
+async def test_biocjson_gap_falls_back_to_pubtator_abstract(pmids: list[str]) -> None:
+    service = PublicationPassageService(BiocjsonGapService())
+
+    response = await service.get_passages(
+        PublicationPassageRequest(pmids=pmids, mode="full_abstract")
+    )
+
+    assert response.success is True
+    fallback = [p for p in response.passages if p.pmid == "39156164"]
+    assert [p.text for p in fallback] == ["HNF1B title", "HNF1B abstract"]
+    assert {p.source for p in fallback} == {"pubtator_abstract"}
+    assert response.coverage_by_pmid["39156164"] == "abstract_only"
+    assert (
+        response.coverage_reason_by_pmid["39156164"] == "biocjson_unavailable_pubtator_fallback"
+    )
+
+
+@pytest.mark.asyncio
+async def test_pmid_missing_from_both_exports_is_not_retrievable() -> None:
+    class EmptyService:
+        async def export_publications_list(self, pmids, format, full):
+            return {"documents": []}
+
+    response = await PublicationPassageService(EmptyService()).get_passages(
+        PublicationPassageRequest(pmids=["1"])
+    )
+
+    assert response.coverage_by_pmid["1"] == "unknown"
+    assert response.coverage_reason_by_pmid["1"] == "not_retrievable"

@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from html import unescape
 from typing import Any, Protocol, cast
 
+from pubtator_link.api.client import PubTatorAPIError
 from pubtator_link.models.publication_passages import (
     FailedPublicationPmid,
     PassageDropReason,
@@ -62,60 +63,47 @@ class PublicationPassageService:
                 format="biocjson",
                 full=request.full,
             )
+        except PubTatorAPIError as exc:
+            # A 400 on a valid PMID list is PubTator's "Could not retrieve publications":
+            # per-PMID unavailability, not a whole-call failure (#247).
+            if exc.status_code != 400:
+                return self._export_failed_response(request)
+            export_data = {"documents": []}
         except Exception:
-            coverage_by_pmid = cast(
-                dict[str, PublicationCoverage],
-                dict.fromkeys(request.pmids, "unknown"),
-            )
-            estimate = PublicationContextEstimate(
-                estimated_passages=0,
-                estimated_chars=0,
-                sections_by_pmid={pmid: [] for pmid in request.pmids},
-                recommended_mode=request.mode,
-                warning="Publication export failed",
-            )
-            return PublicationPassageResponse(
-                success=False,
-                pmids=request.pmids,
-                mode=request.mode,
-                passages=[],
-                dropped=[
-                    PassageDropReason(
-                        reason="upstream_error",
-                        message="Publication export failed.",
-                    )
-                ],
-                context_estimate=estimate,
-                coverage_by_pmid=coverage_by_pmid,
-                coverage_reason_by_pmid=cast(
-                    dict[str, str],
-                    dict.fromkeys(request.pmids, "publication_export_failed"),
-                ),
-                failed_pmids=[
-                    FailedPublicationPmid(pmid=pmid, reason="Publication export failed")
-                    for pmid in request.pmids
-                ],
-                warnings=["Publication export failed"],
-                cache_key=_publication_passage_cache_key(request),
-                corpus_snapshot_date=corpus_snapshot_date(),
-                source_versions={"pubtator3": "live"},
-                degraded_mode=degraded_mode_from_coverage(coverage_by_pmid),
-                dry_run=request.dry_run,
-            )
+            return self._export_failed_response(request)
 
+        documents = _extract_documents(export_data)
+        returned = {_pmid_from_document(document) for document in documents}
+        missing = [pmid for pmid in request.pmids if pmid not in returned]
+        fallback_documents = await self._pubtator_abstract_documents(missing) if missing else []
+        fallback_pmids = {_pmid_from_document(document) for document in fallback_documents}
+        retrieved_pmids = returned | fallback_pmids
+        sections = self._effective_sections(request.mode, request.sections)
+        max_per_pmid = self._effective_max_passages_per_pmid(request)
         passages, dropped = self._compact_export(
-            export_data=export_data,
+            export_data={"documents": documents},
             pmids=request.pmids,
             source=source,
-            sections=self._effective_sections(request.mode, request.sections),
+            sections=sections,
             include_tables=request.include_tables,
             include_references=request.include_references,
-            max_passages_per_pmid=self._effective_max_passages_per_pmid(request),
+            max_passages_per_pmid=max_per_pmid,
         )
+        fallback_passages, fallback_dropped = self._compact_export(
+            export_data={"documents": fallback_documents},
+            pmids=request.pmids,
+            source="pubtator_abstract",
+            sections=sections,
+            include_tables=request.include_tables,
+            include_references=request.include_references,
+            max_passages_per_pmid=max_per_pmid,
+        )
+        passages.extend(fallback_passages)
+        dropped.extend(fallback_dropped)
         if request.dry_run:
             estimate = self._estimate_from_passages(passages, request.pmids, request.mode)
             coverage_by_pmid, coverage_reason_by_pmid, failed_pmids, warnings = (
-                self._coverage_summary(passages, request)
+                self._coverage_summary(passages, request, fallback_pmids, retrieved_pmids)
             )
             return PublicationPassageResponse(
                 success=True,
@@ -138,7 +126,7 @@ class PublicationPassageService:
         dropped.extend(budget_drops)
         estimate = self._estimate_from_passages(passages, request.pmids, request.mode)
         coverage_by_pmid, coverage_reason_by_pmid, failed_pmids, warnings = self._coverage_summary(
-            passages, request
+            passages, request, fallback_pmids, retrieved_pmids
         )
 
         return PublicationPassageResponse(
@@ -157,6 +145,69 @@ class PublicationPassageService:
             source_versions={"pubtator3": "live"},
             degraded_mode=degraded_mode_from_coverage(coverage_by_pmid),
         )
+
+    def _export_failed_response(
+        self, request: PublicationPassageRequest
+    ) -> PublicationPassageResponse:
+        coverage_by_pmid = cast(
+            dict[str, PublicationCoverage],
+            dict.fromkeys(request.pmids, "unknown"),
+        )
+        estimate = PublicationContextEstimate(
+            estimated_passages=0,
+            estimated_chars=0,
+            sections_by_pmid={pmid: [] for pmid in request.pmids},
+            recommended_mode=request.mode,
+            warning="Publication export failed",
+        )
+        return PublicationPassageResponse(
+            success=False,
+            pmids=request.pmids,
+            mode=request.mode,
+            passages=[],
+            dropped=[
+                PassageDropReason(
+                    reason="upstream_error",
+                    message="Publication export failed.",
+                )
+            ],
+            context_estimate=estimate,
+            coverage_by_pmid=coverage_by_pmid,
+            coverage_reason_by_pmid=cast(
+                dict[str, str],
+                dict.fromkeys(request.pmids, "publication_export_failed"),
+            ),
+            failed_pmids=[
+                FailedPublicationPmid(pmid=pmid, reason="Publication export failed")
+                for pmid in request.pmids
+            ],
+            warnings=["Publication export failed"],
+            cache_key=_publication_passage_cache_key(request),
+            corpus_snapshot_date=corpus_snapshot_date(),
+            source_versions={"pubtator3": "live"},
+            degraded_mode=degraded_mode_from_coverage(coverage_by_pmid),
+            dry_run=request.dry_run,
+        )
+
+    async def _pubtator_abstract_documents(self, pmids: list[str]) -> list[dict[str, Any]]:
+        """Title/abstract BioC-like documents from the ``pubtator`` export (#247)."""
+        try:
+            export = await self.publication_service.export_publications_list(
+                pmids, format="pubtator", full=False
+            )
+        except Exception:
+            return []
+        by_pmid: dict[str, list[dict[str, Any]]] = {}
+        for document in _extract_documents(export):
+            pmid = _pmid_from_document(document)
+            sections = document.get("sections")
+            if pmid not in pmids or not isinstance(sections, dict):
+                continue
+            for key, section in (("t", "title"), ("a", "abstract")):
+                text = _string_or_none(sections.get(key))
+                if text:
+                    by_pmid.setdefault(pmid, []).append({"infons": {"type": section}, "text": text})
+        return [{"id": pmid, "passages": passages} for pmid, passages in by_pmid.items()]
 
     async def estimate_context(
         self, request: PublicationContextEstimateRequest
@@ -385,6 +436,8 @@ class PublicationPassageService:
         self,
         passages: list[PublicationPassage],
         request: PublicationPassageRequest,
+        fallback_pmids: set[str | None],
+        retrieved_pmids: set[str | None],
     ) -> tuple[
         dict[str, PublicationCoverage],
         dict[str, str],
@@ -397,6 +450,10 @@ class PublicationPassageService:
         warnings: list[str] = []
         for pmid in request.pmids:
             coverage, reason = self._coverage_for_pmid(passages, pmid)
+            if pmid in fallback_pmids and coverage != "unknown":
+                reason = "biocjson_unavailable_pubtator_fallback"
+            elif pmid not in retrieved_pmids:
+                reason = "not_retrievable"
             coverage_by_pmid[pmid] = coverage
             coverage_reason_by_pmid[pmid] = reason
             if coverage == "unknown":
