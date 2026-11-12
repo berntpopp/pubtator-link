@@ -66,7 +66,7 @@ def configure_logging() -> FilteringBoundLogger:
     processors = [*_SHARED_PROCESSORS, renderer]
 
     structlog.configure(
-        processors=processors,  # type: ignore[arg-type]
+        processors=processors,
         wrapper_class=structlog.make_filtering_bound_logger(
             getattr(logging, settings.log_level.upper())
         ),
