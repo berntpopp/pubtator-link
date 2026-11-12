@@ -16,9 +16,9 @@ pubtator_link/mcp/tools/publications.py:634
 # Raised 691 -> 703 for the pydantic internal-vs-input split + field_errors (#248); split planned above.
 pubtator_link/mcp/errors.py:703
 pubtator_link/repositories/review_rerag.py:2393
-# Raised 1944 -> 1957 for search abstract fill (#246) + title promotion (#243); the search
+# Raised 1944 -> 1958 for search abstract fill/fencing (#246) + title promotion (#243); the search
 # adapter is the next split candidate (decomposition plan above).
-pubtator_link/mcp/service_adapters.py:1957
+pubtator_link/mcp/service_adapters.py:1958
 pubtator_link/services/topic_literature_map.py:1821
 pubtator_link/models/review_rerag.py:1253
 pubtator_link/services/citation_graph.py:1244

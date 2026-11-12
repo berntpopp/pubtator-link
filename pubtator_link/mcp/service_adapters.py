@@ -120,6 +120,7 @@ from pubtator_link.services.search_shaping import (
     attach_search_abstracts,
     combined_search_text,
     dump_search_response,
+    fence_search_abstracts,
     promote_title_matches,
     selected_search_items,
     shaped_search_response,
@@ -597,7 +598,7 @@ async def search_literature_impl(
             "for full server-side pagination."
         )
         response.source_versions["pubtator3_filtering"] = "year_range_local"
-    dumped = dump_search_response(response, response_mode=response_mode)
+    dumped = fence_search_abstracts(dump_search_response(response, response_mode=response_mode))
     if include_meta:
         dumped["_meta"] = response_meta
     else:
