@@ -119,6 +119,7 @@ from pubtator_link.services.search_shaping import (
     TextHighlightFormat,
     attach_search_abstracts,
     combined_search_text,
+    promote_title_matches,
     dump_search_response,
     selected_search_items,
     shaped_search_response,
@@ -522,6 +523,15 @@ async def search_literature_impl(
         plan=plan,
         sections=",".join(sections) if sections else None,
     )
+    if page == 1 and normalized_sort is None and filter_note is None and not entity_ids:
+        result = await promote_title_matches(
+            client,
+            result,
+            text=normalized_text,
+            filters=plan.server_filters,
+            sections=None if not sections else ",".join(sections),
+            wanted=limit,
+        )
     raw_items = _selected_search_items(
         result,
         limit=limit,

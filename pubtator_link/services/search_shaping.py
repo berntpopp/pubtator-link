@@ -356,6 +356,72 @@ async def attach_search_abstracts(client: Any, items: list[dict[str, Any]]) -> s
     return f"No abstract available upstream for PMID(s): {', '.join(missing)}."
 
 
+_QUERY_STOPWORDS = frozenset(
+    {"and", "or", "not", "the", "of", "in", "with", "a", "an", "for", "to"}
+)
+TITLE_PROMOTION_MAX_PAGES = 3
+
+
+def _words(text: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+def _title_rank(item: dict[str, Any], terms: set[str], symbols: set[str]) -> int:
+    """2 = every query term in the title; 1 = every gene-symbol-like term; else 0."""
+    title = _words(str(item.get("title", "")))
+    if terms <= title:
+        return 2
+    return 1 if symbols and symbols <= title else 0
+
+
+async def promote_title_matches(
+    client: Any,
+    result: dict[str, Any],
+    *,
+    text: str,
+    filters: str | None,
+    sections: str | None,
+    wanted: int | None,
+) -> dict[str, Any]:
+    """Promote hits whose title holds the query terms onto relevance page 1 (#243).
+
+    PubTator3 relevance can bury the discovery paper (query terms in its title)
+    pages deep. When page 1 has fewer than ``wanted`` all-term title hits, scan
+    the next upstream pages and move title hits (all terms, then all gene-symbol
+    terms such as ``TBC1D8B``) to the front, keeping the page size.
+    ponytail: scans at most TITLE_PROMOTION_MAX_PAGES; promoted hits may repeat
+    on their original later page.
+    """
+    terms = {term for term in _words(text) if term not in _QUERY_STOPWORDS and len(term) > 1}
+    symbols = {term for term in terms if re.search(r"\d", term) and re.search(r"[a-z]", term)}
+    page_one = list(result.get("results", []))
+    want = min(wanted or len(page_one), len(page_one))
+    full_matches = sum(_title_rank(item, terms, symbols) == 2 for item in page_one)
+    last_page = min(int(result.get("total_pages", 1) or 1), TITLE_PROMOTION_MAX_PAGES)
+    if not terms or not page_one or full_matches >= want or last_page < 2:
+        return result
+    pool = list(page_one)
+    for page in range(2, last_page + 1):
+        try:
+            extra = await client.search_publications(
+                text=text, page=page, sort=None, filters=filters, sections=sections
+            )
+        except Exception:
+            break
+        pool.extend(extra.get("results", []))
+    unique: dict[str, dict[str, Any]] = {}
+    for item in pool:
+        unique.setdefault(str(item.get("pmid")), item)
+    ranked = sorted(unique.values(), key=lambda item: -_title_rank(item, terms, symbols))  # stable
+    page_one_ids = {str(item.get("pmid")) for item in page_one}
+    kept = [
+        item
+        for item in ranked
+        if _title_rank(item, terms, symbols) or str(item.get("pmid")) in page_one_ids
+    ]
+    return {**result, "results": kept[: len(page_one)]}
+
+
 def selected_search_items(
     items: list[dict[str, Any]],
     *,
