@@ -663,5 +663,7 @@ async def test_request_model_error_names_the_field_without_diagnostics_detour() 
 
     assert payload["error_code"] == "invalid_input"
     assert payload["field_errors"][0]["field"] == "pmids"
-    assert "numeric" in payload["field_errors"][0]["reason"].lower()
+    # A custom-validator message can interpolate the caller value; the reason is fixed text.
+    assert "constraints" in payload["field_errors"][0]["reason"]
+    assert "abc123" not in str(payload)
     assert payload["_meta"]["next_commands"] == []

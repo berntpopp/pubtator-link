@@ -479,14 +479,17 @@ class PublicationPassageService:
                     f"PMID {pmid} has only title/abstract (likely not open access); use "
                     "mode='full_abstract' or drop the sections filter."
                 )
+                seen = available_sections[pmid]  # tier must agree with the reason (not "unknown")
+                coverage = "abstract_only" if "abstract" in seen else "title_only"
             coverage_by_pmid[pmid] = coverage
             coverage_reason_by_pmid[pmid] = reason
-            if coverage == "unknown":
+            if coverage == "unknown" or reason == "full_text_not_available":
                 failed_pmids.append(FailedPublicationPmid(pmid=pmid, reason=failure))
             if (
                 request.full
                 and request.mode == "section_text"
                 and coverage in {"abstract_only", "title_only"}
+                and reason != "full_text_not_available"  # already explained above
             ):
                 warnings.append(
                     "No full-text section passages were available for PMID "

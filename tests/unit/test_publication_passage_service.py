@@ -545,5 +545,9 @@ async def test_full_text_section_request_on_abstract_only_pmid_explains_why() ->
     )
 
     assert response.coverage_reason_by_pmid["29058690"] == "full_text_not_available"
+    # The tier must agree with the reason: we KNOW it is abstract-only, not "unknown".
+    assert response.coverage_by_pmid["29058690"] == "abstract_only"
+    assert response.degraded_mode == "abstract_only"
+    assert len(response.warnings) == 1  # no "returned abstract-only passages" claim: none were
     assert "open access" in response.failed_pmids[0].reason
     assert any("full_abstract" in warning for warning in response.warnings)

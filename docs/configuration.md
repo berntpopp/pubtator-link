@@ -95,7 +95,9 @@ PUBTATOR_LINK_REVIEW_EMBEDDING_MODEL_DIR=/opt/models/bge-small-en-v1.5   # set b
 - **Runtime.** CPU-only `onnxruntime` + `tokenizers` + `numpy` (the `embeddings` extra), no
   torch. The image bakes an int8 ONNX export of `BAAI/bge-small-en-v1.5` (34 MB, pinned by
   Hugging Face revision + sha256 in `scripts/fetch_embedding_model.sh`) under `/opt/models`,
-  root-owned and read-only. Nothing is downloaded at request time. Locally: `make embeddings-model`.
+  root-owned and read-only. Nothing is downloaded at request time. Locally: `make
+  install-embeddings` (plain `make install` omits the extra, so rerank reports the model
+  unavailable) plus `make embeddings-model`, and point `..._MODEL_DIR` at `.models/`.
 - **Existing corpora need a backfill.** Embeddings are written at index time only for new
   passages. Embed an existing corpus with
   `pubtator-link embeddings backfill --all` (or `--review-id ID`, repeatable; `make
