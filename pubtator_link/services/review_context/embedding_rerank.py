@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from typing import Any
 
 from pubtator_link.models.review_rerag import (
     EmbeddingRerankDiagnostics,
@@ -63,6 +64,33 @@ def rerank_with_embeddings(
         ),
     )
     return ranked_evidence + guarded_rows, diagnostics
+
+
+def embedding_rerank_outcome(
+    diagnostics: EmbeddingRerankDiagnostics | None,
+) -> dict[str, Any]:
+    """Name the ranking actually used and warn when an enabled rerank was skipped or partial."""
+    if diagnostics is None or not diagnostics.enabled:
+        return {"ranking": "lexical", "warnings": []}
+    if not diagnostics.active:
+        if diagnostics.fallback_reason == "no_candidates":
+            return {"ranking": "lexical", "warnings": []}
+        return {
+            "ranking": "lexical",
+            "warnings": [
+                f"Embedding rerank was skipped ({diagnostics.fallback_reason}); passages are in "
+                "lexical order. If embeddings are missing, run `pubtator-link embeddings "
+                "backfill` for this review."
+            ],
+        }
+    warnings = []
+    if diagnostics.missing_embedding_count:
+        warnings.append(
+            f"Embedding rerank was partial: {diagnostics.embedded_candidate_count} of "
+            f"{diagnostics.candidate_count} candidate passages have embeddings; run "
+            "`pubtator-link embeddings backfill` for this review."
+        )
+    return {"ranking": diagnostics.strategy or RRF_STRATEGY, "warnings": warnings}
 
 
 def _is_guarded_section(section: str) -> bool:

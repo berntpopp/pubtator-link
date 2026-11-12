@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pubtator-link"
-version = "7.2.1"
+version = "7.3.0"
 description = "A unified server for the PubTator3 biomedical literature API with MCP integration"
 readme = "README.md"
 authors = [
@@ -46,10 +46,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# CPU-only ONNX runtime (no torch): see docs/configuration.md "Embedding rerank".
 embeddings = [
-    "sentence-transformers>=6.0.1,<7.0.0",
-    "transformers>=5.10.0",
-    "torch>=2.13.0",
+    "onnxruntime>=1.31.1,<2.0.0",
+    "tokenizers>=0.23.3,<1.0.0",
     "numpy>=2.5.2,<3.0.0",
 ]
 
@@ -152,7 +152,8 @@ module = [
     "pydantic_settings.*",
     "httpx.*",
     "numpy.*",
-    "sentence_transformers.*",
+    "onnxruntime.*",
+    "tokenizers.*",
     "uvicorn.*",
 ]
 ignore_missing_imports = true

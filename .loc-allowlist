@@ -22,7 +22,8 @@ pubtator_link/mcp/service_adapters.py:1958
 pubtator_link/services/topic_literature_map.py:1821
 pubtator_link/models/review_rerag.py:1253
 pubtator_link/services/citation_graph.py:1244
-pubtator_link/services/review_context_service.py:1160
+# Raised 1160 -> 1169: per-response ranking + rerank warnings (#182); split plan above.
+pubtator_link/services/review_context_service.py:1169
 pubtator_link/mcp/resources.py:775
 pubtator_link/services/full_text_preparation.py:742
 pubtator_link/services/ncbi_discovery.py:663

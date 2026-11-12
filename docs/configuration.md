@@ -79,18 +79,38 @@ per-document/source timeouts, `PUBTATOR_LINK_REVIEW_INDEX_TTL_SECONDS`, and down
 (`PUBTATOR_LINK_REVIEW_PREP_PDF_MAX_BYTES`, `..._TEXT_MAX_BYTES`). `index_review_evidence`
 caps `pmids` and `curated_urls` at 200 entries each.
 
-### Optional local embedding rerank
+### Embedding rerank (review retrieval)
 
-Private deployments can enable local dense reranking for review retrieval:
+`get_review_context` / `get_review_context_batch` rerank the lexical (Postgres FTS)
+top-`PUBTATOR_LINK_REVIEW_EMBEDDING_TOP_K` (50) candidates with a local dense model, fused
+by reciprocal rank (`PUBTATOR_LINK_REVIEW_EMBEDDING_RRF_K`, 10). It is **on by default**:
 
 ```bash
-PUBTATOR_LINK_REVIEW_EMBEDDING_RERANK_ENABLED=true
+PUBTATOR_LINK_REVIEW_EMBEDDING_RERANK_ENABLED=true   # default
 PUBTATOR_LINK_REVIEW_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 PUBTATOR_LINK_REVIEW_EMBEDDING_DIM=384
+PUBTATOR_LINK_REVIEW_EMBEDDING_MODEL_DIR=/opt/models/bge-small-en-v1.5   # set by the image
 ```
 
-Lexical retrieval remains the fallback when embeddings are missing, the model is
-unavailable, or `pgvector` is not installed.
+- **Runtime.** CPU-only `onnxruntime` + `tokenizers` + `numpy` (the `embeddings` extra), no
+  torch. The image bakes an int8 ONNX export of `BAAI/bge-small-en-v1.5` (34 MB, pinned by
+  Hugging Face revision + sha256 in `scripts/fetch_embedding_model.sh`) under `/opt/models`,
+  root-owned and read-only. Nothing is downloaded at request time. Locally: `make embeddings-model`.
+- **Existing corpora need a backfill.** Embeddings are written at index time only for new
+  passages. Embed an existing corpus with
+  `pubtator-link embeddings backfill --all` (or `--review-id ID`, repeatable; `make
+  embeddings-backfill`). It is batched, prints progress, and is idempotent and resumable:
+  each round re-queries what is still missing or stale, so rerun it after an interruption.
+  Measured ~50-90 passages/s on 2 CPU threads, i.e. hours for a corpus of ~1.4M passages.
+- **Degrades loudly.** Every review-context response carries `ranking`
+  (`lexical` or `lexical_top_k_dense_rrf`) and `warnings`. If rerank is enabled but was
+  skipped (no embeddings, model unavailable, ...) or only some candidates have embeddings,
+  `warnings` says so and why, and the server logs `review_embedding_rerank_fallback` at WARNING.
+- **Cost.** Request-time cost is one query embedding (p50 ~3 ms) plus a pgvector fetch; the
+  loaded model adds ~135 MB RSS per worker.
+- **Evidence.** `make eval-rerank` (`benchmarks/rerank_eval/`) reproduces the offline eval
+  behind these defaults. Embedding rerank is not applied to `search_literature`: its
+  bottleneck is PubTator3 candidate recall, which no reranker can fix (see the eval README).
 
 ## Caching
 

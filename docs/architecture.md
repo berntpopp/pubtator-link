@@ -52,9 +52,10 @@ pubtator-link/
 
 The differentiator, and the reason a database exists. A review corpus is namespaced by a
 caller-chosen `review_id`: preparation fetches sources, splits them into passages, and
-persists them in PostgreSQL with pgvector. Retrieval is lexical by default, with optional
-local dense reranking (see [Configuration](configuration.md)); lexical retrieval always
-remains the fallback.
+persists them in PostgreSQL with pgvector. Retrieval takes the lexical (FTS) top-k and
+reranks it with a local CPU embedding model (see [Configuration](configuration.md)); lexical
+order is the fallback, and every response names the ranking used and warns when the rerank
+was skipped or partial.
 
 Consequences worth knowing:
 

@@ -46,7 +46,6 @@ from pubtator_link.repositories.review_rerag_mappers import (
 from pubtator_link.repositories.review_research_session_repository import (
     ReviewResearchSessionRepositoryMixin,
 )
-from pubtator_link.services.review_context.embeddings import text_hash
 
 SHORT_SAMPLE_WARNING = "Only short sample passages were available for this PMID."
 
@@ -898,6 +897,12 @@ class PostgresReviewReragRepository(ReviewResearchSessionRepositoryMixin):
                  and e.passage_id = p.passage_id
                  and e.model_name = $2
                 where p.review_id = $1
+                  -- Filter in SQL (sha256 == embeddings.text_hash) so LIMIT pages through
+                  -- the remaining work and a backfill can resume (#182).
+                  and (
+                    e.text_hash is null
+                    or e.text_hash <> encode(sha256(convert_to(p.text, 'UTF8')), 'hex')
+                  )
                 order by p.source_id, p.passage_id
                 limit $3
                 """,
@@ -905,14 +910,7 @@ class PostgresReviewReragRepository(ReviewResearchSessionRepositoryMixin):
                 model_name,
                 limit,
             )
-
-        stale_or_missing: list[ReviewPassageRow] = []
-        for row in rows:
-            embedding_text_hash = row["embedding_text_hash"]
-            current_text_hash = text_hash(str(row["text"]))
-            if embedding_text_hash is None or str(embedding_text_hash) != current_text_hash:
-                stale_or_missing.append(_passage_from_row(row))
-        return stale_or_missing
+        return [_passage_from_row(row) for row in rows]
 
     async def search_passages(
         self,

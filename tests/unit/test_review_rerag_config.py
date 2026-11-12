@@ -35,22 +35,24 @@ def test_europe_pmc_fallback_is_disabled_by_default() -> None:
     assert config.europe_pmc_max_concurrency == 1
 
 
-def test_review_embedding_rerank_defaults_disabled() -> None:
-    settings = ServerSettings()
-    config = ReviewReragConfig.from_settings(settings)
-    assert config.embedding_rerank_enabled is False
-    assert config.embedding_model == "BAAI/bge-small-en-v1.5"
-    assert config.embedding_dim == 384
-    assert config.embedding_top_k == 50
-    assert config.embedding_rrf_k == 60
-
-
-def test_review_embedding_rerank_env_parses(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PUBTATOR_LINK_REVIEW_EMBEDDING_RERANK_ENABLED", "true")
-    monkeypatch.setenv("PUBTATOR_LINK_REVIEW_EMBEDDING_TOP_K", "40")
+def test_review_embedding_rerank_defaults_follow_the_eval() -> None:
+    # #182: on by default, RRF k=10, batch 8 -- see benchmarks/rerank_eval.
     settings = ServerSettings()
     config = ReviewReragConfig.from_settings(settings)
     assert config.embedding_rerank_enabled is True
+    assert config.embedding_batch_size == 8
+    assert config.embedding_model == "BAAI/bge-small-en-v1.5"
+    assert config.embedding_dim == 384
+    assert config.embedding_top_k == 50
+    assert config.embedding_rrf_k == 10
+
+
+def test_review_embedding_rerank_env_parses(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PUBTATOR_LINK_REVIEW_EMBEDDING_RERANK_ENABLED", "false")
+    monkeypatch.setenv("PUBTATOR_LINK_REVIEW_EMBEDDING_TOP_K", "40")
+    settings = ServerSettings()
+    config = ReviewReragConfig.from_settings(settings)
+    assert config.embedding_rerank_enabled is False
     assert config.embedding_top_k == 40
 
 

@@ -33,8 +33,17 @@ COPY uv.lock pyproject.toml README.md ./
 # --upgrade pip uv`, so the build toolchain is reproducible and tamper-evident.
 COPY --from=ghcr.io/astral-sh/uv:0.8.7@sha256:1e26f9a868360eeb32500a35e05787ffff3402f01a8dc8168ef6aee44aef0aab /uv /usr/local/bin/uv
 
-# Install production dependencies only
-RUN uv sync --frozen --no-dev --active
+# Install production dependencies plus the CPU-only ONNX embedding runtime (#182).
+# The wheels' own test fixtures and onnxruntime's sample models are unused at runtime
+# and live under tests/ data/ datasets/ paths the image content gate rejects, so
+# they are deleted rather than allowlisted.
+RUN uv sync --frozen --no-dev --active --extra embeddings \
+    && find /opt/venv/lib/python*/site-packages/numpy -type d -name tests -prune -exec rm -rf '{}' + \
+    && rm -rf /opt/venv/lib/python*/site-packages/onnxruntime/datasets
+
+# Bake the pinned embedding model (revision + sha256) so no request ever fetches weights.
+COPY scripts/fetch_embedding_model.sh /tmp/fetch_embedding_model.sh
+RUN sh /tmp/fetch_embedding_model.sh /opt/models/bge-small-en-v1.5 && rm /tmp/fetch_embedding_model.sh
 
 # --- Production Stage ---
 # This stage creates the final, minimal production image
@@ -65,6 +74,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PUBTATOR_LINK_HOST=0.0.0.0 \
     PUBTATOR_LINK_PORT=8000 \
     PUBTATOR_LINK_TRANSPORT=unified \
+    PUBTATOR_LINK_REVIEW_EMBEDDING_MODEL_DIR=/opt/models/bge-small-en-v1.5 \
     TMPDIR=/tmp
 
 # Install runtime dependencies only
@@ -82,8 +92,9 @@ RUN groupadd --system app && \
     mkdir -p /var/cache/pubtator-link /home/app/.fastmcp && \
     chown -R app:app /var/cache/pubtator-link /home/app
 
-# Copy the virtual environment from builder stage
+# Copy the virtual environment and the read-only embedding model from builder stage
 COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /opt/models /opt/models
 
 # Set working directory
 WORKDIR /home/app/web
@@ -95,6 +106,9 @@ COPY --chown=app:app ./docker/gunicorn_conf.py ./
 
 # Install the application package
 RUN /opt/venv/bin/pip install -e . --no-deps
+
+# Build-time smoke: the baked model must load and embed offline in this image.
+RUN python -c "import asyncio; from pubtator_link.services.review_context.embeddings import OnnxEmbeddingProvider as P; v = asyncio.run(P(model_dir='/opt/models/bge-small-en-v1.5', model_name='smoke', dim=384).embed_query('smoke')); assert len(v) == 384, len(v)"
 
 RUN rm -rf /root/.cache/pip \
            /usr/local/lib/python*/ensurepip \
@@ -141,6 +155,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PUBTATOR_LINK_HOST=0.0.0.0 \
     PUBTATOR_LINK_PORT=8000 \
     PUBTATOR_LINK_TRANSPORT=unified \
+    PUBTATOR_LINK_REVIEW_EMBEDDING_MODEL_DIR=/opt/models/bge-small-en-v1.5 \
     TMPDIR=/tmp
 WORKDIR /home/app/web
 

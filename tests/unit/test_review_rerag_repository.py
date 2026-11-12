@@ -792,28 +792,6 @@ async def test_list_passages_missing_embeddings_returns_absent_and_stale_rows() 
             "lexical_rank": 0.0,
             "embedding_text_hash": "old-hash",
         },
-        {
-            "passage_id": "fresh",
-            "review_id": "review-1",
-            "source_id": "source-3",
-            "source_kind": "pubtator_abstract",
-            "pmid": "789",
-            "pmcid": None,
-            "doi": None,
-            "url": None,
-            "section": "discussion",
-            "heading_path": None,
-            "page": None,
-            "text": "fresh text",
-            "entity_ids": [],
-            "relation_types": [],
-            "screening_status": "candidate",
-            "source_metadata": {},
-            "lexical_rank": 0.0,
-            "embedding_text_hash": (
-                "06b05fe41cba3c2910b5069a680d10827f9a8bc13dc16a9cb583ba58f35b276a"
-            ),
-        },
     ]
     repository = PostgresReviewReragRepository(FakePool(connection))
 
@@ -826,6 +804,9 @@ async def test_list_passages_missing_embeddings_returns_absent_and_stale_rows() 
     assert [row.passage_id for row in rows] == ["missing", "stale"]
     sql, args = connection.executed[0]
     assert "left join review_passage_embeddings" in sql.lower()
+    # Missing/stale filter must be in SQL, before LIMIT, or a resumed backfill stalls (#182).
+    assert "e.text_hash is null" in sql
+    assert "encode(sha256(convert_to(p.text, 'UTF8')), 'hex')" in sql
     assert args == ("review-1", "BAAI/bge-small-en-v1.5", 50)
 
 
