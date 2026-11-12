@@ -117,6 +117,7 @@ from pubtator_link.services.search_shaping import (
     SearchMetadataMode,
     SearchResponseMode,
     TextHighlightFormat,
+    attach_search_abstracts,
     combined_search_text,
     dump_search_response,
     selected_search_items,
@@ -532,6 +533,8 @@ async def search_literature_impl(
         include_citations=include_citations,
         metadata_service=metadata_service,
     )
+    wants_abstract = metadata in {"with_abstract", "full"} or response_mode != "compact"
+    abstract_warning = await attach_search_abstracts(client, raw_items) if wants_abstract else None
     response = shaped_search_response(
         raw=result,
         query=normalized_text,
@@ -590,7 +593,7 @@ async def search_literature_impl(
     else:
         for field in ("cache_key", "corpus_snapshot_date", "source_versions"):
             dumped.pop(field, None)
-    warnings = [warning for warning in (filter_warning, sort_warning) if warning]
+    warnings = [w for w in (filter_warning, sort_warning, abstract_warning) if w]
     return dumped | ({"warnings": warnings} if warnings else {})
 
 

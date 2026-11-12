@@ -14,6 +14,7 @@ from ...services.search_shaping import (
     SearchMetadataMode,
     SearchResponseMode,
     TextHighlightFormat,
+    attach_search_abstracts,
     combined_search_text,
     selected_search_items,
     shaped_search_response,
@@ -464,6 +465,8 @@ async def search_publications(
             guideline_boost=guideline_boost,
             limit=limit,
         )
+        if metadata in {"with_abstract", "full"} or response_mode != "compact":
+            await attach_search_abstracts(client, raw_items)
 
         metadata_by_pmid = {}
         if metadata != "none":

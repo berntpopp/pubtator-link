@@ -459,9 +459,7 @@ async def test_biocjson_gap_falls_back_to_pubtator_abstract(pmids: list[str]) ->
     assert [p.text for p in fallback] == ["HNF1B title", "HNF1B abstract"]
     assert {p.source for p in fallback} == {"pubtator_abstract"}
     assert response.coverage_by_pmid["39156164"] == "abstract_only"
-    assert (
-        response.coverage_reason_by_pmid["39156164"] == "biocjson_unavailable_pubtator_fallback"
-    )
+    assert response.coverage_reason_by_pmid["39156164"] == "biocjson_unavailable_pubtator_fallback"
 
 
 @pytest.mark.asyncio

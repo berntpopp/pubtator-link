@@ -142,7 +142,7 @@ def shaped_search_result(
         pmid=item.get("pmid", ""),
         title=item.get("title", ""),
         abstract=_inline_abstract(item.get("abstract"))
-        if response_mode in {"standard", "full"} or metadata == "with_abstract"
+        if response_mode in {"standard", "full"} or metadata in {"with_abstract", "full"}
         else None,
         authors=raw_authors if include_author_array else [],
         first_author_et_al=_author_summary(raw_authors),
@@ -326,6 +326,34 @@ def _rerank_guidelines(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         key=lambda pair: (-_guideline_rank_features(pair[1])["guideline_boost"], pair[0]),
     )
     return [item for _, item in ranked]
+
+
+async def attach_search_abstracts(client: Any, items: list[dict[str, Any]]) -> str | None:
+    """Fill ``abstract`` on search hits from the pubtator export (#246).
+
+    PubTator3 ``/search/`` hits carry no abstract. Returns a warning naming the
+    PMIDs left without one, or ``None``.
+    """
+    pmids = [pmid for pmid in dict.fromkeys(str(item.get("pmid", "")) for item in items) if pmid]
+    if not pmids:
+        return None
+    try:
+        raw = await client.export_publications(pmids=pmids, format="pubtator")
+    except Exception:
+        return "Abstract lookup failed; abstract is null for this page."
+    abstracts: dict[str, str] = {}
+    content = raw.get("content", "") if isinstance(raw, dict) else ""
+    for line in str(content).splitlines():
+        pmid, separator, text = line.partition("|a|")
+        if separator and pmid.isdigit() and text.strip():
+            abstracts[pmid] = text.strip()
+    for item in items:
+        if not item.get("abstract"):
+            item["abstract"] = abstracts.get(str(item.get("pmid", "")))
+    missing = [pmid for pmid in pmids if pmid not in abstracts]
+    if not missing:
+        return None
+    return f"No abstract available upstream for PMID(s): {', '.join(missing)}."
 
 
 def selected_search_items(
