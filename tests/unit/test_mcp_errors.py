@@ -649,3 +649,19 @@ async def test_mcp_tool_failed_log_carries_exception_type(
     assert record.tool_name == "get_publication_passages"
     assert record.error_code == "internal"
     assert record.exception_type == "RuntimeError"
+
+
+@pytest.mark.asyncio
+async def test_request_model_error_names_the_field_without_diagnostics_detour() -> None:
+    from pubtator_link.models.publication_metadata import PublicationMetadataRequest
+
+    async def failing() -> dict[str, object]:
+        PublicationMetadataRequest(pmids=["abc123"])
+        return {}
+
+    payload = await run_mcp_tool("get_publication_metadata", failing)
+
+    assert payload["error_code"] == "invalid_input"
+    assert payload["field_errors"][0]["field"] == "pmids"
+    assert "numeric" in payload["field_errors"][0]["reason"].lower()
+    assert payload["_meta"]["next_commands"] == []
