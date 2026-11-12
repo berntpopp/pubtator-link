@@ -254,8 +254,10 @@ def error_reason_for_exception(exc: Exception) -> str:
         return "review_index_unavailable"
     if isinstance(exc, httpx.TimeoutException | TimeoutError):
         return "upstream_unavailable"
-    # Args are already bound by FastMCP: a pydantic model failure here is a server bug (#248).
-    if isinstance(exc, ValueError) and not isinstance(exc, PydanticValidationError):
+    # Only a *Request model checks caller input; any other pydantic failure is a server bug (#248).
+    if isinstance(exc, PydanticValidationError) and not exc.title.endswith("Request"):
+        return "internal_error"
+    if isinstance(exc, ValueError):
         return "validation_failed"
     return "internal_error"
 

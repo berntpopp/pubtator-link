@@ -624,6 +624,17 @@ def test_internal_pydantic_validation_error_is_internal_not_invalid_input() -> N
         raise AssertionError("expected a pydantic ValidationError")
 
 
+def test_request_model_validation_error_stays_invalid_input() -> None:
+    from pubtator_link.models.publication_metadata import PublicationMetadataRequest
+
+    try:
+        PublicationMetadataRequest(pmids=["not-a-pmid"])
+    except ValueError as exc:
+        assert error_code_for_exception(exc) == "invalid_input"
+    else:  # pragma: no cover
+        raise AssertionError("expected a pydantic ValidationError")
+
+
 @pytest.mark.asyncio
 async def test_mcp_tool_failed_log_carries_exception_type(
     caplog: pytest.LogCaptureFixture,
