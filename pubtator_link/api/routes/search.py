@@ -465,7 +465,7 @@ async def search_publications(
             guideline_boost=guideline_boost,
             limit=limit,
         )
-        if metadata in {"with_abstract", "full"} or response_mode != "compact":
+        if metadata in {"with_abstract", "full"}:  # REST defaults to standard: keep it opt-in
             await attach_search_abstracts(client, raw_items)
 
         metadata_by_pmid = {}

@@ -21,11 +21,13 @@
 - `get_publication_passages` falls back to the PubTator abstract export when biocjson 400s or
   drops a PMID (`coverage_reason=biocjson_unavailable_pubtator_fallback`); a PMID neither
   export returns is `not_retrievable` instead of a whole-call failure (#247).
-- `search_literature` `metadata='with_abstract'`/`'full'` (and standard/full response modes)
-  return the abstract, with a warning naming PMIDs that have none upstream (#246).
-- `search_literature` promotes hits whose title holds the query terms (or its gene symbols)
-  from the first 3 upstream pages onto relevance page 1, so discovery papers such as
-  PMID 31732614 are no longer buried (#243).
+- `search_literature` `metadata='with_abstract'`/`'full'` (and MCP standard/full response
+  modes) return the abstract, with a warning naming PMIDs that have none upstream (#246).
+- Request-model validation errors (e.g. a non-numeric PMID) return `field_errors` naming the
+  field instead of a generic message and a `diagnostics` detour (#248).
+- `search_literature` (gene-symbol queries, relevance page 1) promotes hits whose title holds
+  the query terms (or its gene symbols) from the first 3 upstream pages, so discovery papers
+  such as PMID 31732614 are no longer buried (#243).
 - Full-text section requests on abstract-only (non open-access) PMIDs report
   `coverage_reason=full_text_not_available` with a recovery warning (#239).
 

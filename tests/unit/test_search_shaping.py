@@ -445,3 +445,23 @@ async def test_title_promotion_skips_extra_fetch_when_page_one_is_enough() -> No
 
     assert result["results"] == page1
     assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_title_promotion_skips_queries_without_a_gene_symbol() -> None:
+    from pubtator_link.services.search_shaping import promote_title_matches
+
+    page1 = _hits("1", 10, "Unrelated")
+    client = _PagedSearchClient({1: page1, 2: _hits("2", 10, "breast cancer risk")})
+
+    result = await promote_title_matches(
+        client,
+        {"results": page1, "count": 20, "total_pages": 2},
+        text="breast cancer risk",
+        filters=None,
+        sections=None,
+        wanted=5,
+    )
+
+    assert result["results"] == page1
+    assert client.calls == []

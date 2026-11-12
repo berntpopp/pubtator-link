@@ -398,7 +398,8 @@ async def promote_title_matches(
     want = min(wanted or len(page_one), len(page_one))
     full_matches = sum(_title_rank(item, terms, symbols) == 2 for item in page_one)
     last_page = min(int(result.get("total_pages", 1) or 1), TITLE_PROMOTION_MAX_PAGES)
-    if not terms or not page_one or full_matches >= want or last_page < 2:
+    # Gene-symbol queries only (the curation case): spares generic searches the extra fetches.
+    if not symbols or not page_one or full_matches >= want or last_page < 2:
         return result
     pool = list(page_one)
     for page in range(2, last_page + 1):
