@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+## [7.2.0] - 2026-11-12
+
+### Added
+
+- `get_publication_passages` returns `dropped_summary` (`{reason: {section: count}}`) and
+  `truncated_sections`; individual `dropped` rows are listed only at `verbosity='full'`. With
+  explicit `sections`, `max_passages_per_pmid` applies per PMID and section, so requested TABLE
+  passages are no longer starved by RESULTS (#244).
+
+### Fixed
+
+- `mcp_tool_failed` (and every stdlib `extra=` log) now carries its fields (`tool_name`,
+  `error_code`, `latency_ms`, `exception_type`) in the JSON log line; a non-request pydantic
+  failure inside a tool is reported `internal`, not `invalid_input` (#248).
+- `get_publication_passages` / `get_review_context` advertised integer bounds looser than the
+  request model, so in-schema values failed as `invalid_input`; bounds aligned and guarded (#248).
+- `get_publication_passages` falls back to the PubTator abstract export when biocjson 400s or
+  drops a PMID (`coverage_reason=biocjson_unavailable_pubtator_fallback`); a PMID neither
+  export returns is `not_retrievable` instead of a whole-call failure (#247).
+- `search_literature` `metadata='with_abstract'`/`'full'` (and standard/full response modes)
+  return the abstract, with a warning naming PMIDs that have none upstream (#246).
+- `search_literature` promotes hits whose title holds the query terms (or its gene symbols)
+  from the first 3 upstream pages onto relevance page 1, so discovery papers such as
+  PMID 31732614 are no longer buried (#243).
+- Full-text section requests on abstract-only (non open-access) PMIDs report
+  `coverage_reason=full_text_not_available` with a recovery warning (#239).
+
 ## [7.1.20] - 2026-11-11
 
 ### Security
