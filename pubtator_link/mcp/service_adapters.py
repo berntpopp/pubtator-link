@@ -119,8 +119,8 @@ from pubtator_link.services.search_shaping import (
     TextHighlightFormat,
     attach_search_abstracts,
     combined_search_text,
-    promote_title_matches,
     dump_search_response,
+    promote_title_matches,
     selected_search_items,
     shaped_search_response,
 )
