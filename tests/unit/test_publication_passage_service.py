@@ -474,3 +474,48 @@ async def test_pmid_missing_from_both_exports_is_not_retrievable() -> None:
 
     assert response.coverage_by_pmid["1"] == "unknown"
     assert response.coverage_reason_by_pmid["1"] == "not_retrievable"
+
+
+class ResultsAndTablesService:
+    """Full text where RESULTS precede TABLE passages (#244)."""
+
+    async def export_publications_list(self, pmids: list[str], format: str, full: bool):
+        passages = [{"infons": {"section_type": "RESULTS"}, "text": f"R{i}"} for i in range(8)]
+        passages += [{"infons": {"section_type": "TABLE"}, "text": f"T{i}"} for i in range(4)]
+        passages += [{"infons": {"section_type": "REF"}, "text": f"ref{i}"} for i in range(5)]
+        return {"documents": [{"id": "34622103", "passages": passages}]}
+
+
+@pytest.mark.asyncio
+async def test_explicit_sections_cap_per_section_so_tables_are_not_starved() -> None:
+    service = PublicationPassageService(ResultsAndTablesService())
+
+    response = await service.get_passages(
+        PublicationPassageRequest(
+            pmids=["34622103"], full=True, sections=["RESULTS", "TABLE"], max_passages_per_pmid=3
+        )
+    )
+
+    texts = [p.text for p in response.passages]
+    assert texts == ["R0", "R1", "R2", "T0", "T1", "T2"]
+    assert response.truncated_sections == ["results", "table"]
+    assert response.dropped_summary == {
+        "max_passages_per_pmid_exceeded": {"results": 5, "table": 1},
+        "reference_excluded": {"references": 5},
+    }
+
+
+@pytest.mark.asyncio
+async def test_mcp_dump_lists_individual_drops_only_at_full_verbosity() -> None:
+    service = PublicationPassageService(ResultsAndTablesService())
+    request = PublicationPassageRequest(pmids=["34622103"], full=True, max_passages_per_pmid=2)
+
+    standard = (await service.get_passages(request)).model_dump_mcp()
+    full = (await service.get_passages(request)).model_dump_mcp(verbosity="full")
+
+    assert standard["dropped"] == []
+    assert standard["dropped_summary"]["max_passages_per_pmid_exceeded"] == {
+        "results": 6,
+        "table": 4,
+    }
+    assert len(full["dropped"]) == 15

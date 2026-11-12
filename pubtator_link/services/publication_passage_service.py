@@ -88,6 +88,7 @@ class PublicationPassageService:
             include_tables=request.include_tables,
             include_references=request.include_references,
             max_passages_per_pmid=max_per_pmid,
+            per_section_cap=bool(request.sections),
         )
         fallback_passages, fallback_dropped = self._compact_export(
             export_data={"documents": fallback_documents},
@@ -97,6 +98,7 @@ class PublicationPassageService:
             include_tables=request.include_tables,
             include_references=request.include_references,
             max_passages_per_pmid=max_per_pmid,
+            per_section_cap=bool(request.sections),
         )
         passages.extend(fallback_passages)
         dropped.extend(fallback_dropped)
@@ -240,6 +242,7 @@ class PublicationPassageService:
             include_tables=request.include_tables,
             include_references=request.include_references,
             max_passages_per_pmid=self._effective_max_passages_per_pmid(request),
+            per_section_cap=bool(request.sections),
         )
         estimate = self._estimate_from_passages(passages, request.pmids, request.mode)
         warning = estimate.warning
@@ -266,11 +269,13 @@ class PublicationPassageService:
         include_tables: bool,
         include_references: bool,
         max_passages_per_pmid: int,
+        per_section_cap: bool = False,
     ) -> tuple[list[PublicationPassage], list[PassageDropReason]]:
         section_filter = {normalize_publication_section(section) for section in sections}
         passages: list[PublicationPassage] = []
         dropped: list[PassageDropReason] = []
-        per_pmid_counts: dict[str, int] = {}
+        # Explicit sections cap per (pmid, section) so TABLE is not starved by RESULTS (#244).
+        per_pmid_counts: dict[tuple[str, str], int] = {}
 
         for document in _extract_documents(export_data):
             pmid = _pmid_from_document(document)
@@ -304,7 +309,8 @@ class PublicationPassageService:
                     dropped.append(drop)
                     continue
 
-                current_count = per_pmid_counts.get(pmid, 0)
+                cap_key = (pmid, section if per_section_cap else "")
+                current_count = per_pmid_counts.get(cap_key, 0)
                 if current_count >= max_passages_per_pmid:
                     dropped.append(
                         PassageDropReason(
@@ -327,7 +333,7 @@ class PublicationPassageService:
                         source=source,
                     )
                 )
-                per_pmid_counts[pmid] = current_count + 1
+                per_pmid_counts[cap_key] = current_count + 1
 
         return passages, dropped
 

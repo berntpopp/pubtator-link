@@ -273,7 +273,7 @@ async def get_publication_passages_impl(
             verbosity=verbosity,
         )
     )
-    return response.model_dump_mcp()
+    return response.model_dump_mcp(verbosity)
 
 
 async def get_publication_metadata_impl(
