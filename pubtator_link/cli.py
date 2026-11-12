@@ -1,7 +1,8 @@
 """Typer command-line interface for pubtator-link.
 
 GeneFoundry Logging & CLI Standard v1: a single ``Typer`` app exposing
-``serve`` / ``config`` / ``health`` / ``version``. Streamable HTTP only — there
+``serve`` / ``config`` / ``health`` / ``version``, plus the domain group
+``embeddings backfill`` (embed an existing review corpus, #182). Streamable HTTP only — there
 is no stdio transport and no bare-serve entry point. The server boots via
 ``pubtator-link serve`` in either the ``unified`` (FastAPI REST + MCP at
 ``/mcp``) or ``http`` (FastAPI REST only) transport.
@@ -11,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import signal
+import time
 from typing import TYPE_CHECKING
 
 import httpx
@@ -176,6 +178,93 @@ def health(
 def version() -> None:
     """Print the installed pubtator-link version."""
     console.print(f"pubtator-link {__version__}")
+
+
+embeddings_app = typer.Typer(no_args_is_help=True, help="Review-corpus embedding maintenance.")
+app.add_typer(embeddings_app, name="embeddings")
+
+
+@embeddings_app.command("backfill")
+def embeddings_backfill(
+    review_ids: list[str] | None = typer.Option(  # noqa: B008
+        None, "--review-id", help="Review index to embed (repeatable)."
+    ),
+    all_reviews: bool = typer.Option(False, "--all", help="Embed every review index."),
+    batch_size: int = typer.Option(
+        settings.review_embedding_batch_size,
+        "--batch-size",
+        min=1,
+        max=256,
+        help="Passages per model call.",
+    ),
+    chunk_size: int = typer.Option(
+        512, "--chunk-size", min=1, max=10000, help="Passages fetched per database round trip."
+    ),
+) -> None:
+    """Embed missing or stale review passages. Idempotent and resumable: rerun to continue."""
+    if bool(review_ids) == all_reviews:
+        console.print("[red]Pass --review-id (one or more) or --all.[/red]")
+        raise typer.Exit(code=2)
+    configure_logging()
+    raise typer.Exit(
+        code=asyncio.run(_embeddings_backfill(review_ids or [], batch_size, chunk_size))
+    )
+
+
+async def _embeddings_backfill(review_ids: list[str], batch_size: int, chunk_size: int) -> int:
+    import asyncpg
+
+    from .api.routes.dependencies.resources import review_pool_kwargs
+    from .api.routes.dependencies.review import load_embedding_provider
+    from .repositories.review_rerag import PostgresReviewReragRepository
+    from .services.review_context.embedding_backfill import backfill_review_passage_embeddings
+
+    provider = load_embedding_provider()
+    if provider is None:
+        console.print(
+            "[red]Embedding model unavailable[/red] (install the 'embeddings' extra and run "
+            "`make embeddings-model`, or set PUBTATOR_LINK_REVIEW_EMBEDDING_MODEL_DIR)."
+        )
+        return 1
+    pool = await asyncpg.create_pool(**{**review_pool_kwargs(), "min_size": 1, "max_size": 2})
+    try:
+        repository = PostgresReviewReragRepository(pool)
+        if not review_ids:
+            offset = 0
+            while page := await repository.list_review_indexes(limit=200, offset=offset):
+                review_ids.extend(item.review_id for item in page)
+                offset += len(page)
+        started, total, failed = time.monotonic(), 0, 0
+        for index, review_id in enumerate(review_ids, start=1):
+
+            def report(rid: str, count: int, index: int = index, base: int = total) -> None:
+                rate = (base + count) / max(time.monotonic() - started, 1e-9)
+                console.print(
+                    f"[{index}/{len(review_ids)}] {rid}: {count} embedded "
+                    f"(run total {base + count}, {rate:.1f} passages/s)"
+                )
+
+            result = await backfill_review_passage_embeddings(
+                repository=repository,
+                review_id=review_id,
+                provider=provider,
+                model_name=provider.model_name,
+                embedding_dim=provider.dim,
+                batch_size=batch_size,
+                chunk_size=chunk_size,
+                progress=report,
+            )
+            total += result.embedded_count
+            if result.error is not None:
+                failed += 1
+                console.print(f"[red]{review_id}: {result.error}[/red]")
+        console.print(
+            f"Done: {total} passages embedded across {len(review_ids)} review(s), "
+            f"{failed} failed, {time.monotonic() - started:.1f}s."
+        )
+        return 1 if failed else 0
+    finally:
+        await pool.close()
 
 
 if __name__ == "__main__":

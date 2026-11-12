@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 from typing import Annotated, Any
 
@@ -38,7 +39,7 @@ from pubtator_link.services.review_audit import ReviewAuditService
 from pubtator_link.services.review_context.embeddings import (
     EmbeddingProvider,
     EmbeddingProviderUnavailableError,
-    SentenceTransformerEmbeddingProvider,
+    OnnxEmbeddingProvider,
 )
 from pubtator_link.services.review_context_service import ReviewContextService
 from pubtator_link.services.review_evidence_certainty import ReviewEvidenceCertaintyService
@@ -147,7 +148,7 @@ def _build_review_context_service(
             ),
             embedding_dim=getattr(review_rerag_config, "embedding_dim", 384),
             embedding_top_k=getattr(review_rerag_config, "embedding_top_k", 50),
-            embedding_rrf_k=getattr(review_rerag_config, "embedding_rrf_k", 60),
+            embedding_rrf_k=getattr(review_rerag_config, "embedding_rrf_k", 10),
         )
     except TypeError:
         return ReviewContextService(repository)
@@ -156,16 +157,24 @@ def _build_review_context_service(
 def _build_embedding_provider() -> EmbeddingProvider | None:
     if not getattr(review_rerag_config, "embedding_rerank_enabled", False):
         return None
+    return load_embedding_provider()
+
+
+@functools.cache
+def load_embedding_provider() -> EmbeddingProvider | None:
+    """Load the ONNX embedding model once per process; None (logged WARNING) if unavailable."""
     try:
-        return SentenceTransformerEmbeddingProvider(
+        return OnnxEmbeddingProvider(
+            model_dir=getattr(
+                review_rerag_config, "embedding_model_dir", ".models/bge-small-en-v1.5"
+            ),
             model_name=getattr(review_rerag_config, "embedding_model", "BAAI/bge-small-en-v1.5"),
             dim=getattr(review_rerag_config, "embedding_dim", 384),
-            device=getattr(review_rerag_config, "embedding_device", "auto"),
         )
     except EmbeddingProviderUnavailableError as exc:
         logger.warning(
-            "Review embedding provider unavailable; lexical fallback active",
-            extra={"error_type": type(exc).__name__},
+            "Embedding provider unavailable; embedding rerank is skipped",
+            extra={"error_type": type(exc).__name__, "reason": str(exc)},
         )
         return None
 

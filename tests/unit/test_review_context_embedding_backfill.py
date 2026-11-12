@@ -27,10 +27,20 @@ class FakeEmbeddingBackfillRepository:
         limit: int,
     ) -> list[ReviewPassageRow]:
         self.calls.append({"review_id": review_id, "model_name": model_name, "limit": limit})
-        return self.missing
+        done = {record.passage_id for record in self.upserted}
+        return [row for row in self.missing if row.passage_id not in done][:limit]
 
     async def upsert_passage_embeddings(self, records: list[ReviewPassageEmbeddingRecord]) -> None:
         self.upserted.extend(records)
+
+
+class StuckRepository(FakeEmbeddingBackfillRepository):
+    """Re-lists rows after upsert (e.g. a text-hash mismatch) -- must not loop forever."""
+
+    async def list_passages_missing_embeddings(
+        self, review_id: str, *, model_name: str, limit: int
+    ) -> list[ReviewPassageRow]:
+        return self.missing[:limit]
 
 
 class FailingEmbeddingProvider:
@@ -73,7 +83,7 @@ async def test_backfill_embeds_missing_passages_in_batches(
         model_name="BAAI/bge-small-en-v1.5",
         embedding_dim=384,
         batch_size=16,
-        limit=100,
+        chunk_size=100,
     )
 
     assert result.embedded_count == 1
@@ -115,7 +125,7 @@ async def test_backfill_reports_provider_failure_without_raising(
         model_name="BAAI/bge-small-en-v1.5",
         embedding_dim=384,
         batch_size=16,
-        limit=100,
+        chunk_size=100,
     )
 
     assert result.embedded_count == 0
@@ -128,3 +138,53 @@ async def test_backfill_reports_provider_failure_without_raising(
     assert records
     assert records[0].failed_count == 1
     assert records[0].elapsed_ms >= 0
+
+
+async def test_backfill_pages_through_chunks_and_is_idempotent() -> None:
+    repository = FakeEmbeddingBackfillRepository(
+        missing=[passage(f"p{index}") for index in range(5)]
+    )
+    progress: list[tuple[str, int]] = []
+
+    first = await backfill_review_passage_embeddings(
+        repository=repository,
+        review_id="r1",
+        provider=FakeEmbeddingProvider(dim=8),
+        model_name="fake",
+        embedding_dim=8,
+        batch_size=2,
+        chunk_size=2,
+        progress=lambda review_id, count: progress.append((review_id, count)),
+    )
+    second = await backfill_review_passage_embeddings(
+        repository=repository,
+        review_id="r1",
+        provider=FakeEmbeddingProvider(dim=8),
+        model_name="fake",
+        embedding_dim=8,
+        batch_size=2,
+        chunk_size=2,
+    )
+
+    assert first.embedded_count == 5
+    assert progress == [("r1", 2), ("r1", 4), ("r1", 5)]
+    assert second.embedded_count == 0
+    assert second.error is None
+    assert len(repository.upserted) == 5
+
+
+async def test_backfill_stops_when_rows_are_relisted_after_upsert() -> None:
+    repository = StuckRepository(missing=[passage("p1"), passage("p2")])
+
+    result = await backfill_review_passage_embeddings(
+        repository=repository,
+        review_id="r1",
+        provider=FakeEmbeddingProvider(dim=8),
+        model_name="fake",
+        embedding_dim=8,
+        batch_size=2,
+        chunk_size=2,
+    )
+
+    assert result.embedded_count == 2
+    assert result.error is not None

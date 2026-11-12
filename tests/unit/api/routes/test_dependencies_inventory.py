@@ -105,7 +105,7 @@ TOLERATED_LEGACY_CALLABLES = {
     "ReviewSchemaStaleError",
     "SearchResponse",
     "SearchResult",
-    "SentenceTransformerEmbeddingProvider",
+    "OnnxEmbeddingProvider",
     "SourcePreflightService",
     "SourcePreflightServiceDep",
     "StageResearchSessionRequest",

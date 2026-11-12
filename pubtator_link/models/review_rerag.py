@@ -628,6 +628,8 @@ class RetrieveReviewContextResponse(BaseModel):
     still_preparing_pmids: list[str] = Field(default_factory=list)
     failed_pmids: list[str] = Field(default_factory=list)
     recovery: RecoveryHint | None = None
+    ranking: Literal["lexical", "lexical_top_k_dense_rrf"] = "lexical"
+    warnings: list[str] = Field(default_factory=list)
 
 
 class EmbeddingRerankDiagnostics(BaseModel):
@@ -769,6 +771,8 @@ class RetrieveReviewContextBatchResponse(BaseModel):
     merged_context_pack: ContextPack
     preparation_status: PreparationStatus
     response_mode: ReviewBatchResponseMode = "compact"
+    ranking: Literal["lexical", "lexical_top_k_dense_rrf"] = "lexical"
+    warnings: list[str] = Field(default_factory=list)
     include_diagnostics: bool = False
     diagnostics: RetrieveReviewBatchDiagnostics | None = None
     query_summaries: list[QueryDiagnosticsSummary] = Field(default_factory=list)

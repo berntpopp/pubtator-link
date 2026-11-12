@@ -2,6 +2,39 @@
 
 ## [Unreleased]
 
+## [7.3.0] - 2026-11-12
+
+### Added
+
+- Embedding rerank for review retrieval is reachable and on by default (#182). The image ships
+  a CPU-only ONNX runtime (`onnxruntime` + `tokenizers` + `numpy`; no torch) and a baked,
+  pinned int8 `BAAI/bge-small-en-v1.5` model (revision + sha256) under `/opt/models`; nothing
+  is fetched at request time. Image size 228 MB -> 408 MB (torch CPU would add ~1.1 GB and
+  breaks the 64 MiB per-file image gate); no new CVEs.
+- `pubtator-link embeddings backfill --all | --review-id ID` (`make embeddings-backfill`):
+  batched, progress-reporting, idempotent and resumable embedding of an existing corpus.
+- Review-context responses (single and batch) carry `ranking` (`lexical` or
+  `lexical_top_k_dense_rrf`) and `warnings` that say when an enabled rerank was skipped or
+  partial and why; the fallback log is now WARNING.
+- `benchmarks/rerank_eval/` + `make eval-rerank`: deterministic offline eval. Review retrieval
+  (36 PubMedQA questions over local indexes): hit@1 0.61 -> 0.89, nDCG@10 0.624 -> 0.902.
+  `search_literature` is unchanged: the gold paper is in PubTator3's top 50 for only 12% of
+  69 labeled queries, so no reranker can help there (documented, not shipped).
+
+### Changed
+
+- Defaults: `REVIEW_EMBEDDING_RERANK_ENABLED=true`, `REVIEW_EMBEDDING_RRF_K=10` (was 60),
+  `REVIEW_EMBEDDING_BATCH_SIZE=8` (was 32; 3x less peak memory and faster on CPU). The
+  `embeddings` extra replaces sentence-transformers/torch; `REVIEW_EMBEDDING_DEVICE` is
+  replaced by `REVIEW_EMBEDDING_MODEL_DIR`.
+
+### Fixed
+
+- The "provider unavailable" guard could never fire; the provider now loads eagerly, so a
+  missing extra or model logs a WARNING and the response says rerank was skipped.
+- `list_passages_missing_embeddings` filtered missing/stale rows after `LIMIT`, so a chunked
+  backfill re-listed already-embedded rows and stopped early; the filter is now in SQL.
+
 ## [7.2.1] - 2026-11-12
 
 ### Security

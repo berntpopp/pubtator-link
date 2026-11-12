@@ -2262,3 +2262,99 @@ async def test_batch_source_fair_respects_global_budget_precedence() -> None:
     assert any(
         drop.reason == "source_budget_exceeded" for drop in response.merged_context_pack.dropped
     )
+
+
+@pytest.mark.asyncio
+async def test_embedding_rerank_skipped_is_loud_without_diagnostics(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # #182: flag on + empty embeddings table used to be an INFO log and nothing in the response.
+    caplog.set_level(logging.INFO, logger="pubtator_link.services.review_context_service")
+    repository = FakeReviewContextRepository(
+        [_passage("lexical-first", pmid="111", text="Lexical first.", lexical_rank=10.0)]
+    )
+    service = ReviewContextService(
+        repository,
+        embedding_provider=StaticQueryEmbeddingProvider(),
+        embedding_rerank_enabled=True,
+        embedding_dim=2,
+    )
+
+    response = await service.retrieve_context(
+        "review-1", RetrieveReviewContextRequest(question="dose", max_passages=2)
+    )
+
+    assert response.ranking == "lexical"
+    assert len(response.warnings) == 1
+    assert "skipped" in response.warnings[0]
+    assert "missing_embeddings" in response.warnings[0]
+    assert "embeddings backfill" in response.warnings[0]
+    fallback = [r for r in caplog.records if r.message == "review_embedding_rerank_fallback"]
+    assert fallback[0].levelno == logging.WARNING
+
+
+@pytest.mark.asyncio
+async def test_embedding_rerank_partial_coverage_is_reported() -> None:
+    repository = FakeReviewContextRepository(
+        [
+            _passage("embedded", pmid="111", text="Embedded.", lexical_rank=10.0),
+            _passage("missing", pmid="222", text="Missing.", lexical_rank=1.0),
+        ]
+    )
+    repository.embeddings_by_passage_id = {"embedded": [1.0, 0.0]}
+    service = ReviewContextService(
+        repository,
+        embedding_provider=StaticQueryEmbeddingProvider(),
+        embedding_rerank_enabled=True,
+        embedding_dim=2,
+    )
+
+    response = await service.retrieve_context(
+        "review-1", RetrieveReviewContextRequest(question="dose", max_passages=2)
+    )
+
+    assert response.ranking == "lexical_top_k_dense_rrf"
+    assert response.warnings == [
+        "Embedding rerank was partial: 1 of 2 candidate passages have embeddings; "
+        "run `pubtator-link embeddings backfill` for this review."
+    ]
+
+
+@pytest.mark.asyncio
+async def test_lexical_ranking_is_named_and_silent_when_rerank_disabled() -> None:
+    repository = FakeReviewContextRepository(
+        [_passage("lexical-first", pmid="111", text="Lexical first.", lexical_rank=10.0)]
+    )
+    service = ReviewContextService(repository)
+
+    response = await service.retrieve_context(
+        "review-1", RetrieveReviewContextRequest(question="dose", max_passages=2)
+    )
+
+    assert response.ranking == "lexical"
+    assert response.warnings == []
+
+
+@pytest.mark.asyncio
+async def test_batch_compact_response_carries_ranking_and_rerank_warning() -> None:
+    repository = FakeReviewContextRepository(
+        [_passage("p1", pmid="111", text="first passage", lexical_rank=9.0)]
+    )
+    service = ReviewContextService(
+        repository,
+        embedding_provider=StaticQueryEmbeddingProvider(),
+        embedding_rerank_enabled=True,
+        embedding_dim=2,
+    )
+
+    response = await service.retrieve_context_batch(
+        "review-1",
+        RetrieveReviewContextBatchRequest(
+            queries=["colchicine children", "FMF phenotype"], response_mode="compact"
+        ),
+    )
+
+    dumped = response.model_dump()
+    assert dumped["ranking"] == "lexical"
+    assert len(dumped["warnings"]) == 1
+    assert "missing_embeddings" in dumped["warnings"][0]

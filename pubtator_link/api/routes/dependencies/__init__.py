@@ -216,7 +216,7 @@ _LEGACY_MUTABLE_EXPORTS = {
     "ReviewContextService": (_resources, _review),
     "review_rerag_config": (_resources, _discovery, _review),
     "ReviewPreparationQueue": (_resources, _review),
-    "SentenceTransformerEmbeddingProvider": (_review,),
+    "OnnxEmbeddingProvider": (_review,),
     "_build_full_text_preparation": (_review,),
     "_build_review_context_service": (_review,),
 }

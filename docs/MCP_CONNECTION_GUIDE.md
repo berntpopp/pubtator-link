@@ -229,18 +229,13 @@ A ready-to-use file is checked in at
 | `record_review_context` | Persist durable review decisions and selected evidence IDs |
 | `get_server_capabilities` | Discover formats, bioconcepts, relation types, and limitations |
 
-### Optional Local Embedding Rerank
+### Embedding Rerank
 
-Private deployments can enable local dense reranking for review retrieval:
-
-```bash
-PUBTATOR_LINK_REVIEW_EMBEDDING_RERANK_ENABLED=true
-PUBTATOR_LINK_REVIEW_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
-PUBTATOR_LINK_REVIEW_EMBEDDING_DIM=384
-```
-
-The server keeps lexical retrieval as the fallback when embeddings are missing,
-the model is unavailable, or `pgvector` is not installed.
+Review retrieval reranks lexical candidates with a local embedding model (on by default).
+Each `get_review_context` / `get_review_context_batch` response names the ranking it used in
+`ranking` (`lexical` or `lexical_top_k_dense_rrf`) and explains a skipped or partial rerank in
+`warnings` (for example, an index that was never backfilled). See
+[Configuration](configuration.md#embedding-rerank-review-retrieval).
 
 ### LLM Driver Ergonomics
 

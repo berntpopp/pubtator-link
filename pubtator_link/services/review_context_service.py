@@ -53,7 +53,10 @@ from pubtator_link.services.review_context.diagnostics import (
     query_summary,
     recovery_from_query_summary,
 )
-from pubtator_link.services.review_context.embedding_rerank import rerank_with_embeddings
+from pubtator_link.services.review_context.embedding_rerank import (
+    embedding_rerank_outcome,
+    rerank_with_embeddings,
+)
 from pubtator_link.services.review_context.embeddings import (
     EmbeddingProvider,
     text_hash,
@@ -198,7 +201,7 @@ class ReviewContextService:
         embedding_model: str = "BAAI/bge-small-en-v1.5",
         embedding_dim: int = 384,
         embedding_top_k: int = 50,
-        embedding_rrf_k: int = 60,
+        embedding_rrf_k: int = 10,
         logger: logging.Logger | None = None,
     ) -> None:
         self.repository = repository
@@ -305,6 +308,7 @@ class ReviewContextService:
             prepared_pmids=prepared_pmids,
             still_preparing_pmids=still_preparing_pmids,
             failed_pmids=failed_pmids,
+            **embedding_rerank_outcome(embedding_diagnostics),
         )
         single_summary = query_summary(
             query=request.question,
@@ -536,6 +540,12 @@ class ReviewContextService:
         return RetrieveReviewContextBatchResponse(
             review_id=review_id,
             response_mode=request.response_mode,
+            ranking=(
+                "lexical_top_k_dense_rrf"
+                if query_results and all(r.ranking != "lexical" for r in query_results)
+                else "lexical"
+            ),
+            warnings=list(dict.fromkeys(w for r in query_results for w in r.warnings)),
             include_diagnostics=include_batch_diagnostics,
             diagnostics=diagnostics,
             results=results,
@@ -661,7 +671,10 @@ class ReviewContextService:
         diagnostics: EmbeddingRerankDiagnostics,
         started: float,
     ) -> None:
-        self.logger.info(
+        # no_candidates is a normal empty result; every other fallback is an operator problem.
+        level = logging.INFO if diagnostics.fallback_reason == "no_candidates" else logging.WARNING
+        self.logger.log(
+            level,
             "review_embedding_rerank_fallback",
             extra={
                 "review_id": review_id,

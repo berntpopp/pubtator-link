@@ -1,3 +1,5 @@
+import logging
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -6,6 +8,7 @@ from fastapi import FastAPI, Request
 
 from pubtator_link import server_manager
 from pubtator_link.api.routes import dependencies
+from pubtator_link.api.routes.dependencies import review as review_dependencies
 from pubtator_link.models.discovery import ArticleIdConversionRecord, ArticleIdConversionResponse
 
 
@@ -94,11 +97,11 @@ class DiscoveryWithConversion:
 class ProviderProbe:
     created = 0
 
-    def __init__(self, *, model_name: str, dim: int, device: str = "auto") -> None:
+    def __init__(self, *, model_dir: str, model_name: str, dim: int) -> None:
         type(self).created += 1
         self.model_name = model_name
         self.dim = dim
-        self.device = device
+        self.model_dir = model_dir
 
 
 @pytest.mark.asyncio
@@ -485,7 +488,7 @@ def test_review_context_service_does_not_create_embedding_provider_when_disabled
         captured.update(kwargs)
         return ("context", kwargs)
 
-    monkeypatch.setattr(dependencies, "SentenceTransformerEmbeddingProvider", fail_provider)
+    monkeypatch.setattr(dependencies, "OnnxEmbeddingProvider", fail_provider)
     monkeypatch.setattr(dependencies, "ReviewContextService", build_service)
     monkeypatch.setattr(
         dependencies,
@@ -517,7 +520,8 @@ def test_review_context_service_creates_embedding_provider_when_enabled(
         captured.update(kwargs)
         return ("context", kwargs)
 
-    monkeypatch.setattr(dependencies, "SentenceTransformerEmbeddingProvider", ProviderProbe)
+    monkeypatch.setattr(dependencies, "OnnxEmbeddingProvider", ProviderProbe)
+    review_dependencies.load_embedding_provider.cache_clear()
     monkeypatch.setattr(dependencies, "ReviewContextService", build_service)
     monkeypatch.setattr(
         dependencies,
@@ -528,7 +532,7 @@ def test_review_context_service_creates_embedding_provider_when_enabled(
             embedding_dim=384,
             embedding_top_k=40,
             embedding_rrf_k=60,
-            embedding_device="cpu",
+            embedding_model_dir="/models/bge",
             retrieval_concurrency=4,
         ),
     )
@@ -540,6 +544,7 @@ def test_review_context_service_creates_embedding_provider_when_enabled(
     assert captured["embedding_provider"].model_name == "BAAI/bge-small-en-v1.5"
     assert captured["embedding_rerank_enabled"] is True
     assert captured["embedding_top_k"] == 40
+    review_dependencies.load_embedding_provider.cache_clear()
 
 
 @pytest.mark.asyncio
@@ -656,3 +661,25 @@ async def test_cleanup_dependencies_closes_lazy_citation_graph_clients(
     assert dependencies._citation_graph_service is None
     assert dependencies._crossref_client is None
     assert dependencies._europe_pmc_literature_client is None
+
+
+def test_load_embedding_provider_warns_and_returns_none_when_model_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # #182: the old `except EmbeddingProviderUnavailableError` could never fire.
+    monkeypatch.setattr(
+        review_dependencies,
+        "review_rerag_config",
+        SimpleNamespace(
+            embedding_model="BAAI/bge-small-en-v1.5",
+            embedding_dim=384,
+            embedding_model_dir=str(tmp_path / "absent"),
+        ),
+    )
+    review_dependencies.load_embedding_provider.cache_clear()
+    caplog.set_level(logging.WARNING, logger="pubtator_link.api.routes.dependencies")
+    try:
+        assert review_dependencies.load_embedding_provider() is None
+    finally:
+        review_dependencies.load_embedding_provider.cache_clear()
+    assert any("embedding rerank is skipped" in r.message for r in caplog.records)

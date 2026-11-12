@@ -104,6 +104,7 @@ dmypy.json
 
 # Development scripts
 scripts/
+!scripts/fetch_embedding_model.sh
 dev/
 
 # Node.js (if any)

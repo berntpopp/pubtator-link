@@ -36,7 +36,7 @@ def test_app_is_typer_with_standard_name() -> None:
 def test_standard_subcommands_are_registered() -> None:
     group = typer.main.get_command(cli.app)
     ctx = click.Context(group)
-    assert set(group.list_commands(ctx)) == {"serve", "config", "health", "version"}
+    assert set(group.list_commands(ctx)) == {"serve", "config", "health", "version", "embeddings"}
 
 
 def test_no_args_shows_help_without_serving() -> None:
@@ -148,3 +148,22 @@ def test_no_stdio_entry_point_remains() -> None:
     scripts = project["scripts"]
     assert "pubtator-link-mcp" not in scripts
     assert all("mcp_server" not in target for target in scripts.values())
+
+
+def test_embeddings_backfill_requires_exactly_one_target() -> None:
+    assert runner.invoke(cli.app, ["embeddings", "backfill"]).exit_code == 2
+    both = runner.invoke(cli.app, ["embeddings", "backfill", "--all", "--review-id", "r1"])
+    assert both.exit_code == 2
+
+
+def test_embeddings_backfill_fails_loudly_without_a_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pubtator_link.api.routes.dependencies import review
+
+    monkeypatch.setattr(review, "load_embedding_provider", lambda: None)
+
+    result = runner.invoke(cli.app, ["embeddings", "backfill", "--review-id", "r1"])
+
+    assert result.exit_code == 1
+    assert "Embedding model unavailable" in result.output

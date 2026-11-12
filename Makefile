@@ -1,4 +1,4 @@
-.PHONY: help install lock upgrade sync format format-check lint lint-ci lint-fix lint-loc lint-readme typecheck typecheck-fast typecheck-stop typecheck-fresh test test-fast test-unit test-integration test-cov test-all check ci-local precommit clean dev serve benchmark-smoke benchmark-pubmedqa benchmark-bioasq benchmark-compare db-init docker-build docker-up docker-down docker-logs docker-prod-config docker-npm-config
+.PHONY: help install lock upgrade sync format format-check lint lint-ci lint-fix lint-loc lint-readme typecheck typecheck-fast typecheck-stop typecheck-fresh test test-fast test-unit test-integration test-cov test-all check ci-local precommit clean dev serve benchmark-smoke benchmark-pubmedqa benchmark-bioasq benchmark-compare db-init embeddings-model embeddings-backfill eval-rerank docker-build docker-up docker-down docker-logs docker-prod-config docker-npm-config
 
 DOCKER_COMPOSE := $(shell if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then echo "docker compose"; elif command -v docker-compose >/dev/null 2>&1; then echo "docker-compose"; else echo "docker compose"; fi)
 
@@ -114,6 +114,15 @@ benchmark-bioasq: ## Run BioASQ ideal-answer benchmark
 
 benchmark-compare: ## Compare two benchmark runs
 	uv run python -m pubtator_link.benchmarks compare --left "$${LEFT}" --right "$${RIGHT}"
+
+embeddings-model: ## Fetch the pinned ONNX embedding model to .models/ (sha256-verified)
+	./scripts/fetch_embedding_model.sh .models/bge-small-en-v1.5
+
+embeddings-backfill: ## Embed missing review passages (ARGS="--all" or "--review-id ID"); resumable
+	uv run pubtator-link embeddings backfill $${ARGS:---all}
+
+eval-rerank: ## Offline lexical-vs-embedding ranking eval (SUITE=review|search)
+	uv run python benchmarks/rerank_eval/eval.py $${SUITE:-review}
 
 db-init: ## Apply bootstrap review re-RAG schema to empty databases
 	test -n "$$PUBTATOR_LINK_DATABASE_URL"
