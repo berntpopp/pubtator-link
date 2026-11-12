@@ -28,6 +28,28 @@ def _add_static_fields(_logger: Any, _name: str, event_dict: dict[str, Any]) -> 
     return event_dict
 
 
+_SHARED_PROCESSORS: list[Any] = [
+    structlog.contextvars.merge_contextvars,
+    structlog.processors.add_log_level,
+    structlog.processors.TimeStamper(fmt="iso"),
+    structlog.processors.StackInfoRenderer(),
+    structlog.dev.set_exc_info,
+    _add_static_fields,
+]
+
+
+def stdlib_formatter(renderer: Any) -> structlog.stdlib.ProcessorFormatter:
+    """Render stdlib ``logging`` records through the structlog chain.
+
+    ``ExtraAdder`` copies ``extra={...}`` fields onto the event; a plain
+    ``%(message)s`` formatter silently dropped them (#248).
+    """
+    return structlog.stdlib.ProcessorFormatter(
+        foreign_pre_chain=[*_SHARED_PROCESSORS, structlog.stdlib.ExtraAdder()],
+        processors=[structlog.stdlib.ProcessorFormatter.remove_processors_meta, renderer],
+    )
+
+
 def configure_logging() -> FilteringBoundLogger:
     """Configure structured logging and return the package logger."""
     use_colors = (
@@ -36,22 +58,15 @@ def configure_logging() -> FilteringBoundLogger:
         and "NO_COLOR" not in os.environ
     )
 
-    shared_processors = [
-        structlog.contextvars.merge_contextvars,
-        structlog.processors.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.StackInfoRenderer(),
-        structlog.dev.set_exc_info,
-        _add_static_fields,
-    ]
-
-    if settings.log_format == "json":
-        processors = [*shared_processors, structlog.processors.JSONRenderer()]
-    else:
-        processors = [*shared_processors, structlog.dev.ConsoleRenderer(colors=use_colors)]
+    renderer: Any = (
+        structlog.processors.JSONRenderer()
+        if settings.log_format == "json"
+        else structlog.dev.ConsoleRenderer(colors=use_colors)
+    )
+    processors = [*_SHARED_PROCESSORS, renderer]
 
     structlog.configure(
-        processors=processors,  # type: ignore[arg-type]
+        processors=processors,
         wrapper_class=structlog.make_filtering_bound_logger(
             getattr(logging, settings.log_level.upper())
         ),
@@ -59,11 +74,9 @@ def configure_logging() -> FilteringBoundLogger:
         cache_logger_on_first_use=True,
     )
 
-    logging.basicConfig(
-        format="%(message)s",
-        stream=sys.stdout,
-        level=getattr(logging, settings.log_level.upper()),
-    )
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(stdlib_formatter(renderer))
+    logging.basicConfig(handlers=[handler], level=getattr(logging, settings.log_level.upper()))
 
     # Tame noisy third-party loggers for the HTTP transports.
     logging.getLogger("uvicorn.access").setLevel(logging.INFO)

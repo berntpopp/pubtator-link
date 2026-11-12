@@ -77,10 +77,10 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             ),
         ] = None,
         max_passages: Annotated[
-            int, Field(ge=1, le=100, description="Maximum passages to return.")
+            int, Field(ge=1, le=30, description="Maximum passages to return.")
         ] = 8,
         max_chars: Annotated[
-            int, Field(ge=200, le=60_000, description="Soft total character budget for passages.")
+            int, Field(ge=500, le=50_000, description="Soft total character budget for passages.")
         ] = 6000,
         include_diagnostics: Annotated[
             bool, Field(description="Include retrieval diagnostics in the response.")
@@ -101,7 +101,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             bool, Field(description="Allow per-passage truncation to fit the char budget.")
         ] = True,
         max_chars_per_passage: Annotated[
-            int, Field(ge=100, le=20000, description="Character cap per returned passage.")
+            int, Field(ge=300, le=10_000, description="Character cap per returned passage.")
         ] = 2200,
         include_resolver_trace: Annotated[
             bool, Field(description="Include the source-resolver trace for auditing.")

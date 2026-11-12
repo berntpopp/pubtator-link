@@ -414,3 +414,136 @@ def test_publication_passage_request_constraints() -> None:
     assert request.full is False
     assert request.include_tables is True
     assert request.include_references is False
+
+
+class BiocjsonGapService:
+    """PubTator3 biocjson 400s (single) or silently drops (batch) PMID 39156164 (#247)."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[list[str], str]] = []
+
+    async def export_publications_list(self, pmids: list[str], format: str, full: bool):
+        from pubtator_link.api.client import PubTatorAPIError
+
+        self.calls.append((pmids, format))
+        if format == "pubtator":
+            docs = []
+            for pmid in pmids:
+                if pmid == "39156164":
+                    docs.append({"pmid": pmid, "sections": {"t": "HNF1B title"}})
+                    docs.append({"pmid": pmid, "sections": {"a": "HNF1B abstract"}})
+            return {"export_data": {"documents": docs}}
+        if pmids == ["39156164"]:
+            raise PubTatorAPIError("PubTator3 API returned HTTP 400.", status_code=400)
+        return {
+            "documents": [
+                {
+                    "id": "42739594",
+                    "passages": [{"infons": {"type": "abstract"}, "text": "Greek cohort"}],
+                }
+            ]
+        }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("pmids", [["39156164"], ["39156164", "42739594"]])
+async def test_biocjson_gap_falls_back_to_pubtator_abstract(pmids: list[str]) -> None:
+    service = PublicationPassageService(BiocjsonGapService())
+
+    response = await service.get_passages(
+        PublicationPassageRequest(pmids=pmids, mode="full_abstract")
+    )
+
+    assert response.success is True
+    fallback = [p for p in response.passages if p.pmid == "39156164"]
+    assert [p.text for p in fallback] == ["HNF1B title", "HNF1B abstract"]
+    assert {p.source for p in fallback} == {"pubtator_abstract"}
+    assert response.coverage_by_pmid["39156164"] == "abstract_only"
+    assert response.coverage_reason_by_pmid["39156164"] == "biocjson_unavailable_pubtator_fallback"
+
+
+@pytest.mark.asyncio
+async def test_pmid_missing_from_both_exports_is_not_retrievable() -> None:
+    class EmptyService:
+        async def export_publications_list(self, pmids, format, full):
+            return {"documents": []}
+
+    response = await PublicationPassageService(EmptyService()).get_passages(
+        PublicationPassageRequest(pmids=["1"])
+    )
+
+    assert response.coverage_by_pmid["1"] == "unknown"
+    assert response.coverage_reason_by_pmid["1"] == "not_retrievable"
+
+
+class ResultsAndTablesService:
+    """Full text where RESULTS precede TABLE passages (#244)."""
+
+    async def export_publications_list(self, pmids: list[str], format: str, full: bool):
+        passages = [{"infons": {"section_type": "RESULTS"}, "text": f"R{i}"} for i in range(8)]
+        passages += [{"infons": {"section_type": "TABLE"}, "text": f"T{i}"} for i in range(4)]
+        passages += [{"infons": {"section_type": "REF"}, "text": f"ref{i}"} for i in range(5)]
+        return {"documents": [{"id": "34622103", "passages": passages}]}
+
+
+@pytest.mark.asyncio
+async def test_explicit_sections_cap_per_section_so_tables_are_not_starved() -> None:
+    service = PublicationPassageService(ResultsAndTablesService())
+
+    response = await service.get_passages(
+        PublicationPassageRequest(
+            pmids=["34622103"], full=True, sections=["RESULTS", "TABLE"], max_passages_per_pmid=3
+        )
+    )
+
+    texts = [p.text for p in response.passages]
+    assert texts == ["R0", "R1", "R2", "T0", "T1", "T2"]
+    assert response.truncated_sections == ["results", "table"]
+    assert response.dropped_summary == {
+        "max_passages_per_pmid_exceeded": {"results": 5, "table": 1},
+        "reference_excluded": {"references": 5},
+    }
+
+
+@pytest.mark.asyncio
+async def test_mcp_dump_lists_individual_drops_only_at_full_verbosity() -> None:
+    service = PublicationPassageService(ResultsAndTablesService())
+    request = PublicationPassageRequest(pmids=["34622103"], full=True, max_passages_per_pmid=2)
+
+    standard = (await service.get_passages(request)).model_dump_mcp()
+    full = (await service.get_passages(request)).model_dump_mcp(verbosity="full")
+
+    assert standard["dropped"] == []
+    assert standard["dropped_summary"]["max_passages_per_pmid_exceeded"] == {
+        "results": 6,
+        "table": 4,
+    }
+    assert len(full["dropped"]) == 15
+
+
+@pytest.mark.asyncio
+async def test_full_text_section_request_on_abstract_only_pmid_explains_why() -> None:
+    # #239: a non-open-access PMID has only title/abstract; say so instead of "unknown".
+    class AbstractOnlyService:
+        async def export_publications_list(self, pmids, format, full):
+            return {
+                "documents": [
+                    {
+                        "id": "29058690",
+                        "passages": [
+                            {"infons": {"type": "title"}, "text": "Title"},
+                            {"infons": {"type": "abstract"}, "text": "Abstract"},
+                        ],
+                    }
+                ]
+            }
+
+    response = await PublicationPassageService(AbstractOnlyService()).get_passages(
+        PublicationPassageRequest(
+            pmids=["29058690"], full=True, sections=["RESULTS", "TABLE"], mode="section_text"
+        )
+    )
+
+    assert response.coverage_reason_by_pmid["29058690"] == "full_text_not_available"
+    assert "open access" in response.failed_pmids[0].reason
+    assert any("full_abstract" in warning for warning in response.warnings)

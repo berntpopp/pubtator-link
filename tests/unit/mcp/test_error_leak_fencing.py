@@ -333,7 +333,8 @@ async def test_publication_passage_drop_reason_is_severed() -> None:
 
     class HostilePublicationService:
         async def export_publications_list(self, pmids: list[str], format: str, full: bool) -> Any:
-            raise PubTatorAPIError(HOSTILE_BODY, status_code=400)
+            # 400 is per-PMID "not retrievable" (#247); a 5xx is the whole-call failure.
+            raise PubTatorAPIError(HOSTILE_BODY, status_code=502)
 
     service = PublicationPassageService(publication_service=HostilePublicationService())
     response = await service.get_passages(PublicationPassageRequest(pmids=["1"]))

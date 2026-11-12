@@ -254,6 +254,9 @@ def error_reason_for_exception(exc: Exception) -> str:
         return "review_index_unavailable"
     if isinstance(exc, httpx.TimeoutException | TimeoutError):
         return "upstream_unavailable"
+    # Only a *Request model checks caller input; any other pydantic failure is a server bug (#248).
+    if isinstance(exc, PydanticValidationError) and not exc.title.endswith("Request"):
+        return "internal_error"
     if isinstance(exc, ValueError):
         return "validation_failed"
     return "internal_error"
@@ -571,6 +574,15 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> dict[str, Any]:
     next_commands: list[dict[str, Any]] = []
     if fallback_tool and fallback_args is not None:
         next_commands.append({"tool": fallback_tool, "arguments": fallback_args})
+    if isinstance(exc, PydanticValidationError) and exc.title.endswith("Request"):
+        # Name the bad field instead of a generic message + diagnostics detour (#248).
+        exc = InputNormalizationError(
+            field_errors=[
+                {"field": str(err["loc"][0]) if err["loc"] else "arguments", "reason": err["msg"]}
+                for err in exc.errors(include_input=False, include_url=False)
+            ],
+            recovery_hint="Correct the named field(s) and retry.",
+        )
     argument_error = isinstance(exc, InputNormalizationError)
     if not argument_error:
         next_commands.append({"tool": "diagnostics", "arguments": {}})
@@ -638,6 +650,7 @@ async def run_mcp_tool(
                 "pmid_count": pmid_count,
                 "latency_ms": round(latency_seconds * 1000, 2),
                 "error_code": error_code,
+                "exception_type": type(exc).__name__,
             },
         )
         # Do NOT retain ``str(exc)``: for an upstream failure it can carry the

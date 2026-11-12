@@ -120,8 +120,32 @@ class PublicationPassageResponse(BaseModel):
     degraded_mode: DegradedMode | None = None
     dry_run: bool = False
 
-    def model_dump_mcp(self) -> dict[str, object]:
-        """Serialize with external passage prose fenced for the MCP boundary."""
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def dropped_summary(self) -> dict[str, dict[str, int]]:
+        """Drop counts as ``{reason: {section: count}}`` (#244)."""
+        summary: dict[str, dict[str, int]] = {}
+        for drop in self.dropped:
+            by_section = summary.setdefault(drop.reason, {})
+            section = drop.section or "unknown"
+            by_section[section] = by_section.get(section, 0) + 1
+        return summary
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def truncated_sections(self) -> list[str]:
+        """Sections the per-PMID cap or the char budget cut short (#244)."""
+        cut = {"max_passages_per_pmid_exceeded", "char_budget_exceeded"}
+        return sorted(
+            {drop.section for drop in self.dropped if drop.reason in cut and drop.section}
+        )
+
+    def model_dump_mcp(self, verbosity: Verbosity = "standard") -> dict[str, object]:
+        """Serialize with external passage prose fenced for the MCP boundary.
+
+        Individual ``dropped`` rows are listed only at ``verbosity='full'``;
+        ``dropped_summary`` carries the counts otherwise (#244).
+        """
         fenced_passages: list[MCPPublicationPassage] = []
         for passage in self.passages:
             fenced = fence_untrusted_text(
@@ -136,9 +160,15 @@ class PublicationPassageResponse(BaseModel):
                     char_count=len(fenced.text),
                 )
             )
+        dropped = (
+            self.dropped
+            if verbosity == "full"
+            else [drop for drop in self.dropped if drop.reason == "upstream_error"]
+        )
         return MCPPublicationPassageResponse(
-            **self.model_dump(exclude={"passages"}),
+            **self.model_dump(exclude={"passages", "dropped"}),
             passages=fenced_passages,
+            dropped=dropped,
         ).model_dump()
 
 
@@ -162,6 +192,8 @@ class MCPPublicationPassageResponse(BaseModel):
     mode: PublicationPassageMode
     passages: list[MCPPublicationPassage]
     dropped: list[PassageDropReason] = Field(default_factory=list)
+    dropped_summary: dict[str, dict[str, int]] = Field(default_factory=dict)
+    truncated_sections: list[str] = Field(default_factory=list)
     context_estimate: PublicationContextEstimate
     coverage_by_pmid: dict[str, PublicationCoverage] = Field(default_factory=dict)
     coverage_reason_by_pmid: dict[str, str] = Field(default_factory=dict)

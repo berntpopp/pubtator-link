@@ -117,8 +117,10 @@ from pubtator_link.services.search_shaping import (
     SearchMetadataMode,
     SearchResponseMode,
     TextHighlightFormat,
+    attach_search_abstracts,
     combined_search_text,
     dump_search_response,
+    promote_title_matches,
     selected_search_items,
     shaped_search_response,
 )
@@ -272,7 +274,7 @@ async def get_publication_passages_impl(
             verbosity=verbosity,
         )
     )
-    return response.model_dump_mcp()
+    return response.model_dump_mcp(verbosity)
 
 
 async def get_publication_metadata_impl(
@@ -521,6 +523,15 @@ async def search_literature_impl(
         plan=plan,
         sections=",".join(sections) if sections else None,
     )
+    if page == 1 and normalized_sort is None and filter_note is None and not entity_ids:
+        result = await promote_title_matches(
+            client,
+            result,
+            text=normalized_text,
+            filters=plan.server_filters,
+            sections=None if not sections else ",".join(sections),
+            wanted=limit,
+        )
     raw_items = _selected_search_items(
         result,
         limit=limit,
@@ -532,6 +543,8 @@ async def search_literature_impl(
         include_citations=include_citations,
         metadata_service=metadata_service,
     )
+    wants_abstract = metadata in {"with_abstract", "full"} or response_mode != "compact"
+    abstract_warning = await attach_search_abstracts(client, raw_items) if wants_abstract else None
     response = shaped_search_response(
         raw=result,
         query=normalized_text,
@@ -590,7 +603,7 @@ async def search_literature_impl(
     else:
         for field in ("cache_key", "corpus_snapshot_date", "source_versions"):
             dumped.pop(field, None)
-    warnings = [warning for warning in (filter_warning, sort_warning) if warning]
+    warnings = [w for w in (filter_warning, sort_warning, abstract_warning) if w]
     return dumped | ({"warnings": warnings} if warnings else {})
 
 

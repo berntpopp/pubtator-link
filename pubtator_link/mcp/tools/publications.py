@@ -291,10 +291,10 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             bool, Field(description="Prefer full-text passages where the article is open-access.")
         ] = False,
         max_passages_per_pmid: Annotated[
-            int, Field(ge=1, le=50, description="Maximum passages returned per PMID.")
+            int, Field(ge=1, le=30, description="Max passages per PMID (or PMID+section).")
         ] = 6,
         max_chars: Annotated[
-            int, Field(ge=200, le=60_000, description="Soft total character budget for passages.")
+            int, Field(ge=1000, le=50_000, description="Soft total character budget for passages.")
         ] = 12000,
         include_tables: Annotated[bool, Field(description="Include table passages.")] = True,
         include_references: Annotated[
@@ -305,7 +305,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         ] = False,
         verbosity: Annotated[
             Verbosity,
-            Field(description="Field verbosity: 'lean', 'standard' (default), or 'full'."),
+            Field(description="'lean', 'standard' (default), or 'full' (+ each dropped row)."),
         ] = "standard",
     ) -> dict[str, Any]:
         """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. For article-local answering, use mode='full_abstract' first; it returns all title/abstract passages without truncating structured abstracts. If full=True returns only abstracts, inspect coverage_by_pmid and answer from available evidence. Do not use for prepared review RAG; use get_review_context_batch."""

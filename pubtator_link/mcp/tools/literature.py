@@ -123,7 +123,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         ] = "plain",
         limit: Annotated[
             int | None,
-            Field(ge=1, le=20, description="Maximum hits to return on this page."),
+            Field(ge=1, le=20, description="Max hits on this page (PubTator pages hold 10)."),
         ] = 5,
         entity_ids: Annotated[
             list[str] | None,
@@ -149,8 +149,8 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             SearchMetadataMode,
             Field(
                 description=(
-                    "Metadata enrichment per hit: 'none', 'basic' (default), 'with_abstract', "
-                    "or 'full'."
+                    "Metadata enrichment per hit: 'none', 'basic' (default), 'with_abstract' "
+                    "(abstract preview, max 640 chars), or 'full'."
                 ),
             ),
         ] = "basic",

@@ -4085,3 +4085,31 @@ async def test_export_rejects_missing_base_directory(tmp_path) -> None:
     assert result["success"] is False
     assert result["error"]["field_errors"][0]["field"] == "save_to_file"
     assert "could not be created" in result["error"]["field_errors"][0]["reason"]
+
+
+@pytest.mark.asyncio
+async def test_search_literature_with_abstract_fills_abstract_from_export() -> None:
+    # #246: PubTator3 /search/ hits carry no abstract; fill it from the pubtator export.
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {
+                "results": [{"pmid": "42739594", "title": "HNF1B"}, {"pmid": "1", "title": "X"}],
+                "count": 2,
+                "total_pages": 1,
+                "page_size": 10,
+            }
+
+        async def export_publications(self, pmids, format="biocjson", full=False):
+            assert format == "pubtator"
+            assert pmids == ["42739594", "1"]
+            return {"content": "42739594|t|HNF1B\n42739594|a|Background: cohort.\n1|t|X\n"}
+
+    result = await search_literature_impl(
+        client=FakeClient(), text="42739594", metadata="with_abstract", metadata_service=None
+    )
+
+    assert result["results"][0]["abstract"] == "Background: cohort."
+    assert result["results"][1].get("abstract") is None
+    assert any("1" in warning and "abstract" in warning for warning in result["warnings"])

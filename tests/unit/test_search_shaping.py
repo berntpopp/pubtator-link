@@ -1,3 +1,5 @@
+import pytest
+
 from pubtator_link.services.search_shaping import (
     selected_search_items,
     shaped_search_response,
@@ -359,3 +361,107 @@ def test_guideline_rank_features_include_reasons() -> None:
     assert result.rank_features["guideline_boost"] > 0
     assert "practice guideline" in result.ranking_reasons
     assert "eular" in result.ranking_reasons
+
+
+class _PagedSearchClient:
+    """Upstream relevance order buries the title-matching discovery paper on page 3 (#243)."""
+
+    def __init__(self, pages: dict[int, list[dict[str, str]]]) -> None:
+        self.pages = pages
+        self.calls: list[int] = []
+
+    async def search_publications(self, *, text, page=1, sort=None, filters=None, sections=None):
+        self.calls.append(page)
+        return {"results": self.pages.get(page, []), "count": 25, "total_pages": len(self.pages)}
+
+
+def _hits(prefix: str, n: int, title: str) -> list[dict[str, str]]:
+    return [{"pmid": f"{prefix}{i}", "title": title} for i in range(n)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("query", "discovery_title"),
+    [
+        (
+            "TBC1D8B nephrotic syndrome",
+            "TBC1D8B Mutations Implicate RAB11-Dependent Vesicular Trafficking in the "
+            "Pathogenesis of Nephrotic Syndrome",
+        ),
+        (
+            "ADAMTS9 nephronophthisis",
+            "Mutations of ADAMTS9 Cause Nephronophthisis-Related Ciliopathy.",
+        ),
+        # Gene symbol in the title but not the disease term: second tier, still promoted.
+        (
+            "ZNF423 nephronophthisis",
+            "Exome capture reveals ZNF423 and CEP164 mutations, linking renal ciliopathies",
+        ),
+        (
+            "DDX59 oral-facial-digital syndrome",
+            "Mutations in DDX59 implicate RNA helicase in orofaciodigital syndrome.",
+        ),
+    ],
+)
+async def test_title_matches_from_later_pages_are_promoted_to_page_one(
+    query: str, discovery_title: str
+) -> None:
+    from pubtator_link.services.search_shaping import promote_title_matches
+
+    page1 = _hits("1", 2, f"{query} case report") + _hits("2", 8, "Unrelated podocyte review")
+    page3 = [{"pmid": "31732614", "title": discovery_title}]
+    client = _PagedSearchClient({1: page1, 2: _hits("3", 10, "Other review"), 3: page3})
+
+    result = await promote_title_matches(
+        client,
+        {"results": page1, "count": 21, "total_pages": 3},
+        text=query,
+        filters=None,
+        sections=None,
+        wanted=5,
+    )
+
+    pmids = [item["pmid"] for item in result["results"]]
+    assert pmids[:3] == ["10", "11", "31732614"]
+    assert len(pmids) == 10
+    assert client.calls == [2, 3]
+
+
+@pytest.mark.asyncio
+async def test_title_promotion_skips_extra_fetch_when_page_one_is_enough() -> None:
+    from pubtator_link.services.search_shaping import promote_title_matches
+
+    page1 = _hits("1", 5, "TBC1D8B nephrotic syndrome") + _hits("2", 5, "Other")
+    client = _PagedSearchClient({1: page1, 2: []})
+
+    result = await promote_title_matches(
+        client,
+        {"results": page1, "count": 10, "total_pages": 2},
+        text="TBC1D8B nephrotic syndrome",
+        filters=None,
+        sections=None,
+        wanted=5,
+    )
+
+    assert result["results"] == page1
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_title_promotion_skips_queries_without_a_gene_symbol() -> None:
+    from pubtator_link.services.search_shaping import promote_title_matches
+
+    page1 = _hits("1", 10, "Unrelated")
+    client = _PagedSearchClient({1: page1, 2: _hits("2", 10, "breast cancer risk")})
+
+    result = await promote_title_matches(
+        client,
+        {"results": page1, "count": 20, "total_pages": 2},
+        text="breast cancer risk",
+        filters=None,
+        sections=None,
+        wanted=5,
+    )
+
+    assert result["results"] == page1
+    assert client.calls == []
