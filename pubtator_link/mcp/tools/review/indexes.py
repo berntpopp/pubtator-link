@@ -6,6 +6,7 @@ from fastmcp import Context, FastMCP
 from pydantic import Field
 
 from pubtator_link.mcp.annotations import IDEMPOTENT_REVIEW_WRITE_ANNOTATIONS, READ_ONLY_OPEN_WORLD
+from pubtator_link.mcp.argument_aliases import merge_pmids
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.tools import review as review_tools
@@ -134,13 +135,14 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         """Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs. Call this before get_review_context_batch, use session_id to scope staged research sessions, set wait_until_ready for small corpora, and inspect preparation_status before retrieval."""
 
         async def call() -> dict[str, Any]:
+            selected_pmids = merge_pmids(pmids) if pmids else pmids
             queue = await review_tools.get_review_queue()
             if wait_until_ready:
                 await _report_index_progress(ctx, progress=0)
             result = await review_tools.index_review_evidence_impl(
                 queue=queue,
                 review_id=review_id,
-                pmids=pmids,
+                pmids=selected_pmids,
                 curated_urls=curated_urls,
                 prepare_mode=prepare_mode,
                 session_id=session_id,
@@ -241,12 +243,13 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         """Use this when a user needs to inspect indexed PMIDs, sections, passage counts, and failures for a review_id, including source coverage."""
 
         async def call() -> dict[str, Any]:
+            selected_pmids = merge_pmids(pmids) if pmids else pmids
             service = await review_tools.get_review_context_service()
             return await review_tools.inspect_review_index_impl(
                 service=service,
                 review_id=review_id,
                 session_id=session_id,
-                pmids=pmids,
+                pmids=selected_pmids,
                 include_passage_samples=include_passage_samples,
                 sample_per_pmid=sample_per_pmid,
                 min_sample_chars=min_sample_chars,

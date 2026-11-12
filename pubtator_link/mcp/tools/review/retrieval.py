@@ -268,6 +268,11 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
 
         async def call() -> dict[str, Any]:
             selected_pmids = merge_pmids(pmids, None, max_items=100) if pmids else None
+            prioritized = (
+                merge_pmids(prioritize_pmids, field="prioritize_pmids")
+                if prioritize_pmids
+                else None
+            )
             service = await review_tools.get_review_context_service()
             result = await review_tools.retrieve_review_context_batch_impl(
                 service=service,
@@ -287,7 +292,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 budget_strategy=budget_strategy or "query_fair",
                 min_passages_per_source=min_passages_per_source,
                 min_passages_per_pmid=min_passages_per_pmid,
-                prioritize_pmids=prioritize_pmids,
+                prioritize_pmids=prioritized,
                 include_diagnostics=include_diagnostics,
                 include_tables=include_tables,
                 include_references=include_references,

@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [7.3.1] - 2026-11-12
+
+### Fixed
+
+- Every caller-fixable error now names the bad argument in `field_errors` (acceptance D4; the
+  #248 mapping only covered `*Request` model errors and missing/unexpected arguments).
+  Type, constraint and union failures from argument validation are named, and a
+  service-layer `ValueError` that names a declared parameter (e.g. `search_literature`
+  `year_min=2025, year_max=2020`) is returned as `Invalid MCP arguments.` with both fields,
+  not a generic "could not complete" + diagnostics detour. Reasons that could echo a caller
+  value (custom validator text) are fixed strings; argument errors no longer suggest a
+  fallback call that replays the bad arguments.
+- One PMID check for every tool: non-numeric PMIDs (`["abc123"]`) are rejected as
+  `invalid_input` on `get_publication_passages` (was `success: true` / `not_retrievable`),
+  `index_review_evidence`, `inspect_review_index`, `suggest_corpus.must_include_pmids` and
+  `get_review_context_batch.prioritize_pmids`, exactly as `get_publication_metadata` does.
+  `PMID:`-prefixed IDs are normalized everywhere.
+- `coverage_by_pmid` reports `abstract_only` (not `unknown`) when
+  `coverage_reason_by_pmid` is `full_text_not_available`, and the contradictory
+  "returned abstract-only passages" warning is no longer added when none were returned.
+
+### Added
+
+- `make install-embeddings` installs the `embeddings` extra, so local runs can rerank.
+
 ## [7.3.0] - 2026-11-12
 
 ### Added

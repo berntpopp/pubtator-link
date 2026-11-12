@@ -16,7 +16,13 @@ from pydantic import ValidationError as PydanticValidationError
 from pubtator_link.api.client import PubTatorAPIError
 from pubtator_link.mcp.input_normalization import InputNormalizationError
 from pubtator_link.mcp.untrusted_content import sanitize_message
-from pubtator_link.mcp.validation_errors import extract_validation_details
+from pubtator_link.mcp.validation_errors import (
+    CURRENT_TOOL_PARAMS,
+    extract_validation_details,
+    message_field_errors,
+    pydantic_field_errors,
+    tool_param_names,
+)
 from pubtator_link.observability.metrics import record_mcp_tool_call
 from pubtator_link.services.degradation import DegradedMode
 from pubtator_link.services.errors import (
@@ -170,10 +176,8 @@ def _is_pubtator_upstream_unavailable(exc: Exception) -> bool:
     return (
         exc.status_code in {502, 503, 504}
         or terminal_reason in {"request_error", "filtered_search_unavailable"}
-        # Back-compat: the raw upstream body is now severed at the client
-        # (Surface A) and its transient-outage meaning travels as the
-        # ``filtered_search_unavailable`` terminal_reason above; these substring
-        # checks still classify any exception constructed with the legacy body.
+        # Back-compat: the body is severed at the client (Surface A); these substring checks
+        # still classify an exception constructed with the legacy body.
         or "currently updating the database" in message
         or "please try again later" in message
     )
@@ -390,11 +394,7 @@ def mcp_validation_tool_error(
     message = "Invalid MCP arguments."
     if valid_params:
         message += " Accepted parameters: " + ", ".join(valid_params) + "."
-    field_errors: list[dict[str, str]] = []
-    for missing in details.get("missing_params") or []:
-        field_errors.append({"field": missing, "reason": "required parameter is missing"})
-    for name in details.get("unexpected_params") or []:
-        field_errors.append({"field": name, "reason": "argument is not accepted by this tool"})
+    field_errors = _sever_validation_frame(pydantic_field_errors(_pydantic_validation_details(exc)))
     payload: dict[str, Any] = {
         "success": False,
         "error_code": "invalid_input",
@@ -505,13 +505,10 @@ def install_validation_error_handler(mcp_server: Any) -> None:
             _original_run: Callable[[dict[str, Any]], Awaitable[Any]] = original_run,
             _tool: Any = tool,
         ) -> Any:
+            params_token = CURRENT_TOOL_PARAMS.set(tool_param_names(_tool.parameters))
             try:
                 result = await _original_run(arguments)
-            except (PydanticValidationError, FastMCPValidationError) as exc:
-                # FastMCP 3.4.3+ re-raises argument-validation pydantic errors as
-                # fastmcp.exceptions.ValidationError (see fastmcp #4128); older
-                # releases raised the raw pydantic error. Catch both so failures
-                # keep returning the flat envelope instead of propagating.
+            except (PydanticValidationError, FastMCPValidationError) as exc:  # see docstring
                 payload = mcp_validation_tool_error(
                     tool_name=str(_tool.name),
                     parameters=dict(_tool.parameters),
@@ -525,6 +522,8 @@ def install_validation_error_handler(mcp_server: Any) -> None:
                 # carries a non-null structuredContent with a six-value error_code.
                 payload = mcp_tool_error(exc, McpErrorContext(tool_name=str(_tool.name)))
                 return ToolResult(structured_content=payload, is_error=True)
+            finally:
+                CURRENT_TOOL_PARAMS.reset(params_token)
             structured = getattr(result, "structured_content", None)
             # Response-Envelope Standard v1: every ``success: false`` envelope MUST carry MCP
             # ``isError: true`` AND an error_code inside the closed enum. This covers the flat error
@@ -574,17 +573,19 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> dict[str, Any]:
     next_commands: list[dict[str, Any]] = []
     if fallback_tool and fallback_args is not None:
         next_commands.append({"tool": fallback_tool, "arguments": fallback_args})
-    if isinstance(exc, PydanticValidationError) and exc.title.endswith("Request"):
-        # Name the bad field instead of a generic message + diagnostics detour (#248).
-        exc = InputNormalizationError(
-            field_errors=[
-                {"field": str(err["loc"][0]) if err["loc"] else "arguments", "reason": err["msg"]}
-                for err in exc.errors(include_input=False, include_url=False)
-            ],
-            recovery_hint="Correct the named field(s) and retry.",
+    if reason == "validation_failed" and not isinstance(exc, InputNormalizationError):
+        # Name the bad field(s) wherever the check ran: model, service layer, adapter (#248, D4).
+        named = (
+            pydantic_field_errors(exc.errors(include_input=False))
+            if isinstance(exc, PydanticValidationError)
+            else message_field_errors(str(exc), CURRENT_TOOL_PARAMS.get())
         )
+        if named:
+            exc = InputNormalizationError(named, "Correct the named field(s) and retry.")
     argument_error = isinstance(exc, InputNormalizationError)
-    if not argument_error:
+    if argument_error:  # a fallback would replay the same bad arguments (and echo them)
+        fallback_tool, fallback_args, next_commands = None, None, []
+    else:
         next_commands.append({"tool": "diagnostics", "arguments": {}})
     payload: dict[str, Any] = {
         "success": False,
@@ -642,7 +643,18 @@ async def run_mcp_tool(
     except Exception as exc:
         latency_seconds = perf_counter() - started_at
         error_code = error_code_for_exception(exc)
-        message = safe_message_for_exception(exc)
+        payload = mcp_tool_error(
+            exc,
+            McpErrorContext(
+                tool_name=tool_name,
+                pmids=pmids,
+                fallback_tool=fallback_tool,
+                fallback_args=fallback_args,
+                diagnostics_snapshot=diagnostics_snapshot,
+                degraded_mode=degraded_mode,
+                fallback_preview=fallback_preview,
+            ),
+        )
         logger.warning(
             "mcp_tool_failed",
             extra={
@@ -656,29 +668,14 @@ async def run_mcp_tool(
         # Do NOT retain ``str(exc)``: for an upstream failure it can carry the
         # (now client-severed) response body or free-text PII. Only the already
         # sanitized, body-free ``message`` is recorded.
-        record_mcp_error(
-            tool_name=tool_name,
-            error_code=error_code,
-            message=message,
-        )
+        record_mcp_error(tool_name=tool_name, error_code=error_code, message=payload["message"])
         record_mcp_tool_call(
             tool_name=tool_name,
             outcome="failure",
             error_code=error_code,
             latency_seconds=latency_seconds,
         )
-        return mcp_tool_error(
-            exc,
-            McpErrorContext(
-                tool_name=tool_name,
-                pmids=pmids,
-                fallback_tool=fallback_tool,
-                fallback_args=fallback_args,
-                diagnostics_snapshot=diagnostics_snapshot,
-                degraded_mode=degraded_mode,
-                fallback_preview=fallback_preview,
-            ),
-        )
+        return payload
     latency_seconds = perf_counter() - started_at
     logger.info(
         "mcp_tool_completed",

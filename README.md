@@ -44,7 +44,7 @@ non-readonly access; never send a caller token onward to the backend (see
 To run it locally (Python 3.14+, [uv](https://github.com/astral-sh/uv)):
 
 ```bash
-make install
+make install          # or: make install-embeddings (+ make embeddings-model) for review rerank
 cp .env.example .env
 make dev                                                     # REST + MCP on :8000
 claude mcp add --transport http pubtator-link http://127.0.0.1:8000/mcp

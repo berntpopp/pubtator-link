@@ -68,13 +68,18 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
 
         async def call() -> dict[str, Any]:
             selected_question = question
+            must_include = (
+                merge_pmids(must_include_pmids, field="must_include_pmids")
+                if must_include_pmids
+                else must_include_pmids
+            )
             service = await get_corpus_suggestion_service()
             return await suggest_corpus_impl(
                 service=service,
                 question=selected_question,
                 max_pmids=max_pmids,
                 entity_ids=entity_ids,
-                must_include_pmids=must_include_pmids,
+                must_include_pmids=must_include,
                 prefer_guidelines=prefer_guidelines,
                 include_metadata=include_metadata,
                 profile=profile,

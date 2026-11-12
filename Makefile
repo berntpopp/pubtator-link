@@ -1,4 +1,4 @@
-.PHONY: help install lock upgrade sync format format-check lint lint-ci lint-fix lint-loc lint-readme typecheck typecheck-fast typecheck-stop typecheck-fresh test test-fast test-unit test-integration test-cov test-all check ci-local precommit clean dev serve benchmark-smoke benchmark-pubmedqa benchmark-bioasq benchmark-compare db-init embeddings-model embeddings-backfill eval-rerank docker-build docker-up docker-down docker-logs docker-prod-config docker-npm-config
+.PHONY: help install install-embeddings lock upgrade sync format format-check lint lint-ci lint-fix lint-loc lint-readme typecheck typecheck-fast typecheck-stop typecheck-fresh test test-fast test-unit test-integration test-cov test-all check ci-local precommit clean dev serve benchmark-smoke benchmark-pubmedqa benchmark-bioasq benchmark-compare db-init embeddings-model embeddings-backfill eval-rerank docker-build docker-up docker-down docker-logs docker-prod-config docker-npm-config
 
 DOCKER_COMPOSE := $(shell if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then echo "docker compose"; elif command -v docker-compose >/dev/null 2>&1; then echo "docker-compose"; else echo "docker compose"; fi)
 
@@ -9,6 +9,9 @@ help: ## Display this help message
 
 install: ## Install project and development dependencies with uv
 	uv sync --group dev
+
+install-embeddings: ## Install dev deps + the embeddings extra (local review rerank)
+	uv sync --group dev --extra embeddings
 
 sync: install ## Alias for install
 
