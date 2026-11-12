@@ -77,7 +77,13 @@ class PublicationPassageService:
         missing = [pmid for pmid in request.pmids if pmid not in returned]
         fallback_documents = await self._pubtator_abstract_documents(missing) if missing else []
         fallback_pmids = {_pmid_from_document(document) for document in fallback_documents}
-        retrieved_pmids = returned | fallback_pmids
+        available_sections: dict[str | None, set[str]] = {}
+        for document in [*documents, *fallback_documents]:
+            available_sections.setdefault(_pmid_from_document(document), set()).update(
+                normalize_publication_section(_section_from_passage(passage))
+                for passage in document.get("passages", [])
+                if isinstance(passage, dict)
+            )
         sections = self._effective_sections(request.mode, request.sections)
         max_per_pmid = self._effective_max_passages_per_pmid(request)
         passages, dropped = self._compact_export(
@@ -105,7 +111,7 @@ class PublicationPassageService:
         if request.dry_run:
             estimate = self._estimate_from_passages(passages, request.pmids, request.mode)
             coverage_by_pmid, coverage_reason_by_pmid, failed_pmids, warnings = (
-                self._coverage_summary(passages, request, fallback_pmids, retrieved_pmids)
+                self._coverage_summary(passages, request, fallback_pmids, available_sections)
             )
             return PublicationPassageResponse(
                 success=True,
@@ -128,7 +134,7 @@ class PublicationPassageService:
         dropped.extend(budget_drops)
         estimate = self._estimate_from_passages(passages, request.pmids, request.mode)
         coverage_by_pmid, coverage_reason_by_pmid, failed_pmids, warnings = self._coverage_summary(
-            passages, request, fallback_pmids, retrieved_pmids
+            passages, request, fallback_pmids, available_sections
         )
 
         return PublicationPassageResponse(
@@ -443,7 +449,7 @@ class PublicationPassageService:
         passages: list[PublicationPassage],
         request: PublicationPassageRequest,
         fallback_pmids: set[str | None],
-        retrieved_pmids: set[str | None],
+        available_sections: dict[str | None, set[str]],
     ) -> tuple[
         dict[str, PublicationCoverage],
         dict[str, str],
@@ -456,16 +462,27 @@ class PublicationPassageService:
         warnings: list[str] = []
         for pmid in request.pmids:
             coverage, reason = self._coverage_for_pmid(passages, pmid)
+            failure = "No PubTator passages found"
             if pmid in fallback_pmids and coverage != "unknown":
                 reason = "biocjson_unavailable_pubtator_fallback"
-            elif pmid not in retrieved_pmids:
+            elif pmid not in available_sections:
                 reason = "not_retrievable"
+            elif (
+                coverage == "unknown"
+                and request.full
+                and available_sections[pmid] <= {"title", "abstract"}
+            ):
+                # Not in the PMC open-access subset: no full text to filter sections from (#239).
+                reason = "full_text_not_available"
+                failure = "No full text in PubTator (typically not PMC open access)"
+                warnings.append(
+                    f"PMID {pmid} has only title/abstract (likely not open access); use "
+                    "mode='full_abstract' or drop the sections filter."
+                )
             coverage_by_pmid[pmid] = coverage
             coverage_reason_by_pmid[pmid] = reason
             if coverage == "unknown":
-                failed_pmids.append(
-                    FailedPublicationPmid(pmid=pmid, reason="No PubTator passages found")
-                )
+                failed_pmids.append(FailedPublicationPmid(pmid=pmid, reason=failure))
             if (
                 request.full
                 and request.mode == "section_text"

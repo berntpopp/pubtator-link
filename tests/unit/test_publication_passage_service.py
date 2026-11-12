@@ -519,3 +519,31 @@ async def test_mcp_dump_lists_individual_drops_only_at_full_verbosity() -> None:
         "table": 4,
     }
     assert len(full["dropped"]) == 15
+
+
+@pytest.mark.asyncio
+async def test_full_text_section_request_on_abstract_only_pmid_explains_why() -> None:
+    # #239: a non-open-access PMID has only title/abstract; say so instead of "unknown".
+    class AbstractOnlyService:
+        async def export_publications_list(self, pmids, format, full):
+            return {
+                "documents": [
+                    {
+                        "id": "29058690",
+                        "passages": [
+                            {"infons": {"type": "title"}, "text": "Title"},
+                            {"infons": {"type": "abstract"}, "text": "Abstract"},
+                        ],
+                    }
+                ]
+            }
+
+    response = await PublicationPassageService(AbstractOnlyService()).get_passages(
+        PublicationPassageRequest(
+            pmids=["29058690"], full=True, sections=["RESULTS", "TABLE"], mode="section_text"
+        )
+    )
+
+    assert response.coverage_reason_by_pmid["29058690"] == "full_text_not_available"
+    assert "open access" in response.failed_pmids[0].reason
+    assert any("full_abstract" in warning for warning in response.warnings)
