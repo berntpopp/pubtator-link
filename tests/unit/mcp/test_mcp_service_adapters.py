@@ -2977,8 +2977,8 @@ async def test_search_literature_with_abstract_metadata_inlines_bounded_abstract
         metadata_service=None,
     )
 
-    assert result["results"][0]["abstract"].startswith("MEFV variant evidence")
-    assert len(result["results"][0]["abstract"]) <= 650
+    assert result["results"][0]["abstract"]["text"].startswith("MEFV variant evidence")
+    assert len(result["results"][0]["abstract"]["text"]) <= 650
 
 
 @pytest.mark.asyncio
@@ -4110,6 +4110,11 @@ async def test_search_literature_with_abstract_fills_abstract_from_export() -> N
         client=FakeClient(), text="42739594", metadata="with_abstract", metadata_service=None
     )
 
-    assert result["results"][0]["abstract"] == "Background: cohort."
+    # Response-Envelope v1.1: external abstract prose is fenced like passage text.
+    fenced = result["results"][0]["abstract"]
+    assert fenced["kind"] == "untrusted_text"
+    assert fenced["text"] == "Background: cohort."
+    assert fenced["provenance"]["record_id"] == "PMID:42739594"
+    assert len(fenced["raw_sha256"]) == 64
     assert result["results"][1].get("abstract") is None
     assert any("1" in warning and "abstract" in warning for warning in result["warnings"])

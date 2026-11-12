@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, Literal
 
+from pubtator_link.mcp.untrusted_content import fence_untrusted_text
 from pubtator_link.models.publication_metadata import PublicationAuthor
 from pubtator_link.models.responses import SearchResponse, SearchResult
 from pubtator_link.services.provenance import corpus_snapshot_date, stable_cache_key
@@ -421,6 +422,18 @@ async def promote_title_matches(
         if _title_rank(item, terms, symbols) or str(item.get("pmid")) in page_one_ids
     ]
     return {**result, "results": kept[: len(page_one)]}
+
+
+def fence_search_abstracts(dumped: dict[str, Any]) -> dict[str, Any]:
+    """Fence hit abstracts as Response-Envelope v1.1 ``untrusted_text`` at the MCP boundary."""
+    for result in dumped.get("results", []):
+        if isinstance(result, dict) and isinstance(result.get("abstract"), str):
+            result["abstract"] = fence_untrusted_text(
+                result["abstract"],
+                source="pubtator_search",
+                record_id=f"PMID:{result.get('pmid', '')}",
+            ).model_dump()
+    return dumped
 
 
 def selected_search_items(

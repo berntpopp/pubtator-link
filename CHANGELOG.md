@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [7.2.1] - 2026-11-12
+
+### Security
+
+- `search_literature` hit abstracts (populated since 7.2.0, #246) are fenced as Response-Envelope
+  v1.1 `untrusted_text` objects (`kind`, `text`, `provenance`, `raw_sha256`) with the same
+  `fence_untrusted_text` helper as passage text, so forbidden control/bidi/zero-width code points
+  are stripped. MCP only; the REST surface is unchanged.
+
 ## [7.2.0] - 2026-11-12
 
 ### Added
