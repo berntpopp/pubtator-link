@@ -10,6 +10,7 @@ from pubtator_link.mcp.argument_aliases import merge_pmids
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.tools import review as review_tools
+from pubtator_link.mcp.tools._vocab import Pmid
 from pubtator_link.mcp.tools.review._helpers import (
     _report_index_progress,
     _warn_if_degraded,
@@ -96,7 +97,7 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             ),
         ],
         pmids: Annotated[
-            list[str] | None,
+            list[Pmid] | None,
             Field(
                 description="PubMed IDs to index as review evidence.",
                 examples=[["12345"]],
@@ -197,7 +198,7 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             Field(description="Optional staged session to scope the inspection to."),
         ] = None,
         pmids: Annotated[
-            list[str] | None,
+            list[Pmid] | None,
             Field(
                 description="Restrict the inspection to these indexed PMIDs.",
                 examples=[["12345"]],

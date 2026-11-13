@@ -114,7 +114,7 @@ async def test_non_numeric_pmid_is_rejected_identically(
     assert payload["field_errors"] == [
         {
             "field": field,
-            "reason": "PMIDs must be numeric PubMed IDs (optionally 'PMID:'-prefixed).",
+            "reason": "PMIDs must be ASCII digits 0-9 (optionally 'PMID:'-prefixed).",
         }
     ]
     assert "abc123" not in str(payload)

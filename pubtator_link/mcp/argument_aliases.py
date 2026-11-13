@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from pubtator_link.mcp.input_normalization import InputNormalizationError
 from pubtator_link.models.literature_graph import normalize_pmid
 
-_PMID_REASON = "PMIDs must be numeric PubMed IDs (optionally 'PMID:'-prefixed)."
+_PMID_REASON = "PMIDs must be ASCII digits 0-9 (optionally 'PMID:'-prefixed)."
 
 
 def _pmid_error(field: str, reason: str) -> InputNormalizationError:

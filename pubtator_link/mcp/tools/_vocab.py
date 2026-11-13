@@ -12,7 +12,11 @@ re-introduce exactly the silent-empty it is meant to kill).
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
+
+from pydantic import Field
+
+from pubtator_link.models.literature_graph import PMID_PATTERN
 
 # PubTator3 search `sections` filter — lowercase section labels.
 SearchSection = Literal["title", "abstract", "introduction", "methods", "results", "discussion"]
@@ -52,3 +56,7 @@ PublicationType = Literal[
     "Clinical Study",
     "Validation Study",
 ]
+
+# Every PMID tool input advertises exactly what normalize_pmid accepts. Schema-only: the tools
+# enforce it via merge_pmids / the request models, which keep the one field-named PMID error.
+Pmid = Annotated[str, Field(json_schema_extra={"pattern": PMID_PATTERN})]

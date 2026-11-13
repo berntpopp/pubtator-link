@@ -14,6 +14,7 @@ from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.meta_budget import strip_meta_for_repeated_call
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.tools import review as review_tools
+from pubtator_link.mcp.tools._vocab import Pmid
 from pubtator_link.mcp.tools.review._helpers import _warn_if_degraded, make_mcp_tool_for
 from pubtator_link.models.review_rerag import (
     BudgetStrategy,
@@ -60,7 +61,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             str | None, Field(description="Optional staged session to scope retrieval to.")
         ] = None,
         pmids: Annotated[
-            list[str] | None,
+            list[Pmid] | None,
             Field(description="Restrict retrieval to these PMIDs.", examples=[["12345"]]),
         ] = None,
         entity_ids: Annotated[
@@ -177,7 +178,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             str | None, Field(description="Optional staged session to scope retrieval to.")
         ] = None,
         pmids: Annotated[
-            list[str] | None,
+            list[Pmid] | None,
             Field(description="Restrict retrieval to these PMIDs.", examples=[["12345"]]),
         ] = None,
         entity_ids: Annotated[
@@ -229,7 +230,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             int, Field(ge=0, le=50, description="Guaranteed minimum passages per PMID.")
         ] = 0,
         prioritize_pmids: Annotated[
-            list[str] | None,
+            list[Pmid] | None,
             Field(description="PMIDs to prioritize in budgeting.", examples=[["12345"]]),
         ] = None,
         include_diagnostics: Annotated[
@@ -350,7 +351,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             Field(max_length=4000, description="Short human-readable summary of the event."),
         ] = None,
         pmids: Annotated[
-            list[Annotated[str, _STR_ITEM]] | None,
+            list[Annotated[Pmid, _STR_ITEM]] | None,
             Field(description="Cited PMIDs.", examples=[["12345"]]),
         ] = None,
         passage_ids: Annotated[
@@ -379,11 +380,11 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             dict[str, Any] | None, Field(description="Response summary.")
         ] = None,
         selected_pmids: Annotated[
-            list[Annotated[str, _STR_ITEM]] | None,
+            list[Annotated[Pmid, _STR_ITEM]] | None,
             Field(description="Selected PMIDs.", examples=[["12345"]]),
         ] = None,
         rejected_pmids: Annotated[
-            list[Annotated[str, _STR_ITEM]] | None,
+            list[Annotated[Pmid, _STR_ITEM]] | None,
             Field(description="Rejected PMIDs.", examples=[["67890"]]),
         ] = None,
         preferred_entity_ids: Annotated[

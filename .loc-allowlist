@@ -27,5 +27,6 @@ pubtator_link/services/review_context_service.py:1169
 pubtator_link/mcp/resources.py:775
 pubtator_link/services/full_text_preparation.py:742
 pubtator_link/services/ncbi_discovery.py:663
-pubtator_link/models/literature_graph.py:662
+# Raised 662 -> 664: normalize_pmid now shares PMID_PATTERN with every advertised PMID schema.
+pubtator_link/models/literature_graph.py:664
 pubtator_link/services/related_evidence.py:643
