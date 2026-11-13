@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [7.3.3] - 2026-11-13
+
+### Fixed
+
+- Release metadata no longer claims a pinned dataset that does not exist. `container-release.json`
+  declared `data.mode: restored-database` with release tag `observed-2026.07.13` and a sha256
+  digest, but no data artifact was ever published or restored: the corpus is the live PubTator3
+  API, and PostgreSQL holds only state written at runtime (review sessions and contexts, passages
+  and the embeddings computed for them, full-text retrieval attempts, benchmark runs). The release now declares `data.mode: none` and
+  `definitions.contract: data-independent`, so the release workflow proves the MCP definitions
+  are identical across two fresh runtime contexts instead of sealing a digest of nothing
+  (genefoundry-router#63). The bundled embedding model stays pinned by revision + sha256 at
+  build time and is covered by the image digest.
+
 ## [7.3.2] - 2026-11-13
 
 ### Fixed

@@ -50,8 +50,16 @@ def test_postgres_sidecar_is_declared_with_the_database_role() -> None:
     assert int(uid) > 0 and int(gid) > 0, "the sidecar must not run as root"
 
 
-def test_smoke_profile_matches_the_restored_database_mode() -> None:
-    assert CONFIG["data"]["mode"] == "restored-database"
+def test_release_declares_no_pinned_data() -> None:
+    # Postgres holds only state written at runtime (reviews, passages, embeddings, benchmark
+    # runs) and the corpus is the live PubTator3 API: nothing is restored from a pinned
+    # artifact, so a data-bound pin would be a digest of nothing (router#63).
+    assert CONFIG["data"]["mode"] == "none"
+    assert "release_tag" not in CONFIG["data"]
+    assert "digest" not in CONFIG["data"]
+    assert CONFIG["definitions"]["contract"] == "data-independent"
+    assert "data_identity_contract" not in CONFIG
+    # The sidecar still needs the postgres smoke profile.
     assert CONFIG["smoke"]["profile"] == "postgres-bundle"
 
 
