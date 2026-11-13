@@ -13,7 +13,9 @@
   case-insensitive `PMID:` prefix, surrounding whitespace).
 - `normalize_pmid` accepted non-ASCII digits (`str.isdigit()` admits Arabic-Indic, fullwidth and
   superscript digits) and passed them upstream; it now accepts ASCII `[0-9]` only, and the
-  `field_errors` reason says so.
+  `field_errors` reason says so. `get_publication_citation_graph` and
+  `find_related_evidence_candidates` now return that same reason for a bad `pmid` (was a
+  generic "invalid value").
 
 ## [7.3.1] - 2026-11-12
 

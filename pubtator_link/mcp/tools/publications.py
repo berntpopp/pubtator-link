@@ -430,7 +430,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             service = await get_citation_graph_service()
             return await get_publication_citation_graph_impl(
                 service=service,
-                pmid=pmid,
+                pmid=merge_pmids(None, pmid)[0],
                 direction=direction,
                 response_mode=response_mode,
                 resolve_metadata=resolve_metadata,
@@ -510,7 +510,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             service = await get_related_evidence_service()
             return await find_related_evidence_candidates_impl(
                 service=service,
-                pmid=pmid,
+                pmid=merge_pmids(None, pmid)[0],
                 max_results=max_results,
                 response_mode=response_mode,
                 prefer_full_text=prefer_full_text,

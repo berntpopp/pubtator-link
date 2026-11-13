@@ -96,3 +96,18 @@ async def test_schema_rejected_pmid_is_a_named_field_error(bad: str) -> None:
     assert isinstance(payload, dict)
     assert payload["error_code"] == "invalid_input"
     assert "pmids" in {e["field"] for e in payload.get("field_errors") or []}
+
+
+@pytest.mark.parametrize(
+    "tool", ["get_publication_citation_graph", "find_related_evidence_candidates"]
+)
+async def test_single_pmid_tools_give_the_same_pmid_reason(tool: str) -> None:
+    mcp = create_pubtator_mcp(profile="full")
+    async with Client(mcp) as client:
+        result = await client.call_tool(tool, {"pmid": "abc"}, raise_on_error=False)
+    payload = result.structured_content
+    assert result.is_error is True
+    assert isinstance(payload, dict)
+    assert payload["field_errors"] == [
+        {"field": "pmid", "reason": "PMIDs must be ASCII digits 0-9 (optionally 'PMID:'-prefixed)."}
+    ]
