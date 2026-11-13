@@ -29,7 +29,7 @@ from pubtator_link.mcp.service_adapters import (
     get_publication_metadata_impl,
     get_publication_passages_impl,
 )
-from pubtator_link.mcp.tools._vocab import PassageSection, PublicationType
+from pubtator_link.mcp.tools._vocab import PassageSection, Pmid, PublicationType
 from pubtator_link.models.publication_passages import (
     PublicationPassageMode,
     Verbosity,
@@ -66,7 +66,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         )
         async def fetch_publication_annotations(
             pmids: Annotated[
-                list[str],
+                list[Pmid],
                 Field(
                     min_length=1,
                     max_length=50,
@@ -129,7 +129,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 ),
             ],
             pmids: Annotated[
-                list[str] | None,
+                list[Pmid] | None,
                 Field(
                     min_length=1,
                     max_length=100,
@@ -269,7 +269,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
     )
     async def get_publication_passages(
         pmids: Annotated[
-            list[str],
+            list[Pmid],
             Field(
                 min_length=1,
                 max_length=25,
@@ -341,7 +341,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
     )
     async def get_publication_metadata(
         pmids: Annotated[
-            list[str],
+            list[Pmid],
             Field(
                 min_length=1,
                 max_length=100,
@@ -390,7 +390,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
     )
     async def get_publication_citation_graph(
         pmid: Annotated[
-            str,
+            Pmid,
             Field(
                 min_length=1,
                 description="PubMed ID of the publication whose citation neighbors are wanted.",
@@ -430,7 +430,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             service = await get_citation_graph_service()
             return await get_publication_citation_graph_impl(
                 service=service,
-                pmid=pmid,
+                pmid=merge_pmids(None, pmid)[0],
                 direction=direction,
                 response_mode=response_mode,
                 resolve_metadata=resolve_metadata,
@@ -456,7 +456,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
     )
     async def find_related_evidence_candidates(
         pmid: Annotated[
-            str,
+            Pmid,
             Field(
                 min_length=1,
                 description="Seed PubMed ID to find related evidence candidates for.",
@@ -510,7 +510,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             service = await get_related_evidence_service()
             return await find_related_evidence_candidates_impl(
                 service=service,
-                pmid=pmid,
+                pmid=merge_pmids(None, pmid)[0],
                 max_results=max_results,
                 response_mode=response_mode,
                 prefer_full_text=prefer_full_text,
@@ -541,7 +541,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         )
         async def estimate_publication_context(
             pmids: Annotated[
-                list[str],
+                list[Pmid],
                 Field(
                     min_length=1,
                     max_length=25,

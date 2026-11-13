@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [7.3.2] - 2026-11-13
+
+### Fixed
+
+- Contract-Truth: every PMID input (20 parameters across 16 tools, e.g. `pmids`, `pmid`,
+  `must_include_pmids`, `prioritize_pmids`, `selected_pmids`) advertised "any string" while the
+  runtime only accepts numeric PMIDs. They now share one `Pmid` schema type whose `pattern` is
+  the exact regex `normalize_pmid` enforces (`PMID_PATTERN`: ASCII digits, optional
+  case-insensitive `PMID:` prefix, surrounding whitespace).
+- `normalize_pmid` accepted non-ASCII digits (`str.isdigit()` admits Arabic-Indic, fullwidth and
+  superscript digits) and passed them upstream; it now accepts ASCII `[0-9]` only, and the
+  `field_errors` reason says so. `get_publication_citation_graph` and
+  `find_related_evidence_candidates` now return that same reason for a bad `pmid` (was a
+  generic "invalid value").
+
 ## [7.3.1] - 2026-11-12
 
 ### Fixed

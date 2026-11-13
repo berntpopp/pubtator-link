@@ -15,7 +15,7 @@ from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.meta_budget import strip_meta_for_repeated_call
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.tools import review as review_tools
-from pubtator_link.mcp.tools._vocab import PublicationType
+from pubtator_link.mcp.tools._vocab import Pmid, PublicationType
 from pubtator_link.mcp.tools.review._helpers import make_mcp_tool_for
 from pubtator_link.models.review_rerag import (
     MaxResponseChars,
@@ -37,7 +37,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
     )
     async def preflight_review_sources(
         pmids: Annotated[
-            list[str],
+            list[Pmid],
             Field(
                 min_length=1,
                 description="PubMed IDs to check source coverage and full-text availability for.",
@@ -45,7 +45,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             ),
         ],
         pmid: Annotated[
-            str | None,
+            Pmid | None,
             Field(min_length=1, description="Single-PMID convenience alias, merged with `pmids`."),
         ] = None,
     ) -> dict[str, Any]:
@@ -92,7 +92,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             Field(min_length=1, description="Search query used to stage candidate PMIDs."),
         ] = None,
         pmids: Annotated[
-            list[str] | None,
+            list[Pmid] | None,
             Field(description="Explicit candidate PMIDs to stage.", examples=[["12345"]]),
         ] = None,
         session_id: Annotated[

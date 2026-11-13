@@ -14,6 +14,7 @@ from pubtator_link.mcp.argument_aliases import merge_pmids
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.service_adapters import suggest_corpus_impl
+from pubtator_link.mcp.tools._vocab import Pmid
 from pubtator_link.models.discovery import ArticleIdKind, RelatedArticleMode
 
 
@@ -49,7 +50,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
             ),
         ] = None,
         must_include_pmids: Annotated[
-            list[str] | None,
+            list[Pmid] | None,
             Field(
                 description="PMIDs that MUST appear in the returned corpus.",
                 examples=[["31036433"]],
@@ -190,7 +191,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
     )
     async def find_related_articles(
         pmids: Annotated[
-            list[str],
+            list[Pmid],
             Field(
                 min_length=1,
                 max_length=100,

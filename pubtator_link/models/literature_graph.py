@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal
 
 from pydantic import (
@@ -51,13 +52,14 @@ LiteraturePaperStatus = Literal[
 ]
 
 
+# One PMID contract (schema `pattern` + runtime). [0-9], not isdigit(): that admits '\u0661'.
+PMID_PATTERN = r"^\s*(?:[Pp][Mm][Ii][Dd]:\s*)?([0-9]+)\s*$"
+
+
 def normalize_pmid(value: str) -> str:
-    clean = value.strip()
-    if clean.upper().startswith("PMID:"):
-        clean = clean[5:].strip()
-    if not clean or not clean.isdigit():
+    if (match := re.fullmatch(PMID_PATTERN, value)) is None:
         raise ValueError("PMID must be numeric")
-    return clean
+    return match.group(1)
 
 
 def normalize_doi(value: str) -> str:
