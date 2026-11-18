@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from fastmcp import Context, FastMCP
+from fastmcp.tools.function_tool import FunctionTool
 
 from pubtator_link.mcp.profiles import MCPToolProfile
 
@@ -36,7 +37,17 @@ def make_mcp_tool_for(
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             if profile in profiles:
-                return cast(Callable[..., Any], mcp.tool(**tool_kwargs)(fn))
+                # FastMCP 4 dropped ``exclude_args``: register normally, then hide the
+                # (still-accepted, defaulted) legacy args from the advertised schema.
+                kwargs = dict(tool_kwargs)
+                exclude_args = kwargs.pop("exclude_args", ())
+                if not exclude_args:
+                    return cast(Callable[..., Any], mcp.tool(**kwargs)(fn))
+                tool = FunctionTool.from_function(fn, **kwargs)
+                for arg in exclude_args:
+                    tool.parameters.get("properties", {}).pop(arg, None)
+                mcp.add_tool(tool)
+                return fn
             return fn
 
         return decorator

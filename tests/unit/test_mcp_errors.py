@@ -461,33 +461,39 @@ async def test_installed_mcp_output_validation_handler_replaces_bare_sdk_error()
     from pubtator_link.mcp.output_validation import install_output_validation_error_handler
 
     mcp = FastMCP(name="test")
+    lowlevel = mcp._mcp_server
+    entry = lowlevel.get_request_handler("tools/call")
+    assert entry is not None
 
-    @mcp.tool(
-        name="get_review_context_batch",
-        output_schema={
-            "type": "object",
-            "properties": {"explanation": {"type": "string"}},
-            "required": ["explanation"],
-        },
-    )
-    async def broken_tool(response_mode: str = "compact") -> dict[str, object]:
-        return {"ok": True}
+    # SDK v2 no longer validates output server-side; stub the inner handler so the
+    # wrapper still proves it rewrites a bare "Output validation error" result.
+    async def bare_sdk_error(ctx: object, params: object) -> types.CallToolResult:
+        return types.CallToolResult(
+            content=[
+                types.TextContent(
+                    type="text",
+                    text="Output validation error: 'explanation' is a required property",
+                )
+            ],
+            is_error=True,
+        )
 
+    lowlevel.add_request_handler("tools/call", entry.params_type, bare_sdk_error)
     install_output_validation_error_handler(mcp)
     clear_recent_mcp_errors()
 
-    handler = mcp._mcp_server.request_handlers[types.CallToolRequest]
-    result = await handler(
-        types.CallToolRequest(
-            params=types.CallToolRequestParams(
-                name="get_review_context_batch",
-                arguments={"response_mode": "compact"},
-            )
-        )
+    wrapped = lowlevel.get_request_handler("tools/call")
+    assert wrapped is not None
+    result = await wrapped.handler(
+        None,
+        types.CallToolRequestParams(
+            name="get_review_context_batch",
+            arguments={"response_mode": "compact"},
+        ),
     )
-    payload = json.loads(result.root.content[0].text)
+    payload = json.loads(result.content[0].text)
 
-    assert result.root.isError is True
+    assert result.is_error is True
     assert payload["error_code"] == "internal"
     assert payload["error_field"] == "explanation"
     assert payload["fallback_response_mode"] == "quotes"

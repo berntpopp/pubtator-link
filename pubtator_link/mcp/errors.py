@@ -10,7 +10,7 @@ from typing import Any
 import asyncpg
 import httpx
 from fastmcp.exceptions import ValidationError as FastMCPValidationError
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 from pydantic import ValidationError as PydanticValidationError
 
 from pubtator_link.api.client import PubTatorAPIError
