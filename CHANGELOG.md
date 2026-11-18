@@ -10,6 +10,9 @@
   cut each 10-hit PubTator3 page and `page=2` jumped to hit 11, so hits 6-10 of every page
   were unreachable (#265). A new `offset` parameter continues inside the current upstream
   page.
+- `search_literature` / `search_guidelines`: `entity_ids` must look like `@TYPE_id` (e.g.
+  `@GENE_BRCA1`); a malformed value is rejected with `invalid_input` instead of silently
+  matching nothing (caught by the behaviour probe once responses gained `returned`).
 
 ### Added
 

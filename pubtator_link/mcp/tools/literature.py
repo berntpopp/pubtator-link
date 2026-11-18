@@ -20,7 +20,7 @@ from pubtator_link.mcp.service_adapters import (
     search_biomedical_entities_impl,
     search_literature_impl,
 )
-from pubtator_link.mcp.tools._vocab import PublicationType, SearchSection
+from pubtator_link.mcp.tools._vocab import PublicationType, PubTatorEntityId, SearchSection
 from pubtator_link.models.variants import VariantEvidenceSource
 from pubtator_link.services.search_coverage import SearchCoverageMode
 from pubtator_link.services.search_shaping import (
@@ -161,7 +161,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             ),
         ] = 5,
         entity_ids: Annotated[
-            list[str] | None,
+            list[PubTatorEntityId] | None,
             Field(
                 description=(
                     "Restrict to articles mentioning these PubTator entity IDs (resolve them "
@@ -292,7 +292,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             Field(ge=1, le=20, description="Max hits to return, at most the rest of `page`."),
         ] = 5,
         entity_ids: Annotated[
-            list[str] | None,
+            list[PubTatorEntityId] | None,
             Field(
                 description=(
                     "Restrict to articles mentioning these PubTator entity IDs (resolve them "

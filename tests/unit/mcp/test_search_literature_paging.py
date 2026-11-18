@@ -44,3 +44,18 @@ async def test_search_literature_paging_reaches_every_hit_once(
     assert seen == [hit["pmid"] for hit in hits]
     assert body["has_more"] is False
     assert "next_commands" not in body["_meta"]
+
+
+@pytest.mark.asyncio
+async def test_search_literature_rejects_malformed_entity_id() -> None:
+    """A non-`@TYPE_id` entity ID is rejected, not AND-joined into a silent empty result."""
+    from fastmcp import Client
+
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    async with Client(create_pubtator_mcp(profile="full")) as client:
+        result = await client.call_tool(
+            "search_literature", {"text": "x", "entity_ids": ["BRCA1"]}, raise_on_error=False
+        )
+    assert result.is_error
+    assert "entity_ids" in result.content[0].text
