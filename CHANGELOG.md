@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [7.4.0] - 2026-11-18
+
+### Changed
+
+- Upgrade FastMCP 3.4 → 4.2.2 and MCP SDK 1.x → 2.x; supports the 2026-07-28 sessionless
+  protocol era alongside the legacy handshake. The not-found guard's protocol backstop and the
+  output-validation handler are ported to the SDK v2 handler registry (`get_request_handler` /
+  `add_request_handler`); `mcp.types` usages move to snake_case; `exclude_args` (removed in
+  FastMCP 4) is replaced by hiding the deprecated `prepare_mode` from the advertised schema.
+- CORS `allow_headers` default adds `Mcp-Method` and `Mcp-Name` (sent by modern-era clients).
+- `httpx2`/`httpcore2` (FastMCP 4's HTTP stack, used by the OAuth/JWKS clients) log at INFO
+  like `httpx`.
+- FastMCP 4 rejects templated-resource parameters containing NUL bytes, `..` or absolute paths
+  before the resource body runs; the not-found guard answers those with its fixed message.
+
+### Deploy notes
+
+- `AUTH_MODE=oauth` (MultiAuth): FastMCP 4.1 qualifies each access token's `client_id` by the
+  auth source that verified it (Keycloak JWT vs. router service token). Existing sessions and
+  background tasks therefore get new ownership scopes after the upgrade; in-flight ones started
+  under 7.3.x are not resumable by the same client. Authorization here keys on scopes only, so
+  the write surface is unaffected.
+
 ## [7.3.4] - 2026-11-13
 
 ### Changed

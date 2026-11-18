@@ -78,6 +78,8 @@ class ServerSettings(BaseSettings):
             "Content-Type",
             "Mcp-Session-Id",
             "MCP-Protocol-Version",
+            "Mcp-Method",
+            "Mcp-Name",
             "Last-Event-ID",
             "X-Request-ID",
         ],

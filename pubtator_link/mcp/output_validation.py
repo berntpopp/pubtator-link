@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, cast
+from typing import Any
 
 import mcp.types
 
@@ -59,39 +59,38 @@ def actionable_output_validation_error(
 
 def install_output_validation_error_handler(mcp_server: Any) -> None:
     """Wrap the MCP call-tool handler so SDK output validation errors are observable."""
-    handler = mcp_server._mcp_server.request_handlers.get(mcp.types.CallToolRequest)
-    if handler is None:
+    lowlevel = mcp_server._mcp_server
+    entry = lowlevel.get_request_handler("tools/call")
+    if entry is None:
         return
+    handler = entry.handler
 
-    async def wrapped(request: mcp.types.CallToolRequest) -> mcp.types.ServerResult:
-        result = cast(mcp.types.ServerResult, await handler(request))
-        call_result = getattr(result, "root", None)
-        if not isinstance(call_result, mcp.types.CallToolResult):
+    async def wrapped(ctx: Any, params: Any) -> Any:
+        result = await handler(ctx, params)
+        if not isinstance(result, mcp.types.CallToolResult):
             return result
-        if not call_result.isError or not call_result.content:
+        if not result.is_error or not result.content:
             return result
-        first_content = call_result.content[0]
+        first_content = result.content[0]
         message = getattr(first_content, "text", "")
         if not isinstance(message, str) or not message.startswith(OUTPUT_VALIDATION_PREFIX):
             return result
         payload = actionable_output_validation_error(
-            tool_name=request.params.name,
-            arguments=request.params.arguments or {},
+            tool_name=params.name,
+            arguments=params.arguments or {},
             message=message,
         )
-        return mcp.types.ServerResult(
-            mcp.types.CallToolResult(
-                content=[
-                    mcp.types.TextContent(
-                        type="text",
-                        text=json.dumps(payload, separators=(",", ":"), sort_keys=True),
-                    )
-                ],
-                isError=True,
-            )
+        return mcp.types.CallToolResult(
+            content=[
+                mcp.types.TextContent(
+                    type="text",
+                    text=json.dumps(payload, separators=(",", ":"), sort_keys=True),
+                )
+            ],
+            is_error=True,
         )
 
-    mcp_server._mcp_server.request_handlers[mcp.types.CallToolRequest] = wrapped
+    lowlevel.add_request_handler("tools/call", entry.params_type, wrapped)
 
 
 def _output_validation_field(message: str) -> str | None:

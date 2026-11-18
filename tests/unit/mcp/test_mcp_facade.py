@@ -1062,9 +1062,9 @@ def test_research_session_tool_schema_and_annotations_are_stable() -> None:
     assert stage_properties["page"]["maximum"] == 1000
 
     assert "coverage hints" in stage_tool.description
-    assert stage_tool.annotations.readOnlyHint is False
-    assert stage_tool.annotations.destructiveHint is False
-    assert stage_tool.annotations.openWorldHint is True
+    assert stage_tool.annotations.read_only_hint is False
+    assert stage_tool.annotations.destructive_hint is False
+    assert stage_tool.annotations.open_world_hint is True
 
     for name in (
         "get_research_session_status",
@@ -1072,9 +1072,9 @@ def test_research_session_tool_schema_and_annotations_are_stable() -> None:
     ):
         tool = tools[name]
         assert "research session" in tool.description
-        assert tool.annotations.readOnlyHint is True
-        assert tool.annotations.destructiveHint is False
-        assert tool.annotations.openWorldHint is True
+        assert tool.annotations.read_only_hint is True
+        assert tool.annotations.destructive_hint is False
+        assert tool.annotations.open_world_hint is True
 
 
 def test_discovery_tools_are_registered_and_suppress_output_schema() -> None:
@@ -1839,8 +1839,8 @@ def test_public_hosted_tools_have_expected_annotations() -> None:
     ):
         tool = tools[name]
         assert "Use this when" in tool.description
-        assert tool.annotations.readOnlyHint is True
-        assert tool.annotations.destructiveHint is False
+        assert tool.annotations.read_only_hint is True
+        assert tool.annotations.destructive_hint is False
 
 
 def test_write_capable_mcp_tools_have_precise_annotations() -> None:
@@ -1850,10 +1850,10 @@ def test_write_capable_mcp_tools_have_precise_annotations() -> None:
     tools = mcp._tool_manager._tools
 
     annotation_submit = tools["submit_text_annotation"].annotations
-    assert annotation_submit.readOnlyHint is False
-    assert annotation_submit.destructiveHint is False
-    assert annotation_submit.idempotentHint is False
-    assert annotation_submit.openWorldHint is True
+    assert annotation_submit.read_only_hint is False
+    assert annotation_submit.destructive_hint is False
+    assert annotation_submit.idempotent_hint is False
+    assert annotation_submit.open_world_hint is True
 
     expected_review_writes = {
         "add_evidence_certainty": False,
@@ -1865,16 +1865,16 @@ def test_write_capable_mcp_tools_have_precise_annotations() -> None:
     }
     for name, expected_idempotent in expected_review_writes.items():
         annotations = tools[name].annotations
-        assert annotations.readOnlyHint is False, name
-        assert annotations.destructiveHint is False, name
-        assert annotations.idempotentHint is expected_idempotent, name
-        assert annotations.openWorldHint is True, name
+        assert annotations.read_only_hint is False, name
+        assert annotations.destructive_hint is False, name
+        assert annotations.idempotent_hint is expected_idempotent, name
+        assert annotations.open_world_hint is True, name
 
     audit_export = tools["export_review_audit_bundle"].annotations
-    assert audit_export.readOnlyHint is False
-    assert audit_export.destructiveHint is False
-    assert audit_export.idempotentHint is False
-    assert audit_export.openWorldHint is True
+    assert audit_export.read_only_hint is False
+    assert audit_export.destructive_hint is False
+    assert audit_export.idempotent_hint is False
+    assert audit_export.open_world_hint is True
 
 
 def test_open_world_tools_are_marked_open_world() -> None:
@@ -1883,7 +1883,7 @@ def test_open_world_tools_are_marked_open_world() -> None:
     mcp = create_pubtator_mcp(profile="full")
     tool = mcp._tool_manager._tools["search_literature"]
 
-    assert tool.annotations.openWorldHint is True
+    assert tool.annotations.open_world_hint is True
 
 
 def test_capabilities_resource_tool_names_are_registered() -> None:

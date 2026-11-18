@@ -57,3 +57,36 @@ async def test_oauth_multiauth_accepts_service_token_rejects_garbage() -> None:
     assert ok is not None
     assert "pubtator:write" in ok.scopes
     assert await auth.verify_token("not-a-real-token") is None
+
+
+@pytest.mark.asyncio
+async def test_oauth_multiauth_accepts_audience_bound_jwt(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Keycloak-JWT path of MultiAuth verifies a signed, audience-bound token
+    (FastMCP 4.1+ qualifies client_id by source; scopes are what we authorize on)."""
+    from fastmcp.server.auth.providers.jwt import RSAKeyPair
+
+    keys = RSAKeyPair.generate()
+    auth = build_auth(_oauth_settings())
+    jwt_v = next(v for v in auth.verifiers if isinstance(v, JWTVerifier))
+
+    async def _key(_token: str) -> str:
+        return keys.public_key
+
+    monkeypatch.setattr(jwt_v, "_get_verification_key", _key)
+    settings = _oauth_settings()
+    good = keys.create_token(
+        subject="alice",
+        issuer=settings.jwt_issuer,
+        audience=settings.jwt_audience,
+        scopes=["pubtator:read", "pubtator:write"],
+    )
+    ok = await auth.verify_token(good)
+    assert ok is not None
+    assert "pubtator:write" in ok.scopes
+    wrong_aud = keys.create_token(
+        subject="alice",
+        issuer=settings.jwt_issuer,
+        audience="https://other.example.org/mcp",
+        scopes=["pubtator:write"],
+    )
+    assert await auth.verify_token(wrong_aud) is None

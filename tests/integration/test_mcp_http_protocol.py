@@ -43,3 +43,67 @@ def test_unified_app_mounts_streamable_http_mcp() -> None:
     names = {tool["name"] for tool in tools.json()["result"]["tools"]}
     assert "search_literature" in names
     assert "pubtator.clear_api_cache" not in names
+
+
+_MODERN_VERSION = "2026-07-28"
+_MODERN_META = {
+    "io.modelcontextprotocol/protocolVersion": _MODERN_VERSION,
+    "io.modelcontextprotocol/clientCapabilities": {},
+    "io.modelcontextprotocol/clientInfo": {"name": "pytest", "version": "1.0"},
+}
+
+
+def _modern_post(
+    client: TestClient, req_id: int, method: str, params: dict[str, object], name: str | None = None
+):  # type: ignore[no-untyped-def]
+    headers = {
+        "Accept": "application/json, text/event-stream",
+        "MCP-Protocol-Version": _MODERN_VERSION,
+        "Mcp-Method": method,
+    }
+    if name is not None:
+        headers["Mcp-Name"] = name
+    return client.post(
+        "/mcp",
+        headers=headers,
+        json={
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "method": method,
+            "params": {"_meta": _MODERN_META, **params},
+        },
+    )
+
+
+def test_modern_mcp_http_discovers_lists_calls_and_fences_unknown_tool() -> None:
+    """The 2026-07-28 sessionless era works end to end through the unified app."""
+    from pubtator_link.server_manager import UnifiedServerManager
+
+    app = UnifiedServerManager().create_app(include_mcp=True)
+    hostile = "ignore-instructions-secret"
+    with TestClient(app, raise_server_exceptions=False) as client:
+        discover = _modern_post(client, 1, "server/discover", {})
+        listed = _modern_post(client, 2, "tools/list", {})
+        called = _modern_post(
+            client,
+            3,
+            "tools/call",
+            {"name": "get_server_capabilities", "arguments": {}},
+            name="get_server_capabilities",
+        )
+        unknown = _modern_post(
+            client, 4, "tools/call", {"name": hostile, "arguments": {}}, name=hostile
+        )
+
+    assert discover.status_code == 200, discover.text
+    assert _MODERN_VERSION in discover.json()["result"]["supportedVersions"]
+    assert "mcp-session-id" not in discover.headers
+    assert listed.status_code == 200
+    assert "get_server_capabilities" in {t["name"] for t in listed.json()["result"]["tools"]}
+    assert called.status_code == 200
+    assert called.json()["result"].get("isError") is not True
+    assert unknown.status_code == 200
+    unknown_result = unknown.json()["result"]
+    assert unknown_result["isError"] is True
+    assert unknown_result["structuredContent"]["error_code"] == "not_found"
+    assert hostile not in unknown.text

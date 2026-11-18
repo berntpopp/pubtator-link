@@ -71,7 +71,7 @@ def test_registered_write_annotations_match_inventory() -> None:
     annotated_writes = {
         name
         for name, tool in tools.items()
-        if tool.annotations is not None and tool.annotations.readOnlyHint is False
+        if tool.annotations is not None and tool.annotations.read_only_hint is False
     }
     assert annotated_writes == EXPECTED_WRITE_TOOLS
 

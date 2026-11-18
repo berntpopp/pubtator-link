@@ -172,6 +172,8 @@ def test_create_app_uses_explicit_cors_methods_and_headers() -> None:
         "Content-Type",
         "Mcp-Session-Id",
         "MCP-Protocol-Version",
+        "Mcp-Method",
+        "Mcp-Name",
         "Last-Event-ID",
         "X-Request-ID",
     ]

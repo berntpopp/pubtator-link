@@ -80,8 +80,8 @@ def configure_logging() -> FilteringBoundLogger:
 
     # Tame noisy third-party loggers for the HTTP transports.
     logging.getLogger("uvicorn.access").setLevel(logging.INFO)
-    logging.getLogger("httpx").setLevel(logging.INFO)
-    logging.getLogger("httpcore").setLevel(logging.INFO)
+    for name in ("httpx", "httpcore", "httpx2", "httpcore2"):  # httpx2: FastMCP 4 auth clients
+        logging.getLogger(name).setLevel(logging.INFO)
 
     return structlog.get_logger("pubtator_link")  # type: ignore[no-any-return]
 

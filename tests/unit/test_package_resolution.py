@@ -23,6 +23,6 @@ def test_modern_mcp_dependencies_are_declared() -> None:
     # mcp[cli]'s, fastmcp's and fastapi's lower bounds advance via Dependabot;
     # assert the bounded major range rather than an exact floor so version bumps
     # don't break CI.
-    assert any(d.startswith("mcp[cli]>=1.") and d.endswith(",<2.0.0") for d in deps), deps
-    assert any(d.startswith("fastmcp>=3.") and d.endswith(",<4.0.0") for d in deps), deps
+    assert any(d.startswith("mcp[cli]>=2.") and d.endswith(",<3.0.0") for d in deps), deps
+    assert any(d.startswith("fastmcp>=4.") and d.endswith(",<5.0.0") for d in deps), deps
     assert any(d.startswith("fastapi>=0.") and d.endswith(",<1.0.0") for d in deps), deps
