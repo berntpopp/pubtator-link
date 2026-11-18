@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [7.5.0] - 2026-11-18
+
+### Fixed
+
+- `search_literature` / `search_guidelines`: paging no longer skips hits. `limit` (default 5)
+  cut each 10-hit PubTator3 page and `page=2` jumped to hit 11, so hits 6-10 of every page
+  were unreachable (#265). A new `offset` parameter continues inside the current upstream
+  page.
+
+### Added
+
+- Search responses report `returned`, `has_more`, `next_page` and `next_offset`; when more
+  hits exist, `_meta.next_commands` holds the exact call for the next unseen hit.
+
 ## [7.4.2] - 2026-11-18
 
 ### Fixed
