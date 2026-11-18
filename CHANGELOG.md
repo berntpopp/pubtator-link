@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [7.4.2] - 2026-11-18
+
+### Fixed
+
+- `get_publication_passages` / `estimate_publication_context`: requesting a full-text-only
+  section (TABLE, FIG, RESULTS, ...) now fetches full text even without `full=true`. Before,
+  `sections=["TABLE"]` fetched the abstract only and reported "No PubTator passages found",
+  which a model read as "zero tables" (#263). A PMID without PMC open-access full text now
+  gets the existing `full_text_not_available` reason. The tool description says `sections`
+  selects full-text sections and that a table usually yields a caption and a body passage.
+
 ## [7.4.1] - 2026-11-18
 
 ### Security

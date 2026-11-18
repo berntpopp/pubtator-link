@@ -1,8 +1,8 @@
 """Compact publication passage models."""
 
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, model_validator
 
 from pubtator_link.mcp.untrusted_content import UntrustedText, fence_untrusted_text
 from pubtator_link.services.degradation import DegradedMode
@@ -22,9 +22,23 @@ PublicationPassageSource = Literal["pubtator_abstract", "pubtator_full_bioc"]
 MAX_PUBLICATION_PASSAGE_CHARS = 50_000
 RECOMMENDED_CONTEXT_SAFETY_NUMERATOR = 6
 RECOMMENDED_CONTEXT_SAFETY_DENOMINATOR = 5
+_ABSTRACT_SECTIONS = {"title", "abstract", "abstr"}
 
 
-class PublicationPassageRequest(BaseModel):
+class _SectionsImplyFullText(BaseModel):
+    """Requesting a full-text-only section (TABLE, RESULTS, ...) implies ``full`` (#263)."""
+
+    sections: list[str] = Field(default_factory=list)
+    full: bool = False
+
+    @model_validator(mode="after")
+    def _full_for_full_text_sections(self) -> Self:
+        if any(section.strip().lower() not in _ABSTRACT_SECTIONS for section in self.sections):
+            self.full = True
+        return self
+
+
+class PublicationPassageRequest(_SectionsImplyFullText):
     """Request for compact passages from PubTator BioC exports."""
 
     pmids: list[str] = Field(min_length=1, max_length=25)
@@ -39,7 +53,7 @@ class PublicationPassageRequest(BaseModel):
     verbosity: Verbosity = "standard"
 
 
-class PublicationContextEstimateRequest(BaseModel):
+class PublicationContextEstimateRequest(_SectionsImplyFullText):
     """Request for estimating compact publication context size."""
 
     pmids: list[str] = Field(min_length=1, max_length=25)
