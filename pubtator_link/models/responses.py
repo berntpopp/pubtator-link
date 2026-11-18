@@ -249,6 +249,17 @@ class SearchResponse(BaseResponse):
     page: int = Field(..., description="Current page number")
     per_page: int = Field(default=20, description="Results per page")
     total_pages: int = Field(..., description="Total number of pages")
+    returned: int | None = Field(default=None, description="Hits returned in this response")
+    has_more: bool | None = Field(
+        default=None,
+        description="More hits exist after this response; continue at next_page/next_offset",
+    )
+    next_page: int | None = Field(
+        default=None, description="`page` for the next call when has_more"
+    )
+    next_offset: int | None = Field(
+        default=None, description="`offset` for the next call when has_more"
+    )
     sort_order: str | None = Field(default=None, description="Applied sort order")
     cache_key: str | None = Field(default=None, description="Stable search cache key")
     corpus_snapshot_date: str | None = Field(

@@ -487,6 +487,7 @@ async def search_literature_impl(
     client: PubTator3Client,
     text: str,
     page: int = 1,
+    offset: int = 0,
     sort: str | None = None,
     filters: str | None = None,
     publication_types: list[str] | None = None,
@@ -533,10 +534,8 @@ async def search_literature_impl(
             sections=None if not sections else ",".join(sections),
             wanted=limit,
         )
-    raw_items = _selected_search_items(
-        result,
-        limit=limit,
-        guideline_boost=guideline_boost,
+    raw_items = selected_search_items(
+        list(result.get("results", [])), guideline_boost=guideline_boost, limit=limit, offset=offset
     )
     metadata_by_pmid = await _search_metadata_by_pmid(
         raw_items,
@@ -560,6 +559,7 @@ async def search_literature_impl(
         guideline_boost=guideline_boost,
         metadata=metadata,
         metadata_by_pmid=metadata_by_pmid,
+        offset=offset,
     )
     response_meta = {
         "coverage_note": (
@@ -687,16 +687,6 @@ def _local_single_page(
         "has_more": has_more,
         "warnings": warnings,
     }
-
-
-def _selected_search_items(
-    raw_result: dict[str, Any],
-    *,
-    limit: int | None,
-    guideline_boost: bool,
-) -> list[dict[str, Any]]:
-    items = list(raw_result.get("results", []))
-    return selected_search_items(items, guideline_boost=guideline_boost, limit=limit)
 
 
 async def _search_metadata_by_pmid(

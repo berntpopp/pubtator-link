@@ -20,7 +20,7 @@ from pubtator_link.mcp.service_adapters import (
     search_biomedical_entities_impl,
     search_literature_impl,
 )
-from pubtator_link.mcp.tools._vocab import PublicationType, SearchSection
+from pubtator_link.mcp.tools._vocab import PublicationType, PubTatorEntityId, SearchSection
 from pubtator_link.models.variants import VariantEvidenceSource
 from pubtator_link.services.search_coverage import SearchCoverageMode
 from pubtator_link.services.search_shaping import (
@@ -29,6 +29,19 @@ from pubtator_link.services.search_shaping import (
     SearchResponseMode,
     TextHighlightFormat,
 )
+
+# Closure names visible in locals() that are not tool arguments.
+_CLOSURE = frozenset({"mcp", "profile"})
+
+
+def with_next_page_command(
+    result: dict[str, Any], tool: str, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    """Point `_meta.next_commands` at the next unseen hit when the search has more (#265)."""
+    if result.get("has_more") and isinstance(result.get("_meta"), dict):
+        next_arguments = arguments | {"page": result["next_page"], "offset": result["next_offset"]}
+        result["_meta"]["next_commands"] = [{"tool": tool, "arguments": next_arguments}]
+    return result
 
 
 def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
@@ -54,8 +67,23 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         ],
         page: Annotated[
             int,
-            Field(ge=1, le=1000, description="1-based page number for paging beyond `limit`."),
+            Field(
+                ge=1,
+                le=1000,
+                description=(
+                    "1-based PubTator3 result page (10 hits each). To continue, use "
+                    "`next_page`/`next_offset` from the previous response."
+                ),
+            ),
         ] = 1,
+        offset: Annotated[
+            int,
+            Field(
+                ge=0,
+                le=99,
+                description="0-based start position inside `page`; set it from `next_offset`.",
+            ),
+        ] = 0,
         sort: Annotated[
             str | None,
             Field(
@@ -123,10 +151,17 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         ] = "plain",
         limit: Annotated[
             int | None,
-            Field(ge=1, le=20, description="Max hits on this page (PubTator pages hold 10)."),
+            Field(
+                ge=1,
+                le=20,
+                description=(
+                    "Max hits to return, at most the rest of `page`; `returned` and "
+                    "`has_more` report what was cut."
+                ),
+            ),
         ] = 5,
         entity_ids: Annotated[
-            list[str] | None,
+            list[PubTatorEntityId] | None,
             Field(
                 description=(
                     "Restrict to articles mentioning these PubTator entity IDs (resolve them "
@@ -160,6 +195,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         ] = True,
     ) -> dict[str, Any]:
         """Use this when a user needs PubMed literature search through PubTator3. Supports flat filters, section filters, and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false means continue with results or inspect diagnostics."""
+        arguments = {k: v for k, v in locals().items() if v is not None and k not in _CLOSURE}
 
         async def call() -> dict[str, Any]:
             search_text = text
@@ -170,10 +206,11 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 await get_publication_metadata_service() if metadata != "none" else None
             )
             client = await get_api_client()
-            return await search_literature_impl(
+            result = await search_literature_impl(
                 client=client,
                 text=search_text,
                 page=page,
+                offset=offset,
                 sort=sort,
                 filters=filters,
                 publication_types=cast("list[str] | None", publication_types),
@@ -193,6 +230,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 include_meta=include_meta,
                 profile=profile,
             )
+            return with_next_page_command(result, "search_literature", arguments)
 
         return await run_mcp_tool("search_literature", call)
 
@@ -217,8 +255,23 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         ],
         page: Annotated[
             int,
-            Field(ge=1, le=1000, description="1-based page number for paging beyond `limit`."),
+            Field(
+                ge=1,
+                le=1000,
+                description=(
+                    "1-based PubTator3 result page (10 hits each). To continue, use "
+                    "`next_page`/`next_offset` from the previous response."
+                ),
+            ),
         ] = 1,
+        offset: Annotated[
+            int,
+            Field(
+                ge=0,
+                le=99,
+                description="0-based start position inside `page`; set it from `next_offset`.",
+            ),
+        ] = 0,
         year_min: Annotated[
             int | None,
             Field(ge=1800, le=2030, description="Earliest publication year, inclusive."),
@@ -236,10 +289,10 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         ] = None,
         limit: Annotated[
             int | None,
-            Field(ge=1, le=20, description="Maximum hits to return on this page."),
+            Field(ge=1, le=20, description="Max hits to return, at most the rest of `page`."),
         ] = 5,
         entity_ids: Annotated[
-            list[str] | None,
+            list[PubTatorEntityId] | None,
             Field(
                 description=(
                     "Restrict to articles mentioning these PubTator entity IDs (resolve them "
@@ -254,6 +307,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         ] = "preflight",
     ) -> dict[str, Any]:
         """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. Wraps search_literature with guideline/systematic-review filters and guideline boosting; not an independent guideline database."""
+        arguments = {k: v for k, v in locals().items() if v is not None and k not in _CLOSURE}
 
         async def call() -> dict[str, Any]:
             search_text = text
@@ -261,10 +315,11 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 await get_source_preflight_service() if coverage == "preflight" else None
             )
             client = await get_api_client()
-            return await search_literature_impl(
+            result = await search_literature_impl(
                 client=client,
                 text=search_text,
                 page=page,
+                offset=offset,
                 sort="score desc",
                 publication_types=None,
                 year_min=year_min,
@@ -280,6 +335,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 preflight_service=preflight_service,
                 profile=profile,
             )
+            return with_next_page_command(result, "search_guidelines", arguments)
 
         return await run_mcp_tool("search_guidelines", call)
 

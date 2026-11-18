@@ -57,12 +57,26 @@ def shaped_search_response(
     guideline_boost: bool,
     metadata: SearchMetadataMode = "none",
     metadata_by_pmid: dict[str, dict[str, Any]] | None = None,
+    offset: int = 0,
 ) -> SearchResponse:
-    raw_items = list(raw.get("results", []))
-    raw_items = selected_search_items(raw_items, guideline_boost=guideline_boost, limit=limit)
+    page_items = list(raw.get("results", []))
+    raw_items = selected_search_items(
+        page_items, guideline_boost=guideline_boost, limit=limit, offset=offset
+    )
 
     total_results = int(raw.get("count", raw.get("total", 0)))
     per_page = int(raw.get("page_size", raw.get("per_page", 20)))
+    total_pages = int(
+        raw.get("total_pages", (total_results + per_page - 1) // per_page if per_page else 0)
+    )
+    # Continue inside this upstream page before moving on, so `limit` never skips hits (#265).
+    next_offset = offset + len(raw_items)
+    if next_offset < len(page_items):
+        next_page: int | None = page
+    elif page < total_pages:
+        next_page, next_offset = page + 1, 0
+    else:
+        next_page = None
     return SearchResponse(
         success=True,
         query=query,
@@ -81,12 +95,11 @@ def shaped_search_response(
         total_results=total_results,
         page=page,
         per_page=per_page,
-        total_pages=int(
-            raw.get(
-                "total_pages",
-                (total_results + per_page - 1) // per_page if per_page else 0,
-            )
-        ),
+        total_pages=total_pages,
+        returned=len(raw_items),
+        has_more=next_page is not None,
+        next_page=next_page,
+        next_offset=next_offset if next_page is not None else None,
         sort_order=sort,
         cache_key=search_cache_key(
             text=query,
@@ -441,9 +454,10 @@ def selected_search_items(
     *,
     guideline_boost: bool,
     limit: int | None,
+    offset: int = 0,
 ) -> list[dict[str, Any]]:
     selected = _rerank_guidelines(items) if guideline_boost else items
-    return selected[:limit] if limit is not None else selected
+    return selected[offset : offset + limit] if limit is not None else selected[offset:]
 
 
 def _shape_text_hl(value: str | None, mode: TextHighlightFormat) -> str | None:

@@ -60,3 +60,7 @@ PublicationType = Literal[
 # Every PMID tool input advertises exactly what normalize_pmid accepts. Schema-only: the tools
 # enforce it via merge_pmids / the request models, which keep the one field-named PMID error.
 Pmid = Annotated[str, Field(json_schema_extra={"pattern": PMID_PATTERN})]
+
+# PubTator3 entity ID (`@<TYPE>_<id>`, e.g. @GENE_BRCA1). An unshaped value would AND-join into the
+# query and silently match nothing, so reject it instead (S4).
+PubTatorEntityId = Annotated[str, Field(pattern=r"^@[A-Z]+_\S+$")]

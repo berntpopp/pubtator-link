@@ -570,7 +570,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"text":"asthma treatment adults","limit":5}`
 - Next tools by profile: lean: `preflight_review_sources`; full: `preflight_review_sources`; readonly: `preflight_review_sources`
 - Resource links: None
-- Input schema: `text` (string); `page` (integer; default: `1`); `year_min` (integer); `year_max` (integer); `sections` (array); `limit` (integer; default: `5`); `entity_ids` (array); `coverage` (string; enum: `none`, `preflight`; default: `preflight`)
+- Input schema: `text` (string); `page` (integer; default: `1`); `offset` (integer; default: `0`); `year_min` (integer); `year_max` (integer); `sections` (array); `limit` (integer; default: `5`); `entity_ids` (array); `coverage` (string; enum: `none`, `preflight`; default: `preflight`)
 - Output schema: `None`; has_output_schema: `no`
 
 ## `search_literature`
@@ -585,7 +585,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Example: `{"text":"BRCA1 ovarian cancer PARP inhibitor","limit":5,"metadata":"basic"}`
 - Next tools by profile: lean: `preflight_review_sources`; full: `preflight_review_sources`; readonly: `preflight_review_sources`
 - Resource links: None
-- Input schema: `text` (string); `page` (integer; default: `1`); `sort` (string); `filters` (string); `publication_types` (array); `year_min` (integer); `year_max` (integer); `sections` (array); `response_mode` (string; enum: `compact`, `standard`, `full`; default: `compact`); `include_citations` (string; enum: `none`, `nlm`, `bibtex`, `both`; default: `none`); `text_hl_format` (string; enum: `none`, `plain`, `annotated`; default: `plain`); `limit` (integer; default: `5`); `entity_ids` (array); `guideline_boost` (boolean; default: `False`); `coverage` (string; enum: `none`, `preflight`; default: `none`); `metadata` (string; enum: `none`, `basic`, `with_abstract`, `full`; default: `basic`); `include_meta` (boolean; default: `True`)
+- Input schema: `text` (string); `page` (integer; default: `1`); `offset` (integer; default: `0`); `sort` (string); `filters` (string); `publication_types` (array); `year_min` (integer); `year_max` (integer); `sections` (array); `response_mode` (string; enum: `compact`, `standard`, `full`; default: `compact`); `include_citations` (string; enum: `none`, `nlm`, `bibtex`, `both`; default: `none`); `text_hl_format` (string; enum: `none`, `plain`, `annotated`; default: `plain`); `limit` (integer; default: `5`); `entity_ids` (array); `guideline_boost` (boolean; default: `False`); `coverage` (string; enum: `none`, `preflight`; default: `none`); `metadata` (string; enum: `none`, `basic`, `with_abstract`, `full`; default: `basic`); `include_meta` (boolean; default: `True`)
 - Output schema: `None`; has_output_schema: `no`
 
 ## `stage_research_session`
