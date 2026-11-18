@@ -54,6 +54,8 @@ from fastmcp.exceptions import NotFoundError as FastMCPNotFoundError
 from fastmcp.exceptions import ResourceError
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.tools import ToolResult
+from mcp.shared.exceptions import MCPError
+from mcp_types import INVALID_PARAMS, METHOD_NOT_FOUND
 
 logger = logging.getLogger(__name__)
 
@@ -160,10 +162,6 @@ class NotFoundGuard(Middleware):
 # ---------------------------------------------------------------------------
 
 
-class ProtocolError(Exception):
-    """A dispatch-level failure re-raised with a FIXED, input-free message."""
-
-
 def _is_structured_envelope(call_result: mcp.types.CallToolResult) -> bool:
     """True if an ``is_error`` result carries one of OUR JSON envelopes.
 
@@ -202,6 +200,18 @@ def install_protocol_error_handler(mcp_server: Any) -> None:
     exist and this one is outermost.
     """
     lowlevel = mcp_server._mcp_server
+
+    # SDK 2 echoes an unknown JSON-RPC method name verbatim in the METHOD_NOT_FOUND
+    # error ``data`` (both eras); strip it so caller input never reaches the frame.
+    async def _strip_method_not_found_data(ctx: Any, call_next: Any) -> Any:
+        try:
+            return await call_next(ctx)
+        except MCPError as exc:
+            if exc.error.code == METHOD_NOT_FOUND and exc.error.data is not None:
+                raise MCPError(code=METHOD_NOT_FOUND, message="Method not found") from None
+            raise
+
+    lowlevel.middleware.insert(0, _strip_method_not_found_data)
 
     call_tool = lowlevel.get_request_handler("tools/call")
     if call_tool is not None:
@@ -253,7 +263,8 @@ def install_protocol_error_handler(mcp_server: Any) -> None:
             except Exception:
                 # Re-raise with a FIXED, input-free message so no requested
                 # name/URI (or its code points) reaches the JSON-RPC error frame.
-                raise ProtocolError(_message) from None
+                # SDK 2 maps a plain exception to code 0, so carry -32602 explicitly.
+                raise MCPError(code=INVALID_PARAMS, message=_message) from None
 
         lowlevel.add_request_handler(method, entry.params_type, wrapped)
 
@@ -278,6 +289,11 @@ _SCRUB_MARKERS: tuple[str, ...] = (
     "Failed to validate request",
     "Failed to validate notification",
     "Message that failed validation",
+    # SDK 2 runner/dispatcher lines that echo a caller-supplied method name.
+    "dropped %r",
+    "dropped %s",
+    "dropped a frame",
+    "no handler for notification",
 )
 
 # The source loggers on which those records are CREATED. A logging filter must be
@@ -295,6 +311,7 @@ _SCRUB_LOGGERS: tuple[str, ...] = (
     "fastmcp.server.mixins.mcp_operations",
     "mcp",
     "mcp.server.lowlevel.server",
+    "mcp.server.runner",
 )
 
 _SCRUBBED_MESSAGE = "MCP request detail omitted (caller input redacted)."

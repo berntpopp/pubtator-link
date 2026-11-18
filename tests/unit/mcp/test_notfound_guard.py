@@ -332,7 +332,8 @@ async def test_malformed_uri_real_request_frame_and_logs_are_clean() -> None:
     # rejected the URI at session validation (-32602); SDK v2 passes it to the
     # handler, where the Layer-3 backstop answers with the fixed message.
     assert root is not None, "expected a JSON-RPC error response"
-    assert root.error.code == INVALID_PARAMS or root.error.message == _UNKNOWN_RESOURCE_MESSAGE
+    assert root.error.code == INVALID_PARAMS
+    assert root.error.message == _UNKNOWN_RESOURCE_MESSAGE
     _assert_clean_text(root.error.message, where="jsonrpc-error")
     if isinstance(root.error.data, str):
         _assert_clean_text(root.error.data, where="jsonrpc-error-data")
