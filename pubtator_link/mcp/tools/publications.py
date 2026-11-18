@@ -48,8 +48,8 @@ LiteratureGraphBias = Literal[
 # BioC passage section labels get_publication_passages filters on (case-insensitive upstream).
 _SECTIONS_FIELD = Field(
     description=(
-        "Restrict to these BioC section labels (case-insensitive); omit for all sections. An "
-        "article that lacks a requested section simply contributes no passages for it."
+        "Restrict to these BioC section labels (case-insensitive); omit for all. A missing "
+        "section contributes no passages; a table usually yields a caption and a body passage."
     ),
     examples=[["ABSTRACT", "RESULTS"]],
 )
@@ -308,7 +308,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             Field(description="'lean', 'standard' (default), or 'full' (+ each dropped row)."),
         ] = "standard",
     ) -> dict[str, Any]:
-        """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. For article-local answering, use mode='full_abstract' first; it returns all title/abstract passages without truncating structured abstracts. If full=True returns only abstracts, inspect coverage_by_pmid and answer from available evidence. Do not use for prepared review RAG; use get_review_context_batch."""
+        """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. For article-local answering, use mode='full_abstract' first; it returns all title/abstract passages without truncating structured abstracts. sections can select full-text sections (TABLE, FIG, RESULTS, ...) of PMC open-access articles; check coverage_by_pmid. Do not use for prepared review RAG; use get_review_context_batch."""
 
         async def call() -> dict[str, Any]:
             selected_pmids = merge_pmids(pmids, None, max_items=25)

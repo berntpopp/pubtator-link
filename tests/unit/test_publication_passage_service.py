@@ -136,7 +136,8 @@ async def test_get_publication_passages_filters_sections_and_references() -> Non
     assert [passage.section for passage in response.passages] == ["abstract", "table"]
     assert [passage.text for passage in response.passages] == ["Abstract text", "Table text"]
     assert response.passages[0].passage_id == "PMID:111:abstract:0"
-    assert response.passages[0].source == "pubtator_abstract"
+    # a TABLE request implies full text (#263)
+    assert response.passages[0].source == "pubtator_full_bioc"
     assert "documents" not in response.model_dump()
     assert {drop.reason for drop in response.dropped} >= {"section_filtered", "reference_excluded"}
 
@@ -551,3 +552,34 @@ async def test_full_text_section_request_on_abstract_only_pmid_explains_why() ->
     assert len(response.warnings) == 1  # no "returned abstract-only passages" claim: none were
     assert "open access" in response.failed_pmids[0].reason
     assert any("full_abstract" in warning for warning in response.warnings)
+
+
+@pytest.mark.asyncio
+async def test_full_text_only_sections_fetch_full_text_without_full_flag() -> None:
+    # #263: sections=["TABLE"] without full=True fetched abstracts only, then reported
+    # "No PubTator passages found" -- a model read that as "zero tables".
+    seen_full: list[bool] = []
+
+    class AbstractOnlyService:
+        async def export_publications_list(self, pmids, format, full):
+            seen_full.append(full)
+            return {
+                "documents": [
+                    {
+                        "id": "23248578",
+                        "passages": [
+                            {"infons": {"type": "title"}, "text": "Title"},
+                            {"infons": {"type": "abstract"}, "text": "Abstract"},
+                        ],
+                    }
+                ]
+            }
+
+    response = await PublicationPassageService(AbstractOnlyService()).get_passages(
+        PublicationPassageRequest(pmids=["23248578"], sections=["TABLE"])
+    )
+
+    assert seen_full == [True]
+    assert response.coverage_reason_by_pmid["23248578"] == "full_text_not_available"
+    assert "No PubTator passages found" not in response.failed_pmids[0].reason
+    assert PublicationPassageRequest(pmids=["1"], sections=["ABSTRACT"]).full is False
