@@ -16,6 +16,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field
 
+from pubtator_link.mcp.argument_aliases import ARTICLE_ID_PATTERN
 from pubtator_link.models.literature_graph import PMID_PATTERN
 
 # PubTator3 search `sections` filter — lowercase section labels.
@@ -60,6 +61,8 @@ PublicationType = Literal[
 # Every PMID tool input advertises exactly what normalize_pmid accepts. Schema-only: the tools
 # enforce it via merge_pmids / the request models, which keep the one field-named PMID error.
 Pmid = Annotated[str, Field(json_schema_extra={"pattern": PMID_PATTERN})]
+# Entry-point article input: a PMID, or a PMCID/DOI that resolve_pmids converts (router #319).
+ArticleId = Annotated[str, Field(json_schema_extra={"pattern": ARTICLE_ID_PATTERN})]
 
 # PubTator3 entity ID (`@<TYPE>_<id>`, e.g. @GENE_BRCA1). An unshaped value would AND-join into the
 # query and silently match nothing, so reject it instead (S4).

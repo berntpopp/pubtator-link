@@ -12,6 +12,7 @@ from typing import Any, get_args
 import pytest
 from fastmcp import Client
 
+from pubtator_link.mcp.argument_aliases import ARTICLE_ID_PATTERN, _id_form
 from pubtator_link.mcp.facade import create_pubtator_mcp
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.models.literature_graph import PMID_PATTERN, normalize_pmid
@@ -35,6 +36,17 @@ def _pmid_value_schemas() -> list[tuple[str, str, str, dict[str, Any]]]:
 
 
 _CASES = _pmid_value_schemas()
+# Entry-point tools also take a PMCID/DOI and convert it (router #319).
+_ARTICLE_ID_TOOLS = {
+    ("build_topic_literature_map", "pmids"),
+    ("estimate_publication_context", "pmids"),
+    ("find_related_articles", "pmids"),
+    ("find_related_evidence_candidates", "pmid"),
+    ("get_publication_annotations", "pmids"),
+    ("get_publication_citation_graph", "pmid"),
+    ("get_publication_metadata", "pmids"),
+    ("get_publication_passages", "pmids"),
+}
 
 
 def test_glob_found_every_pmid_parameter() -> None:
@@ -47,7 +59,8 @@ def test_pmid_parameter_advertises_runtime_pattern(
     profile: str, tool: str, param: str, schema: dict[str, Any]
 ) -> None:
     assert schema.get("type") == "string", f"{profile}:{tool}.{param}"
-    assert schema.get("pattern") == PMID_PATTERN, f"{profile}:{tool}.{param}"
+    expected = ARTICLE_ID_PATTERN if (tool, param) in _ARTICLE_ID_TOOLS else PMID_PATTERN
+    assert schema.get("pattern") == expected, f"{profile}:{tool}.{param}"
 
 
 _PARTITION = [
@@ -111,3 +124,30 @@ async def test_single_pmid_tools_give_the_same_pmid_reason(tool: str) -> None:
     assert payload["field_errors"] == [
         {"field": "pmid", "reason": "PMIDs must be ASCII digits 0-9 (optionally 'PMID:'-prefixed)."}
     ]
+
+
+_ARTICLE_PARTITION = [
+    *_PARTITION,
+    ("PMC3518823", True),
+    (" pmc3518823 ", True),
+    ("10.1038/ng.2500", True),
+    ("doi: 10.1038/NG.2500", True),
+    ("PMC", False),
+    ("PMC12x", False),
+    ("PMC\u0661", False),
+    ("PMC" + "9" * 13, False),
+    ("10.12/x", False),
+    ("10.1038/ ng", False),
+    ("https://doi.org/10.1038/ng.2500", False),
+]
+
+
+@pytest.mark.parametrize(("value", "accepted"), _ARTICLE_PARTITION)
+def test_article_id_schema_pattern_and_runtime_shape_agree(value: str, accepted: bool) -> None:
+    try:
+        normalize_pmid(value)
+        runtime_accepts = True
+    except ValueError:
+        runtime_accepts = _id_form(value) is not None
+    assert (re.search(ARTICLE_ID_PATTERN, value) is not None) is accepted
+    assert runtime_accepts is accepted

@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [7.6.0] - 2026-11-19
+
+### Added
+
+- The PMID-taking entry-point tools (`get_publication_passages`, `get_publication_annotations`,
+  `get_publication_metadata`, `estimate_publication_context`, `build_topic_literature_map`,
+  `get_publication_citation_graph`, `find_related_evidence_candidates`, `find_related_articles`)
+  also accept a PMCID or DOI. It is shape-validated, converted through the existing NCBI ID
+  converter (bounded in-process cache) and echoed as top-level
+  `resolved_from: {input, form, resolved_to}` (a list for `pmids`). An ID that does not
+  convert keeps the field-named `invalid_input` pointing at `convert_article_ids`
+  (genefoundry-router #319).
+
 ## [7.5.4] - 2026-11-19
 
 - `search_literature` description lead names biomedical literature (PubMed articles) again, restoring its search ranking.

@@ -24,8 +24,9 @@ from pubtator_link.mcp.facade import create_pubtator_mcp
 
 MAX_TOOL_TOKENS = 1_200
 # Guard ceiling for the readonly surface. NOT the 10k B2 target (see module docstring); it locks in
-# the reduction from ~73k and fails loudly on any regression. Achieved surface is ~13.6k.
-MAX_SERVER_TOKENS = 14_000
+# the reduction from ~73k and fails loudly on any regression. Achieved surface is ~14.2k.
+# Raised 14,000 -> 14,250: 8 entry-point PMID inputs advertise the PMCID/DOI pattern (router #319).
+MAX_SERVER_TOKENS = 14_250
 
 
 def _tool_entries() -> list[dict[str, object]]:
