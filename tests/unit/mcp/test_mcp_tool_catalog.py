@@ -94,3 +94,19 @@ def test_workflow_help_task_schema_accepts_free_form_aliases() -> None:
 
     assert task_schema["type"] == "string"
     assert "enum" not in task_schema
+
+
+def test_lead_states_what_is_returned_within_reranker_window() -> None:
+    """Rerankers see ~300 description chars; the lead must name what comes back."""
+    from pubtator_link.mcp.catalog import build_tool_catalog
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    catalog = build_tool_catalog(create_pubtator_mcp(profile="full"), profile="full")
+    leads = {
+        "get_publication_passages": ("returns", "full text", "figure", "table"),
+        "search_literature": ("returns", "PMID", "title"),
+    }
+    for name, words in leads.items():
+        head = catalog[name].description[:300]
+        for word in words:
+            assert word in head, (name, word)
