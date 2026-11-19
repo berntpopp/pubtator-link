@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [7.5.2] - 2026-11-19
+
+### Changed
+
+- `get_publication_passages` description now leads with what it returns: citable passages
+  of a PubMed/PMC article by PMID, including open-access PMC full text with figure captions
+  and tables. The old lead ("compact citable publication passages") hid the full-text
+  capability from rerankers that read only the first ~300 characters (#269).
+- `search_literature` description now states what it returns (ranked articles with PMID,
+  title, journal, year and citation). Guard test pins both leads inside the first 300
+  characters.
+
 ## [7.5.1] - 2026-11-19
 
 ### Fixed

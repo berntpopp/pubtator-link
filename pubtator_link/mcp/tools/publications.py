@@ -308,7 +308,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             Field(description="'lean', 'standard' (default), or 'full' (+ each dropped row)."),
         ] = "standard",
     ) -> dict[str, Any]:
-        """Use this when a user needs compact citable publication passages from PMIDs without raw BioC. For article-local answering, use mode='full_abstract' first; it returns all title/abstract passages without truncating structured abstracts. sections can select full-text sections (TABLE, FIG, RESULTS, ...) of PMC open-access articles; check coverage_by_pmid. Do not use for prepared review RAG; use get_review_context_batch."""
+        """Use this when a user needs the text of a PubMed/PMC article by PMID: returns citable passages (title, abstract and, for open-access PMC articles, full text incl. figure captions and tables), not raw BioC. For article-local answering use mode='full_abstract' first (untruncated); sections (FIG, TABLE, RESULTS, ...) selects full text; check coverage_by_pmid. Not for prepared review RAG; use get_review_context_batch."""
 
         async def call() -> dict[str, Any]:
             selected_pmids = merge_pmids(pmids, None, max_items=25)
