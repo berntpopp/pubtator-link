@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 
 from pubtator_link.mcp.input_normalization import InputNormalizationError
 from pubtator_link.models.literature_graph import normalize_pmid
 
 _PMID_REASON = "PMIDs must be ASCII digits 0-9 (optionally 'PMID:'-prefixed)."
+_PMCID_REASON = "PMIDs only; this is a PMCID. Convert it with convert_article_ids first."
+_PMCID_PATTERN = re.compile(r"PMC\d{1,12}", re.IGNORECASE)
 
 
 def _pmid_error(field: str, reason: str) -> InputNormalizationError:
@@ -50,6 +53,12 @@ def merge_pmids(
             # One PMID validator for every tool (D4): never pass a non-numeric ID upstream.
             stripped = normalize_pmid(value)
         except ValueError:
+            if _PMCID_PATTERN.fullmatch(value.strip()):
+                # ponytail: lean profile does not register convert_article_ids; pointer dangles there.
+                error = _pmid_error(source, _PMCID_REASON)
+                pmcid = value.strip().upper()  # strict pattern above: safe to echo
+                error.next_command = {"tool": "convert_article_ids", "arguments": {"ids": [pmcid]}}
+                raise error from None
             raise _pmid_error(source, _PMID_REASON) from None
         if stripped in seen_pmids:
             continue

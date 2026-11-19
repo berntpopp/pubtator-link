@@ -146,3 +146,33 @@ def test_merge_pmids_names_the_list_field_for_empty_and_oversized_input() -> Non
     assert oversized.value.field_errors[0]["field"] == "prioritize_pmids"
     assert scalar.value.field_errors[0]["field"] == "pmid"
     assert merge_pmids(["PMID: 123", "123"], None) == ["123"]
+
+
+@pytest.mark.parametrize("profile", ["full", "readonly"])
+async def test_pmcid_in_pmids_points_to_convert_article_ids(profile: str) -> None:
+    """A PMCID is a caller-fixable ID-kind error, not an upstream failure (#267)."""
+    mcp = create_pubtator_mcp(profile=profile)
+    async with Client(mcp) as client:
+        result = await client.call_tool(
+            "get_publication_passages", {"pmids": ["PMC3518823"]}, raise_on_error=False
+        )
+
+    payload = result.structured_content
+    assert result.is_error is True
+    assert payload["error_code"] == "invalid_input"
+    assert payload["field_errors"][0]["field"] == "pmids"
+    assert "convert_article_ids" in payload["field_errors"][0]["reason"]
+    assert payload["fallback_tool"] == "convert_article_ids"
+    assert {"tool": "convert_article_ids", "arguments": {"ids": ["PMC3518823"]}} in payload[
+        "_meta"
+    ]["next_commands"]
+
+
+def test_passages_tool_schema_max_chars_matches_runtime_model() -> None:
+    """The advertised max_chars bound is the one the request model enforces (#267)."""
+    from pubtator_link.models.publication_passages import PublicationPassageRequest
+
+    mcp = create_pubtator_mcp(profile="full")
+    schema = mcp._tool_manager._tools["get_publication_passages"].parameters
+    model_max = PublicationPassageRequest.model_json_schema()["properties"]["max_chars"]["maximum"]
+    assert schema["properties"]["max_chars"]["maximum"] == model_max
