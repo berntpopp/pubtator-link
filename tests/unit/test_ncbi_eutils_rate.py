@@ -18,11 +18,6 @@ from pubtator_link.services.publication_metadata import NcbiPublicationMetadataC
 KEY = "abc123secretkey0000000000000000000"
 
 
-@pytest.fixture(autouse=True)
-def _single_worker(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GUNICORN_WORKERS", "1")
-
-
 def test_bucket_is_3_per_second_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "ncbi_api_key", None)
     limiter = ncbi_eutils_rate.eutils_rate_limiter()
@@ -35,14 +30,6 @@ def test_bucket_is_3_per_second_without_key(monkeypatch: pytest.MonkeyPatch) -> 
 def test_bucket_is_10_per_second_with_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "ncbi_api_key", SecretStr(KEY))
     assert ncbi_eutils_rate.eutils_rate_limiter().rate == 10.0
-
-
-def test_bucket_splits_the_per_ip_rate_across_gunicorn_workers(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("GUNICORN_WORKERS", "4")
-    monkeypatch.setattr(settings, "ncbi_api_key", SecretStr(KEY))
-    assert ncbi_eutils_rate.eutils_rate_limiter().rate == 2.5
 
 
 async def test_bucket_spaces_requests_at_the_configured_rate(

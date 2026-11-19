@@ -3,13 +3,10 @@
 NCBI allows 3 requests/s per IP without an API key and 10/s with one
 (https://www.ncbi.nlm.nih.gov/books/NBK25497/). Every E-utilities caller in
 this process shares ONE token bucket so concurrent tools cannot jointly exceed it.
-Gunicorn forks GUNICORN_WORKERS processes behind one egress IP, so each worker's
-bucket gets an equal share of NCBI's per-IP rate.
 """
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import httpx
@@ -32,8 +29,8 @@ def ncbi_api_key_params() -> dict[str, str]:
 def eutils_rate_limiter() -> RateLimiter:
     global _limiter
     rate = KEYED_RATE_PER_SECOND if settings.ncbi_api_key else KEYLESS_RATE_PER_SECOND
-    # Same default as docker/gunicorn_conf.py; a single-process dev run is merely slower.
-    rate /= max(1, int(os.environ.get("GUNICORN_WORKERS", "2")))
+    # ponytail: per process; N Gunicorn workers can reach N x rate per egress IP.
+    # Upgrade to a shared store (e.g. Postgres) if NCBI 429s persist with the key set.
     if _limiter is None or _limiter.rate != rate:
         _limiter = RateLimiter(rate=rate)
     return _limiter
