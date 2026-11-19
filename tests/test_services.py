@@ -131,6 +131,25 @@ class TestPublicationService:
         )
 
     @pytest.mark.asyncio
+    async def test_pmc_annotations_keep_passages_not_not_found(
+        self, publication_service, mock_client
+    ):
+        """A PMC export whose content lives only in passages is returned, not not_found."""
+        from pubtator_link.mcp.pmc_annotations import fetch_pmc_annotations_impl
+
+        passage = {"offset": 0, "text": "Full text body.", "annotations": []}
+        mock_client.export_pmc_publications.return_value = {
+            "PubTator3": [{"id": "3531190", "infons": {}, "passages": [passage], "relations": []}]
+        }
+
+        result = await fetch_pmc_annotations_impl(
+            service=publication_service, pmcids=["PMC3531190"]
+        )
+
+        assert result.get("error_code") != "not_found"
+        assert result["export_data"]["documents"][0]["passages"] == [passage]
+
+    @pytest.mark.asyncio
     async def test_export_pmc_publications_list_interface(self, publication_service, mock_client):
         """Test PMC export with list interface."""
         mock_response = MockPubTatorResponses.pmc_export_response()

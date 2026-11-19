@@ -50,13 +50,11 @@ class SourcePreflightService:
     ) -> SourcePreflightService:
         async def abstract_available(pmid: str) -> bool:
             response = await client.export_publications([pmid], format="biocjson", full=False)
-            documents = response.get("documents", [])
-            return bool(documents)
+            return bool(response.get("PubTator3") or response.get("documents"))
 
         async def pmc_available(pmcid: str) -> bool:
             response = await client.export_pmc_publications([pmcid], format="biocjson")
-            documents = response.get("documents", [])
-            return bool(documents)
+            return bool(response.get("PubTator3") or response.get("documents"))
 
         return cls(
             id_converter=id_converter,

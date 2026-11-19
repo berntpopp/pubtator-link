@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [7.7.2] - 2026-11-19
+
+### Fixed
+
+- `get_pmc_annotations` no longer returns `not_found` for every PMCID: the PMC export model dropped BioC `passages`, so full-text articles looked empty; the review source preflight likewise read `documents` instead of the live `PubTator3` key and never saw PMC full text.
+
 ## [7.7.1] - 2026-11-19
 
 ### Fixed
