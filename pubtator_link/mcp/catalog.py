@@ -72,7 +72,8 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         profiles=("full", "readonly"),
         stability="advanced",
         purpose=(
-            "Use this when a user needs a topic literature graph. response_mode='compact' "
+            "Use this when a user needs a topic literature graph: returns candidate PMID "
+            "lanes with bounded summaries. response_mode='compact' "
             "is the MCP default for candidate lanes and bounded summaries; full can be "
             "large. Returns response_size_class."
         ),
@@ -145,7 +146,8 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         profiles=("lean", "full", "readonly"),
         stability="lean",
         purpose=(
-            "Use this when a user has one PMID and needs related evidence candidates. "
+            "Use this when a user has one PMID and needs related evidence candidates: "
+            "returns related candidate PMIDs with bounded summaries. "
             "response_mode='compact' is the MCP default for candidate lanes and bounded "
             "summaries; full can be large. Returns response_size_class."
         ),
@@ -184,7 +186,8 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         stability="lean",
         purpose=(
             "Use this when a user needs reference or cited-by neighborhoods for one "
-            "publication. response_mode='compact' is the MCP default for candidate lanes "
+            "publication: returns reference and cited-by PMIDs with bounded summaries. "
+            "response_mode='compact' is the MCP default for candidate lanes "
             "and bounded summaries; full can be large. Returns response_size_class."
         ),
         do_not_use_for=("claim-level evidence support", "publisher full-text retrieval"),
@@ -253,7 +256,7 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         purpose=(
             "Use this when a user needs a one-call grounded research workflow that "
             "searches literature, indexes candidate PMIDs, inspects readiness, and "
-            "retrieves compact citable context."
+            "retrieves compact citable context; returns citable passages with PMIDs."
         ),
         do_not_use_for=("clinical decision support", "uncited answer generation"),
         example='{"question":"Does colchicine prevent FMF flares?","max_pmids":8}',

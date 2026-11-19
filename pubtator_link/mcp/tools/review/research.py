@@ -49,7 +49,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             Field(min_length=1, description="Single-PMID convenience alias, merged with `pmids`."),
         ] = None,
     ) -> dict[str, Any]:
-        """Use this when a user needs PMID source coverage, PMC fallback availability, and likely full-text versus abstract-only retrieval before indexing review evidence."""
+        """Use this when a user needs PMID source coverage, PMC fallback availability, and likely full-text versus abstract-only retrieval before indexing review evidence; returns per-PMID source coverage and fallback availability."""
 
         async def call() -> dict[str, Any]:
             selected_pmids = merge_pmids(pmids, pmid)
@@ -138,7 +138,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             bool, Field(description="Include the _meta orientation block.")
         ] = True,
     ) -> dict[str, Any]:
-        """Use this when a user needs to stage candidate PMIDs with coverage hints and queued review preparation after search planning."""
+        """Use this when a user needs to stage candidate PMIDs with coverage hints and queued review preparation after search planning; returns the session ID and staged candidates."""
 
         async def call() -> dict[str, Any]:
             selected_pmids = merge_pmids(pmids, None, max_items=100) if pmids else None
@@ -326,7 +326,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             Field(min_length=1, description="Optional review index the session belongs to."),
         ] = None,
     ) -> dict[str, Any]:
-        """Use this when a user needs staged candidate, coverage, and preparation status for a research session."""
+        """Use this when a user needs staged candidate, coverage, and preparation status for a research session; returns staged candidate PMIDs, coverage hints and preparation status."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_research_session_service()
@@ -370,7 +370,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             ),
         ] = None,
     ) -> dict[str, Any]:
-        """Use this when a user needs staged research sessions for orientation or one review ID."""
+        """Use this when a user needs staged research sessions for orientation or one review ID; returns session IDs with review IDs and status."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_research_session_service()

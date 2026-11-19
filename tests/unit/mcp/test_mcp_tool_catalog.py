@@ -1,6 +1,31 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
+
+# ponytail: copy of genefoundry-router scripts/surface.py lead_states_return (D1,
+# Tool-Schema Documentation v1.1); re-vendor if the router rule changes.
+_LEAD_VERBS = (  # noqa: SIM905 - kept identical to the router source
+    "get fetch retrieve list look lookup search find resolve report read predict annotate "
+    "compute calculate count summarize summarise map translate convert describe show check "
+    "validate classify score rank query browse discover explain compare diff normalize normalise "
+    "expand evaluate assess enumerate identify locate export download match suggest recommend "
+    "inspect generate render estimate"
+).split()
+_VERB_LEAD = re.compile(
+    rf"^(?:use this (?:tool )?to )?(?:{'|'.join(_LEAD_VERBS)})(?:s|es|ies)?\b", re.IGNORECASE
+)
+_RETURNS = re.compile(
+    r"(?<!not )(?<!n't )(?<!n\u2019t )(?<!never )\breturn(?:s|ed|ing)?\b(?!\s*[~<\d])|\u2192|->",
+    re.IGNORECASE,
+)
+_FIELD_LIST = re.compile(r"\w+\W+\w+[^:]*:\s+[^.;:]+,")
+_SENTENCE_END = re.compile(r"(?<!e\.g\.)(?<!i\.e\.)(?<=[.!?])\s+")
+
+
+def _lead_states_return(description: str) -> bool:
+    lead = _SENTENCE_END.split(" ".join(description.split()), maxsplit=1)[0][:300]
+    return bool(_VERB_LEAD.match(lead) or _RETURNS.search(lead) or _FIELD_LIST.search(lead))
 
 
 def test_build_tool_catalog_covers_exact_full_runtime_tools() -> None:
@@ -110,3 +135,22 @@ def test_lead_states_what_is_returned_within_reranker_window() -> None:
         head = catalog[name].description[:300]
         for word in words:
             assert word in head, (name, word)
+
+
+def test_every_tool_lead_states_what_is_returned() -> None:
+    """D1: every runtime and catalog description's first sentence says what comes back."""
+    from pubtator_link.mcp.catalog import build_tool_catalog
+    from pubtator_link.mcp.facade import create_pubtator_mcp
+
+    mcp = create_pubtator_mcp(profile="full")
+    catalog = build_tool_catalog(mcp, profile="full")
+    runtime = {name: tool.description or "" for name, tool in mcp._tool_manager._tools.items()}
+    failing = [
+        name
+        for name in sorted(catalog)
+        if not (
+            _lead_states_return(runtime[name]) and _lead_states_return(catalog[name].description)
+        )
+    ]
+    assert failing == []
+    assert all(len(d) <= 420 and d.startswith("Use this when ") for d in runtime.values())

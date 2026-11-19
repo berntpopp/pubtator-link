@@ -306,7 +306,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             Field(description="'preflight' (default) or 'none' to skip source-coverage hints."),
         ] = "preflight",
     ) -> dict[str, Any]:
-        """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. Wraps search_literature with guideline/systematic-review filters and guideline boosting; not an independent guideline database."""
+        """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question; returns ranked candidate PMIDs with titles. Wraps search_literature with guideline/systematic-review filters and guideline boosting; not an independent guideline database."""
         arguments = {k: v for k, v in locals().items() if v is not None and k not in _CLOSURE}
 
         async def call() -> dict[str, Any]:
@@ -366,7 +366,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             Field(ge=1, le=100, description="Maximum entity candidates to return."),
         ] = 10,
     ) -> dict[str, Any]:
-        """Use this when a user needs canonical PubTator biomedical entity IDs for genes, diseases, chemicals, species, variants, or cell lines."""
+        """Use this when a user needs canonical PubTator biomedical entity IDs for genes, diseases, chemicals, species, variants, or cell lines; returns matching entity IDs with names and types."""
 
         async def call() -> dict[str, Any]:
             client = await get_api_client()
@@ -456,7 +456,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 ),
             ] = 12_000,
         ) -> dict[str, Any]:
-            """Use this when a user has a PubTator entity ID and needs literature-derived related entities to expand a corpus. Do not use this for canonical entity lookup; use search_biomedical_entities. Next: search_literature."""
+            """Use this when a user has a PubTator entity ID and needs literature-derived related entities to expand a corpus; returns related PubTator entity IDs with relation types. Do not use this for canonical entity lookup; use search_biomedical_entities. Next: search_literature."""
 
             async def call() -> dict[str, Any]:
                 client = await get_api_client()
@@ -522,7 +522,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             Field(description="Attach formatted citations for the supporting PMIDs."),
         ] = True,
     ) -> dict[str, Any]:
-        """Use this when a user needs source-attributed variant records and literature evidence for a gene and variant. Does not compute clinical classification."""
+        """Use this when a user needs source-attributed variant records and literature evidence for a gene and variant; returns source-attributed variant records plus PMID literature evidence. Does not compute clinical classification."""
 
         async def call() -> dict[str, Any]:
             service = await get_variant_evidence_service()

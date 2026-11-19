@@ -10,7 +10,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `review`
 - Profiles: `full`
 - Stability: `advanced`
-- Description: Use this when a user needs to store a user-supplied GRADE-style evidence certainty judgment linked to prepared passage IDs. The backend stores the judgment; it does not compute certainty.
+- Description: Use this when a user needs to store a user-supplied GRADE-style evidence certainty judgment linked to prepared passage IDs; returns the stored judgment record. The backend stores the judgment; it does not compute certainty.
 - Do not use for: `automated certainty grading`, `clinical decision support`
 - Example: `{"review_id":"demo","outcome":"overall survival","overall_certainty":"low"}`
 - Next tools by profile: full: `list_evidence_certainty`
@@ -25,7 +25,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `publication`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user needs a topic literature graph. response_mode='compact' is the MCP default for candidate lanes and bounded summaries; full can be large. Returns response_size_class.
+- Description: Use this when a user needs a topic literature graph: returns candidate PMID lanes with bounded summaries. response_mode='compact' is the MCP default for candidate lanes and bounded summaries; full can be large. Returns response_size_class.
 - Do not use for: `claim-level evidence support`, `substitute evidence selection`
 - Example: `{"query":"familial Mediterranean fever colchicine","max_seed_papers":10}`
 - Next tools by profile: full: `get_publication_passages`, `index_review_evidence`; readonly: `get_publication_passages`
@@ -40,7 +40,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `discovery`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user provides article identifiers such as PMIDs, PMCIDs, or DOIs and needs normalized candidate PMIDs for research workflows.
+- Description: Use this when a user provides article identifiers such as PMIDs, PMCIDs, or DOIs and needs normalized candidate PMIDs for research workflows; returns the normalized PMID, PMCID and DOI for each input identifier.
 - Do not use for: `article text retrieval`
 - Example: `{"ids":["PMC123456","10.1000/example"],"source":"auto"}`
 - Next tools by profile: full: `get_publication_metadata`; readonly: `get_publication_metadata`
@@ -55,7 +55,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `diagnostics`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a client needs PubTator-Link subsystem status and recovery commands.
+- Description: Use this when a client needs PubTator-Link subsystem status and recovery commands: returns per-subsystem health and suggested recovery commands.
 - Do not use for: `biomedical literature search`
 - Example: `{}`
 - Next tools by profile: lean: `get_server_capabilities`; full: `get_server_capabilities`; readonly: `get_server_capabilities`
@@ -70,7 +70,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `publication`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user needs to estimate passage count and context size before fetching publication passages. Do not use this for text retrieval; use get_publication_passages. Next: get_publication_passages.
+- Description: Use this when a user needs to estimate passage count and context size before fetching publication passages; returns estimated passage and character counts plus a recommended passage mode. Do not use this for text retrieval; use get_publication_passages. Next: get_publication_passages.
 - Do not use for: `returning passage text`
 - Example: `{"pmids":["12345"],"max_passages_per_pmid":6}`
 - Next tools by profile: full: `get_publication_passages`; readonly: `get_publication_passages`
@@ -85,7 +85,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `audit`
 - Profiles: `full`
 - Stability: `compat`
-- Description: Use this when a user needs to export review preparation status, source coverage, resolver attempts, retrieval runs, passage IDs, and stable citation keys for scientific auditability.
+- Description: Use this when a user needs to export review preparation status, source coverage, resolver attempts, retrieval runs, passage IDs, and stable citation keys for scientific auditability; returns them as one audit bundle.
 - Do not use for: `routine context retrieval`
 - Example: `{"review_id":"demo","fallback_inline":true}`
 - Next tools by profile: full: `get_review_audit_trail`
@@ -100,7 +100,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `discovery`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user has a PubTator entity ID and needs literature-derived related entities to expand a corpus. Do not use this for canonical entity lookup; use search_biomedical_entities. Next: search_literature.
+- Description: Use this when a user has a PubTator entity ID and needs literature-derived related entities to expand a corpus; returns related PubTator entity IDs with relation types. Do not use this for canonical entity lookup; use search_biomedical_entities. Next: search_literature.
 - Do not use for: `canonical entity lookup`
 - Example: `{"entity_id":"@CHEMICAL_remdesivir"}`
 - Next tools by profile: full: `search_literature`; readonly: `search_literature`
@@ -115,7 +115,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `discovery`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user has seed PMIDs and needs similar, cited-by, or reference-linked articles to expand a research corpus.
+- Description: Use this when a user has seed PMIDs and needs similar, cited-by, or reference-linked articles to expand a research corpus; returns related PMIDs with title, journal, year and relation.
 - Do not use for: `initial topic search without seed PMIDs`
 - Example: `{"pmids":["12345"],"mode":"similar","limit":20}`
 - Next tools by profile: full: `preflight_review_sources`; readonly: `preflight_review_sources`
@@ -130,7 +130,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `publication`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user has one PMID and needs related evidence candidates. response_mode='compact' is the MCP default for candidate lanes and bounded summaries; full can be large. Returns response_size_class.
+- Description: Use this when a user has one PMID and needs related evidence candidates: returns related candidate PMIDs with bounded summaries. response_mode='compact' is the MCP default for candidate lanes and bounded summaries; full can be large. Returns response_size_class.
 - Do not use for: `claim-level evidence support`, `substitute evidence selection`
 - Example: `{"pmid":"40562663","max_results":25,"prefer_full_text":true}`
 - Next tools by profile: lean: `get_publication_passages`; full: `get_publication_passages`; readonly: `get_publication_passages`
@@ -145,7 +145,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `discovery`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user provides free-text citations and needs candidate PMIDs for research evidence gathering.
+- Description: Use this when a user provides free-text citations and needs candidate PMIDs for research evidence gathering; returns candidate PMID matches per citation.
 - Do not use for: `citation formatting`
 - Example: `{"citations":["Smith J. Example disease study. 2024."]}`
 - Next tools by profile: full: `get_publication_metadata`; readonly: `get_publication_metadata`
@@ -160,7 +160,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `review`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user needs one user-supplied evidence certainty judgment.
+- Description: Use this when a user needs one user-supplied evidence certainty judgment: returns that judgment with its linked passage IDs.
 - Do not use for: `listing all judgments`
 - Example: `{"review_id":"demo","certainty_id":"certainty-1"}`
 - Next tools by profile: full: `list_evidence_certainty`; readonly: `list_evidence_certainty`
@@ -175,7 +175,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `discovery`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user needs MeSH descriptors and candidate PubMed search terms for a biomedical research query.
+- Description: Use this when a user needs MeSH descriptors and candidate PubMed search terms for a biomedical research query; returns matching MeSH descriptors and suggested PubMed query terms.
 - Do not use for: `article retrieval`
 - Example: `{"query":"breast cancer","limit":10}`
 - Next tools by profile: full: `search_literature`; readonly: `search_literature`
@@ -190,7 +190,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `retrieval`
 - Profiles: `full`, `readonly`
 - Stability: `compat`
-- Description: Use this when a user needs prepared review passages near a cited stable passage ID for local context expansion. This only reads the review index and does not call upstream APIs.
+- Description: Use this when a user needs prepared review passages near a cited stable passage ID for local context expansion; returns the neighboring passages with stable passage IDs and text. This only reads the review index and does not call upstream APIs.
 - Do not use for: `new semantic retrieval`
 - Example: `{"review_id":"demo","passage_id":"p1","before":1,"after":1}`
 - Next tools by profile: full: `get_review_context_batch`; readonly: `get_review_context_batch`
@@ -205,7 +205,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `annotation`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user provides PMC IDs and needs raw PubTator full-text BioC annotation export. Do not use this for compact grounded answers; use get_publication_passages. Next: get_publication_passages.
+- Description: Use this when a user provides PMC IDs and needs raw PubTator full-text BioC annotation export; returns BioC documents with passages and entity annotations. Do not use this for compact grounded answers; use get_publication_passages. Next: get_publication_passages.
 - Do not use for: `compact grounded answers`
 - Example: `{"pmcids":["PMC123456"],"format":"biocjson"}`
 - Next tools by profile: full: `get_publication_passages`; readonly: `get_publication_passages`
@@ -220,7 +220,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `annotation`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user provides PubMed IDs and needs raw PubTator BioC annotation export. Do not use this for compact grounded answers; use get_publication_passages. Next: get_publication_passages.
+- Description: Use this when a user provides PubMed IDs and needs raw PubTator BioC annotation export; returns BioC documents with passages and entity annotations. Do not use this for compact grounded answers; use get_publication_passages. Next: get_publication_passages.
 - Do not use for: `compact grounded answers`
 - Example: `{"pmids":["12345"],"format":"biocjson","full":false}`
 - Next tools by profile: full: `get_publication_passages`; readonly: `get_publication_passages`
@@ -235,7 +235,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `publication`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user needs reference or cited-by neighborhoods for one publication. response_mode='compact' is the MCP default for candidate lanes and bounded summaries; full can be large. Returns response_size_class.
+- Description: Use this when a user needs reference or cited-by neighborhoods for one publication: returns reference and cited-by PMIDs with bounded summaries. response_mode='compact' is the MCP default for candidate lanes and bounded summaries; full can be large. Returns response_size_class.
 - Do not use for: `claim-level evidence support`, `publisher full-text retrieval`
 - Example: `{"pmid":"40562663","direction":"both","max_results":50}`
 - Next tools by profile: lean: `find_related_evidence_candidates`, `get_publication_passages`; full: `find_related_evidence_candidates`, `get_publication_passages`; readonly: `find_related_evidence_candidates`, `get_publication_passages`
@@ -250,7 +250,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `publication`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user needs citation-grade metadata for known PMIDs. Do not use this for article text or annotations; use get_publication_passages. Next: get_publication_passages.
+- Description: Use this when a user needs citation-grade metadata for known PMIDs: returns title, authors, journal, year, DOI and formatted citations per PMID. Do not use this for article text or annotations; use get_publication_passages. Next: get_publication_passages.
 - Do not use for: `article passage text`
 - Example: `{"pmids":["12345"],"include_citations":"nlm"}`
 - Next tools by profile: lean: `get_publication_passages`; full: `get_publication_passages`; readonly: `get_publication_passages`
@@ -280,7 +280,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `review`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user needs staged candidate, coverage, and preparation status for a research session.
+- Description: Use this when a user needs staged candidate, coverage, and preparation status for a research session; returns staged candidate PMIDs, coverage hints and preparation status.
 - Do not use for: `creating or modifying sessions`
 - Example: `{"review_id":"demo","session_id":"session-1"}`
 - Next tools by profile: full: `index_review_evidence`; readonly: None
@@ -295,7 +295,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `audit`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user needs a copy-ready audit block for selected prepared review passage IDs or the latest recorded audit passages without calling upstream APIs.
+- Description: Use this when a user needs a copy-ready audit block for selected prepared review passage IDs or the latest recorded audit passages without calling upstream APIs; returns that audit block.
 - Do not use for: `retrieving full passage context`
 - Example: `{"review_id":"demo","passage_ids":["p1"],"max_chars_per_passage":500}`
 - Next tools by profile: lean: None; full: None; readonly: None
@@ -310,7 +310,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `retrieval`
 - Profiles: `full`, `readonly`
 - Stability: `compat`
-- Description: Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Use a short keyword query and PMID filters. If zero passages are returned, simplify the query, inspect the review index, or fall back to get_publication_annotations.
+- Description: Use this when a review needs compact citable context from prepared review passages instead of raw BioC export; returns ranked citable passages with stable passage IDs and PMIDs. Use a short keyword query and PMID filters. If zero passages are returned, simplify the query, inspect the review index, or fall back to get_publication_annotations.
 - Do not use for: `multiple query variants in one call`
 - Example: `{"review_id":"demo","question":"EGFR resistance","max_passages":8}`
 - Next tools by profile: full: `get_review_audit_trail`; readonly: `get_review_audit_trail`
@@ -325,7 +325,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `retrieval`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode uses query_fair budgeting, merged passages, per-query summaries, and next_steps for zero-result queries. Use response_mode="quotes" for short citable snippets or dry_run for diagnostics without passage text.
+- Description: Use this when a user wants multiple short review retrieval query variants in one call; returns merged citable passages and per-query summaries. Compact (default): query_fair budgeting, next_steps for zero-result queries. Use response_mode="quotes" for short citable snippets or dry_run for diagnostics without passage text.
 - Do not use for: `unindexed PubMed-only article fetching`
 - Example: `{"review_id":"demo","queries":["EGFR resistance","osimertinib resistance"]}`
 - Next tools by profile: lean: `record_review_context`, `get_review_audit_trail`; full: `record_review_context`, `get_review_audit_trail`; readonly: `get_review_audit_trail`
@@ -340,7 +340,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `review`
 - Profiles: `full`, `readonly`
 - Stability: `admin`
-- Description: Use this when a user needs one persisted review index summary without loading passage samples.
+- Description: Use this when a user needs one persisted review index summary without loading passage samples; returns its preparation status, source counts and passage counts.
 - Do not use for: `loading passage samples`
 - Example: `{"review_id":"demo"}`
 - Next tools by profile: full: `inspect_review_index`; readonly: `inspect_review_index`
@@ -355,7 +355,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `retrieval`
 - Profiles: `full`, `readonly`
 - Stability: `compat`
-- Description: Use this when a user needs exact prepared review passages by stable passage IDs from prior context packs or audit bundles. This only reads the review index and does not call upstream APIs.
+- Description: Use this when a user needs exact prepared review passages by stable passage IDs from prior context packs or audit bundles; returns those passages with text and citation metadata. This only reads the review index and does not call upstream APIs.
 - Do not use for: `searching unknown relevant passages`
 - Example: `{"review_id":"demo","passage_ids":["p1"]}`
 - Next tools by profile: full: `get_review_audit_trail`; readonly: `get_review_audit_trail`
@@ -370,7 +370,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `metadata`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a client needs supported tools, transports, formats, and limitations. Do not use this for task-specific workflow guidance; use workflow_help. Next: workflow_help.
+- Description: Use this when a client needs supported tools, transports, formats, and limitations; returns those lists in one capability record. Do not use this for task-specific workflow guidance; use workflow_help. Next: workflow_help.
 - Do not use for: `task-specific workflow steps`
 - Example: `{"details":["tools","workflow_help"]}`
 - Next tools by profile: lean: `workflow_help`; full: `workflow_help`; readonly: `workflow_help`
@@ -385,7 +385,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `annotation`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user has a PubTator text annotation session ID and needs its results. Do not use this for entity lookup from names; use search_biomedical_entities. Next: search_biomedical_entities.
+- Description: Use this when a user has a PubTator text annotation session ID and needs its results; returns the annotated text with entity mentions and IDs once ready. Do not use this for entity lookup from names; use search_biomedical_entities. Next: search_biomedical_entities.
 - Do not use for: `submitting new text`
 - Example: `{"session_id":"session-12345678"}`
 - Next tools by profile: full: `search_biomedical_entities`; readonly: `search_biomedical_entities`
@@ -400,7 +400,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `literature`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user needs source-attributed variant records and literature evidence for a gene and variant. Does not compute clinical classification.
+- Description: Use this when a user needs source-attributed variant records and literature evidence for a gene and variant; returns source-attributed variant records plus PMID literature evidence. Does not compute clinical classification.
 - Do not use for: `clinical classification`
 - Example: `{"gene":"BRCA1","variant":"c.68_69delAG"}`
 - Next tools by profile: lean: `search_literature`; full: `search_literature`; readonly: `search_literature`
@@ -415,7 +415,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `review`
 - Profiles: `lean`, `full`
 - Stability: `lean`
-- Description: Use this when a user needs a one-call grounded research workflow that searches literature, indexes candidate PMIDs, inspects readiness, and retrieves compact citable context.
+- Description: Use this when a user needs a one-call grounded research workflow that searches literature, indexes candidate PMIDs, inspects readiness, and retrieves compact citable context; returns citable passages with PMIDs.
 - Do not use for: `clinical decision support`, `uncited answer generation`
 - Example: `{"question":"Does colchicine prevent FMF flares?","max_pmids":8}`
 - Next tools by profile: lean: `record_review_context`, `get_review_audit_trail`; full: `record_review_context`, `get_review_audit_trail`
@@ -430,7 +430,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `review`
 - Profiles: `lean`, `full`
 - Stability: `lean`
-- Description: Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs. Call this before get_review_context_batch, use session_id to scope staged research sessions, set wait_until_ready for small corpora, and inspect preparation_status before retrieval.
+- Description: Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs; returns preparation status per source. Call this before get_review_context_batch, use session_id to scope staged research sessions, set wait_until_ready for small corpora, and inspect preparation_status before retrieval.
 - Do not use for: `ad hoc passage retrieval without a review_id`
 - Example: `{"review_id":"demo","pmids":["12345"],"wait_until_ready":true}`
 - Next tools by profile: lean: `inspect_review_index`, `get_review_context_batch`; full: `inspect_review_index`, `get_review_context_batch`
@@ -445,7 +445,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `review`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user needs to inspect indexed PMIDs, sections, passage counts, and failures for a review_id, including source coverage.
+- Description: Use this when a user needs to inspect indexed PMIDs, sections, passage counts, and failures for a review_id, including source coverage; returns per-source summaries, totals and failures.
 - Do not use for: `retrieving final answer context`
 - Example: `{"review_id":"demo","include_passage_samples":true}`
 - Next tools by profile: lean: `get_review_context_batch`; full: `get_review_context_batch`; readonly: `get_review_context_batch`
@@ -460,7 +460,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `review`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user needs user-supplied evidence certainty judgments for a review.
+- Description: Use this when a user needs user-supplied evidence certainty judgments for a review; returns the stored judgments for that review.
 - Do not use for: `creating certainty judgments`
 - Example: `{"review_id":"demo"}`
 - Next tools by profile: full: `get_evidence_certainty`; readonly: `get_evidence_certainty`
@@ -475,7 +475,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `review`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user needs staged research sessions for orientation or one review ID.
+- Description: Use this when a user needs staged research sessions for orientation or one review ID; returns session IDs with review IDs and status.
 - Do not use for: `inspecting a specific session in detail`
 - Example: `{"review_id":"demo"}`
 - Next tools by profile: full: `get_research_session_status`; readonly: `get_research_session_status`
@@ -490,7 +490,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `review`
 - Profiles: `full`, `readonly`
 - Stability: `admin`
-- Description: Use this when a user needs persisted review indexes with preparation status, source counts, passage counts, and approximate storage size.
+- Description: Use this when a user needs persisted review indexes with preparation status, source counts, passage counts, and approximate storage size; returns one row per index with those fields.
 - Do not use for: `retrieving review passages`
 - Example: `{"limit":20,"offset":0}`
 - Next tools by profile: full: `get_review_index_summary`; readonly: `get_review_index_summary`
@@ -505,7 +505,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `review`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user needs PMID source coverage, PMC fallback availability, and likely full-text versus abstract-only retrieval before indexing review evidence.
+- Description: Use this when a user needs PMID source coverage, PMC fallback availability, and likely full-text versus abstract-only retrieval before indexing review evidence; returns per-PMID source coverage and fallback availability.
 - Do not use for: `indexing or retrieving passages`
 - Example: `{"pmids":["12345","67890"]}`
 - Next tools by profile: lean: `index_review_evidence`; full: `index_review_evidence`; readonly: None
@@ -520,7 +520,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `audit`
 - Profiles: `lean`, `full`
 - Stability: `lean`
-- Description: Use this when a user needs to persist compact LLM review context, selected evidence IDs, decisions, or next-step state without storing article text.
+- Description: Use this when a user needs to persist compact LLM review context, selected evidence IDs, decisions, or next-step state without storing article text; returns the stored context record.
 - Do not use for: `retrieving passages`
 - Example: `{"review_id":"demo","event_type":"passage_selected","passage_ids":["p1"],"selected_passage_ids":["p1"],"summary":"used in answer"}`
 - Next tools by profile: lean: `get_review_audit_trail`; full: `get_review_audit_trail`
@@ -550,7 +550,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `discovery`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user needs canonical PubTator biomedical entity IDs for genes, diseases, chemicals, species, variants, or cell lines.
+- Description: Use this when a user needs canonical PubTator biomedical entity IDs for genes, diseases, chemicals, species, variants, or cell lines; returns matching entity IDs with names and types.
 - Do not use for: `literature search by article topic`
 - Example: `{"query":"TP53","concept":"Gene","limit":10}`
 - Next tools by profile: lean: `search_literature`; full: `search_literature`; readonly: `search_literature`
@@ -565,7 +565,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `literature`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question. Wraps search_literature with guideline/systematic-review filters and guideline boosting; not an independent guideline database.
+- Description: Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question; returns ranked candidate PMIDs with titles. Wraps search_literature with guideline/systematic-review filters and guideline boosting; not an independent guideline database.
 - Do not use for: `non-guideline exhaustive PubMed search`
 - Example: `{"text":"asthma treatment adults","limit":5}`
 - Next tools by profile: lean: `preflight_review_sources`; full: `preflight_review_sources`; readonly: `preflight_review_sources`
@@ -595,7 +595,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `review`
 - Profiles: `full`
 - Stability: `advanced`
-- Description: Use this when a user needs to stage candidate PMIDs with coverage hints and queued review preparation after search planning.
+- Description: Use this when a user needs to stage candidate PMIDs with coverage hints and queued review preparation after search planning; returns the session ID and staged candidates.
 - Do not use for: `readonly deployments`
 - Example: `{"review_id":"demo","query":"BRCA1 PARP inhibitor","max_candidates":20}`
 - Next tools by profile: full: `get_research_session_status`, `index_review_evidence`
@@ -610,7 +610,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `annotation`
 - Profiles: `full`
 - Stability: `advanced`
-- Description: Use this when research text should be submitted for PubTator biomedical named entity recognition. Do not use this for PubMed or PMC IDs; use get_publication_annotations. Next: get_text_annotation_results.
+- Description: Use this when research text should be submitted for PubTator biomedical named entity recognition; returns a session ID for get_text_annotation_results. Do not use this for PubMed or PMC IDs; use get_publication_annotations. Next: get_text_annotation_results.
 - Do not use for: `PubMed or PMC ID annotation export`
 - Example: `{"text":"BRCA1 is associated with breast cancer.","bioconcepts":"Gene,Disease"}`
 - Next tools by profile: full: `get_text_annotation_results`
@@ -625,7 +625,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `discovery`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user needs a compact, review-feeding PMID corpus for a research question. Returns candidate PMIDs, roles, coverage hints, metadata, and next commands.
+- Description: Use this when a user needs a compact, review-feeding PMID corpus for a research question: returns candidate PMIDs, roles, coverage hints, metadata, and next commands.
 - Do not use for: `final evidence retrieval`
 - Example: `{"question":"EGFR resistance in lung cancer","max_pmids":8}`
 - Next tools by profile: full: `preflight_review_sources`, `index_review_evidence`; readonly: `preflight_review_sources`
@@ -640,7 +640,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `metadata`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a fresh context needs the canonical PubTator-Link research workflow.
+- Description: Use this when a fresh context needs the canonical PubTator-Link research workflow: returns ordered workflow steps with the tool to call at each.
 - Do not use for: `server capability inventory`
 - Example: `{"task":"clinical_genetics_review"}`
 - Next tools by profile: lean: `search_literature`; full: `search_literature`; readonly: `search_literature`

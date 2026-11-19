@@ -85,7 +85,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 Field(description="Request full-text annotations where available (else abstract)."),
             ] = False,
         ) -> dict[str, Any]:
-            """Use this when a user provides PubMed IDs and needs raw PubTator BioC annotation export. Do not use this for compact grounded answers; use get_publication_passages. Next: get_publication_passages."""
+            """Use this when a user provides PubMed IDs and needs raw PubTator BioC annotation export; returns BioC documents with passages and entity annotations. Do not use this for compact grounded answers; use get_publication_passages. Next: get_publication_passages."""
 
             async def call() -> dict[str, Any]:
                 if full and format == "pubtator":  # PubTator3 ignores full for this format
@@ -219,7 +219,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 bool, Field(description="Include the _meta orientation block.")
             ] = True,
         ) -> dict[str, Any]:
-            """Use this when a user needs a bounded topic-level literature map from a topic query, optionally seeded with PMIDs. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: get_publication_passages."""
+            """Use this when a user needs a bounded topic-level literature map from a topic query, optionally seeded with PMIDs: returns candidate PMID lanes with bounded summaries. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: get_publication_passages."""
 
             async def call() -> dict[str, Any]:
                 selected_query = query
@@ -361,7 +361,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             bool, Field(description="Include per-PMID source-coverage hints.")
         ] = True,
     ) -> dict[str, Any]:
-        """Use this when a user needs citation-grade metadata for known PMIDs. Do not use this for article text or annotations; use get_publication_passages. Next: get_publication_passages."""
+        """Use this when a user needs citation-grade metadata for known PMIDs: returns title, authors, journal, year, DOI and formatted citations per PMID. Do not use this for article text or annotations; use get_publication_passages. Next: get_publication_passages."""
 
         async def call() -> dict[str, Any]:
             selected_pmids = merge_pmids(pmids, None, max_items=100)
@@ -424,7 +424,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             int, Field(ge=1, le=100, description="Maximum neighbor publications to return.")
         ] = 50,
     ) -> dict[str, Any]:
-        """Use this when a user needs reference or cited-by neighbors for one publication. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: get_publication_passages."""
+        """Use this when a user needs reference or cited-by neighbors for one publication: returns reference and cited-by PMIDs with bounded summaries. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: get_publication_passages."""
 
         async def call() -> dict[str, Any]:
             service = await get_citation_graph_service()
@@ -504,7 +504,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             bool, Field(description="Include the _meta orientation block.")
         ] = True,
     ) -> dict[str, Any]:
-        """Use this when a user has one PMID and needs related full-text-preferred candidates. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: get_publication_passages."""
+        """Use this when a user has one PMID and needs related full-text-preferred candidates: returns related candidate PMIDs with bounded summaries. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: get_publication_passages."""
 
         async def call() -> dict[str, Any]:
             service = await get_related_evidence_service()
@@ -572,7 +572,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 bool, Field(description="Count reference-list passages in the estimate.")
             ] = False,
         ) -> dict[str, Any]:
-            """Use this when a user needs to estimate passage count and context size before fetching publication passages. Do not use this for text retrieval; use get_publication_passages. Next: get_publication_passages."""
+            """Use this when a user needs to estimate passage count and context size before fetching publication passages; returns estimated passage and character counts plus a recommended passage mode. Do not use this for text retrieval; use get_publication_passages. Next: get_publication_passages."""
 
             async def call() -> dict[str, Any]:
                 selected_pmids = merge_pmids(pmids, None, max_items=25)
@@ -621,7 +621,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                     Field(description="Export serialization: 'biocjson' (default) or 'biocxml'."),
                 ] = "biocjson",
             ) -> dict[str, Any]:
-                """Use this when a user provides PMC IDs and needs raw PubTator full-text BioC annotation export. Do not use this for compact grounded answers; use get_publication_passages. Next: get_publication_passages."""
+                """Use this when a user provides PMC IDs and needs raw PubTator full-text BioC annotation export; returns BioC documents with passages and entity annotations. Do not use this for compact grounded answers; use get_publication_passages. Next: get_publication_passages."""
 
                 async def call() -> dict[str, Any]:
                     service = await get_publication_service()
