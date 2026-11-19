@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [7.7.1] - 2026-11-19
+
+### Fixed
+
+- The NCBI E-utilities limit (3 req/s, 10 with `NCBI_API_KEY`) is now shared by all Gunicorn
+  workers in the container through an fcntl-locked state file in `/tmp`, instead of applying
+  per worker (4 workers could reach 4x NCBI's per-key limit). Falls back to the per-process
+  bucket with a warning when the file cannot be opened.
+
 ## [7.7.0] - 2026-11-19
 
 ### Added
