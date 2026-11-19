@@ -5,7 +5,7 @@ This module pins the four env facts the docs assert, so a future edit that
 re-introduces a false one fails here instead of shipping.
 
 1. ``ServerSettings`` reads env under the ``PUBTATOR_LINK_`` prefix, and ONLY under
-   that prefix. ``extra="ignore"`` means an unprefixed name is silently dropped —
+   that prefix (sole exception: the aliased ``NCBI_API_KEY``, see ``UNPREFIXED``). ``extra="ignore"`` means an unprefixed name is silently dropped —
    no error, no warning, no effect. Docs must never promise otherwise.
 2. Every variable in ``.env.example`` is prefixed and names a real setting. An
    unprefixed row there is dead config that an operator will reasonably expect to work.
@@ -45,8 +45,23 @@ _TABLE_ROW = re.compile(r"^\|\s*(.+?)\s*\|", re.M)
 _BACKTICKED = re.compile(r"`([A-Z][A-Z0-9_]*)`")
 
 
+# Settings read under an exact, unprefixed name set by the fleet deploy controller
+# (``validation_alias``), e.g. ``NCBI_API_KEY`` (#275). Checked against the model below.
+UNPREFIXED = {"NCBI_API_KEY"}
+
+
 def _settings_env_names() -> set[str]:
-    return {f"{PREFIX}{name.upper()}" for name in ServerSettings.model_fields}
+    names = set(UNPREFIXED)
+    for name, info in ServerSettings.model_fields.items():
+        if info.validation_alias is None:
+            names.add(f"{PREFIX}{name.upper()}")
+    return names
+
+
+def test_unprefixed_exemptions_are_real_aliases(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NCBI_API_KEY", "k")
+    key = ServerSettings(_env_file=None).ncbi_api_key
+    assert key is not None and key.get_secret_value() == "k"
 
 
 def _env_example_names() -> list[str]:
@@ -89,7 +104,11 @@ def test_env_example_names_are_prefixed_and_real() -> None:
     """A row in .env.example that no setting reads is config that silently does nothing."""
     known = _settings_env_names() | COMPOSE_ONLY
 
-    unprefixed = [name for name in _env_example_names() if not name.startswith(PREFIX)]
+    unprefixed = [
+        name
+        for name in _env_example_names()
+        if not name.startswith(PREFIX) and name not in UNPREFIXED
+    ]
     assert not unprefixed, (
         f".env.example ships unprefixed names that ServerSettings ignores: {sorted(unprefixed)}"
     )

@@ -44,6 +44,8 @@ services:
       PUBTATOR_LINK_CORS_ORIGINS: "${PUBTATOR_LINK_CORS_ORIGINS}"
       PUBTATOR_LINK_ALLOWED_HOSTS: '["localhost","127.0.0.1","::1","${PUBTATOR_LINK_PUBLIC_DOMAIN}"]'
       PUBTATOR_LINK_ALLOWED_ORIGINS: "${PUBTATOR_LINK_CORS_ORIGINS}"
+      # Optional NCBI E-utilities key (10 req/s instead of 3); unset = keyless.
+      NCBI_API_KEY: "${NCBI_API_KEY:-}"
 
     # ports: []
     ports: !reset []

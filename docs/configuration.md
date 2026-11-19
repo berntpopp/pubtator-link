@@ -1,7 +1,7 @@
 # Configuration
 
 Every setting is read from the environment (or `.env`) by `pubtator_link/config.py`.
-**Every name carries the `PUBTATOR_LINK_` prefix.** The prefix is not optional: `config.py`
+**Every name carries the `PUBTATOR_LINK_` prefix** (sole exception: `NCBI_API_KEY`, the fleet-wide name the deploy controller sets). The prefix is not optional: `config.py`
 sets `env_prefix="PUBTATOR_LINK_"` with `extra="ignore"`, so an unprefixed name such as
 `PORT` or `LOG_LEVEL` is *silently discarded* — no error, no warning, no effect.
 
@@ -33,7 +33,7 @@ pubtator-link config --validate
 | `PUBTATOR_LINK_API_BASE_URL` | `https://www.ncbi.nlm.nih.gov/research/pubtator3-api` | PubTator3 API base URL |
 | `PUBTATOR_LINK_API_TIMEOUT` | `30` | PubTator3 request timeout (seconds) |
 | `PUBTATOR_LINK_RATE_LIMIT_PER_SECOND` | `2.5` | Outbound rate limit. **PubTator3 permits at most 3 requests/second — do not raise this above 3.** |
-| `PUBTATOR_LINK_NCBI_API_KEY` | unset | Optional NCBI API key, sent as `api_key` on E-utilities requests. All E-utilities calls share one process-wide token bucket: 3 requests/s without a key, 10/s with one. The key is scrubbed from logs |
+| `NCBI_API_KEY` | unset | Optional NCBI API key (the one unprefixed setting), sent as `api_key` on E-utilities and PMC ID-converter requests. `/health` reports `has_api_key`. All these calls share one process-wide token bucket: 3 requests/s without a key, 10/s with one. The key is scrubbed from logs |
 | `PUBTATOR_LINK_TEXT_API_BASE_URL` | `https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/RESTful` | Text-processing (NER submission) API |
 | `PUBTATOR_LINK_TEXT_API_TIMEOUT` | `60` | Text-processing request timeout (seconds) |
 

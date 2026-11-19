@@ -131,7 +131,7 @@ class NcbiDiscoveryClient:
 
     async def _get_absolute(self, url: str, params: QueryParams) -> httpx.Response:
         response, _metadata = await call_with_retries(
-            lambda: self._client.get(url, params=params),
+            lambda: eutils_get(self._client, url, params=params),
             policy=self.retry_policy,
         )
         response.raise_for_status()

@@ -6,8 +6,10 @@
 
 ### Added
 
-- `PUBTATOR_LINK_NCBI_API_KEY`: optional NCBI API key sent as `api_key` on every E-utilities
-  request (PubMed metadata, discovery, MeSH, ClinVar). All E-utilities calls now share one
+- `NCBI_API_KEY`: optional NCBI API key sent as `api_key` on every E-utilities and PMC
+  ID-converter request (PubMed metadata, discovery, MeSH, ClinVar, PMCID/DOI conversion), passed
+  through by `docker/docker-compose.npm.yml`; `/health` reports `has_api_key` (never the value).
+  These calls now share one
   process-wide token bucket at NCBI's documented rate, 3 requests/s without a key and 10/s
   with one; 429s keep honouring `Retry-After`. The key is scrubbed from every log line,
   including httpx's request-URL log (#275).

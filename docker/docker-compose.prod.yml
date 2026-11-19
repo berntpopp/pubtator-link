@@ -129,8 +129,6 @@ services:
       PUBTATOR_LINK_DATABASE_URL: "postgresql://${PUBTATOR_LINK_POSTGRES_USER:-pubtator_link}:${PUBTATOR_LINK_POSTGRES_PASSWORD:?PUBTATOR_LINK_POSTGRES_PASSWORD is required in production (no fallback)}@pubtator-postgres:5432/${PUBTATOR_LINK_POSTGRES_DB:-pubtator_link}"
       PUBTATOR_LINK_ENABLE_INBOUND_RATE_LIMIT: "true"
       PUBTATOR_LINK_TRUST_PROXY_HEADERS: "true"
-      # Optional; from the server's .env.docker secret store. Unset = keyless 3 req/s.
-      PUBTATOR_LINK_NCBI_API_KEY: "${PUBTATOR_LINK_NCBI_API_KEY:-}"
       GUNICORN_WORKERS: 4
       GUNICORN_LOG_LEVEL: warning
       # --- OAuth go-live (enable ONLY after Keycloak is configured; see docs/SECURITY.md) ---

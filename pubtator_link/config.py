@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Annotated, Any, Literal
 
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -51,8 +51,10 @@ class ServerSettings(BaseSettings):
         default=2.5,
         description="Rate limit for API requests (max 3/sec per PubTator3 guidelines)",
     )
+    # Exactly NCBI_API_KEY (unprefixed): the fleet deploy controller sets this name.
     ncbi_api_key: SecretStr | None = Field(
         default=None,
+        validation_alias=AliasChoices("NCBI_API_KEY", "ncbi_api_key"),
         description=(
             "Optional NCBI API key sent to E-utilities; raises the shared outbound "
             "E-utilities budget from 3 to 10 requests/s. Never logged."

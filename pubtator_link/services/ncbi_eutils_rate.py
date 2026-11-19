@@ -24,7 +24,7 @@ _limiter: RateLimiter | None = None
 
 
 def ncbi_api_key_params() -> dict[str, str]:
-    """``{"api_key": ...}`` when ``PUBTATOR_LINK_NCBI_API_KEY`` is set, else ``{}``."""
+    """``{"api_key": ...}`` when ``NCBI_API_KEY`` is set, else ``{}``."""
     key = settings.ncbi_api_key
     return {"api_key": key.get_secret_value()} if key else {}
 
