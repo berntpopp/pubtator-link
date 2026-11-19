@@ -38,6 +38,18 @@ _SHARED_PROCESSORS: list[Any] = [
 ]
 
 
+def _redact_secrets(_logger: Any, _name: str, rendered: Any) -> Any:
+    """Last-chance scrub of the NCBI API key from the rendered line (#275).
+
+    httpx logs every request URL at INFO, and E-utilities URLs carry ``api_key``.
+    """
+    key = settings.ncbi_api_key
+    secret = key.get_secret_value() if key else ""
+    return (
+        rendered.replace(secret, "[REDACTED]") if secret and isinstance(rendered, str) else rendered
+    )
+
+
 def stdlib_formatter(renderer: Any) -> structlog.stdlib.ProcessorFormatter:
     """Render stdlib ``logging`` records through the structlog chain.
 
@@ -46,7 +58,11 @@ def stdlib_formatter(renderer: Any) -> structlog.stdlib.ProcessorFormatter:
     """
     return structlog.stdlib.ProcessorFormatter(
         foreign_pre_chain=[*_SHARED_PROCESSORS, structlog.stdlib.ExtraAdder()],
-        processors=[structlog.stdlib.ProcessorFormatter.remove_processors_meta, renderer],
+        processors=[
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            renderer,
+            _redact_secrets,
+        ],
     )
 
 
@@ -63,7 +79,7 @@ def configure_logging() -> FilteringBoundLogger:
         if settings.log_format == "json"
         else structlog.dev.ConsoleRenderer(colors=use_colors)
     )
-    processors = [*_SHARED_PROCESSORS, renderer]
+    processors = [*_SHARED_PROCESSORS, renderer, _redact_secrets]
 
     structlog.configure(
         processors=processors,

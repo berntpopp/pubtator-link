@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Annotated, Any, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -51,6 +51,13 @@ class ServerSettings(BaseSettings):
         default=2.5,
         description="Rate limit for API requests (max 3/sec per PubTator3 guidelines)",
     )
+    ncbi_api_key: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Optional NCBI API key sent to E-utilities; raises the shared outbound "
+            "E-utilities budget from 3 to 10 requests/s. Never logged."
+        ),
+    )
 
     # Text processing API
     text_api_base_url: str = Field(
@@ -94,8 +101,10 @@ class ServerSettings(BaseSettings):
         default=False,
         description="Enable simple per-client inbound HTTP rate limiting",
     )
+    # Behind genefoundry-router every caller shares the router's IP, and the router
+    # already limits per account, so this is a generous backstop, not a per-user cap.
     inbound_rate_limit_per_minute: int = Field(
-        default=120,
+        default=1200,
         ge=1,
         description="Maximum requests per client per minute when inbound rate limiting is enabled",
     )

@@ -31,6 +31,7 @@ from pubtator_link.services.discovery_metadata import (
     enrich_citation_records,
     enrich_related_article_records,
 )
+from pubtator_link.services.ncbi_eutils_rate import eutils_get
 from pubtator_link.services.ncbi_id_conversion import (
     conversion_records_from_response,
     convert_article_ids_individually,
@@ -122,7 +123,7 @@ class NcbiDiscoveryClient:
     async def _get(self, path: str, params: QueryParams) -> httpx.Response:
         url = f"{self.base_url}/{path.lstrip('/')}"
         response, _metadata = await call_with_retries(
-            lambda: self._client.get(url, params=params),
+            lambda: eutils_get(self._client, url, params=params),
             policy=self.retry_policy,
         )
         response.raise_for_status()

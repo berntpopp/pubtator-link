@@ -19,6 +19,7 @@ from pubtator_link.models.publication_metadata import (
 )
 from pubtator_link.models.review_rerag import CoverageReason, CoverageTier
 from pubtator_link.services.ncbi_discovery import NCBI_EUTILS_BASE_URL
+from pubtator_link.services.ncbi_eutils_rate import eutils_get
 
 QueryParamValue = str | int | float | bool | None
 QueryParams = Mapping[str, QueryParamValue | Sequence[QueryParamValue]]
@@ -242,7 +243,8 @@ class NcbiPublicationMetadataClient:
         url = f"{NCBI_EUTILS_BASE_URL}/{path.lstrip('/')}"
         request_params = {**params, "tool": self._tool_name}
         response, _metadata = await call_with_retries(
-            lambda: self._http_client.get(
+            lambda: eutils_get(
+                self._http_client,
                 url,
                 params=request_params,
                 timeout=self._timeout,
