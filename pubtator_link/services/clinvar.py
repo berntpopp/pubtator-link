@@ -9,6 +9,7 @@ import httpx
 from pydantic import BaseModel, Field
 
 from pubtator_link.models.variants import NormalizedVariant, SourceClassification
+from pubtator_link.services.ncbi_eutils_rate import eutils_get
 
 CLINVAR_EUTILS_BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 _HGVS_FIELDS = ("title", "variation_name", "cdna_change", "protein_change", "aliases")
@@ -86,7 +87,8 @@ class ClinVarService:
         retmax: int = 10,
     ) -> list[ClinVarRecord]:
         term = _clinvar_term(gene=gene, variant_terms=variant_terms, condition=condition)
-        search_response = await self.http_client.get(
+        search_response = await eutils_get(
+            self.http_client,
             f"{self.base_url}/esearch.fcgi",
             params={
                 "db": "clinvar",
@@ -102,7 +104,8 @@ class ClinVarService:
         if not id_list:
             return []
 
-        summary_response = await self.http_client.get(
+        summary_response = await eutils_get(
+            self.http_client,
             f"{self.base_url}/esummary.fcgi",
             params={
                 "db": "clinvar",

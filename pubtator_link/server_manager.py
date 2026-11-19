@@ -353,12 +353,13 @@ class UnifiedServerManager:
             }
 
         @app.get("/health")
-        async def health() -> dict[str, str]:
+        async def health() -> dict[str, str | bool]:
             """Health check endpoint."""
             return {
                 "status": "healthy",
                 "version": __version__,
                 "transport": "streamable-http-stateless",
+                "has_api_key": bool(settings.ncbi_api_key),
             }
 
         @app.get("/metrics", include_in_schema=False)
