@@ -65,7 +65,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
             Field(description="Attach per-PMID citation metadata to each candidate."),
         ] = True,
     ) -> dict[str, Any]:
-        """Use this when a user needs a compact, review-feeding PMID corpus for a research question. Returns candidate PMIDs, roles, coverage hints, metadata, and next commands."""
+        """Use this when a user needs a compact, review-feeding PMID corpus for a research question: returns candidate PMIDs, roles, coverage hints, metadata, and next commands."""
 
         async def call() -> dict[str, Any]:
             selected_question = question
@@ -113,7 +113,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
             ),
         ] = "auto",
     ) -> dict[str, Any]:
-        """Use this when a user provides article identifiers such as PMIDs, PMCIDs, or DOIs and needs normalized candidate PMIDs for research workflows."""
+        """Use this when a user provides article identifiers such as PMIDs, PMCIDs, or DOIs and needs normalized candidate PMIDs for research workflows; returns the normalized PMID, PMCID and DOI for each input identifier."""
 
         async def call() -> dict[str, Any]:
             service = await get_discovery_service()
@@ -147,7 +147,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
             Field(description="Require an exact descriptor match instead of prefix/fuzzy."),
         ] = False,
     ) -> dict[str, Any]:
-        """Use this when a user needs MeSH descriptors and candidate PubMed search terms for a biomedical research query."""
+        """Use this when a user needs MeSH descriptors and candidate PubMed search terms for a biomedical research query; returns matching MeSH descriptors and suggested PubMed query terms."""
 
         async def call() -> dict[str, Any]:
             selected_query = query
@@ -174,7 +174,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
             ),
         ],
     ) -> dict[str, Any]:
-        """Use this when a user provides free-text citations and needs candidate PMIDs for research evidence gathering."""
+        """Use this when a user provides free-text citations and needs candidate PMIDs for research evidence gathering; returns candidate PMID matches per citation."""
 
         async def call() -> dict[str, Any]:
             service = await get_discovery_service()
@@ -212,7 +212,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
             Field(ge=1, le=100, description="Maximum related articles to return."),
         ] = 20,
     ) -> dict[str, Any]:
-        """Use this when a user has seed PMIDs and needs similar, cited-by, or reference-linked articles to expand a research corpus."""
+        """Use this when a user has seed PMIDs and needs similar, cited-by, or reference-linked articles to expand a research corpus; returns related PMIDs with title, journal, year and relation."""
 
         async def call() -> dict[str, Any]:
             selected_pmids = merge_pmids(pmids, None, max_items=100)

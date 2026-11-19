@@ -40,7 +40,7 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             Field(ge=0, description="Zero-based row offset for pagination."),
         ] = 0,
     ) -> dict[str, Any]:
-        """Use this when a user needs persisted review indexes with preparation status, source counts, passage counts, and approximate storage size."""
+        """Use this when a user needs persisted review indexes with preparation status, source counts, passage counts, and approximate storage size; returns one row per index with those fields."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_review_index_lifecycle_service()
@@ -68,7 +68,7 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             ),
         ],
     ) -> dict[str, Any]:
-        """Use this when a user needs one persisted review index summary without loading passage samples."""
+        """Use this when a user needs one persisted review index summary without loading passage samples; returns its preparation status, source counts and passage counts."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_review_index_lifecycle_service()
@@ -133,7 +133,7 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         ] = False,
         ctx: Context | None = None,
     ) -> dict[str, Any]:
-        """Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs. Call this before get_review_context_batch, use session_id to scope staged research sessions, set wait_until_ready for small corpora, and inspect preparation_status before retrieval."""
+        """Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs; returns preparation status per source. Call this before get_review_context_batch, use session_id to scope staged research sessions, set wait_until_ready for small corpora, and inspect preparation_status before retrieval."""
 
         async def call() -> dict[str, Any]:
             selected_pmids = merge_pmids(pmids) if pmids else pmids
@@ -241,7 +241,7 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             Field(description="Opaque pagination cursor from a prior page."),
         ] = None,
     ) -> dict[str, Any]:
-        """Use this when a user needs to inspect indexed PMIDs, sections, passage counts, and failures for a review_id, including source coverage."""
+        """Use this when a user needs to inspect indexed PMIDs, sections, passage counts, and failures for a review_id, including source coverage; returns per-source summaries, totals and failures."""
 
         async def call() -> dict[str, Any]:
             selected_pmids = merge_pmids(pmids) if pmids else pmids

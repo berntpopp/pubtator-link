@@ -50,7 +50,7 @@ def register_export_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             Field(description="Bundle verbosity: 'compact' (default) or 'full'."),
         ] = "compact",
     ) -> dict[str, Any]:
-        """Use this when a user needs to export review preparation status, source coverage, resolver attempts, retrieval runs, passage IDs, and stable citation keys for scientific auditability."""
+        """Use this when a user needs to export review preparation status, source coverage, resolver attempts, retrieval runs, passage IDs, and stable citation keys for scientific auditability; returns them as one audit bundle."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_review_audit_service()

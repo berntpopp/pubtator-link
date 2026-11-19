@@ -49,7 +49,7 @@ def register_passages_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             Field(ge=100, le=20000, description="Character cap per returned passage."),
         ] = 2200,
     ) -> dict[str, Any]:
-        """Use this when a user needs exact prepared review passages by stable passage IDs from prior context packs or audit bundles. This only reads the review index and does not call upstream APIs."""
+        """Use this when a user needs exact prepared review passages by stable passage IDs from prior context packs or audit bundles; returns those passages with text and citation metadata. This only reads the review index and does not call upstream APIs."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_review_context_service()
@@ -97,7 +97,7 @@ def register_passages_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             Field(ge=100, le=20000, description="Character cap per audited passage."),
         ] = 500,
     ) -> dict[str, Any]:
-        """Use this when a user needs a copy-ready audit block for selected prepared review passage IDs or the latest recorded audit passages without calling upstream APIs."""
+        """Use this when a user needs a copy-ready audit block for selected prepared review passage IDs or the latest recorded audit passages without calling upstream APIs; returns that audit block."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_review_context_service()
@@ -157,7 +157,7 @@ def register_passages_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             Field(ge=100, le=20000, description="Character cap per returned passage."),
         ] = 2200,
     ) -> dict[str, Any]:
-        """Use this when a user needs prepared review passages near a cited stable passage ID for local context expansion. This only reads the review index and does not call upstream APIs."""
+        """Use this when a user needs prepared review passages near a cited stable passage ID for local context expansion; returns the neighboring passages with stable passage IDs and text. This only reads the review index and does not call upstream APIs."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_review_context_service()

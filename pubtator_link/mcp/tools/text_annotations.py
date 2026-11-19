@@ -66,7 +66,7 @@ def register_text_annotation_tools(mcp: FastMCP, profile: MCPToolProfile = "lean
                 Field(ge=1000, le=30000, description="Inline-wait budget in milliseconds."),
             ] = 30000,
         ) -> dict[str, Any]:
-            """Use this when research text should be submitted for PubTator biomedical named entity recognition. Do not use this for PubMed or PMC IDs; use get_publication_annotations. Next: get_text_annotation_results."""
+            """Use this when research text should be submitted for PubTator biomedical named entity recognition; returns a session ID for get_text_annotation_results. Do not use this for PubMed or PMC IDs; use get_publication_annotations. Next: get_text_annotation_results."""
 
             async def call() -> dict[str, Any]:
                 client = await get_api_client()
@@ -99,7 +99,7 @@ def register_text_annotation_tools(mcp: FastMCP, profile: MCPToolProfile = "lean
             ),
         ],
     ) -> dict[str, Any]:
-        """Use this when a user has a PubTator text annotation session ID and needs its results. Do not use this for entity lookup from names; use search_biomedical_entities. Next: search_biomedical_entities."""
+        """Use this when a user has a PubTator text annotation session ID and needs its results; returns the annotated text with entity mentions and IDs once ready. Do not use this for entity lookup from names; use search_biomedical_entities. Next: search_biomedical_entities."""
 
         async def call() -> dict[str, Any]:
             client = await get_api_client()

@@ -154,7 +154,7 @@ def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
             ),
         ] = None,
     ) -> dict[str, Any]:
-        """Use this when a client needs supported tools, transports, formats, and limitations. Do not use this for task-specific workflow guidance; use workflow_help. Next: workflow_help."""
+        """Use this when a client needs supported tools, transports, formats, and limitations; returns those lists in one capability record. Do not use this for task-specific workflow guidance; use workflow_help. Next: workflow_help."""
 
         async def call() -> dict[str, Any]:
             return get_capabilities_resource(
@@ -182,7 +182,7 @@ def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
             ),
         ] = "clinical_genetics_review",
     ) -> dict[str, Any]:
-        """Use this when a fresh context needs the canonical PubTator-Link research workflow."""
+        """Use this when a fresh context needs the canonical PubTator-Link research workflow: returns ordered workflow steps with the tool to call at each."""
 
         async def call() -> dict[str, Any]:
             return WorkflowHelpService(profile=profile).get_help(task).model_dump(by_alias=True)

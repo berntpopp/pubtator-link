@@ -112,7 +112,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         ] = True,
         ctx: Context | None = None,
     ) -> dict[str, Any]:
-        """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export. Use a short keyword query and PMID filters. If zero passages are returned, simplify the query, inspect the review index, or fall back to get_publication_annotations."""
+        """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export; returns ranked citable passages with stable passage IDs and PMIDs. Use a short keyword query and PMID filters. If zero passages are returned, simplify the query, inspect the review index, or fall back to get_publication_annotations."""
 
         async def call() -> dict[str, Any]:
             selected_question = question
@@ -265,7 +265,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         ] = True,
         ctx: Context | None = None,
     ) -> dict[str, Any]:
-        """Use this when a user wants multiple short review retrieval query variants in one call. Default compact mode uses query_fair budgeting, merged passages, per-query summaries, and next_steps for zero-result queries. Use response_mode="quotes" for short citable snippets or dry_run for diagnostics without passage text."""
+        """Use this when a user wants multiple short review retrieval query variants in one call; returns merged citable passages and per-query summaries. Compact (default): query_fair budgeting, next_steps for zero-result queries. Use response_mode="quotes" for short citable snippets or dry_run for diagnostics without passage text."""
 
         async def call() -> dict[str, Any]:
             selected_pmids = merge_pmids(pmids, None, max_items=100) if pmids else None
@@ -449,7 +449,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             str | None, Field(max_length=200, description="Recorded-by attribution.")
         ] = None,
     ) -> dict[str, Any]:
-        """Use this when a user needs to persist compact LLM review context, selected evidence IDs, decisions, or next-step state without storing article text."""
+        """Use this when a user needs to persist compact LLM review context, selected evidence IDs, decisions, or next-step state without storing article text; returns the stored context record."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_llm_review_context_service()

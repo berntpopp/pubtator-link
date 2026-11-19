@@ -93,7 +93,7 @@ def register_evidence_certainty_tools(mcp: FastMCP, profile: MCPToolProfile) -> 
             Field(description="Verify the passage_ids exist in the review index before storing."),
         ] = False,
     ) -> dict[str, Any]:
-        """Use this when a user needs to store a user-supplied GRADE-style evidence certainty judgment linked to prepared passage IDs. The backend stores the judgment; it does not compute certainty."""
+        """Use this when a user needs to store a user-supplied GRADE-style evidence certainty judgment linked to prepared passage IDs; returns the stored judgment record. The backend stores the judgment; it does not compute certainty."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_review_evidence_certainty_service()
@@ -135,7 +135,7 @@ def register_evidence_certainty_tools(mcp: FastMCP, profile: MCPToolProfile) -> 
             ),
         ],
     ) -> dict[str, Any]:
-        """Use this when a user needs user-supplied evidence certainty judgments for a review."""
+        """Use this when a user needs user-supplied evidence certainty judgments for a review; returns the stored judgments for that review."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_review_evidence_certainty_service()
@@ -171,7 +171,7 @@ def register_evidence_certainty_tools(mcp: FastMCP, profile: MCPToolProfile) -> 
             ),
         ],
     ) -> dict[str, Any]:
-        """Use this when a user needs one user-supplied evidence certainty judgment."""
+        """Use this when a user needs one user-supplied evidence certainty judgment: returns that judgment with its linked passage IDs."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_review_evidence_certainty_service()
