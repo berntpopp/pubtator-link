@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [7.5.4] - 2026-11-19
+
+- `search_literature` description lead names biomedical literature (PubMed articles) again, restoring its search ranking.
+
 ## [7.5.3] - 2026-11-19
 
 - Tool descriptions lead with what each tool returns (D1, Tool-Schema Documentation v1.1).
