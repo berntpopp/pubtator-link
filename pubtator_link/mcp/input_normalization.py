@@ -4,10 +4,17 @@ from typing import Any
 
 
 class InputNormalizationError(ValueError):
-    def __init__(self, field_errors: list[dict[str, str]], recovery_hint: str) -> None:
+    def __init__(
+        self,
+        field_errors: list[dict[str, str]],
+        recovery_hint: str,
+        next_command: dict[str, Any] | None = None,
+    ) -> None:
         super().__init__("invalid MCP arguments")
         self.field_errors = field_errors
         self.recovery_hint = recovery_hint
+        # A different tool that accepts the input as given (never a replay of this call).
+        self.next_command = next_command
 
 
 def _warning(field: str, normalized_to: str, message: str) -> dict[str, str]:

@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [7.5.1] - 2026-11-19
+
+### Fixed
+
+- A PMCID (e.g. `PMC3518823`) passed where PMIDs are expected is now rejected with an
+  `invalid_input` that says "PMIDs only", sets `fallback_tool: convert_article_ids` and puts
+  the exact conversion call in `_meta.next_commands` (#267). Applies to every tool that takes
+  PMIDs.
+- Guard test: `get_publication_passages` advertises the same `max_chars` maximum its request
+  model enforces (the 60000-vs-50000 mismatch and the opaque error in #267 were already fixed
+  in 7.2.0/7.3.1; `dropped` rows are already counts-only below `verbosity="full"`).
+
 ## [7.5.0] - 2026-11-18
 
 ### Fixed

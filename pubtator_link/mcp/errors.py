@@ -585,6 +585,8 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> dict[str, Any]:
     argument_error = isinstance(exc, InputNormalizationError)
     if argument_error:  # a fallback would replay the same bad arguments (and echo them)
         fallback_tool, fallback_args, next_commands = None, None, []
+        if isinstance(exc, InputNormalizationError) and exc.next_command is not None:
+            fallback_tool, next_commands = exc.next_command["tool"], [exc.next_command]
     else:
         next_commands.append({"tool": "diagnostics", "arguments": {}})
     payload: dict[str, Any] = {
