@@ -149,8 +149,17 @@ def test_merge_pmids_names_the_list_field_for_empty_and_oversized_input() -> Non
 
 
 @pytest.mark.parametrize("profile", ["full", "readonly"])
-async def test_pmcid_in_pmids_points_to_convert_article_ids(profile: str) -> None:
-    """A PMCID is a caller-fixable ID-kind error, not an upstream failure (#267)."""
+async def test_pmcid_in_pmids_points_to_convert_article_ids(
+    profile: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A PMCID that does not convert is a caller-fixable ID-kind error (#267, router #319)."""
+    import pubtator_link.mcp.argument_aliases as aliases
+
+    async def no_converter() -> object:
+        raise RuntimeError("converter unavailable")
+
+    monkeypatch.setattr(aliases, "get_discovery_service", no_converter)
+    monkeypatch.setattr(aliases, "_resolved_pmids", {})
     mcp = create_pubtator_mcp(profile=profile)
     async with Client(mcp) as client:
         result = await client.call_tool(

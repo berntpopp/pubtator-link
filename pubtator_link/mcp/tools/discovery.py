@@ -10,11 +10,11 @@ from pubtator_link.api.routes.dependencies import (
     get_discovery_service,
 )
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
-from pubtator_link.mcp.argument_aliases import merge_pmids
+from pubtator_link.mcp.argument_aliases import merge_pmids, resolve_pmids, with_resolved_from
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.service_adapters import suggest_corpus_impl
-from pubtator_link.mcp.tools._vocab import Pmid
+from pubtator_link.mcp.tools._vocab import ArticleId, Pmid
 from pubtator_link.models.discovery import ArticleIdKind, RelatedArticleMode
 
 
@@ -191,11 +191,11 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
     )
     async def find_related_articles(
         pmids: Annotated[
-            list[Pmid],
+            list[ArticleId],
             Field(
                 min_length=1,
                 max_length=100,
-                description="Seed PMIDs to expand from.",
+                description="Seed PMIDs (or PMCIDs/DOIs, converted) to expand from.",
                 examples=[["25741868"]],
             ),
         ],
@@ -215,7 +215,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
         """Use this when a user has seed PMIDs and needs similar, cited-by, or reference-linked articles to expand a research corpus; returns related PMIDs with title, journal, year and relation."""
 
         async def call() -> dict[str, Any]:
-            selected_pmids = merge_pmids(pmids, None, max_items=100)
+            selected_pmids, resolved_from = await resolve_pmids(pmids, max_items=100)
             service = await get_discovery_service()
             response = await service.find_related_articles(
                 pmids=selected_pmids,
@@ -223,7 +223,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
                 limit=limit,
                 profile=profile,
             )
-            return response.model_dump(by_alias=True)
+            return with_resolved_from(response.model_dump(by_alias=True), resolved_from)
 
         try:
             tool_pmids = merge_pmids(pmids, None, max_items=100)

@@ -12,7 +12,8 @@
 # (Tool-Schema Documentation Standard v1). Decomposition: split build_topic_literature_map into
 # its own module (publications.py) and extract the error-code canon into error_codes.py (errors.py).
 # Raised 628 -> 634 for the format=pubtator + full=true up-front rejection (#231).
-pubtator_link/mcp/tools/publications.py:634
+# Raised 634 -> 645: PMCID/DOI accepted + resolved_from echo (genefoundry-router #319).
+pubtator_link/mcp/tools/publications.py:645
 # Raised 691 -> 703 for the pydantic internal-vs-input split + field_errors (#248); split planned above.
 pubtator_link/mcp/errors.py:703
 pubtator_link/repositories/review_rerag.py:2393
