@@ -314,3 +314,20 @@ def test_unknown_noninformative_coverage_hint_is_omitted() -> None:
     )
 
     assert result.model_dump(exclude_none=True).get("coverage_hint") is None
+
+
+@pytest.mark.asyncio
+async def test_pubtator_probes_read_the_live_pubtator3_export_key() -> None:
+    from unittest.mock import AsyncMock
+
+    client = AsyncMock()
+    client.export_pmc_publications.return_value = {"PubTator3": [{"id": "123"}]}
+
+    async def id_converter(_pmid: str) -> dict[str, str]:
+        return {"pmcid": "PMC123"}
+
+    service = SourcePreflightService.from_pubtator_client(client, id_converter=id_converter)
+
+    hints = await service.preflight_pmids(["40234174"])
+
+    assert hints[0].coverage_reason == "pmc_oa_bioc"

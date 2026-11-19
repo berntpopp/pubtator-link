@@ -47,6 +47,9 @@ class PublicationAnnotation(BaseModel):
     id: str = Field(..., description="Annotation ID")
     infons: dict[str, Any] = Field(default_factory=dict, description="Annotation metadata")
     text: str | None = Field(default=None, description="Annotation text")
+    passages: list[dict[str, Any]] = Field(
+        default_factory=list, description="BioC passages carrying the full text"
+    )
     annotations: list[dict[str, Any]] = Field(
         default_factory=list, description="List of annotations"
     )
