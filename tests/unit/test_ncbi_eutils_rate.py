@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import logging
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
 
 import httpx
 import pytest
@@ -18,11 +22,17 @@ from pubtator_link.services.publication_metadata import NcbiPublicationMetadataC
 KEY = "abc123secretkey0000000000000000000"
 
 
+@pytest.fixture(autouse=True)
+def _private_rate_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Keep this file's timing assertions away from other xdist workers' requests.
+    monkeypatch.setattr(ncbi_eutils_rate, "RATE_FILE", tmp_path / "ncbi.rate")
+    monkeypatch.setattr(ncbi_eutils_rate, "_limiter", None)
+
+
 def test_bucket_is_3_per_second_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "ncbi_api_key", None)
     limiter = ncbi_eutils_rate.eutils_rate_limiter()
     assert limiter.rate == 3.0
-    assert limiter.burst == 1.0
     assert ncbi_eutils_rate.eutils_rate_limiter() is limiter  # one process-wide bucket
     assert ncbi_eutils_rate.ncbi_api_key_params() == {}
 
@@ -36,7 +46,6 @@ async def test_bucket_spaces_requests_at_the_configured_rate(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "ncbi_api_key", None)
-    monkeypatch.setattr(ncbi_eutils_rate, "_limiter", None)
     waits = [await ncbi_eutils_rate.eutils_rate_limiter().acquire() for _ in range(3)]
     assert waits[0] == 0.0
     assert all(wait == pytest.approx(1 / 3, abs=0.05) for wait in waits[1:])
@@ -103,3 +112,63 @@ def test_health_reports_has_api_key_never_the_value(
     response = TestClient(UnifiedServerManager().create_app(include_mcp=False)).get("/health")
     assert response.json()["has_api_key"] is (key is not None)
     assert KEY not in response.text
+
+
+_WORKER = textwrap.dedent(
+    """
+    import asyncio, sys, time
+    from pathlib import Path
+    from pubtator_link.services.ncbi_eutils_rate import SharedRateLimiter
+
+    async def main():
+        limiter = SharedRateLimiter(rate=10.0, path=Path(sys.argv[1]))
+        print("ready", flush=True)
+        sys.stdin.readline()
+        for _ in range(10):
+            await limiter.acquire()
+            print(time.time(), flush=True)
+
+    asyncio.run(main())
+    """
+)
+
+
+def test_two_processes_share_one_bucket(tmp_path: Path) -> None:
+    """Two worker processes together stay at 10 req/s (unshared they would do 20)."""
+    procs = [
+        subprocess.Popen(  # noqa: S603 - fixed argv, our own interpreter
+            [sys.executable, "-c", _WORKER, str(tmp_path / "shared.rate")],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        for _ in range(2)
+    ]
+    for proc in procs:  # both imported and waiting, so their acquires overlap
+        assert proc.stdout is not None and proc.stdout.readline().strip() == "ready"
+    for proc in procs:
+        assert proc.stdin is not None
+        proc.stdin.write("go\n")
+        proc.stdin.flush()
+    stamps: list[float] = []
+    for proc in procs:
+        stamps += map(float, proc.communicate(timeout=30)[0].split())
+    stamps.sort()
+    assert len(stamps) == 20
+    # Never more than 10 grants in any 1 s window across both processes.
+    assert min(b - a for a, b in zip(stamps, stamps[10:], strict=False)) >= 0.95
+    assert stamps[-1] - stamps[0] >= 1.85
+
+
+async def test_unusable_rate_file_falls_back_to_process_bucket(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(settings, "ncbi_api_key", SecretStr(KEY))
+    monkeypatch.setattr(ncbi_eutils_rate, "RATE_FILE", tmp_path / "missing-dir" / "x.rate")
+    limiter = ncbi_eutils_rate.eutils_rate_limiter()
+    with caplog.at_level(logging.WARNING):
+        waits = [await limiter.acquire() for _ in range(2)]
+    assert waits[0] == 0.0
+    assert waits[1] == pytest.approx(1 / 10, abs=0.05)  # still throttled
+    assert "falling back to a per-process bucket" in caplog.text
+    assert KEY not in caplog.text
