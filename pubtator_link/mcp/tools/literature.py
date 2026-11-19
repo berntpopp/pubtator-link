@@ -194,7 +194,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             Field(description="Include the _meta orientation block (next_commands, provenance)."),
         ] = True,
     ) -> dict[str, Any]:
-        """Use this when a user needs to search PubMed through PubTator3: returns ranked articles with PMID, title, journal, year and citation. Supports flat filters, section filters, and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false means continue with results or inspect diagnostics."""
+        """Use this when a user needs PubMed biomedical literature search via PubTator3: returns ranked articles (PMID, title, journal, year, citation). Supports flat and section filters and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false: continue with results or inspect diagnostics."""
         arguments = {k: v for k, v in locals().items() if v is not None and k not in _CLOSURE}
 
         async def call() -> dict[str, Any]:

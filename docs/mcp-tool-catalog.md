@@ -580,7 +580,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `literature`
 - Profiles: `lean`, `full`, `readonly`
 - Stability: `lean`
-- Description: Use this when a user needs to search PubMed through PubTator3: returns ranked articles with PMID, title, journal, year and citation. Supports flat filters, section filters, and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false means continue with results or inspect diagnostics.
+- Description: Use this when a user needs PubMed biomedical literature search via PubTator3: returns ranked articles (PMID, title, journal, year, citation). Supports flat and section filters and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false: continue with results or inspect diagnostics.
 - Do not use for: `fetching known PMID passage text`
 - Example: `{"text":"BRCA1 ovarian cancer PARP inhibitor","limit":5,"metadata":"basic"}`
 - Next tools by profile: lean: `preflight_review_sources`; full: `preflight_review_sources`; readonly: `preflight_review_sources`

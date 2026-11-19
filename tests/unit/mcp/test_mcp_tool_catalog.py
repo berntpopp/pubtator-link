@@ -129,7 +129,7 @@ def test_lead_states_what_is_returned_within_reranker_window() -> None:
     catalog = build_tool_catalog(create_pubtator_mcp(profile="full"), profile="full")
     leads = {
         "get_publication_passages": ("returns", "full text", "figure", "table"),
-        "search_literature": ("returns", "PMID", "title"),
+        "search_literature": ("literature", "PubMed", "returns", "PMID", "title"),
     }
     for name, words in leads.items():
         head = catalog[name].description[:300]
