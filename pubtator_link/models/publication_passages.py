@@ -154,6 +154,13 @@ class PublicationPassageResponse(BaseModel):
             {drop.section for drop in self.dropped if drop.reason in cut and drop.section}
         )
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def truncated_for_budget_pmids(self) -> list[str]:
+        """PMIDs whose existing passages ``max_chars`` cut; re-fetch them on their own (#282)."""
+        cut = {drop.pmid for drop in self.dropped if drop.reason == "char_budget_exceeded"}
+        return [pmid for pmid in self.pmids if pmid in cut]
+
     def model_dump_mcp(self, verbosity: Verbosity = "standard") -> dict[str, object]:
         """Serialize with external passage prose fenced for the MCP boundary.
 
@@ -208,6 +215,7 @@ class MCPPublicationPassageResponse(BaseModel):
     dropped: list[PassageDropReason] = Field(default_factory=list)
     dropped_summary: dict[str, dict[str, int]] = Field(default_factory=dict)
     truncated_sections: list[str] = Field(default_factory=list)
+    truncated_for_budget_pmids: list[str] = Field(default_factory=list)
     context_estimate: PublicationContextEstimate
     coverage_by_pmid: dict[str, PublicationCoverage] = Field(default_factory=dict)
     coverage_reason_by_pmid: dict[str, str] = Field(default_factory=dict)

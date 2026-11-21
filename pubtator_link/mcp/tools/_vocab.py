@@ -56,6 +56,7 @@ PublicationType = Literal[
     "Multicenter Study",
     "Clinical Study",
     "Validation Study",
+    "Retracted Publication",
 ]
 
 # Every PMID tool input advertises exactly what normalize_pmid accepts. Schema-only: the tools

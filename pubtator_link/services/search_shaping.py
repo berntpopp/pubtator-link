@@ -167,7 +167,7 @@ def shaped_search_result(
         pmcid=item.get("pmcid"),
         doi=item.get("doi"),
         date=item.get("date"),
-        text_hl=_shape_text_hl(item.get("text_hl"), text_hl_format) if include_text_hl else None,
+        text_hl=shape_text_hl(item.get("text_hl"), text_hl_format) if include_text_hl else None,
         citations=_shape_citations(item.get("citations"), include_citations),
         recommended_citation=_recommended_citation(item, raw_authors),
         volume=item.get("volume") or item.get("meta_volume"),
@@ -460,11 +460,12 @@ def selected_search_items(
     return selected[offset : offset + limit] if limit is not None else selected[offset:]
 
 
-def _shape_text_hl(value: str | None, mode: TextHighlightFormat) -> str | None:
+def shape_text_hl(value: str | None, mode: TextHighlightFormat) -> str | None:
     if value is None or mode == "annotated":
         return value
     text = re.sub(r"@@@([^@]+)@@@", r"\1", value)
-    text = re.sub(r"@\w+(?::[\w.-]+)?", "", text)
+    # Entity tags are whitespace-free runs (tmVar ones carry |;: payloads, #280); keep e-mails.
+    text = re.sub(r"(?<![\w@])@[A-Za-z]+_\S*", "", text)
     text = re.sub(r"</?m>", "", text)
     return " ".join(text.split())
 

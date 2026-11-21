@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [7.7.3] - 2026-11-21
+
+### Fixed
+
+- `search_literature` plain `text_hl` no longer leaks PubTator3 entity-tag payloads
+  (`|SUB|V|61|F;CorrespondingGene:...`), including upstream tmVar normalisations that name a
+  different residue than the text (`p.V61F` for V617F); `get_variant_evidence` snippets are
+  plainified the same way (#280).
+- `search_literature` year ranges (`year_max`, `year_min`+`year_max`) are paged through with
+  PubTator3's year facets instead of being trimmed from the newest page: the first page holds
+  matches and `total_results` counts the whole range, not `0` (#281).
+- `get_publication_passages` marks PMIDs whose passages `max_chars` cut as
+  `truncated_for_budget` (listed in `truncated_for_budget_pmids`, with a warning) instead of
+  `title_only_metadata`, and no longer lists them as failed (#282).
+- `search_literature` `filters` accepts the object form (e.g. `{"type":["Retracted
+  Publication"]}`; `Retracted Publication` added to the publication-type vocabulary), and a
+  malformed value is rejected as `invalid_input` instead of being ignored with a warning (#282).
+
 ## [7.7.2] - 2026-11-19
 
 ### Fixed

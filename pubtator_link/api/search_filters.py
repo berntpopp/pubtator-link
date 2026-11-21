@@ -21,6 +21,8 @@ from typing import Any
 
 MIN_SEARCH_YEAR = 1800
 MAX_SEARCH_YEAR = 2030
+# PubTator3 returns at most this many year-facet buckets (live 2026-11-21).
+_YEAR_FACET_CAP = 100
 
 _YEAR_RE = re.compile(r"\b(18\d{2}|19\d{2}|20\d{2})\b")
 
@@ -47,6 +49,7 @@ VALID_PUBLICATION_TYPES: frozenset[str] = frozenset(
         "Multicenter Study",
         "Clinical Study",
         "Validation Study",
+        "Retracted Publication",
     }
 )
 
@@ -314,6 +317,31 @@ def apply_year_window(
             continue
         selected.append(item)
     return selected
+
+
+def year_facet_counts(
+    result: dict[str, Any], year_min: int | None, year_max: int | None
+) -> tuple[int, int] | None:
+    """``(newer_than_window, in_window)`` hit counts from PubTator3's year facet, if present.
+
+    Returns ``None`` without a facet, or when it hit PubTator3's 100-year cap: the dropped
+    (rarest, usually oldest) years could be the window, and an undercount would end paging early.
+    """
+    facet = ((result.get("facets") or {}).get("facet_fields") or {}).get("year")
+    # ponytail: capped facets fall back to the single-page trim; per-year queries would cover them.
+    if not isinstance(facet, list) or not facet or len(facet) >= _YEAR_FACET_CAP:
+        return None
+    newer = in_window = 0
+    for entry in facet:
+        try:
+            year, count = int(entry["name"]), int(entry["value"])
+        except KeyError, TypeError, ValueError:
+            continue
+        if year_max is not None and year > year_max:
+            newer += count
+        elif year_min is None or year >= year_min:
+            in_window += count
+    return newer, in_window
 
 
 def _ignored_filters_warning(reason: str) -> str:
