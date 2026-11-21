@@ -635,6 +635,39 @@ class TestSearchRoutes:
         assert pmids == ["1"]
 
     @patch.object(PubTator3Client, "search_publications")
+    def test_search_publications_pages_year_max_to_matches(self, mock_search, test_client):
+        """#281: REST year_max uses the shared facet paging, not a newest-page trim."""
+        counts = {2026: 1500, 2006: 53, 2005: 12}
+        dates = [y for y in sorted(counts, reverse=True) for _ in range(counts[y])]
+
+        async def fake_search(*, text, page, sort, filters, sections):
+            chunk = dates[(page - 1) * 10 : page * 10]
+            return {
+                "results": [
+                    {"pmid": f"{y}{i}", "title": "t", "date": f"{y}-01-01T00:00:00Z"}
+                    for i, y in enumerate(chunk)
+                ],
+                "count": len(dates),
+                "page_size": 10,
+                "total_pages": -(-len(dates) // 10),
+                "facets": {
+                    "facet_fields": {
+                        "year": [{"name": str(y), "value": n} for y, n in counts.items()]
+                    }
+                },
+            }
+
+        mock_search.side_effect = fake_search
+        response = test_client.get(
+            "/api/search/", params=[("text", "JAK2"), ("year_max", "2005"), ("limit", "20")]
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert {r["pmid"][:4] for r in body["results"]} == {"2005"}
+        assert body["total_results"] == 12
+
+    @patch.object(PubTator3Client, "search_publications")
     def test_search_publications_rejects_flat_filter_conflict(self, mock_search, test_client):
         """Test route rejects duplicate raw and flat publication type filters."""
         response = test_client.get(

@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [7.7.4] - 2026-11-21
+
+### Fixed
+
+- The REST `/api/search/` route and the research-session search now page year ranges with
+  the same shared PubTator3 year-facet paging as `search_literature`, instead of trimming the
+  newest page (often to nothing) (#281).
+- A year-range page that can hide matches is never a bare empty success: when the year
+  facet hit PubTator3's 100-year cap, the range is too deep to page to, or no facet/date
+  order is available, the response carries a warning, `total_results_is_lower_bound`, and a
+  `next_year_filter` exact-year search, which `search_literature` leads `_meta.next_commands`
+  with. Search responses now also surface their `warnings`.
+
 ## [7.7.3] - 2026-11-21
 
 ### Fixed

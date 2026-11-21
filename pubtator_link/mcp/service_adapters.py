@@ -595,9 +595,8 @@ async def search_literature_impl(
         response.source_versions["pubtator3_filtering"] = "year_range_local"
     elif filter_note == "year_range_paged":
         response.message = (
-            "PubTator3 filters only an exact year server-side; the year range was resolved with "
-            "its year facets, so total_results counts the whole range and pages step through it "
-            "newest-first."
+            "PubTator3 filters only an exact year server-side; the year range was paged newest-first "
+            "with its year facets (total_results is a lower bound if total_results_is_lower_bound)."
         )
         response.source_versions["pubtator3_filtering"] = "year_range_paged"
     dumped = fence_search_abstracts(dump_search_response(response, response_mode=response_mode))
@@ -606,7 +605,8 @@ async def search_literature_impl(
     else:
         for field in ("cache_key", "corpus_snapshot_date", "source_versions"):
             dumped.pop(field, None)
-    warnings = [w for w in (filter_warning, sort_warning, abstract_warning) if w]
+    extra = (filter_warning, sort_warning, abstract_warning)
+    warnings = [*(dumped.get("warnings") or []), *(w for w in extra if w)]
     return dumped | ({"warnings": warnings} if warnings else {})
 
 

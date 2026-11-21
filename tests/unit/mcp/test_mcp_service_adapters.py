@@ -4118,7 +4118,7 @@ async def test_search_literature_plain_text_hl_strips_tmvar_annotation_payload()
     )
 
 
-def _year_facet_client(counts: dict[int, int], page_size: int = 10):
+def _year_facet_client(counts: dict[int, int], page_size: int = 10, facet_cap: int = 100):
     """Fake PubTator3 search over `counts` papers per year, newest first, with year facets."""
 
     class YearFacetClient:
@@ -4140,7 +4140,10 @@ def _year_facet_client(counts: dict[int, int], page_size: int = 10):
                 "total_pages": -(-len(dates) // page_size),
                 "facets": {
                     "facet_fields": {
-                        "year": [{"name": str(y), "value": n} for y, n in counts.items()]
+                        "year": [
+                            {"name": str(y), "value": n}
+                            for y, n in sorted(counts.items(), key=lambda kv: -kv[1])[:facet_cap]
+                        ]
                     }
                 },
             }
@@ -4216,18 +4219,90 @@ async def test_search_literature_rejects_malformed_filters() -> None:
             await search_literature_impl(client=NeverCalled(), text="x", filters=bad)
 
 
-def test_year_facet_counts_ignores_a_capped_facet() -> None:
-    from pubtator_link.api.search_filters import year_facet_counts
+def test_year_facet_counts_flags_a_capped_facet() -> None:
+    from pubtator_link.api.search_filters import YearFacet, year_facet_counts
 
     capped = {
         "facets": {
             "facet_fields": {"year": [{"name": str(1900 + i), "value": 1} for i in range(100)]}
         }
     }
-    assert year_facet_counts(capped, None, 1950) is None
+    assert year_facet_counts(capped, None, 1950) == YearFacet(49, 51, False, 1950)
     small = {
         "facets": {
             "facet_fields": {"year": [{"name": "2026", "value": 9}, {"name": "2005", "value": 2}]}
         }
     }
-    assert year_facet_counts(small, None, 2005) == (9, 2)
+    assert year_facet_counts(small, None, 2005) == YearFacet(9, 2, True, 2005)
+    assert year_facet_counts({}, None, 2005) is None
+
+
+@pytest.mark.asyncio
+async def test_search_literature_capped_year_facet_still_pages_to_the_range() -> None:
+    """A capped facet (oldest, rarest years missing) still lands on the range, never ends early."""
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    counts = {2026: 40, 2020: 30} | {1900 + i: 2 for i in range(100)}  # 102 years, cap drops 2
+    client = _year_facet_client(counts)
+    result = await search_literature_impl(
+        client=client, text="x", year_max=1950, metadata="none", limit=None
+    )
+
+    assert result["results"], "matches exist in the range"
+    assert {item["pmid"][:4] for item in result["results"]} <= {str(y) for y in range(1900, 1951)}
+    assert result["total_results_is_lower_bound"] is True
+    assert result["has_more"] is True  # 102 in-range hits, page 1 cannot hold them all
+
+
+@pytest.mark.asyncio
+async def test_search_literature_empty_trimmed_page_points_at_an_exact_year() -> None:
+    """A relevance-sorted range page with no in-range hit is never a bare empty success."""
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+    from pubtator_link.mcp.tools.literature import with_next_page_command
+
+    client = _year_facet_client({2026: 30, 2006: 53, 2005: 12})
+    result = await search_literature_impl(
+        client=client, text="x", year_max=2005, sort="score desc", metadata="none", limit=3
+    )
+
+    assert result["results"] == []
+    assert result["next_year_filter"] == {"year_min": 2005, "year_max": 2005}
+    assert any("year_min=year_max=2005" in w for w in result["warnings"])
+    args = {"text": "x", "year_max": 2005, "sort": "score desc", "limit": 3}
+    commands = with_next_page_command(result, "search_literature", args)["_meta"]["next_commands"]
+    assert commands[0]["arguments"] | {} == args | {
+        "year_min": 2005,
+        "year_max": 2005,
+        "page": 1,
+        "offset": 0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_route_search_provider_pages_year_ranges() -> None:
+    """The review/research-session search uses the same year-range paging (#281)."""
+    from pubtator_link.api.routes.dependencies.review import _RouteSearchProvider
+    from pubtator_link.models.review_rerag import StageResearchSessionRequest
+
+    provider = _RouteSearchProvider(_year_facet_client({2026: 1500, 2006: 53, 2005: 12}))
+    response = await provider.search(StageResearchSessionRequest(query="JAK2", year_max=2005))
+
+    assert response.results
+    assert {result.pmid[:4] for result in response.results} == {"2005"}
+    assert response.total_results == 12
+
+
+@pytest.mark.asyncio
+async def test_search_literature_too_deep_year_range_points_at_an_exact_year() -> None:
+    """Past PubTator3's page reach the range gets an exact-year next step, not an error."""
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    client = _year_facet_client({2026: 600_000, 1950: 4})
+    result = await search_literature_impl(
+        client=client, text="cancer", year_max=1950, metadata="none", limit=3
+    )
+
+    assert len(client.calls) == 1  # no deep upstream call
+    assert result["success"] is True and result["results"] == []
+    assert result["total_results"] == 4
+    assert result["next_year_filter"] == {"year_min": 1950, "year_max": 1950}

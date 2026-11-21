@@ -319,19 +319,29 @@ def apply_year_window(
     return selected
 
 
+@dataclass(frozen=True)
+class YearFacet:
+    """Hit counts from PubTator3's year facet relative to a year window."""
+
+    newer: int  # hits newer than the window (lower bound when not ``complete``)
+    in_window: int  # hits inside the window (lower bound when not ``complete``)
+    complete: bool  # False when the facet hit PubTator3's 100-year cap
+    newest_in_window: int | None  # newest window year with hits: an exact-year search finds them
+
+
 def year_facet_counts(
     result: dict[str, Any], year_min: int | None, year_max: int | None
-) -> tuple[int, int] | None:
-    """``(newer_than_window, in_window)`` hit counts from PubTator3's year facet, if present.
+) -> YearFacet | None:
+    """Count newer / in-window hits from PubTator3's year facet; ``None`` without a facet.
 
-    Returns ``None`` without a facet, or when it hit PubTator3's 100-year cap: the dropped
-    (rarest, usually oldest) years could be the window, and an undercount would end paging early.
+    A capped facet drops the rarest years, so both counts can only be undercounts: a
+    newest-first jump past ``newer`` hits lands at or before the window, never past a match.
     """
     facet = ((result.get("facets") or {}).get("facet_fields") or {}).get("year")
-    # ponytail: capped facets fall back to the single-page trim; per-year queries would cover them.
-    if not isinstance(facet, list) or not facet or len(facet) >= _YEAR_FACET_CAP:
+    if not isinstance(facet, list) or not facet:
         return None
     newer = in_window = 0
+    newest: int | None = None
     for entry in facet:
         try:
             year, count = int(entry["name"]), int(entry["value"])
@@ -341,7 +351,9 @@ def year_facet_counts(
             newer += count
         elif year_min is None or year >= year_min:
             in_window += count
-    return newer, in_window
+            if count and (newest is None or year > newest):
+                newest = year
+    return YearFacet(newer, in_window, len(facet) < _YEAR_FACET_CAP, newest)
 
 
 def _ignored_filters_warning(reason: str) -> str:
