@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 
+from ...mcp.search_fallback import search_publications_with_filter_fallback
 from ...models.requests import SearchRequest, SearchSection, SearchSortOrder
 from ...models.responses import SearchResponse
 from ...services.publication_metadata import lookup_metadata_batched
@@ -19,7 +20,7 @@ from ...services.search_shaping import (
     selected_search_items,
     shaped_search_response,
 )
-from ..search_filters import apply_year_window, build_search_filter_plan
+from ..search_filters import build_search_filter_plan
 from .dependencies import (
     ClientDep,
     PublicationMetadataServiceDep,
@@ -442,23 +443,14 @@ async def search_publications(
 
     # Call PubTator3 API
     try:
-        result = await client.search_publications(
+        result, _ = await search_publications_with_filter_fallback(
+            client=client,
             text=request.text,
             page=request.page,
             sort=request.sort.value if request.sort else None,
-            filters=merged_filters,
+            plan=filter_plan,
             sections=(",".join([s.value for s in request.sections]) if request.sections else None),
         )
-
-        if filter_plan.has_local_year_window:
-            # PubTator3 only filters by an exact year server-side; apply the
-            # requested year range locally over this page (best-effort).
-            trimmed = apply_year_window(
-                list(result.get("results", [])),
-                filter_plan.local_year_min,
-                filter_plan.local_year_max,
-            )
-            result = {**result, "results": trimmed, "count": len(trimmed), "total_pages": 1}
 
         raw_items = selected_search_items(
             list(result.get("results", [])),

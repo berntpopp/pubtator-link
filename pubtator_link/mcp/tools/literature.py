@@ -37,10 +37,22 @@ _CLOSURE = frozenset({"mcp", "profile"})
 def with_next_page_command(
     result: dict[str, Any], tool: str, arguments: dict[str, Any]
 ) -> dict[str, Any]:
-    """Point `_meta.next_commands` at the next unseen hit when the search has more (#265)."""
-    if result.get("has_more") and isinstance(result.get("_meta"), dict):
+    """Point `_meta.next_commands` at the next unseen hit when the search has more (#265).
+
+    A year-range page that hides matches leads with the exact-year search that reaches them.
+    """
+    if not isinstance(result.get("_meta"), dict):
+        return result
+    commands = []
+    if year_filter := result.get("next_year_filter"):
+        commands.append(
+            {"tool": tool, "arguments": arguments | year_filter | {"page": 1, "offset": 0}}
+        )
+    if result.get("has_more"):
         next_arguments = arguments | {"page": result["next_page"], "offset": result["next_offset"]}
-        result["_meta"]["next_commands"] = [{"tool": tool, "arguments": next_arguments}]
+        commands.append({"tool": tool, "arguments": next_arguments})
+    if commands:
+        result["_meta"]["next_commands"] = commands
     return result
 
 

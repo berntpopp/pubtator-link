@@ -203,39 +203,70 @@ async def search_publications_with_filter_fallback(
         return _local_single_page(fallback, items), "transient_outage"
 
     if plan.has_local_year_window:
-        window = None
-        if fetch_sort == "date desc":
-            window = year_facet_counts(result, plan.local_year_min, plan.local_year_max)
-        if window is not None:
-            # Newest-first, the range is one contiguous run after `newer` hits: page through it
-            # instead of trimming the newest page to nothing (#281).
-            newer, in_window = window
-            size = int(result.get("page_size") or 10)
-            if newer // size:
-                if page + newer // size > _MAX_UPSTREAM_PAGE:
-                    raise ValueError(
-                        "year_max excludes too many newer hits to page past; narrow text or set "
-                        "year_min equal to year_max"
-                    )
+        return await _year_window_page(
+            client, result, plan, text=text, page=page, sort=fetch_sort, sections=sections
+        )
+    return result, None
+
+
+async def _year_window_page(
+    client: PubTator3Client,
+    result: dict[str, Any],
+    plan: SearchFilterPlan,
+    *,
+    text: str,
+    page: int,
+    sort: str | None,
+    sections: str | None,
+) -> tuple[dict[str, Any], str]:
+    """Serve one page of a year range PubTator3 cannot filter server-side (#281)."""
+    lo, hi = plan.local_year_min, plan.local_year_max
+    facet = year_facet_counts(result, lo, hi)
+    if facet is None or sort != "date desc":
+        items = apply_year_window(list(result.get("results", [])), lo, hi)
+        paged, note, exact = _local_single_page(result, items), "year_range_local", False
+    else:
+        # Newest-first, the range is one contiguous run after `newer` hits: jump to it.
+        size = int(result.get("page_size") or 10)
+        skip = facet.newer // size
+        too_deep = page + skip > _MAX_UPSTREAM_PAGE
+        if too_deep:
+            # Too deep to page to: return no rows and the exact-year search below instead.
+            items = []
+            paged = {**result, "results": items, "count": facet.in_window, "total_pages": page}
+            paged["total_results_is_lower_bound"] = True
+        else:
+            if skip:
                 result = await client.search_publications(
                     text=text,
-                    page=page + newer // size,
-                    sort=fetch_sort,
-                    filters=server_filters,
+                    page=page + skip,
+                    sort=sort,
+                    filters=plan.server_filters,
                     sections=sections,
                 )
-            items = apply_year_window(
-                list(result.get("results", [])), plan.local_year_min, plan.local_year_max
-            )
-            pages = -(-(newer % size + in_window) // size)
-            return {**result, "results": items, "count": in_window, "total_pages": pages}, (
-                "year_range_paged"
-            )
-        items = apply_year_window(
-            list(result.get("results", [])), plan.local_year_min, plan.local_year_max
-        )
-        return _local_single_page(result, items), "year_range_local"
-    return result, None
+            items = apply_year_window(list(result.get("results", [])), lo, hi)
+            if facet.complete:
+                pages = -(-(facet.newer % size + facet.in_window) // size)
+                paged = {**result, "results": items, "count": facet.in_window, "total_pages": pages}
+            else:  # capped facet: counts are lower bounds, so keep upstream's page count
+                paged = {
+                    **result,
+                    "results": items,
+                    "count": max(facet.in_window, len(items)),
+                    "total_pages": max(int(result.get("total_pages") or 0) - skip, 1),
+                    "total_results_is_lower_bound": True,
+                }
+        note, exact = "year_range_paged", facet.complete and not too_deep
+    if not items and not exact and (facet is None or facet.in_window):
+        # Never an empty success that hides matches: point at an exact year PubTator3 filters.
+        year = facet.newest_in_window if facet and facet.newest_in_window else hi or lo
+        paged["next_year_filter"] = {"year_min": year, "year_max": year}
+        paged["warnings"] = [
+            *(paged.get("warnings") or []),
+            f"No hit of the year range on this page; to reach its matches search "
+            f"year_min=year_max={year} (an exact year is filtered server-side).",
+        ]
+    return paged, note
 
 
 def _local_single_page(

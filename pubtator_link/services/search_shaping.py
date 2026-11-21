@@ -101,6 +101,9 @@ def shaped_search_response(
         next_page=next_page,
         next_offset=next_offset if next_page is not None else None,
         sort_order=sort,
+        total_results_is_lower_bound=raw.get("total_results_is_lower_bound"),
+        next_year_filter=raw.get("next_year_filter"),
+        warnings=raw.get("warnings") or None,
         cache_key=search_cache_key(
             text=query,
             page=page,

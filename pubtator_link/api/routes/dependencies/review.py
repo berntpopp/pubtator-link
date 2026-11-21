@@ -21,8 +21,9 @@ from pubtator_link.api.routes.dependencies.resources import (
     current_app_resources,
     review_pool_kwargs,
 )
-from pubtator_link.api.search_filters import apply_year_window, build_search_filter_plan
+from pubtator_link.api.search_filters import build_search_filter_plan
 from pubtator_link.config import review_rerag_config
+from pubtator_link.mcp.search_fallback import search_publications_with_filter_fallback
 from pubtator_link.models.responses import SearchResponse, SearchResult
 from pubtator_link.models.review_rerag import StageResearchSessionRequest
 from pubtator_link.repositories.review_rerag import PostgresReviewReragRepository
@@ -396,20 +397,15 @@ class _RouteSearchProvider(ResearchSessionSearchProvider):
             year_max=request.year_max,
             ignore_malformed_filters=False,
         )
-        raw = await self.client.search_publications(
+        raw, _ = await search_publications_with_filter_fallback(
+            client=self.client,
             text=request.query or "",
             page=request.page,
             sort=request.sort,
-            filters=filter_plan.server_filters,
+            plan=filter_plan,
             sections=",".join(request.sections) if request.sections else None,
         )
         raw_results = list(raw.get("results", []))
-        if filter_plan.has_local_year_window:
-            # PubTator3 only filters by an exact year server-side; apply the
-            # requested year range locally over this page (best-effort).
-            raw_results = apply_year_window(
-                raw_results, filter_plan.local_year_min, filter_plan.local_year_max
-            )
         results = [
             SearchResult(
                 pmid=item.get("pmid", ""),
@@ -434,11 +430,7 @@ class _RouteSearchProvider(ResearchSessionSearchProvider):
             )
             for item in raw_results
         ]
-        total_results = (
-            len(raw_results)
-            if filter_plan.has_local_year_window
-            else int(raw.get("count", raw.get("total", 0)))
-        )
+        total_results = int(raw.get("count", raw.get("total", 0)))
         per_page = int(raw.get("page_size", raw.get("per_page", 20)))
         return SearchResponse(
             success=True,
@@ -454,6 +446,9 @@ class _RouteSearchProvider(ResearchSessionSearchProvider):
                 )
             ),
             sort_order=request.sort,
+            total_results_is_lower_bound=raw.get("total_results_is_lower_bound"),
+            next_year_filter=raw.get("next_year_filter"),
+            warnings=raw.get("warnings") or None,
         )
 
 

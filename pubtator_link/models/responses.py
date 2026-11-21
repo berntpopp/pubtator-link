@@ -263,6 +263,13 @@ class SearchResponse(BaseResponse):
     next_offset: int | None = Field(
         default=None, description="`offset` for the next call when has_more"
     )
+    total_results_is_lower_bound: bool | None = Field(
+        default=None, description="total_results undercounts (filters applied locally)"
+    )
+    next_year_filter: dict[str, int] | None = Field(
+        default=None, description="year_min/year_max that reach the range's matches"
+    )
+    warnings: list[str] | None = Field(default=None, description="Caveats about this result")
     sort_order: str | None = Field(default=None, description="Applied sort order")
     cache_key: str | None = Field(default=None, description="Stable search cache key")
     corpus_snapshot_date: str | None = Field(
