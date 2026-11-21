@@ -7,12 +7,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from pubtator_link.api.client import PubTator3Client, PubTatorAPIError
-from pubtator_link.api.search_filters import (
-    SearchFilterPlan,
-    apply_year_window,
-    build_search_filter_plan,
-)
+from pubtator_link.api.client import PubTator3Client
+from pubtator_link.api.search_filters import build_search_filter_plan
 from pubtator_link.config import settings, text_processing_config
 from pubtator_link.mcp.audit_export import compact_audit_bundle_summary
 from pubtator_link.mcp.errors import mcp_field_validation_error
@@ -31,9 +27,8 @@ from pubtator_link.mcp.quickstart import (
 )
 from pubtator_link.mcp.relations import shape_entity_relations
 from pubtator_link.mcp.search_fallback import (
-    apply_local_search_filters,
     normalize_search_sort,
-    pubtator_filtered_search_unavailable,
+    search_publications_with_filter_fallback,
 )
 from pubtator_link.mcp.session_orientation import (
     research_session_status_payload,
@@ -489,7 +484,7 @@ async def search_literature_impl(
     page: int = 1,
     offset: int = 0,
     sort: str | None = None,
-    filters: str | None = None,
+    filters: dict[str, Any] | str | None = None,
     publication_types: list[str] | None = None,
     year_min: int | None = None,
     year_max: int | None = None,
@@ -510,14 +505,14 @@ async def search_literature_impl(
     normalized_text = combined_search_text(text, entity_ids)
     normalized_sort, sort_warning = normalize_search_sort(sort)
     plan = build_search_filter_plan(
-        filters=filters,
+        filters=json.dumps(filters) if isinstance(filters, dict) else filters,
         publication_types=publication_types,
         year_min=year_min,
         year_max=year_max,
-        ignore_malformed_filters=True,
+        ignore_malformed_filters=False,  # an ignored filter is a silently wrong answer (#282)
     )
     filter_warning = plan.warning
-    result, filter_note = await _search_publications_with_filter_fallback(
+    result, filter_note = await search_publications_with_filter_fallback(
         client=client,
         text=normalized_text,
         page=page,
@@ -598,6 +593,13 @@ async def search_literature_impl(
             "for full server-side pagination."
         )
         response.source_versions["pubtator3_filtering"] = "year_range_local"
+    elif filter_note == "year_range_paged":
+        response.message = (
+            "PubTator3 filters only an exact year server-side; the year range was resolved with "
+            "its year facets, so total_results counts the whole range and pages step through it "
+            "newest-first."
+        )
+        response.source_versions["pubtator3_filtering"] = "year_range_paged"
     dumped = fence_search_abstracts(dump_search_response(response, response_mode=response_mode))
     if include_meta:
         dumped["_meta"] = response_meta
@@ -606,87 +608,6 @@ async def search_literature_impl(
             dumped.pop(field, None)
     warnings = [w for w in (filter_warning, sort_warning, abstract_warning) if w]
     return dumped | ({"warnings": warnings} if warnings else {})
-
-
-async def _search_publications_with_filter_fallback(
-    *,
-    client: PubTator3Client,
-    text: str,
-    page: int,
-    sort: str | None,
-    plan: SearchFilterPlan,
-    sections: str | None,
-) -> tuple[dict[str, Any], str | None]:
-    """Run the search, honouring PubTator3's filter limits.
-
-    Returns ``(result, note)`` where ``note`` is ``None`` for a fully server-side
-    search, ``"year_range_local"`` when a year range was trimmed locally, or
-    ``"transient_outage"`` when PubTator3's filtered endpoint was unavailable and
-    every filter had to be applied locally over an unfiltered page.
-    """
-    server_filters = plan.server_filters
-    # A year range can only be honoured locally over one page, so fetch
-    # newest-first (when the caller chose no sort) to avoid undercounting recent
-    # literature behind relevance-ranked older hits and dropping it on the trim.
-    fetch_sort = sort
-    if fetch_sort is None and plan.has_local_year_window:
-        fetch_sort = "date desc"
-    try:
-        result = await client.search_publications(
-            text=text,
-            page=page,
-            sort=fetch_sort,
-            filters=server_filters,
-            sections=sections,
-        )
-    except PubTatorAPIError as exc:
-        if server_filters is None or not pubtator_filtered_search_unavailable(exc):
-            raise
-        fallback = await client.search_publications(
-            text=text,
-            page=page,
-            sort=fetch_sort,
-            filters=None,
-            sections=sections,
-        )
-        items = apply_local_search_filters(list(fallback.get("results", [])), server_filters)
-        items = apply_year_window(items, plan.local_year_min, plan.local_year_max)
-        return _local_single_page(fallback, items), "transient_outage"
-
-    if plan.has_local_year_window:
-        items = apply_year_window(
-            list(result.get("results", [])), plan.local_year_min, plan.local_year_max
-        )
-        return _local_single_page(result, items), "year_range_local"
-    return result, None
-
-
-def _local_single_page(
-    base: dict[str, Any],
-    items: list[dict[str, Any]],
-) -> dict[str, Any]:
-    # Filters were applied locally to a SINGLE fetched page (upstream could not do it server-side).
-    # The true filtered total across all upstream pages is unknown, so `total` is reported as a
-    # lower bound and the upstream page count is preserved so the client can see that later pages
-    # exist -- never a fabricated `total_pages: 1` that says retrieval is complete.
-    upstream_pages = base.get("total_pages")
-    current_page = int(base.get("page", 1) or 1)
-    has_more = bool(isinstance(upstream_pages, int) and current_page < upstream_pages)
-    warnings = list(base.get("warnings") or [])
-    warnings.append(
-        "Filters were applied locally to one fetched page; total is a lower bound and more "
-        "matches may exist on later pages (increase page to continue)."
-    )
-    return {
-        **base,
-        "results": items,
-        "count": len(items),
-        "total": len(items),
-        "total_results": len(items),
-        "total_results_is_lower_bound": True,
-        "has_more": has_more,
-        "warnings": warnings,
-    }
 
 
 async def _search_metadata_by_pmid(

@@ -13,6 +13,7 @@ from pubtator_link.models.variants import (
     VariantLiteratureEvidence,
 )
 from pubtator_link.services.clinvar import ClinVarRecord, ClinVarService
+from pubtator_link.services.search_shaping import shape_text_hl
 
 SOURCE_ATTRIBUTION_WARNING = (
     "Classifications are source-attributed; PubTator-Link does not compute clinical significance."
@@ -154,7 +155,7 @@ class VariantEvidenceService:
             VariantLiteratureEvidence(
                 pmid=str(item.get("pmid", "")),
                 title=item.get("title"),
-                snippet=item.get("text_hl") or item.get("abstract"),
+                snippet=shape_text_hl(item.get("text_hl"), "plain") or item.get("abstract"),
             )
             for item in items
             if item.get("pmid")

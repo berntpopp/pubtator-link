@@ -11,6 +11,7 @@ from pubtator_link.api.client import PubTatorAPIError
 from pubtator_link.models.publication_passages import (
     FailedPublicationPmid,
     PassageDropReason,
+    PassageDropReasonCode,
     PublicationContextEstimate,
     PublicationContextEstimateRequest,
     PublicationContextEstimateResponse,
@@ -134,7 +135,7 @@ class PublicationPassageService:
         dropped.extend(budget_drops)
         estimate = self._estimate_from_passages(passages, request.pmids, request.mode)
         coverage_by_pmid, coverage_reason_by_pmid, failed_pmids, warnings = self._coverage_summary(
-            passages, request, fallback_pmids, available_sections
+            passages, request, fallback_pmids, available_sections, {d.pmid for d in budget_drops}
         )
 
         return PublicationPassageResponse(
@@ -352,28 +353,16 @@ class PublicationPassageService:
         include_tables: bool,
         include_references: bool,
     ) -> PassageDropReason | None:
+        reason: PassageDropReasonCode | None = None
         if section == "references" and not include_references:
-            return PassageDropReason(
-                reason="reference_excluded",
-                pmid=pmid,
-                section=section,
-                passage_id=passage_id,
-            )
-        if section == "table" and not include_tables:
-            return PassageDropReason(
-                reason="table_excluded",
-                pmid=pmid,
-                section=section,
-                passage_id=passage_id,
-            )
-        if section_filter and section not in section_filter:
-            return PassageDropReason(
-                reason="section_filtered",
-                pmid=pmid,
-                section=section,
-                passage_id=passage_id,
-            )
-        return None
+            reason = "reference_excluded"
+        elif section == "table" and not include_tables:
+            reason = "table_excluded"
+        elif section_filter and section not in section_filter:
+            reason = "section_filtered"
+        if reason is None:
+            return None
+        return PassageDropReason(reason=reason, pmid=pmid, section=section, passage_id=passage_id)
 
     @staticmethod
     def _apply_char_budget(
@@ -450,6 +439,7 @@ class PublicationPassageService:
         request: PublicationPassageRequest,
         fallback_pmids: set[str | None],
         available_sections: dict[str | None, set[str]],
+        budget_cut: set[str | None] | None = None,
     ) -> tuple[
         dict[str, PublicationCoverage],
         dict[str, str],
@@ -481,20 +471,29 @@ class PublicationPassageService:
                 )
                 seen = available_sections[pmid]  # tier must agree with the reason (not "unknown")
                 coverage = "abstract_only" if "abstract" in seen else "title_only"
+            if budget_cut and pmid in budget_cut:
+                reason = "truncated_for_budget"  # content exists; max_chars cut it (#282)
             coverage_by_pmid[pmid] = coverage
             coverage_reason_by_pmid[pmid] = reason
-            if coverage == "unknown" or reason == "full_text_not_available":
+            if reason == "full_text_not_available" or (
+                coverage == "unknown" and reason != "truncated_for_budget"
+            ):
                 failed_pmids.append(FailedPublicationPmid(pmid=pmid, reason=failure))
             if (
                 request.full
                 and request.mode == "section_text"
                 and coverage in {"abstract_only", "title_only"}
-                and reason != "full_text_not_available"  # already explained above
+                and reason not in {"full_text_not_available", "truncated_for_budget"}  # explained
             ):
                 warnings.append(
                     "No full-text section passages were available for PMID "
                     f"{pmid}; returned {coverage.replace('_', '-')} PubTator passages."
                 )
+        if cut := [pmid for pmid in request.pmids if budget_cut and pmid in budget_cut]:
+            warnings.append(
+                f"max_chars={request.max_chars} cut passages for PMID(s) {', '.join(cut)}; their "
+                "content exists. Fetch truncated_for_budget_pmids in a new call or raise max_chars."
+            )
         return coverage_by_pmid, coverage_reason_by_pmid, failed_pmids, warnings
 
     @staticmethod

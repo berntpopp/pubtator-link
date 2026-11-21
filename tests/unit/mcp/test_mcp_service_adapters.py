@@ -3071,39 +3071,6 @@ async def test_search_literature_adapter_merges_flat_filters() -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_literature_adapter_ignores_malformed_filters_with_warning() -> None:
-    from pubtator_link.mcp.service_adapters import search_literature_impl
-
-    class RecordingClient:
-        filters = "not-called"
-
-        async def search_publications(
-            self,
-            text: str,
-            page: int,
-            sort: str | None,
-            filters: str | None,
-            sections: str | None,
-        ) -> dict[str, object]:
-            self.filters = filters
-            return {"results": [], "count": 0, "total_pages": 0, "page_size": 10}
-
-    client = RecordingClient()
-
-    result = await search_literature_impl(
-        client=client,
-        text="guideline",
-        filters="not json",
-    )
-
-    assert client.filters is None
-    assert result["warnings"] == [
-        "Ignored malformed filters value for MCP search: Invalid filters JSON format: "
-        "Expecting value: line 1 column 1 (char 0)"
-    ]
-
-
-@pytest.mark.asyncio
 async def test_search_literature_retries_unfiltered_when_pubtator_filters_unavailable() -> None:
     from pubtator_link.api.client import PubTatorAPIError
     from pubtator_link.mcp.service_adapters import search_literature_impl
@@ -3922,7 +3889,9 @@ async def test_search_literature_normalizes_bare_date_sort_end_to_end() -> None:
 @pytest.mark.asyncio
 async def test_filter_fallback_uses_date_desc_when_year_range_present() -> None:
     from pubtator_link.api.search_filters import SearchFilterPlan
-    from pubtator_link.mcp.service_adapters import _search_publications_with_filter_fallback
+    from pubtator_link.mcp.search_fallback import (
+        search_publications_with_filter_fallback as _search_publications_with_filter_fallback,
+    )
 
     class FakeClient:
         calls: ClassVar[list[dict[str, object]]] = []
@@ -3960,7 +3929,9 @@ async def test_filter_fallback_uses_date_desc_when_year_range_present() -> None:
 @pytest.mark.asyncio
 async def test_filter_fallback_respects_explicit_sort() -> None:
     from pubtator_link.api.search_filters import SearchFilterPlan
-    from pubtator_link.mcp.service_adapters import _search_publications_with_filter_fallback
+    from pubtator_link.mcp.search_fallback import (
+        search_publications_with_filter_fallback as _search_publications_with_filter_fallback,
+    )
 
     class FakeClient:
         calls: ClassVar[list[dict[str, object]]] = []
@@ -3986,7 +3957,9 @@ async def test_filter_fallback_respects_explicit_sort() -> None:
 async def test_filter_fallback_local_fallback_on_transient_outage() -> None:
     from pubtator_link.api.client import PubTatorAPIError
     from pubtator_link.api.search_filters import SearchFilterPlan
-    from pubtator_link.mcp.service_adapters import _search_publications_with_filter_fallback
+    from pubtator_link.mcp.search_fallback import (
+        search_publications_with_filter_fallback as _search_publications_with_filter_fallback,
+    )
 
     class FakeClient:
         calls: ClassVar[list[dict[str, object]]] = []
@@ -4118,3 +4091,143 @@ async def test_search_literature_with_abstract_fills_abstract_from_export() -> N
     assert len(fenced["raw_sha256"]) == 64
     assert result["results"][1].get("abstract") is None
     assert any("1" in warning and "abstract" in warning for warning in result["warnings"])
+
+
+@pytest.mark.asyncio
+async def test_search_literature_plain_text_hl_strips_tmvar_annotation_payload() -> None:
+    """#280: live PubTator3 tmVar tags carry `|`/`;`/`:` payloads that plain mode must drop."""
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    raw_hl = (
+        "Role of @VARIANT_p.V61F_JAK2_human @VARIANT_tmVar:p|SUB|V|61|F;CorrespondingGene:3717;"
+        "HGVS:p.V61F;CorrespondingGene:3717;VariantGroup:0;CorrespondingSpecies:9606 "
+        "@@@<m>JAK2</m> <m>V617F</m>@@@ in @DISEASE_Neoplasms @DISEASE_MESH:D009369 "
+        "@@@<m>Myeloproliferative</m> <m>Neoplasms</m>@@@: A <m>Review</m>. Mail a@b.org"
+    )
+
+    class FakeClient:
+        async def search_publications(self, **kwargs):
+            return {"results": [{"pmid": "1", "title": "t", "text_hl": raw_hl}], "count": 1}
+
+    result = await search_literature_impl(
+        client=FakeClient(), text="JAK2 V617F", metadata="none", limit=1
+    )
+
+    assert result["results"][0]["text_hl"] == (
+        "Role of JAK2 V617F in Myeloproliferative Neoplasms: A Review. Mail a@b.org"
+    )
+
+
+def _year_facet_client(counts: dict[int, int], page_size: int = 10):
+    """Fake PubTator3 search over `counts` papers per year, newest first, with year facets."""
+
+    class YearFacetClient:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, object]] = []
+
+        async def search_publications(self, *, text, page, sort, filters, sections):
+            self.calls.append({"page": page, "sort": sort, "filters": filters})
+            dates = [y for y in sorted(counts, reverse=True) for _ in range(counts[y])]
+            chunk = dates[(page - 1) * page_size : page * page_size]
+            return {
+                "results": [
+                    {"pmid": f"{y}{i}", "title": "t", "date": f"{y}-01-01T00:00:00Z"}
+                    for i, y in enumerate(chunk)
+                ],
+                "count": len(dates),
+                "page_size": page_size,
+                "current": page,
+                "total_pages": -(-len(dates) // page_size),
+                "facets": {
+                    "facet_fields": {
+                        "year": [{"name": str(y), "value": n} for y, n in counts.items()]
+                    }
+                },
+            }
+
+    return YearFacetClient()
+
+
+@pytest.mark.asyncio
+async def test_search_literature_year_max_jumps_to_the_page_holding_matches() -> None:
+    """#281: year_max over a newest-first corpus must not return an empty first page."""
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    client = _year_facet_client({2026: 1500, 2006: 53, 2005: 12})
+    result = await search_literature_impl(
+        client=client, text="JAK2 V617F", year_max=2005, metadata="none", limit=3
+    )
+
+    assert [item["pmid"][:4] for item in result["results"]] == ["2005"] * 3
+    assert result["total_results"] == 12
+    assert client.calls[-1]["page"] == 1 + 1553 // 10
+    # Continuation stays inside the window and pages are counted in the window, not upstream.
+    assert result["has_more"] is True
+    assert result["total_pages"] == 2
+
+
+@pytest.mark.asyncio
+async def test_search_literature_year_range_total_counts_the_window() -> None:
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    client = _year_facet_client({2026: 25, 2006: 53, 2005: 12, 2004: 3})
+    result = await search_literature_impl(
+        client=client, text="x", year_min=2005, year_max=2006, metadata="none", limit=None
+    )
+
+    assert result["total_results"] == 65
+    assert {item["pmid"][:4] for item in result["results"]} == {"2006"}
+    assert result["returned"] == 5  # page 3 upstream = 5 newer (trimmed) + 5 in window
+
+
+@pytest.mark.asyncio
+async def test_search_literature_accepts_filters_as_object() -> None:
+    """#282: the object form of `filters` is accepted (retracted publications reachable)."""
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class RecordingClient:
+        filters: str | None = None
+
+        async def search_publications(self, *, text, page, sort, filters, sections):
+            type(self).filters = filters
+            return {"results": [], "count": 0, "total_pages": 0, "page_size": 10}
+
+    await search_literature_impl(
+        client=RecordingClient(),
+        text="cancer",
+        filters={"type": ["Retracted Publication"]},
+        metadata="none",
+    )
+
+    assert RecordingClient.filters == '{"type":["Retracted Publication"]}'
+
+
+@pytest.mark.asyncio
+async def test_search_literature_rejects_malformed_filters() -> None:
+    """#282: an unusable `filters` value is invalid input, never a silently unfiltered page."""
+    from pubtator_link.mcp.service_adapters import search_literature_impl
+
+    class NeverCalled:
+        async def search_publications(self, **kwargs):
+            raise AssertionError("must not search")
+
+    for bad in ("not json", "[1]"):
+        with pytest.raises(ValueError, match="filters"):
+            await search_literature_impl(client=NeverCalled(), text="x", filters=bad)
+
+
+def test_year_facet_counts_ignores_a_capped_facet() -> None:
+    from pubtator_link.api.search_filters import year_facet_counts
+
+    capped = {
+        "facets": {
+            "facet_fields": {"year": [{"name": str(1900 + i), "value": 1} for i in range(100)]}
+        }
+    }
+    assert year_facet_counts(capped, None, 1950) is None
+    small = {
+        "facets": {
+            "facet_fields": {"year": [{"name": "2026", "value": 9}, {"name": "2005", "value": 2}]}
+        }
+    }
+    assert year_facet_counts(small, None, 2005) == (9, 2)

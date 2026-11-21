@@ -95,12 +95,11 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             ),
         ] = None,
         filters: Annotated[
-            str | None,
+            dict[str, Any] | str | None,
             Field(
                 description=(
-                    "Advanced PubTator3 filter as a JSON object string, e.g. "
-                    '\'{"journal":["Nature"]}\'. Prefer the flat publication_types / year_min / '
-                    "year_max parameters; do not also set a JSON `type`/`year` key."
+                    'Filter object (or JSON string), e.g. {"type":["Retracted Publication"]}; '
+                    "keys type/journal/year. Prefer publication_types/year_min/year_max."
                 ),
             ),
         ] = None,

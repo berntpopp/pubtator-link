@@ -583,3 +583,37 @@ async def test_full_text_only_sections_fetch_full_text_without_full_flag() -> No
     assert response.coverage_reason_by_pmid["23248578"] == "full_text_not_available"
     assert "No PubTator passages found" not in response.failed_pmids[0].reason
     assert PublicationPassageRequest(pmids=["1"], sections=["ABSTRACT"]).full is False
+
+
+class TwoAbstractsService:
+    async def export_publications_list(self, pmids: list[str], format: str, full: bool):
+        return {
+            "export_data": {
+                "documents": [
+                    {
+                        "id": pmid,
+                        "passages": [
+                            {"infons": {"section_type": "TITLE"}, "text": f"Title {pmid}"},
+                            {"infons": {"section_type": "ABSTRACT"}, "text": "a" * 700},
+                        ],
+                    }
+                    for pmid in pmids
+                ]
+            }
+        }
+
+
+@pytest.mark.asyncio
+async def test_budget_dropped_abstract_is_truncated_for_budget_not_title_only() -> None:
+    """#282: an abstract cut by max_chars must not read as 'the paper has no abstract'."""
+    service = PublicationPassageService(TwoAbstractsService())
+
+    response = await service.get_passages(
+        PublicationPassageRequest(pmids=["1", "2"], mode="full_abstract", max_chars=1000)
+    )
+
+    assert response.coverage_reason_by_pmid["1"] == "abstract_fallback_used"
+    assert response.coverage_reason_by_pmid["2"] == "truncated_for_budget"
+    assert response.truncated_for_budget_pmids == ["2"]
+    assert not response.failed_pmids
+    assert any("max_chars" in warning and "2" in warning for warning in response.warnings)
