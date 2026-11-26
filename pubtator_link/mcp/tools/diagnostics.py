@@ -79,7 +79,7 @@ def register_diagnostics_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         tags={"meta"},
     )
     async def diagnostics() -> dict[str, Any]:
-        """Use this when a client needs PubTator-Link subsystem status and recovery commands: returns per-subsystem health and suggested recovery commands."""
+        """Use this when a client needs subsystem status; returns per-subsystem health and recovery commands."""
         service = await get_diagnostics_service()
         return await run_mcp_tool(
             "diagnostics",
