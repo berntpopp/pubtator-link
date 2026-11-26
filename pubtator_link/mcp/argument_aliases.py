@@ -12,7 +12,7 @@ from pubtator_link.models.literature_graph import normalize_pmid
 logger = logging.getLogger(__name__)
 
 _PMID_REASON = "PMIDs must be ASCII digits 0-9 (optionally 'PMID:'-prefixed)."
-_ID_FORM_REASON = "PMIDs only; this is a {}. Convert it with convert_article_ids first."
+_ID_FORM_REASON = "PMIDs only; this is a {}. Convert it with map_article_ids first."
 # [0-9], not \d: \d admits non-ASCII digits. One shape contract for schema and runtime.
 _PMCID = r"[Pp][Mm][Cc][0-9]{1,12}"
 _DOI = r"(?:[Dd][Oo][Ii]:\s*)?(10\.[0-9]{4,9}/[-._;()/:A-Za-z0-9]+)"
@@ -77,11 +77,11 @@ def merge_pmids(
             stripped = normalize_pmid(value)
         except ValueError:
             if form := _id_form(value):
-                # ponytail: lean profile does not register convert_article_ids; pointer dangles there.
+                # ponytail: lean profile does not register map_article_ids; pointer dangles there.
                 error = _pmid_error(source, _ID_FORM_REASON.format(form[0].upper()))
                 # strict pattern above: safe to echo
                 error.next_command = {
-                    "tool": "convert_article_ids",
+                    "tool": "map_article_ids",
                     "arguments": {"ids": [form[1]]},
                 }
                 raise error from None
@@ -107,14 +107,14 @@ async def resolve_pmids(
 
     Returns the PMIDs and the `resolved_from` echo (a list for `pmids`, one dict for a scalar
     `pmid`, None when nothing was converted). An ID that does not convert stays as given, so
-    merge_pmids raises the field-named invalid_input pointing at convert_article_ids.
+    merge_pmids raises the field-named invalid_input pointing at map_article_ids.
     """
     values = [*(pmids or []), *([pmid] if pmid is not None else [])]
     forms = {value: form for value in values if (form := _id_form(value))}
     missing = list(dict.fromkeys(c for _, c in forms.values() if c not in _resolved_pmids))
     if missing:
         try:
-            response = await (await get_discovery_service()).convert_article_ids(missing)
+            response = await (await get_discovery_service()).map_article_ids(missing)
         except Exception as exc:  # converter down: fall back to the honest invalid_input
             logger.warning("article_id_conversion_failed", extra={"error": type(exc).__name__})
         else:

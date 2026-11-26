@@ -18,9 +18,9 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Input schema: `review_id` (string); `outcome` (string); `question` (string); `study_design` (string); `risk_of_bias_notes` (string); `inconsistency_notes` (string); `indirectness_notes` (string); `imprecision_notes` (string); `publication_bias_notes` (string); `overall_certainty` (string; enum: `high`, `moderate`, `low`, `very_low`, `not_rated`; default: `not_rated`); `certainty_rationale` (string); `passage_ids` (array); `created_by` (string); `validate_passages` (boolean; default: `False`)
 - Output schema: `None`; has_output_schema: `no`
 
-## `build_topic_literature_map`
+## `generate_topic_literature_map`
 
-- Name: `build_topic_literature_map`
+- Name: `generate_topic_literature_map`
 - Title: Build Topic Literature Map
 - Category: `publication`
 - Profiles: `full`, `readonly`
@@ -33,9 +33,9 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Input schema: `query` (string); `pmids` (array); `max_seed_papers` (integer; default: `10`); `max_neighbors_per_paper` (integer; default: `5`); `response_mode` (string; enum: `compact`, `nodes_edges`, `full`; default: `compact`); `max_candidates` (integer; default: `8`); `include_demoted` (boolean; default: `True`); `max_demoted` (integer; default: `3`); `bias_toward` (array); `max_graph_nodes` (integer; default: `30`); `max_graph_edges` (integer; default: `60`); `include_authors` (boolean; default: `True`); `include_citations` (boolean; default: `True`); `include_pubtator_entities` (boolean; default: `True`); `include_related_candidates` (boolean; default: `True`); `year_min` (integer); `year_max` (integer); `prefer_full_text` (boolean; default: `True`); `timeout_ms` (integer; default: `45000`); `partial_ok` (boolean; default: `True`); `expand_query_seeds` (boolean; default: `False`); `citation_graph_timeout_ms` (integer; default: `15000`); `related_evidence_timeout_ms` (integer; default: `20000`); `metadata_backfill_timeout_ms` (integer; default: `10000`); `include_meta` (boolean; default: `True`)
 - Output schema: `None`; has_output_schema: `no`
 
-## `convert_article_ids`
+## `map_article_ids`
 
-- Name: `convert_article_ids`
+- Name: `map_article_ids`
 - Title: Convert Article IDs
 - Category: `discovery`
 - Profiles: `full`, `readonly`
@@ -63,9 +63,9 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Input schema: None
 - Output schema: `None`; has_output_schema: `no`
 
-## `estimate_publication_context`
+## `compute_publication_context`
 
-- Name: `estimate_publication_context`
+- Name: `compute_publication_context`
 - Title: Estimate Publication Context
 - Category: `publication`
 - Profiles: `full`, `readonly`
@@ -118,7 +118,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Description: Use this when a user has seed PMIDs and needs similar, cited-by, or reference-linked articles to expand a research corpus; returns related PMIDs with title, journal, year and relation.
 - Do not use for: `initial topic search without seed PMIDs`
 - Example: `{"pmids":["12345"],"mode":"similar","limit":20}`
-- Next tools by profile: full: `preflight_review_sources`; readonly: `preflight_review_sources`
+- Next tools by profile: full: `get_review_source_coverage`; readonly: `get_review_source_coverage`
 - Resource links: None
 - Input schema: `pmids` (array); `mode` (string; enum: `similar`, `cited_by`, `references`; default: `similar`); `limit` (integer; default: `20`)
 - Output schema: `None`; has_output_schema: `no`
@@ -268,7 +268,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Description: Use this when a user needs the text of a PubMed/PMC article by PMID: returns citable passages (title, abstract and, for open-access PMC articles, full text incl. figure captions and tables), not raw BioC. For article-local answering use mode='full_abstract' first (untruncated); sections (FIG, TABLE, RESULTS, ...) selects full text; check coverage_by_pmid. Not for prepared review RAG; use get_review_context_batch.
 - Do not use for: `prepared review RAG retrieval`
 - Example: `{"pmids":["12345"],"max_passages_per_pmid":6,"verbosity":"standard"}`
-- Next tools by profile: lean: `preflight_review_sources`; full: `preflight_review_sources`; readonly: `preflight_review_sources`
+- Next tools by profile: lean: `get_review_source_coverage`; full: `get_review_source_coverage`; readonly: `get_review_source_coverage`
 - Resource links: None
 - Input schema: `pmids` (array); `sections` (array); `mode` (string; enum: `abstracts`, `full_abstract`, `compact_passages`, `section_text`; default: `compact_passages`); `full` (boolean; default: `False`); `max_passages_per_pmid` (integer; default: `6`); `max_chars` (integer; default: `12000`); `include_tables` (boolean; default: `True`); `include_references` (boolean; default: `False`); `dry_run` (boolean; default: `False`); `verbosity` (string; enum: `lean`, `standard`, `full`; default: `standard`)
 - Output schema: `None`; has_output_schema: `no`
@@ -343,7 +343,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Description: Use this when a user needs one persisted review index summary without loading passage samples; returns its preparation status, source counts and passage counts.
 - Do not use for: `loading passage samples`
 - Example: `{"review_id":"demo"}`
-- Next tools by profile: full: `inspect_review_index`; readonly: `inspect_review_index`
+- Next tools by profile: full: `get_review_index_status`; readonly: `get_review_index_status`
 - Resource links: `pubtator://reviews/{review_id}`
 - Input schema: `review_id` (string)
 - Output schema: `None`; has_output_schema: `no`
@@ -433,14 +433,14 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Description: Use this when a review needs review-scoped evidence preparation for a review_id and PMIDs/curated URLs; returns preparation status per source. Call this before get_review_context_batch, use session_id to scope staged research sessions, set wait_until_ready for small corpora, and inspect preparation_status before retrieval.
 - Do not use for: `ad hoc passage retrieval without a review_id`
 - Example: `{"review_id":"demo","pmids":["12345"],"wait_until_ready":true}`
-- Next tools by profile: lean: `inspect_review_index`, `get_review_context_batch`; full: `inspect_review_index`, `get_review_context_batch`
+- Next tools by profile: lean: `get_review_index_status`, `get_review_context_batch`; full: `get_review_index_status`, `get_review_context_batch`
 - Resource links: `pubtator://reviews/{review_id}`
 - Input schema: `review_id` (string); `pmids` (array); `curated_urls` (array); `session_id` (string); `wait_for_status` (string; enum: `complete`, `complete_or_partial`, `terminal`); `wait_until_ready` (boolean; default: `False`); `timeout_ms` (integer; default: `0`); `dry_run` (boolean; default: `False`)
 - Output schema: `None`; has_output_schema: `no`
 
-## `inspect_review_index`
+## `get_review_index_status`
 
-- Name: `inspect_review_index`
+- Name: `get_review_index_status`
 - Title: Inspect Review Index
 - Category: `review`
 - Profiles: `lean`, `full`, `readonly`
@@ -498,9 +498,9 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Input schema: `limit` (integer; default: `50`); `offset` (integer; default: `0`)
 - Output schema: `None`; has_output_schema: `no`
 
-## `preflight_review_sources`
+## `get_review_source_coverage`
 
-- Name: `preflight_review_sources`
+- Name: `get_review_source_coverage`
 - Title: Preflight Review Sources
 - Category: `review`
 - Profiles: `lean`, `full`, `readonly`
@@ -568,7 +568,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Description: Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question; returns ranked candidate PMIDs with titles. Wraps search_literature with guideline/systematic-review filters and guideline boosting; not an independent guideline database.
 - Do not use for: `non-guideline exhaustive PubMed search`
 - Example: `{"text":"asthma treatment adults","limit":5}`
-- Next tools by profile: lean: `preflight_review_sources`; full: `preflight_review_sources`; readonly: `preflight_review_sources`
+- Next tools by profile: lean: `get_review_source_coverage`; full: `get_review_source_coverage`; readonly: `get_review_source_coverage`
 - Resource links: None
 - Input schema: `text` (string); `page` (integer; default: `1`); `offset` (integer; default: `0`); `year_min` (integer); `year_max` (integer); `sections` (array); `limit` (integer; default: `5`); `entity_ids` (array); `coverage` (string; enum: `none`, `preflight`; default: `preflight`)
 - Output schema: `None`; has_output_schema: `no`
@@ -583,7 +583,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Description: Use this when a user needs PubMed biomedical literature search via PubTator3: returns ranked articles (PMID, title, journal, year, citation). Supports flat and section filters and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false: continue with results or inspect diagnostics.
 - Do not use for: `fetching known PMID passage text`
 - Example: `{"text":"BRCA1 ovarian cancer PARP inhibitor","limit":5,"metadata":"basic"}`
-- Next tools by profile: lean: `preflight_review_sources`; full: `preflight_review_sources`; readonly: `preflight_review_sources`
+- Next tools by profile: lean: `get_review_source_coverage`; full: `get_review_source_coverage`; readonly: `get_review_source_coverage`
 - Resource links: None
 - Input schema: `text` (string); `page` (integer; default: `1`); `offset` (integer; default: `0`); `sort` (string); `filters` (object | string | null; default: `None`); `publication_types` (array); `year_min` (integer); `year_max` (integer); `sections` (array); `response_mode` (string; enum: `compact`, `standard`, `full`; default: `compact`); `include_citations` (string; enum: `none`, `nlm`, `bibtex`, `both`; default: `none`); `text_hl_format` (string; enum: `none`, `plain`, `annotated`; default: `plain`); `limit` (integer; default: `5`); `entity_ids` (array); `guideline_boost` (boolean; default: `False`); `coverage` (string; enum: `none`, `preflight`; default: `none`); `metadata` (string; enum: `none`, `basic`, `with_abstract`, `full`; default: `basic`); `include_meta` (boolean; default: `True`)
 - Output schema: `None`; has_output_schema: `no`
@@ -618,9 +618,9 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Input schema: `text` (string); `bioconcepts` (string; default: `Gene`); `wait` (boolean; default: `False`); `timeout_ms` (integer; default: `30000`)
 - Output schema: `None`; has_output_schema: `no`
 
-## `suggest_corpus`
+## `find_review_corpus`
 
-- Name: `suggest_corpus`
+- Name: `find_review_corpus`
 - Title: Suggest Corpus
 - Category: `discovery`
 - Profiles: `full`, `readonly`
@@ -628,7 +628,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Description: Use this when a user needs a compact, review-feeding PMID corpus for a research question: returns candidate PMIDs, roles, coverage hints, metadata, and next commands.
 - Do not use for: `final evidence retrieval`
 - Example: `{"question":"EGFR resistance in lung cancer","max_pmids":8}`
-- Next tools by profile: full: `preflight_review_sources`, `index_review_evidence`; readonly: `preflight_review_sources`
+- Next tools by profile: full: `get_review_source_coverage`, `index_review_evidence`; readonly: `get_review_source_coverage`
 - Resource links: None
 - Input schema: `question` (string); `max_pmids` (integer; default: `8`); `entity_ids` (array); `must_include_pmids` (array); `prefer_guidelines` (boolean; default: `True`); `include_metadata` (boolean; default: `True`)
 - Output schema: `None`; has_output_schema: `no`

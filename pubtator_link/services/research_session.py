@@ -235,7 +235,7 @@ class ResearchSessionService:
             _meta={
                 "next_commands": [
                     "get_research_session_status",
-                    "inspect_review_index",
+                    "get_review_index_status",
                     "get_review_context_batch",
                 ],
                 "unsafe_for_clinical_use": True,

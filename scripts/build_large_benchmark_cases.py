@@ -46,7 +46,7 @@ def _parse_ideal_answer(value: Any) -> str:
     for parser in (json.loads, ast.literal_eval):
         try:
             parsed = parser(text)
-        except (ValueError, SyntaxError, TypeError, json.JSONDecodeError):
+        except ValueError, SyntaxError, TypeError, json.JSONDecodeError:
             continue
         if isinstance(parsed, list):
             return " ".join(str(part) for part in parsed)

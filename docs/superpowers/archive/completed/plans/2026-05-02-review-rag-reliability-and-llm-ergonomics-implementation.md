@@ -134,7 +134,7 @@ Modify both `PublicationPassageService.get_passages()` return paths in `pubtator
 ```python
 from pubtator_link.services.degradation import degraded_mode_from_coverage
 
-degraded_mode=degraded_mode_from_coverage(coverage_by_pmid),
+degraded_mode = (degraded_mode_from_coverage(coverage_by_pmid),)
 ```
 
 For exception paths where coverage is `unknown`, build `coverage_by_pmid` with `"unknown"` and pass it through the same helper.
@@ -245,17 +245,17 @@ Inside `mcp_tool_error()`, after building `payload`, add:
 Extend `run_mcp_tool()` keyword arguments:
 
 ```python
-    diagnostics_snapshot: dict[str, Any] | None = None,
-    degraded_mode: DegradedMode | None = None,
-    fallback_preview: dict[str, Any] | None = None,
+diagnostics_snapshot: dict[str, Any] | None = (None,)
+degraded_mode: DegradedMode | None = (None,)
+fallback_preview: dict[str, Any] | None = (None,)
 ```
 
 Pass those values into the the `McpErrorContext` call construction inside the generic `except Exception as exc:` branch:
 
 ```python
-                diagnostics_snapshot=diagnostics_snapshot,
-                degraded_mode=degraded_mode,
-                fallback_preview=fallback_preview,
+diagnostics_snapshot = (diagnostics_snapshot,)
+degraded_mode = (degraded_mode,)
+fallback_preview = (fallback_preview,)
 ```
 
 - [ ] **Step 4: Add bounded diagnostics helper**
@@ -320,7 +320,7 @@ from fastmcp import Context, FastMCP
 For `retrieve_review_context`, `retrieve_review_context_batch`, and `index_review_evidence`, add an optional context parameter using FastMCP's context injection pattern:
 
 ```python
-ctx: Context | None = None,
+ctx: Context | None = (None,)
 ```
 
 After each tool call returns `result`, emit:
@@ -476,29 +476,29 @@ Expected: FAIL because adapter/tool signatures do not expose these arguments.
 Modify `get_publication_passages_impl()` in `pubtator_link/mcp/service_adapters.py`:
 
 ```python
-    dry_run: bool = False,
-    verbosity: Literal["lean", "standard", "full"] = "standard",
+dry_run: bool = (False,)
+verbosity: Literal["lean", "standard", "full"] = ("standard",)
 ```
 
 Pass the values into ``PublicationPassageRequest``:
 
 ```python
-            dry_run=dry_run,
-            verbosity=verbosity,
+dry_run = (dry_run,)
+verbosity = (verbosity,)
 ```
 
 Modify `get_publication_passages()` in `pubtator_link/mcp/tools/publications.py`:
 
 ```python
-        dry_run: bool = False,
-        verbosity: Literal["lean", "standard", "full"] = "standard",
+dry_run: bool = (False,)
+verbosity: Literal["lean", "standard", "full"] = ("standard",)
 ```
 
 Pass the values into ``get_publication_passages_impl``:
 
 ```python
-                dry_run=dry_run,
-                verbosity=verbosity,
+dry_run = (dry_run,)
+verbosity = (verbosity,)
 ```
 
 - [ ] **Step 8: Run publication and MCP tests**
@@ -573,9 +573,7 @@ async def test_prepare_pmid_records_resolver_attempts_before_abstract_fallback()
     )
     europe_pmc = UnavailableEuropePmcClient(pmcid="PMC123", doi="10.1000/example")
     base_config = _config()
-    config = ReviewReragConfig(
-        **{**base_config.__dict__, "enable_europe_pmc_fallback": True}
-    )
+    config = ReviewReragConfig(**{**base_config.__dict__, "enable_europe_pmc_fallback": True})
     service = FullTextPreparationService(
         config=config,
         repository=repository,
@@ -705,7 +703,7 @@ async def test_retrieve_review_context_batch_adapter_omits_resolver_trace_by_def
 Modify `pubtator_link/mcp/tools/review.py` retrieval tool signatures:
 
 ```python
-include_resolver_trace: bool = False,
+include_resolver_trace: bool = (False,)
 ```
 
 Thread this through `pubtator_link/mcp/service_adapters.py` into the relevant request or response-shaping layer. After `model_dump()`, strip trace-heavy fields unless requested:
@@ -843,7 +841,7 @@ def _guideline_rank_features(item: dict[str, Any]) -> dict[str, Any]:
 In `shaped_search_result()`, set:
 
 ```python
-        ranking_reasons=rank_features.get("ranking_reasons", []) if rank_features else [],
+ranking_reasons = (rank_features.get("ranking_reasons", []) if rank_features else [],)
 ```
 
 - [ ] **Step 6: Write failing entity synonym extraction test**
@@ -909,7 +907,7 @@ from pubtator_link.services.entity_matching import (
 Use `synonyms_from_entity_item(item)` in the ``EntityMatch`` construction:
 
 ```python
-            synonyms=synonyms_from_entity_item(item),
+synonyms = (synonyms_from_entity_item(item),)
 ```
 
 - [ ] **Step 9: Run search/entity tests**
@@ -963,7 +961,7 @@ Expected: FAIL because `include_citations` currently defaults to `"none"`.
 Modify `pubtator_link/mcp/tools/literature.py`:
 
 ```python
-        include_citations: IncludeCitations = "nlm",
+include_citations: IncludeCitations = ("nlm",)
 ```
 
 Keep REST route defaults unchanged.
@@ -1112,7 +1110,7 @@ Expected: FAIL before cleanup because active workflow guidance still shows `prep
 Modify `pubtator_link/mcp/tools/review.py` so `index_review_evidence()` does not expose `prepare_mode` in the public tool signature. The adapter can keep passing the internal default:
 
 ```python
-prepare_mode="selected",
+prepare_mode = ("selected",)
 ```
 
 Modify `pubtator_link/services/workflow_help.py` and `pubtator_link/mcp/resources.py` to remove sample-call arguments containing:
@@ -1185,16 +1183,16 @@ Expected: FAIL because the current public argument is `wait_for_completion`, not
 Modify `pubtator_link/mcp/tools/review.py` `index_review_evidence()` signature:
 
 ```python
-wait_until_ready: bool = False,
-timeout_ms: int = 0,
+wait_until_ready: bool = (False,)
+timeout_ms: int = (0,)
 ```
 
 Pass into the adapter as:
 
 ```python
-wait_for_completion=wait_until_ready,
-wait_for_status="complete_or_partial" if wait_until_ready else wait_for_status,
-timeout_ms=timeout_ms,
+wait_for_completion = (wait_until_ready,)
+wait_for_status = ("complete_or_partial" if wait_until_ready else wait_for_status,)
+timeout_ms = (timeout_ms,)
 ```
 
 Keep existing internal `wait_for_completion` support in `IndexReviewEvidenceRequest` and `ReviewIndexingService` unchanged.
@@ -1283,9 +1281,27 @@ Add to `tests/unit/test_review_context_service.py`:
 async def test_inspect_review_index_includes_coverage_summary() -> None:
     repository = FakeReviewContextRepository([])
     repository.source_summaries = [
-        ReviewSourceSummary(source_id="s1", pmid="1", source_kind="pubtator_full_bioc", job_status="complete", coverage="full_text"),
-        ReviewSourceSummary(source_id="s2", pmid="2", source_kind="pubtator_abstract", job_status="complete", coverage="abstract_only"),
-        ReviewSourceSummary(source_id="s3", pmid="3", source_kind="pubtator_abstract", job_status="complete", coverage="title_only"),
+        ReviewSourceSummary(
+            source_id="s1",
+            pmid="1",
+            source_kind="pubtator_full_bioc",
+            job_status="complete",
+            coverage="full_text",
+        ),
+        ReviewSourceSummary(
+            source_id="s2",
+            pmid="2",
+            source_kind="pubtator_abstract",
+            job_status="complete",
+            coverage="abstract_only",
+        ),
+        ReviewSourceSummary(
+            source_id="s3",
+            pmid="3",
+            source_kind="pubtator_abstract",
+            job_status="complete",
+            coverage="title_only",
+        ),
     ]
     service = ReviewContextService(repository)
 

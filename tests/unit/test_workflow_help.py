@@ -79,7 +79,7 @@ def test_workflow_help_mentions_literature_graph_bundle_boundary() -> None:
     payload = WorkflowHelpService().get_help("graph").model_dump()
     text = str(payload)
 
-    assert "build_topic_literature_map" in text
+    assert "generate_topic_literature_map" in text
     assert "get_publication_citation_graph" in text
     assert "find_related_evidence_candidates" in text
     assert "ToolSearch" in text
@@ -90,7 +90,7 @@ def test_workflow_help_routes_hyphenated_literature_graph_aliases() -> None:
         response = WorkflowHelpService().get_help(task)
 
         assert response.task == "graph"
-        assert "build_topic_literature_map" in response.tool_sequence
+        assert "generate_topic_literature_map" in response.tool_sequence
         assert "get_publication_citation_graph" in response.tool_sequence
 
 
@@ -117,7 +117,7 @@ def test_readonly_clinical_workflow_is_contiguous_and_retrieval_only() -> None:
         "get_variant_evidence",
         "search_literature",
         "get_publication_metadata",
-        "preflight_review_sources",
+        "get_review_source_coverage",
         "get_publication_passages",
     ]
     assert [step.order for step in response.steps] == list(range(1, len(response.steps) + 1))

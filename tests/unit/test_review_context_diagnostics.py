@@ -41,7 +41,7 @@ def test_query_summary_marks_unindexed_review() -> None:
     summary = query_summary(query="MEFV", result=result, returned_count=0, dropped_count=0)
 
     assert summary.zero_result_reason == "review_not_indexed"
-    assert summary.next_steps == ["index_review_evidence", "inspect_review_index"]
+    assert summary.next_steps == ["index_review_evidence", "get_review_index_status"]
 
 
 def test_zero_result_reason_includes_coverage_abstract_only() -> None:
@@ -79,7 +79,7 @@ def test_high_drop_nonzero_query_summary_has_next_steps() -> None:
         query="MEFV colchicine", result=result, returned_count=1, dropped_count=9
     )
 
-    assert summary.next_steps == ["increase_budget", "narrow_query", "inspect_review_index"]
+    assert summary.next_steps == ["increase_budget", "narrow_query", "get_review_index_status"]
 
 
 def test_recovery_from_zero_result_query_summary_promotes_next_steps() -> None:

@@ -32,7 +32,7 @@ def _json_object_from_text(text: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             try:
                 parsed = ast.literal_eval(stripped)
-            except (SyntaxError, ValueError):
+            except SyntaxError, ValueError:
                 parsed = json.loads(stripped.replace("\\n", "\n").replace('\\"', '"'))
         if isinstance(parsed, dict):
             return parsed
@@ -45,7 +45,7 @@ def _json_object_from_text(text: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             try:
                 parsed = ast.literal_eval(candidate)
-            except (SyntaxError, ValueError):
+            except SyntaxError, ValueError:
                 parsed = json.loads(candidate.replace("\\n", "\n").replace('\\"', '"'))
         if isinstance(parsed, dict):
             return parsed

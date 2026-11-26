@@ -111,7 +111,7 @@ class WorkflowHelpService:
                 ),
                 WorkflowStep(
                     order=6,
-                    tool_name="preflight_review_sources",
+                    tool_name="get_review_source_coverage",
                     purpose="Check likely source coverage before direct passage retrieval.",
                 ),
                 WorkflowStep(
@@ -201,7 +201,7 @@ class WorkflowHelpService:
             ),
             WorkflowStep(
                 order=9,
-                tool_name="inspect_review_index",
+                tool_name="get_review_index_status",
                 purpose="Verify indexed coverage, source status, and sample passages.",
             ),
             WorkflowStep(
@@ -247,7 +247,7 @@ class WorkflowHelpService:
             ),
             WorkflowStep(
                 order=3,
-                tool_name="preflight_review_sources",
+                tool_name="get_review_source_coverage",
                 purpose="Check likely source coverage before indexing or retrieval.",
             ),
         ]
@@ -279,7 +279,7 @@ class WorkflowHelpService:
                 ),
                 WorkflowStep(
                     order=2,
-                    tool_name="build_topic_literature_map",
+                    tool_name="generate_topic_literature_map",
                     purpose="Build a compact topic map with bounded candidate signals.",
                     key_args={"response_mode": "compact", "max_candidates": 12},
                 ),
@@ -329,7 +329,7 @@ class WorkflowHelpService:
             ),
             WorkflowStep(
                 order=2,
-                tool_name="build_topic_literature_map",
+                tool_name="generate_topic_literature_map",
                 purpose=(
                     "Build a compact topic map with bounded summary papers, candidate "
                     "signals, omitted_counts, and recommended next PMIDs."

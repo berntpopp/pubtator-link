@@ -109,7 +109,7 @@ async def test_readonly_corpus_suggestion_ends_in_direct_passage_retrieval() -> 
 
     assert response.meta["next_commands"] == [
         "get_publication_metadata(pmids=['1'])",
-        "preflight_review_sources(pmids=['1'])",
+        "get_review_source_coverage(pmids=['1'])",
         "get_publication_passages(pmids=['1'])",
     ]
 

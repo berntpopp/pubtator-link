@@ -133,7 +133,9 @@ Required behavior:
 Use `stable_cache_key()` with each graph request's normalized payload:
 
 ```python
-stable_cache_key("literature_graph", {"tool": tool_name, "request": request.model_dump(mode="json")})
+stable_cache_key(
+    "literature_graph", {"tool": tool_name, "request": request.model_dump(mode="json")}
+)
 ```
 
 Set `_meta.cache_key`, `_meta.snapshot_date`, and `_meta.source_versions`.
@@ -562,11 +564,11 @@ Add an optional score object to returned context passages or diagnostics:
 
 ```python
 {
-  "lexical_score": float | None,
-  "section_score": float,
-  "source_coverage_score": float,
-  "entity_overlap_score": float | None,
-  "final_rank_reason": list[str]
+    "lexical_score": float | None,
+    "section_score": float,
+    "source_coverage_score": float,
+    "entity_overlap_score": float | None,
+    "final_rank_reason": list[str],
 }
 ```
 

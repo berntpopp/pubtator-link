@@ -151,7 +151,7 @@ class ReviewIndexingService:
             source_preflight_warnings=source_preflight_warnings,
             lifecycle_note=(
                 "Repeated calls with the same review_id and already indexed sources are no-ops. "
-                "Call inspect_review_index before retrieval to verify source coverage."
+                "Call get_review_index_status before retrieval to verify source coverage."
             ),
         )
 

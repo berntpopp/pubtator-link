@@ -147,7 +147,11 @@ Create `tests/unit/test_literature_graph_compact.py`:
 ```python
 from __future__ import annotations
 
-from pubtator_link.models.literature_graph import LiteratureAvailability, LiteraturePaper, ProviderWarning
+from pubtator_link.models.literature_graph import (
+    LiteratureAvailability,
+    LiteraturePaper,
+    ProviderWarning,
+)
 from pubtator_link.services.literature_graph_compact import (
     access_flags,
     access_summary,
@@ -186,7 +190,9 @@ def test_coalesces_repeated_provider_warnings() -> None:
     warnings = [
         ProviderWarning(provider="unpaywall", status="provider_disabled", message="missing email"),
         ProviderWarning(provider="unpaywall", status="provider_disabled", message="missing email"),
-        ProviderWarning(provider="crossref", status="provider_failed", message="timeout", retryable=True),
+        ProviderWarning(
+            provider="crossref", status="provider_failed", message="timeout", retryable=True
+        ),
     ]
 
     coalesced = coalesced_provider_warnings(warnings)
@@ -503,7 +509,9 @@ class DisabledUnpaywall:
 
 
 @pytest.mark.asyncio
-async def test_citation_graph_compact_returns_candidates_status_and_no_metadata_duplicates() -> None:
+async def test_citation_graph_compact_returns_candidates_status_and_no_metadata_duplicates() -> (
+    None
+):
     service = CitationGraphService(
         crossref=FakeCrossref(),
         europe_pmc=FakeEuropePmc(),
@@ -785,7 +793,9 @@ async def test_citation_graph_batches_reference_doi_resolution() -> None:
     assert discovery.calls == [["10.1016/j.ard.2025.05.020"], ["10.1000/primary-study"]]
     assert response.reference_candidates[0].pmid == "30000001"
     assert "resolved_pmid_from_doi" in response.reference_candidates[0].rank_reasons
-    assert any(status.operation == "doi_to_pmid" for status in response.identifier_resolution_status)
+    assert any(
+        status.operation == "doi_to_pmid" for status in response.identifier_resolution_status
+    )
 ```
 
 - [ ] **Step 2: Run tests to verify failure**
@@ -909,7 +919,9 @@ if request.resolve_reference_pmids and request.max_reference_resolution > 0:
     )
     cited_by, cited_by_resolution_status = await self._resolve_neighbor_dois(
         papers=cited_by,
-        max_ids=max(0, request.max_reference_resolution - len(reference_resolution_status.resolved)),
+        max_ids=max(
+            0, request.max_reference_resolution - len(reference_resolution_status.resolved)
+        ),
     )
 ```
 
@@ -1047,7 +1059,9 @@ def rank_topic_candidates(
                 relevance_to_query=relevance,
                 rank_reasons=rank_reasons,
                 demotion_reasons=demotion_reasons,
-                source_tools=["topic_search"] if paper.pmid in seed_set else ["topic_search", "related_evidence"],
+                source_tools=["topic_search"]
+                if paper.pmid in seed_set
+                else ["topic_search", "related_evidence"],
             )
         )
     return sorted(
@@ -1135,7 +1149,9 @@ async def test_topic_map_compact_omits_topology_and_uses_pmid_indexes() -> None:
 
 
 @pytest.mark.asyncio
-async def test_topic_map_nodes_edges_mode_returns_bounded_topology_without_candidate_envelopes() -> None:
+async def test_topic_map_nodes_edges_mode_returns_bounded_topology_without_candidate_envelopes() -> (
+    None
+):
     response = await _service().build_map(
         TopicLiteratureMapRequest(
             pmids=["111", "222"],
@@ -1166,13 +1182,18 @@ Expected: fail because topic request/response mode fields do not exist and the s
 In `TopicLiteratureMapRequest`, add:
 
 ```python
-    response_mode: LiteratureGraphResponseMode = "full"
-    max_candidates: int = Field(default=12, ge=1, le=50)
-    include_demoted: bool = True
-    max_demoted: int = Field(default=3, ge=0, le=20)
-    bias_toward: list[Literal["guideline", "cohort", "genotype_phenotype", "treatment", "pediatric", "population"]] | None = None
-    max_graph_nodes: int = Field(default=30, ge=1, le=200)
-    max_graph_edges: int = Field(default=60, ge=1, le=400)
+response_mode: LiteratureGraphResponseMode = "full"
+max_candidates: int = Field(default=12, ge=1, le=50)
+include_demoted: bool = True
+max_demoted: int = Field(default=3, ge=0, le=20)
+bias_toward: (
+    list[
+        Literal["guideline", "cohort", "genotype_phenotype", "treatment", "pediatric", "population"]
+    ]
+    | None
+) = None
+max_graph_nodes: int = Field(default=30, ge=1, le=200)
+max_graph_edges: int = Field(default=60, ge=1, le=400)
 ```
 
 In `TopicLiteratureMapResponse`, add:
@@ -1394,7 +1415,9 @@ async def test_citation_graph_adapter_accepts_compact_response_mode() -> None:
     class Service:
         async def get_citation_graph(self, request):
             assert request.response_mode == "compact"
-            return PublicationCitationGraphResponse(source=LiteraturePaper(pmid="1"), response_mode="compact")
+            return PublicationCitationGraphResponse(
+                source=LiteraturePaper(pmid="1"), response_mode="compact"
+            )
 
     result = await get_publication_citation_graph_impl(
         service=Service(),
@@ -1456,7 +1479,12 @@ For topic map also pass:
 max_candidates: int = 12
 include_demoted: bool = True
 max_demoted: int = 3
-bias_toward: list[Literal["guideline", "cohort", "genotype_phenotype", "treatment", "pediatric", "population"]] | None = None
+bias_toward: (
+    list[
+        Literal["guideline", "cohort", "genotype_phenotype", "treatment", "pediatric", "population"]
+    ]
+    | None
+) = None
 max_graph_nodes: int = 30
 max_graph_edges: int = 60
 ```

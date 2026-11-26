@@ -6,24 +6,24 @@ from pubtator_link.mcp.profiles import MCPToolProfile, tool_names_for_profile
 
 READONLY_RETRIEVAL_WORKFLOW_TOOLS = [
     "search_literature",
-    "preflight_review_sources",
+    "get_review_source_coverage",
     "get_publication_passages",
 ]
 
 LEAN_REVIEW_WORKFLOW_TOOLS = [
     "search_literature",
-    "preflight_review_sources",
+    "get_review_source_coverage",
     "index_review_evidence",
-    "inspect_review_index",
+    "get_review_index_status",
     "get_review_context_batch",
 ]
 
 CORE_WORKFLOW_TOOLS = [
     "workflow_help",
     "search_literature",
-    "preflight_review_sources",
+    "get_review_source_coverage",
     "index_review_evidence",
-    "inspect_review_index",
+    "get_review_index_status",
     "get_review_context_batch",
     "diagnostics",
 ]
@@ -32,12 +32,12 @@ TOOL_CATEGORIES = {
     "discovery": [
         "search_literature",
         "get_citation",
-        "convert_article_ids",
+        "map_article_ids",
     ],
     "review": [
-        "preflight_review_sources",
+        "get_review_source_coverage",
         "index_review_evidence",
-        "inspect_review_index",
+        "get_review_index_status",
     ],
     "retrieval": [
         "get_review_context_batch",
@@ -72,7 +72,7 @@ SAMPLE_CALLS = {
         "mode": "similar",
         "limit": 20,
     },
-    "suggest_corpus": {
+    "find_review_corpus": {
         "question": "FMF MEFV VUS colchicine",
         "max_pmids": 8,
     },
@@ -145,9 +145,9 @@ def get_llm_driver_contract(profile: MCPToolProfile | None = None) -> dict[str, 
         "core_workflow_tools": [
             "search_biomedical_entities",
             "search_literature",
-            "preflight_review_sources",
+            "get_review_source_coverage",
             "index_review_evidence",
-            "inspect_review_index",
+            "get_review_index_status",
             "ground_question",
             "get_review_context_batch",
             "get_review_context",

@@ -209,7 +209,7 @@ def _build_source_preflight_service(
     europe_pmc_client: EuropePmcClient | None = None,
 ) -> SourcePreflightService:
     async def id_converter(pmid: str) -> dict[str, str | None]:
-        converted = await discovery_service.convert_article_ids([pmid], source="auto")
+        converted = await discovery_service.map_article_ids([pmid], source="auto")
         record = next(
             (
                 record

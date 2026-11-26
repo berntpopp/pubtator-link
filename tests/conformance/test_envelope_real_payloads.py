@@ -209,7 +209,7 @@ class _Upstream:
         return PublicationMetadataResponse(metadata=[PublicationMetadata(pmid=PMID, title="T")])
 
     # NCBI discovery.
-    async def convert_article_ids(self, **_: Any) -> ArticleIdConversionResponse:
+    async def map_article_ids(self, **_: Any) -> ArticleIdConversionResponse:
         record = ArticleIdConversionRecord(
             input_id=PMID, input_kind="pmid", status="resolved", pmid=PMID
         )
@@ -295,7 +295,7 @@ class _Upstream:
         session = ResearchSessionSummary(session_id="ses_1", review_id=REVIEW)
         return ListResearchSessionsResponse(sessions=[session], total_returned=1)
 
-    async def inspect_review_index(self, *_: Any, **__: Any) -> InspectReviewIndexResponse:
+    async def get_review_index_status(self, *_: Any, **__: Any) -> InspectReviewIndexResponse:
         source = ReviewSourceSummary(
             source_id=f"pmid:{PMID}", source_kind="pubtator_abstract", job_status="complete"
         )
@@ -397,13 +397,13 @@ EXTRA_ARGUMENTS = {
 }
 NESTED = {  # no single primary payload: the whole payload is the ``result`` object
     "get_variant_evidence",
-    "build_topic_literature_map",
+    "generate_topic_literature_map",
     "get_publication_citation_graph",
-    "estimate_publication_context",
+    "compute_publication_context",
     "submit_text_annotation",
     "get_text_annotation_results",
     "index_review_evidence",
-    "inspect_review_index",
+    "get_review_index_status",
     "ground_question",
     "review_quickstart",
     "export_review_audit_bundle",
@@ -461,7 +461,7 @@ async def test_doi_cache_hit_keeps_the_original_fetch_time(
     class _Discovery:
         calls = 0
 
-        async def convert_article_ids(self, dois: list[str], **_: Any) -> Any:
+        async def map_article_ids(self, dois: list[str], **_: Any) -> Any:
             self.calls += 1
             record = ArticleIdConversionRecord(
                 input_id=dois[0], input_kind="doi", status="resolved", pmid=PMID

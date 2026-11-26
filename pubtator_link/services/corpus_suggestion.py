@@ -350,13 +350,13 @@ def _next_commands(
     if profile == "readonly":
         return [
             f"get_publication_metadata(pmids={pmids!r})",
-            f"preflight_review_sources(pmids={pmids!r})",
+            f"get_review_source_coverage(pmids={pmids!r})",
             f"get_publication_passages(pmids={pmids!r})",
         ]
     return [
         f"get_publication_metadata(pmids={pmids!r})",
         f"index_review_evidence(review_id='{review_id}', pmids={pmids!r})",
-        f"inspect_review_index(review_id='{review_id}')",
+        f"get_review_index_status(review_id='{review_id}')",
         f"get_review_context_batch(review_id='{review_id}', queries={[request.question]!r})",
     ]
 

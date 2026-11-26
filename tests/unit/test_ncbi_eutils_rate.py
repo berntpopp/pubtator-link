@@ -95,7 +95,7 @@ async def test_id_converter_requests_carry_the_key(monkeypatch: pytest.MonkeyPat
         return httpx.Response(200, json={"records": []})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
-        await NcbiDiscoveryClient(http_client=http).convert_article_ids(["PMC1"], source="auto")
+        await NcbiDiscoveryClient(http_client=http).map_article_ids(["PMC1"], source="auto")
     assert seen[0].host == "pmc.ncbi.nlm.nih.gov"
     assert seen[0].params["api_key"] == KEY
 

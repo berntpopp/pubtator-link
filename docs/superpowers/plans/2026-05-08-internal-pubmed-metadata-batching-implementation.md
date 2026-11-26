@@ -702,7 +702,9 @@ async def test_related_evidence_candidate_metadata_preserves_internal_options() 
 
 
 @pytest.mark.asyncio
-async def test_related_evidence_partial_metadata_batch_failure_keeps_successful_candidates() -> None:
+async def test_related_evidence_partial_metadata_batch_failure_keeps_successful_candidates() -> (
+    None
+):
     metadata = PartialFailureMetadata()
     service = RelatedEvidenceService(
         discovery_service=ManyCandidateDiscovery(),
@@ -748,28 +750,26 @@ from pubtator_link.services.publication_metadata import lookup_metadata_batched
 Replace the request loop inside `_metadata_candidates()` with:
 
 ```python
-        warnings: list[ProviderWarning] = []
-        metadata_by_pmid: dict[str, Any] = {}
-        failed_pmids: dict[str, Any] = {}
-        try:
-            metadata_response = await lookup_metadata_batched(
-                self.metadata_service,
-                pmids,
-                include_mesh=False,
-                include_publication_types=True,
-                include_citations="none",
-                include_coverage=True,
-            )
-        except Exception as exc:
-            warnings.append(_provider_failed_warning("pubmed_metadata", exc))
-            metadata_response = None
+warnings: list[ProviderWarning] = []
+metadata_by_pmid: dict[str, Any] = {}
+failed_pmids: dict[str, Any] = {}
+try:
+    metadata_response = await lookup_metadata_batched(
+        self.metadata_service,
+        pmids,
+        include_mesh=False,
+        include_publication_types=True,
+        include_citations="none",
+        include_coverage=True,
+    )
+except Exception as exc:
+    warnings.append(_provider_failed_warning("pubmed_metadata", exc))
+    metadata_response = None
 
-        if metadata_response is not None:
-            metadata_by_pmid.update(
-                {metadata.pmid: metadata for metadata in metadata_response.metadata}
-            )
-            failed_pmids.update(getattr(metadata_response, "failed_pmids", {}))
-            warnings.extend(_metadata_response_provider_warnings(metadata_response))
+if metadata_response is not None:
+    metadata_by_pmid.update({metadata.pmid: metadata for metadata in metadata_response.metadata})
+    failed_pmids.update(getattr(metadata_response, "failed_pmids", {}))
+    warnings.extend(_metadata_response_provider_warnings(metadata_response))
 ```
 
 Add this helper near `_provider_failed_warning()`:

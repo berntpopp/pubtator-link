@@ -112,7 +112,10 @@ def test_infer_source_coverage_prefers_full_text_sections() -> None:
 def test_parse_execute_count_and_recall_query_are_stable() -> None:
     assert _parse_execute_count("INSERT 0 7") == 7
     assert _parse_execute_count("UPDATE") == 0
-    assert _recall_tsquery("MEFV MEFV colchicine response in FMF") == "mefv | colchicine | response | fmf"
+    assert (
+        _recall_tsquery("MEFV MEFV colchicine response in FMF")
+        == "mefv | colchicine | response | fmf"
+    )
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -455,6 +458,7 @@ Define:
 ```python
 from dataclasses import dataclass
 
+
 @dataclass(frozen=True)
 class PackedPassages:
     selected: list[ReviewPassageRow]
@@ -532,8 +536,16 @@ Create tests for tokenization, query suggestions, and query summary zero-result 
 ```python
 from __future__ import annotations
 
-from pubtator_link.models.review_rerag import ContextPack, PreparationStatus, RetrieveReviewContextResponse
-from pubtator_link.services.review_context.diagnostics import query_summary, query_tokens, suggested_queries
+from pubtator_link.models.review_rerag import (
+    ContextPack,
+    PreparationStatus,
+    RetrieveReviewContextResponse,
+)
+from pubtator_link.services.review_context.diagnostics import (
+    query_summary,
+    query_tokens,
+    suggested_queries,
+)
 
 
 def test_query_tokens_deduplicates_and_limits_short_tokens() -> None:
@@ -772,6 +784,7 @@ Define return container:
 
 ```python
 from dataclasses import dataclass
+
 
 @dataclass
 class MergedBatchContext:

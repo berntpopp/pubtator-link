@@ -119,7 +119,10 @@ from pubtator_link.models.literature_graph import (
 
 def test_citation_graph_request_requires_exactly_one_identifier() -> None:
     assert PublicationCitationGraphRequest(pmid="40562663").pmid == "40562663"
-    assert PublicationCitationGraphRequest(doi="10.1016/j.ard.2025.05.020").doi == "10.1016/j.ard.2025.05.020"
+    assert (
+        PublicationCitationGraphRequest(doi="10.1016/j.ard.2025.05.020").doi
+        == "10.1016/j.ard.2025.05.020"
+    )
 
     for payload in ({}, {"pmid": "40562663", "doi": "10.1016/j.ard.2025.05.020"}):
         try:
@@ -137,8 +140,14 @@ def test_related_evidence_request_normalizes_numeric_pmid_string() -> None:
 
 
 def test_topic_map_request_requires_query_or_pmids() -> None:
-    assert TopicLiteratureMapRequest(query="familial mediterranean fever").query == "familial mediterranean fever"
-    assert TopicLiteratureMapRequest(pmids=["40562663", "39596913"]).pmids == ["40562663", "39596913"]
+    assert (
+        TopicLiteratureMapRequest(query="familial mediterranean fever").query
+        == "familial mediterranean fever"
+    )
+    assert TopicLiteratureMapRequest(pmids=["40562663", "39596913"]).pmids == [
+        "40562663",
+        "39596913",
+    ]
 
     try:
         TopicLiteratureMapRequest()
@@ -822,9 +831,15 @@ Expected: FAIL because provider clients and `find_related_article_scores` do not
 In `pubtator_link/config.py`, add these fields to `ServerSettings` near the Europe PMC settings:
 
 ```python
-    crossref_mailto: str | None = Field(default=None, description="Optional Crossref polite-pool mailto")
-    openalex_mailto: str | None = Field(default=None, description="Optional OpenAlex polite-pool mailto")
-    unpaywall_email: str | None = Field(default=None, description="Required email for optional Unpaywall API use")
+crossref_mailto: str | None = Field(
+    default=None, description="Optional Crossref polite-pool mailto"
+)
+openalex_mailto: str | None = Field(
+    default=None, description="Optional OpenAlex polite-pool mailto"
+)
+unpaywall_email: str | None = Field(
+    default=None, description="Required email for optional Unpaywall API use"
+)
 ```
 
 - [ ] **Step 6: Add provider clients**
@@ -935,8 +950,12 @@ class EuropePmcLiteratureClient:
         )
         response.raise_for_status()
         payload = response.json()
-        records = payload.get("resultList", {}).get("result", []) if isinstance(payload, dict) else []
-        return [_paper_from_europe_pmc_record(record) for record in records if isinstance(record, dict)]
+        records = (
+            payload.get("resultList", {}).get("result", []) if isinstance(payload, dict) else []
+        )
+        return [
+            _paper_from_europe_pmc_record(record) for record in records if isinstance(record, dict)
+        ]
 
 
 class OpenAlexClient:
@@ -956,7 +975,9 @@ class OpenAlexClient:
 
     async def get_work_by_doi(self, doi: str) -> LiteraturePaper:
         params = {"mailto": self.mailto} if self.mailto else None
-        response = await self.http_client.get(f"{self.base_url}/works/https://doi.org/{doi}", params=params)
+        response = await self.http_client.get(
+            f"{self.base_url}/works/https://doi.org/{doi}", params=params
+        )
         response.raise_for_status()
         payload = response.json()
         return _paper_from_openalex_work(payload if isinstance(payload, dict) else {})
@@ -985,14 +1006,18 @@ class UnpaywallClient:
                 retryable=False,
                 message="UNPAYWALL_EMAIL is not configured.",
             )
-        response = await self.http_client.get(f"{self.base_url}/{doi}", params={"email": self.email})
+        response = await self.http_client.get(
+            f"{self.base_url}/{doi}", params={"email": self.email}
+        )
         response.raise_for_status()
         payload = response.json()
         best = payload.get("best_oa_location", {}) if isinstance(payload, dict) else {}
         best = best if isinstance(best, dict) else {}
         return LiteratureAvailability(
             is_open_access=bool(payload.get("is_oa")) if isinstance(payload, dict) else False,
-            oa_status=_optional_str(payload.get("oa_status")) if isinstance(payload, dict) else None,
+            oa_status=_optional_str(payload.get("oa_status"))
+            if isinstance(payload, dict)
+            else None,
             full_text_url=_optional_str(best.get("url")),
             license_or_access_hint=_optional_str(best.get("license")),
         )
@@ -1015,7 +1040,11 @@ def _paper_from_europe_pmc_record(record: dict[str, Any]) -> LiteraturePaper:
             has_pdf=has_pdf,
         ),
         status="resolved_full_text_candidate" if in_pmc or is_oa else "resolved_metadata_only",
-        provenance=[LiteratureGraphProvenance(provider=EUROPE_PMC_PROVIDER, source_id=_optional_str(record.get("id")))],
+        provenance=[
+            LiteratureGraphProvenance(
+                provider=EUROPE_PMC_PROVIDER, source_id=_optional_str(record.get("id"))
+            )
+        ],
     )
 
 
@@ -1039,8 +1068,14 @@ def _paper_from_openalex_work(work: dict[str, Any]) -> LiteraturePaper:
             oa_status=_optional_str(oa.get("oa_status")),
             full_text_url=_optional_str(oa.get("oa_url")),
         ),
-        status="resolved_full_text_candidate" if bool(oa.get("is_oa")) else "resolved_metadata_only",
-        provenance=[LiteratureGraphProvenance(provider=OPENALEX_PROVIDER, source_id=_optional_str(work.get("id")))],
+        status="resolved_full_text_candidate"
+        if bool(oa.get("is_oa"))
+        else "resolved_metadata_only",
+        provenance=[
+            LiteratureGraphProvenance(
+                provider=OPENALEX_PROVIDER, source_id=_optional_str(work.get("id"))
+            )
+        ],
     )
 
 
@@ -1054,11 +1089,15 @@ def _openalex_authors(value: object) -> list[LiteratureAuthor]:
         author = item.get("author", {})
         author = author if isinstance(author, dict) else {}
         institutions = item.get("institutions", [])
-        affiliations = [
-            str(inst.get("display_name"))
-            for inst in institutions
-            if isinstance(inst, dict) and inst.get("display_name")
-        ] if isinstance(institutions, list) else []
+        affiliations = (
+            [
+                str(inst.get("display_name"))
+                for inst in institutions
+                if isinstance(inst, dict) and inst.get("display_name")
+            ]
+            if isinstance(institutions, list)
+            else []
+        )
         name = _optional_str(author.get("display_name"))
         if name:
             authors.append(
@@ -1094,7 +1133,7 @@ def _optional_str(value: object) -> str | None:
 def _optional_int(value: object) -> int | None:
     try:
         return int(str(value))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 ```
 
@@ -1233,7 +1272,9 @@ class FakeCrossref:
             LiteraturePaper(
                 doi="10.1000/primary-study",
                 title="Primary trial",
-                provenance=[LiteratureGraphProvenance(provider="crossref", source_id=str(work["DOI"]))],
+                provenance=[
+                    LiteratureGraphProvenance(provider="crossref", source_id=str(work["DOI"]))
+                ],
             )
         ]
 
@@ -1261,6 +1302,7 @@ class FakeDiscovery:
     async def convert_article_ids(self, ids, source="auto"):
         class Response:
             records = []
+
         return Response()
 
 
@@ -1269,6 +1311,7 @@ class FakeMetadata:
         class Response:
             metadata = []
             failed_pmids = {}
+
         return Response()
 
 
@@ -1411,7 +1454,11 @@ class CitationGraphService:
         references: list[LiteraturePaper] = []
         cited_by: list[LiteraturePaper] = []
 
-        if request.doi is not None and source.pmid is None and request.direction in {"both", "cited_by"}:
+        if (
+            request.doi is not None
+            and source.pmid is None
+            and request.direction in {"both", "cited_by"}
+        ):
             warnings.append(
                 ProviderWarning(
                     provider="identifier_resolution",
@@ -1428,9 +1475,15 @@ class CitationGraphService:
             except Exception as exc:
                 warnings.append(_provider_warning(CROSSREF_PROVIDER, exc))
 
-        if request.direction in {"both", "cited_by"} and source.pmid and self.europe_pmc is not None:
+        if (
+            request.direction in {"both", "cited_by"}
+            and source.pmid
+            and self.europe_pmc is not None
+        ):
             try:
-                cited_by.extend(await self.europe_pmc.get_citations(source.pmid, limit=request.max_results))
+                cited_by.extend(
+                    await self.europe_pmc.get_citations(source.pmid, limit=request.max_results)
+                )
             except Exception as exc:
                 warnings.append(_provider_warning(EUROPE_PMC_PROVIDER, exc))
 
@@ -1440,7 +1493,8 @@ class CitationGraphService:
         metadata_only = [
             paper
             for paper in [*references, *cited_by]
-            if paper.status in {"resolved_metadata_only", "unresolved_reference", "publisher_entitlement_required"}
+            if paper.status
+            in {"resolved_metadata_only", "unresolved_reference", "publisher_entitlement_required"}
         ]
         return PublicationCitationGraphResponse(
             source=source,
@@ -1448,7 +1502,9 @@ class CitationGraphService:
             cited_by=cited_by,
             candidate_pmids=candidate_pmids,
             metadata_only=metadata_only,
-            _meta=LiteratureResponseMeta(warnings=warnings, next_commands=_next_commands(candidate_pmids)),
+            _meta=LiteratureResponseMeta(
+                warnings=warnings, next_commands=_next_commands(candidate_pmids)
+            ),
         )
 
     async def _source_paper(self, request: PublicationCitationGraphRequest) -> LiteraturePaper:
@@ -1502,7 +1558,10 @@ def _next_commands(pmids: list[str]) -> list[dict[str, object]]:
         return []
     return [
         {"tool": "pubtator.get_publication_passages", "arguments": {"pmids": pmids}},
-        {"tool": "pubtator.index_review_evidence", "arguments": {"pmids": pmids, "prepare_mode": "selected"}},
+        {
+            "tool": "pubtator.index_review_evidence",
+            "arguments": {"pmids": pmids, "prepare_mode": "selected"},
+        },
     ]
 ```
 
@@ -1773,35 +1832,37 @@ async def get_publication_citation_graph_impl(
 In `pubtator_link/mcp/tools/publications.py`, import `get_citation_graph_service`, `PublicationCitationGraphResponse`, and the adapter. Add inside `register_publication_tools`:
 
 ```python
-    @mcp.tool(
-        name="pubtator.get_publication_citation_graph",
-        title="Get Publication Citation Graph",
-        output_schema=PublicationCitationGraphResponse.model_json_schema(),
-        annotations=READ_ONLY_OPEN_WORLD,
+@mcp.tool(
+    name="pubtator.get_publication_citation_graph",
+    title="Get Publication Citation Graph",
+    output_schema=PublicationCitationGraphResponse.model_json_schema(),
+    annotations=READ_ONLY_OPEN_WORLD,
+)
+async def get_publication_citation_graph(
+    pmid: Annotated[str | None, Field(default=None, description="Numeric PMID string")] = None,
+    doi: Annotated[str | None, Field(default=None, description="DOI string")] = None,
+    direction: Literal["references", "cited_by", "both"] = "both",
+    resolve_metadata: bool = True,
+    include_open_access_status: bool = True,
+    max_results: Annotated[int, Field(ge=1, le=100)] = 50,
+) -> dict[str, Any]:
+    """Use this when a user needs reference or cited-by neighbors for one publication before deciding which sources to inspect next."""
+
+    async def call() -> dict[str, Any]:
+        service = await get_citation_graph_service()
+        return await get_publication_citation_graph_impl(
+            service=service,
+            pmid=pmid,
+            doi=doi,
+            direction=direction,
+            resolve_metadata=resolve_metadata,
+            include_open_access_status=include_open_access_status,
+            max_results=max_results,
+        )
+
+    return await run_mcp_tool(
+        "pubtator.get_publication_citation_graph", call, pmids=[pmid] if pmid else None
     )
-    async def get_publication_citation_graph(
-        pmid: Annotated[str | None, Field(default=None, description="Numeric PMID string")] = None,
-        doi: Annotated[str | None, Field(default=None, description="DOI string")] = None,
-        direction: Literal["references", "cited_by", "both"] = "both",
-        resolve_metadata: bool = True,
-        include_open_access_status: bool = True,
-        max_results: Annotated[int, Field(ge=1, le=100)] = 50,
-    ) -> dict[str, Any]:
-        """Use this when a user needs reference or cited-by neighbors for one publication before deciding which sources to inspect next."""
-
-        async def call() -> dict[str, Any]:
-            service = await get_citation_graph_service()
-            return await get_publication_citation_graph_impl(
-                service=service,
-                pmid=pmid,
-                doi=doi,
-                direction=direction,
-                resolve_metadata=resolve_metadata,
-                include_open_access_status=include_open_access_status,
-                max_results=max_results,
-            )
-
-        return await run_mcp_tool("pubtator.get_publication_citation_graph", call, pmids=[pmid] if pmid else None)
 ```
 
 - [ ] **Step 7: Update MCP profiles and catalog supplement**
@@ -2033,7 +2094,9 @@ class RelatedEvidenceService:
         candidate_pmids: list[str] = []
 
         try:
-            records = await self.discovery_service.find_related_article_scores([request.pmid], request.max_results)
+            records = await self.discovery_service.find_related_article_scores(
+                [request.pmid], request.max_results
+            )
             for record in records:
                 neighbor_scores[record.pmid] = record.neighbor_score
                 candidate_pmids.append(record.pmid)
@@ -2043,14 +2106,18 @@ class RelatedEvidenceService:
         if request.include_citation_neighbors:
             try:
                 graph = await self.citation_graph_service.get_citation_graph(
-                    PublicationCitationGraphRequest(pmid=request.pmid, direction="both", max_results=request.max_results)
+                    PublicationCitationGraphRequest(
+                        pmid=request.pmid, direction="both", max_results=request.max_results
+                    )
                 )
                 candidate_pmids.extend(graph.candidate_pmids)
                 warnings.extend(graph.meta.warnings)
             except Exception as exc:
                 warnings.append(_warning("citation_graph", exc))
 
-        candidate_pmids = list(dict.fromkeys([pmid for pmid in candidate_pmids if pmid != request.pmid]))
+        candidate_pmids = list(
+            dict.fromkeys([pmid for pmid in candidate_pmids if pmid != request.pmid])
+        )
         papers = await self._metadata_papers(candidate_pmids)
         candidates = [
             self._candidate_from_paper(paper, neighbor_scores.get(paper.pmid or "", 0), request)
@@ -2064,7 +2131,9 @@ class RelatedEvidenceService:
             source=LiteraturePaper(pmid=request.pmid),
             candidates=candidates,
             candidate_pmids=output_pmids,
-            _meta=LiteratureResponseMeta(warnings=warnings, next_commands=_next_commands(output_pmids)),
+            _meta=LiteratureResponseMeta(
+                warnings=warnings, next_commands=_next_commands(output_pmids)
+            ),
         )
 
     async def _metadata_papers(self, pmids: list[str]) -> list[LiteraturePaper]:
@@ -2091,8 +2160,12 @@ class RelatedEvidenceService:
                     journal=item.journal,
                     year=item.pub_year,
                     publication_types=item.publication_types,
-                    availability=LiteratureAvailability(has_pmc_full_text=full_text, is_open_access=full_text),
-                    status="resolved_full_text_candidate" if full_text else "resolved_metadata_only",
+                    availability=LiteratureAvailability(
+                        has_pmc_full_text=full_text, is_open_access=full_text
+                    ),
+                    status="resolved_full_text_candidate"
+                    if full_text
+                    else "resolved_metadata_only",
                 )
             )
         return papers
@@ -2106,7 +2179,9 @@ class RelatedEvidenceService:
         reasons = ["pubmed_neighbor_score"] if neighbor_score else ["citation_neighbor"]
         if paper.availability.has_pmc_full_text or paper.availability.is_open_access:
             reasons.append("full_text_available")
-        if request.publication_types and set(request.publication_types) & set(paper.publication_types):
+        if request.publication_types and set(request.publication_types) & set(
+            paper.publication_types
+        ):
             reasons.append("requested_publication_type")
         return RelatedEvidenceCandidate(
             paper=paper,
@@ -2124,7 +2199,9 @@ class RelatedEvidenceService:
             return False
         if request.year_max is not None and (paper.year is None or paper.year > request.year_max):
             return False
-        if request.publication_types and not (set(request.publication_types) & set(paper.publication_types)):
+        if request.publication_types and not (
+            set(request.publication_types) & set(paper.publication_types)
+        ):
             return False
         return True
 
@@ -2134,8 +2211,18 @@ def _ranking_key(
     request: RelatedEvidenceCandidatesRequest,
 ) -> tuple[int, int, int, int, int, str]:
     paper = candidate.paper
-    full_text_rank = 1 if request.prefer_full_text and (paper.availability.has_pmc_full_text or paper.availability.is_open_access) else 0
-    publication_type_rank = 1 if request.publication_types and set(request.publication_types) & set(paper.publication_types) else 0
+    full_text_rank = (
+        1
+        if request.prefer_full_text
+        and (paper.availability.has_pmc_full_text or paper.availability.is_open_access)
+        else 0
+    )
+    publication_type_rank = (
+        1
+        if request.publication_types
+        and set(request.publication_types) & set(paper.publication_types)
+        else 0
+    )
     return (
         -(candidate.pubmed_neighbor_score or 0),
         -full_text_rank,
@@ -2147,7 +2234,9 @@ def _ranking_key(
 
 
 def _warning(provider: str, exc: Exception) -> ProviderWarning:
-    return ProviderWarning(provider=provider, status="provider_failed", retryable=True, message=exc.__class__.__name__)
+    return ProviderWarning(
+        provider=provider, status="provider_failed", retryable=True, message=exc.__class__.__name__
+    )
 
 
 def _next_commands(pmids: list[str]) -> list[dict[str, object]]:
@@ -2489,12 +2578,18 @@ async def test_topic_map_builds_nodes_edges_summary_and_hints() -> None:
     )
 
     response = await service.build_map(
-        TopicLiteratureMapRequest(query="familial mediterranean fever", max_seed_papers=2, max_neighbors_per_paper=2)
+        TopicLiteratureMapRequest(
+            query="familial mediterranean fever", max_seed_papers=2, max_neighbors_per_paper=2
+        )
     )
 
     assert response.seed_pmids == ["111", "222"]
     assert {node.node_type for node in response.nodes} >= {"paper", "author"}
-    assert {edge.edge_type for edge in response.edges} >= {"authored_by", "cites", "related_by_elink"}
+    assert {edge.edge_type for edge in response.edges} >= {
+        "authored_by",
+        "cites",
+        "related_by_elink",
+    }
     assert response.summary.central_papers[0].pmid == "111"
     assert response.summary.recommended_next_pmids
     assert response.candidate_retrieval_hints[0]["tool"] == "pubtator.get_publication_passages"
@@ -2510,11 +2605,16 @@ async def test_topic_map_respects_explicit_seed_pmids_and_bounds() -> None:
     )
 
     response = await service.build_map(
-        TopicLiteratureMapRequest(pmids=["111", "222", "333"], max_seed_papers=1, max_neighbors_per_paper=1)
+        TopicLiteratureMapRequest(
+            pmids=["111", "222", "333"], max_seed_papers=1, max_neighbors_per_paper=1
+        )
     )
 
     assert response.seed_pmids == ["111"]
-    assert len([edge for edge in response.edges if edge.edge_type in {"cites", "related_by_elink"}]) <= 2
+    assert (
+        len([edge for edge in response.edges if edge.edge_type in {"cites", "related_by_elink"}])
+        <= 2
+    )
 ```
 
 - [ ] **Step 2: Run topic map tests to verify they fail**
@@ -2579,11 +2679,21 @@ class TopicLiteratureMapService:
 
         for seed in seed_papers:
             neighbor_count = 0
-            if request.include_citations and seed.pmid and neighbor_count < request.max_neighbors_per_paper:
+            if (
+                request.include_citations
+                and seed.pmid
+                and neighbor_count < request.max_neighbors_per_paper
+            ):
                 graph = await self.citation_graph_service.get_citation_graph(
-                    PublicationCitationGraphRequest(pmid=seed.pmid, direction="both", max_results=request.max_neighbors_per_paper)
+                    PublicationCitationGraphRequest(
+                        pmid=seed.pmid,
+                        direction="both",
+                        max_results=request.max_neighbors_per_paper,
+                    )
                 )
-                for paper in [*graph.references, *graph.cited_by][: request.max_neighbors_per_paper - neighbor_count]:
+                for paper in [*graph.references, *graph.cited_by][
+                    : request.max_neighbors_per_paper - neighbor_count
+                ]:
                     all_papers.append(paper)
                     edges.append(
                         LiteratureGraphEdge(
@@ -2591,11 +2701,19 @@ class TopicLiteratureMapService:
                             target=paper.key,
                             edge_type="cites",
                             reasons=["citation_neighbor"],
-                            provenance=[LiteratureGraphProvenance(provider="citation_graph", source_id=seed.pmid)],
+                            provenance=[
+                                LiteratureGraphProvenance(
+                                    provider="citation_graph", source_id=seed.pmid
+                                )
+                            ],
                         )
                     )
                     neighbor_count += 1
-            if request.include_related_candidates and seed.pmid and neighbor_count < request.max_neighbors_per_paper:
+            if (
+                request.include_related_candidates
+                and seed.pmid
+                and neighbor_count < request.max_neighbors_per_paper
+            ):
                 related = await self.related_evidence_service.find_candidates(
                     RelatedEvidenceCandidatesRequest(
                         pmid=seed.pmid,
@@ -2614,7 +2732,11 @@ class TopicLiteratureMapService:
                             edge_type="related_by_elink",
                             weight=float(candidate.pubmed_neighbor_score or 1),
                             reasons=candidate.match_reasons,
-                            provenance=[LiteratureGraphProvenance(provider="ncbi_elink", source_id=seed.pmid)],
+                            provenance=[
+                                LiteratureGraphProvenance(
+                                    provider="ncbi_elink", source_id=seed.pmid
+                                )
+                            ],
                         )
                     )
 
@@ -2623,14 +2745,29 @@ class TopicLiteratureMapService:
         nodes.extend(_author_nodes(papers) if request.include_authors else [])
         edges = dedupe_edges(edges)
         central = _central_papers(papers, edges)
-        recommended = [paper.pmid for paper in papers if paper.pmid and (paper.availability.has_pmc_full_text or paper.availability.is_open_access)]
+        recommended = [
+            paper.pmid
+            for paper in papers
+            if paper.pmid
+            and (paper.availability.has_pmc_full_text or paper.availability.is_open_access)
+        ]
         summary = TopicLiteratureMapSummary(
             central_papers=central[:5],
-            recent_connected_papers=sorted(papers, key=lambda paper: (-(paper.year or 0), paper.key))[:5],
+            recent_connected_papers=sorted(
+                papers, key=lambda paper: (-(paper.year or 0), paper.key)
+            )[:5],
             bridge_papers=central[:5],
             dominant_author_groups=_dominant_authors(papers),
-            accessible_full_text_candidates=[paper for paper in papers if paper.availability.has_pmc_full_text or paper.availability.is_open_access][:10],
-            closed_central_sources=[paper for paper in central if not (paper.availability.has_pmc_full_text or paper.availability.is_open_access)][:5],
+            accessible_full_text_candidates=[
+                paper
+                for paper in papers
+                if paper.availability.has_pmc_full_text or paper.availability.is_open_access
+            ][:10],
+            closed_central_sources=[
+                paper
+                for paper in central
+                if not (paper.availability.has_pmc_full_text or paper.availability.is_open_access)
+            ][:5],
             recommended_next_pmids=recommended[:10],
         )
         return TopicLiteratureMapResponse(
@@ -2639,13 +2776,22 @@ class TopicLiteratureMapService:
             nodes=nodes,
             edges=edges,
             summary=summary,
-            candidate_retrieval_hints=[{"tool": "pubtator.get_publication_passages", "arguments": {"pmids": recommended[:10]}}] if recommended else [],
+            candidate_retrieval_hints=[
+                {
+                    "tool": "pubtator.get_publication_passages",
+                    "arguments": {"pmids": recommended[:10]},
+                }
+            ]
+            if recommended
+            else [],
         )
 
     async def _seed_pmids(self, request: TopicLiteratureMapRequest) -> list[str]:
         seeds = list(request.pmids or [])
         if request.query:
-            raw = await self.search_client.search_publications(text=request.query, page=1, sort=None)
+            raw = await self.search_client.search_publications(
+                text=request.query, page=1, sort=None
+            )
             results = raw.get("results", []) if isinstance(raw, dict) else []
             for item in results:
                 if isinstance(item, dict) and item.get("pmid"):
@@ -2666,7 +2812,11 @@ class TopicLiteratureMapService:
         )
         papers: list[LiteraturePaper] = []
         for item in response.metadata:
-            authors = [LiteratureAuthor(name=author.display_name) for author in item.authors if author.display_name]
+            authors = [
+                LiteratureAuthor(name=author.display_name)
+                for author in item.authors
+                if author.display_name
+            ]
             papers.append(
                 LiteraturePaper(
                     pmid=item.pmid,
@@ -2704,18 +2854,24 @@ def _author_edges(papers: list[LiteraturePaper]) -> list[LiteratureGraphEdge]:
                     target=author.key,
                     edge_type="authored_by",
                     reasons=["metadata_author"],
-                    provenance=[LiteratureGraphProvenance(provider="pubmed_metadata", source_id=paper.pmid)],
+                    provenance=[
+                        LiteratureGraphProvenance(provider="pubmed_metadata", source_id=paper.pmid)
+                    ],
                 )
             )
     return edges
 
 
-def _central_papers(papers: list[LiteraturePaper], edges: list[LiteratureGraphEdge]) -> list[LiteraturePaper]:
+def _central_papers(
+    papers: list[LiteraturePaper], edges: list[LiteratureGraphEdge]
+) -> list[LiteraturePaper]:
     degree: dict[str, int] = {}
     for edge in edges:
         degree[edge.source] = degree.get(edge.source, 0) + 1
         degree[edge.target] = degree.get(edge.target, 0) + 1
-    return sorted(papers, key=lambda paper: (-degree.get(paper.key, 0), -(paper.year or 0), paper.key))
+    return sorted(
+        papers, key=lambda paper: (-degree.get(paper.key, 0), -(paper.year or 0), paper.key)
+    )
 
 
 def _dominant_authors(papers: list[LiteraturePaper]) -> list[str]:
@@ -2723,7 +2879,9 @@ def _dominant_authors(papers: list[LiteraturePaper]) -> list[str]:
     for paper in papers:
         for author in paper.authors:
             counts[author.name] = counts.get(author.name, 0) + 1
-    return [name for name, _count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:10]]
+    return [
+        name for name, _count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:10]
+    ]
 ```
 
 - [ ] **Step 4: Run topic map service tests**
@@ -2741,7 +2899,9 @@ Expected: PASS.
 In `pubtator_link/api/routes/dependencies.py`, add `get_topic_literature_map_service()` and alias:
 
 ```python
-TopicLiteratureMapServiceDep = Annotated[TopicLiteratureMapService, Depends(get_topic_literature_map_service)]
+TopicLiteratureMapServiceDep = Annotated[
+    TopicLiteratureMapService, Depends(get_topic_literature_map_service)
+]
 ```
 
 Use a search adapter that wraps `resources.api_client.search_publications` or `await get_api_client()`.

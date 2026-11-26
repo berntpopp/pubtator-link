@@ -77,9 +77,9 @@ class DiagnosticsService:
         minimum_workflow: dict[str, Any] = {
             "grounded_review": [
                 "search_literature",
-                "preflight_review_sources",
+                "get_review_source_coverage",
                 "index_review_evidence",
-                "inspect_review_index",
+                "get_review_index_status",
                 "get_review_context_batch",
             ],
             "one_call": "ground_question",

@@ -294,7 +294,7 @@ class GatedUnpaywall:
 
 
 class FakeDiscovery:
-    async def convert_article_ids(self, ids: list[str], source: str = "auto"):
+    async def map_article_ids(self, ids: list[str], source: str = "auto"):
         return type("ArticleIdConversionResponse", (), {"records": []})()
 
     async def find_pmid_by_doi(self, doi: str) -> str | None:
@@ -302,7 +302,7 @@ class FakeDiscovery:
 
 
 class ResolvingDiscovery:
-    async def convert_article_ids(self, ids: list[str], source: str = "auto"):
+    async def map_article_ids(self, ids: list[str], source: str = "auto"):
         assert ids == ["10.1016/j.ard.2025.05.020"]
         assert source == "doi"
         return type(
@@ -326,7 +326,7 @@ class ResolvingDiscovery:
 
 
 class ReferenceResolvingDiscovery:
-    async def convert_article_ids(self, ids: list[str], source: str = "auto"):
+    async def map_article_ids(self, ids: list[str], source: str = "auto"):
         records = []
         for doi in ids:
             pmid = {
@@ -514,7 +514,7 @@ class BatchResolvingDiscovery:
     def __init__(self) -> None:
         self.calls: list[list[str]] = []
 
-    async def convert_article_ids(self, ids: list[str], source: str = "auto"):
+    async def map_article_ids(self, ids: list[str], source: str = "auto"):
         self.calls.append(ids)
         return type(
             "ArticleIdConversionResponse",

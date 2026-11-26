@@ -144,17 +144,18 @@ import logging
 import structlog
 from structlog.contextvars import merge_contextvars
 
+
 def configure_logging(*, transport: str, level: str = "INFO") -> None:
     is_stdio = transport == "stdio"
     is_dev = level.upper() == "DEBUG"
 
     processors = [
-        merge_contextvars,                        # pulls correlation_id, tool_name, etc.
+        merge_contextvars,  # pulls correlation_id, tool_name, etc.
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
-        _redact_sensitive,                        # custom; see §6
+        _redact_sensitive,  # custom; see §6
     ]
     if is_dev and not is_stdio:
         processors.append(structlog.dev.ConsoleRenderer(colors=True))
@@ -207,8 +208,10 @@ from structlog.contextvars import bind_contextvars, clear_contextvars
 
 log = structlog.get_logger("mcp.tool")
 
+
 def instrument_tool(name: str) -> Callable:
     """Wrap an MCP tool body. Emits start/complete/error events with stable fields."""
+
     def decorator(func: Callable[..., Awaitable[dict[str, Any]]]):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -230,6 +233,7 @@ def instrument_tool(name: str) -> Callable:
                 latency_ms = (time.perf_counter() - started) * 1000
                 # error_code resolved by mcp/errors.py — re-extract here for log field parity
                 from pubtator_link.mcp.errors import error_code_for_exception
+
                 log.warning(
                     "mcp_tool_failed",
                     latency_ms=round(latency_ms, 2),
@@ -241,7 +245,9 @@ def instrument_tool(name: str) -> Callable:
                 raise
             finally:
                 clear_contextvars()
+
         return wrapper
+
     return decorator
 ```
 
@@ -358,8 +364,9 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
 
+
 def configure_tracing(app, *, service_name: str, otlp_endpoint: str | None) -> None:
-    if not otlp_endpoint:                          # tracing optional / no-op when unset
+    if not otlp_endpoint:  # tracing optional / no-op when unset
         return
     resource = Resource.create({"service.name": service_name, "service.version": "1.0.0"})
     provider = TracerProvider(resource=resource)
@@ -433,6 +440,8 @@ Without this, your queue work shows up as orphan traces — a real and documente
 
    ```python
    _SENSITIVE_KEYS = frozenset({"text", "raw_text", "annotation_payload", "patient_text"})
+
+
    def _redact_sensitive(_logger, _name, event_dict):
        for k in list(event_dict):
            if k in _SENSITIVE_KEYS:

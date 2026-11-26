@@ -10,7 +10,7 @@ import httpx
 
 CALLS: list[tuple[str, dict[str, Any], int]] = [
     (
-        "convert_article_ids",
+        "map_article_ids",
         {
             "ids": ["24166952", "PMC12758588", "10.1038/s41431-022-01127-3"],
             "source": "auto",
@@ -18,7 +18,7 @@ CALLS: list[tuple[str, dict[str, Any], int]] = [
         12_000,
     ),
     (
-        "preflight_review_sources",
+        "get_review_source_coverage",
         {"pmids": ["24166952", "42135612"]},
         12_000,
     ),
@@ -26,8 +26,7 @@ CALLS: list[tuple[str, dict[str, Any], int]] = [
         "submit_text_annotation",
         {
             "text": (
-                "Familial Mediterranean fever is associated with MEFV variants "
-                "and colchicine."
+                "Familial Mediterranean fever is associated with MEFV variants and colchicine."
             ),
             "bioconcepts": "Gene,Disease,Chemical",
         },

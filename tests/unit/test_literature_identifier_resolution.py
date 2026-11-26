@@ -12,7 +12,7 @@ class RecordingDiscovery:
     def __init__(self) -> None:
         self.calls: list[tuple[list[str], str]] = []
 
-    async def convert_article_ids(self, ids: list[str], source: str = "auto"):
+    async def map_article_ids(self, ids: list[str], source: str = "auto"):
         self.calls.append((ids, source))
         return type(
             "ArticleIdConversionResponse",
@@ -41,7 +41,7 @@ class NoMatchDiscovery:
     def __init__(self) -> None:
         self.calls: list[tuple[list[str], str]] = []
 
-    async def convert_article_ids(self, ids: list[str], source: str = "auto"):
+    async def map_article_ids(self, ids: list[str], source: str = "auto"):
         self.calls.append((ids, source))
         return type(
             "ArticleIdConversionResponse",

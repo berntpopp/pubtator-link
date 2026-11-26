@@ -38,8 +38,8 @@ def _pmid_value_schemas() -> list[tuple[str, str, str, dict[str, Any]]]:
 _CASES = _pmid_value_schemas()
 # Entry-point tools also take a PMCID/DOI and convert it (router #319).
 _ARTICLE_ID_TOOLS = {
-    ("build_topic_literature_map", "pmids"),
-    ("estimate_publication_context", "pmids"),
+    ("generate_topic_literature_map", "pmids"),
+    ("compute_publication_context", "pmids"),
     ("find_related_articles", "pmids"),
     ("find_related_evidence_candidates", "pmid"),
     ("get_publication_annotations", "pmids"),

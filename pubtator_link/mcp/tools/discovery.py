@@ -13,7 +13,7 @@ from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from pubtator_link.mcp.argument_aliases import merge_pmids, resolve_pmids, with_resolved_from
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.profiles import MCPToolProfile
-from pubtator_link.mcp.service_adapters import suggest_corpus_impl
+from pubtator_link.mcp.service_adapters import find_review_corpus_impl
 from pubtator_link.mcp.tools._vocab import ArticleId, Pmid
 from pubtator_link.models.discovery import ArticleIdKind, RelatedArticleMode
 
@@ -23,12 +23,12 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
         return
 
     @mcp.tool(
-        name="suggest_corpus",
+        name="find_review_corpus",
         title="Suggest Corpus",
         output_schema=None,
         annotations=READ_ONLY_OPEN_WORLD,
     )
-    async def suggest_corpus(
+    async def find_review_corpus(
         question: Annotated[
             str,
             Field(
@@ -75,7 +75,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
                 else must_include_pmids
             )
             service = await get_corpus_suggestion_service()
-            return await suggest_corpus_impl(
+            return await find_review_corpus_impl(
                 service=service,
                 question=selected_question,
                 max_pmids=max_pmids,
@@ -86,15 +86,15 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
                 profile=profile,
             )
 
-        return await run_mcp_tool("suggest_corpus", call)
+        return await run_mcp_tool("find_review_corpus", call)
 
     @mcp.tool(
-        name="convert_article_ids",
+        name="map_article_ids",
         title="Convert Article IDs",
         output_schema=None,
         annotations=READ_ONLY_OPEN_WORLD,
     )
-    async def convert_article_ids(
+    async def map_article_ids(
         ids: Annotated[
             list[str],
             Field(
@@ -117,10 +117,10 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
 
         async def call() -> dict[str, Any]:
             service = await get_discovery_service()
-            response = await service.convert_article_ids(ids=ids, source=source, profile=profile)
+            response = await service.map_article_ids(ids=ids, source=source, profile=profile)
             return response.model_dump(by_alias=True)
 
-        return await run_mcp_tool("convert_article_ids", call)
+        return await run_mcp_tool("map_article_ids", call)
 
     @mcp.tool(
         name="get_mesh",

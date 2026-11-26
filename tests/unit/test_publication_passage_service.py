@@ -385,7 +385,7 @@ async def test_abstracts_mode_estimate_counts_only_title_and_abstract() -> None:
 
 
 @pytest.mark.asyncio
-async def test_estimate_publication_context_counts_sections_and_warns_large_output() -> None:
+async def test_compute_publication_context_counts_sections_and_warns_large_output() -> None:
     service = PublicationPassageService(FakePublicationService())
 
     response = await service.estimate_context(

@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [8.0.0] - 2026-11-26
+
+### Changed
+
+- **Breaking (MCP tool names):** six tools are renamed to canonical verbs of the Tool-Naming
+  Standard v1.1 (#297). The old names are removed, with no aliases:
+
+  | Old name | New name |
+  |---|---|
+  | `suggest_corpus` | `find_review_corpus` |
+  | `convert_article_ids` | `map_article_ids` |
+  | `build_topic_literature_map` | `generate_topic_literature_map` |
+  | `estimate_publication_context` | `compute_publication_context` |
+  | `inspect_review_index` | `get_review_index_status` |
+  | `preflight_review_sources` | `get_review_source_coverage` |
+
+  Migration: call the new name with the same arguments. Descriptions, `workflow_help` steps,
+  `next_commands` and REST `operation_id`s use the new names. The six entries leave the
+  action-verb exemption list.
+- Tool descriptions and argument docs are shorter (Tool-Surface Budget Standard v1); meaning,
+  units and formats are unchanged.
+
 ## [7.11.0] - 2026-11-26
 
 ### Fixed

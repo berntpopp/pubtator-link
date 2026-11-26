@@ -24,13 +24,13 @@ router = APIRouter(prefix="/api/discovery", tags=["discovery"])
     response_model=ArticleIdConversionResponse,
 )
 @handle_api_errors
-async def convert_article_ids(
+async def map_article_ids(
     request: ArticleIdConversionRequest,
     service: DiscoveryServiceDep,
 ) -> ArticleIdConversionResponse:
     if request.target is not None:
         raise HTTPException(status_code=400, detail="target filtering is not supported yet")
-    return await service.convert_article_ids(ids=request.ids, source=request.source)
+    return await service.map_article_ids(ids=request.ids, source=request.source)
 
 
 @router.get(
@@ -80,7 +80,7 @@ async def related_articles(
     response_model=CorpusSuggestionResponse,
 )
 @handle_api_errors
-async def suggest_corpus(
+async def find_review_corpus(
     request: CorpusSuggestionRequest,
     service: CorpusSuggestionServiceDep,
 ) -> CorpusSuggestionResponse:

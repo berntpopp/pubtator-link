@@ -179,12 +179,12 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         "lean",
         "full",
         "readonly",
-        name="inspect_review_index",
+        name="get_review_index_status",
         title="Inspect Review Index",
         output_schema=None,
         annotations=READ_ONLY_OPEN_WORLD,
     )
-    async def inspect_review_index(
+    async def get_review_index_status(
         review_id: Annotated[
             str,
             Field(
@@ -246,7 +246,7 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         async def call() -> dict[str, Any]:
             selected_pmids = merge_pmids(pmids) if pmids else pmids
             service = await review_tools.get_review_context_service()
-            return await review_tools.inspect_review_index_impl(
+            return await review_tools.get_review_index_status_impl(
                 service=service,
                 review_id=review_id,
                 session_id=session_id,
@@ -262,4 +262,4 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 cursor=cursor,
             )
 
-        return await run_mcp_tool("inspect_review_index", call, pmids=pmids)
+        return await run_mcp_tool("get_review_index_status", call, pmids=pmids)

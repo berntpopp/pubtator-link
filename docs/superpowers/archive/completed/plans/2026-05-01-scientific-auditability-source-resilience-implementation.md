@@ -84,9 +84,17 @@ def test_resolver_attempt_summary_captures_retry_metadata() -> None:
 
 
 def test_evidence_tier_derives_from_actual_coverage() -> None:
-    assert coverage_to_evidence_tier("full_text", "pubtator_full_bioc") == EvidenceTier.PASSAGE_FULL_TEXT
-    assert coverage_to_evidence_tier("abstract_only", "pubtator_abstract") == EvidenceTier.PASSAGE_ABSTRACT
-    assert coverage_to_evidence_tier("title_only", "pubtator_abstract") == EvidenceTier.METADATA_TITLE
+    assert (
+        coverage_to_evidence_tier("full_text", "pubtator_full_bioc")
+        == EvidenceTier.PASSAGE_FULL_TEXT
+    )
+    assert (
+        coverage_to_evidence_tier("abstract_only", "pubtator_abstract")
+        == EvidenceTier.PASSAGE_ABSTRACT
+    )
+    assert (
+        coverage_to_evidence_tier("title_only", "pubtator_abstract") == EvidenceTier.METADATA_TITLE
+    )
     assert coverage_to_evidence_tier("curated_url", "curated_pdf") == EvidenceTier.CURATED_FULL_TEXT
 ```
 
@@ -189,6 +197,7 @@ Add assertions that the retrieval attempts table contains columns for:
 
 ```python
 "attempt_count"
+
 "last_status_code"
 "retry_after_ms"
 "backoff_ms"
@@ -270,9 +279,7 @@ class RetryPolicy:
     max_attempts: int = 3
     base_delay_ms: int = 500
     max_delay_ms: int = 10_000
-    retry_status_codes: set[int] = field(
-        default_factory=lambda: {408, 429, 500, 502, 503, 504}
-    )
+    retry_status_codes: set[int] = field(default_factory=lambda: {408, 429, 500, 502, 503, 504})
     respect_retry_after: bool = True
 
 
@@ -330,12 +337,17 @@ async def call_with_retries(
                 retry_after_ms=last_retry_after_ms,
                 backoff_ms=last_backoff_ms,
                 terminal_reason="retry_exhausted"
-                if response.status_code in policy.retry_status_codes and attempts >= policy.max_attempts
+                if response.status_code in policy.retry_status_codes
+                and attempts >= policy.max_attempts
                 else None,
             )
 
         last_retry_after_ms = retry_after_ms(response) if policy.respect_retry_after else None
-        last_backoff_ms = last_retry_after_ms if last_retry_after_ms is not None else full_jitter_delay_ms(policy, attempts)
+        last_backoff_ms = (
+            last_retry_after_ms
+            if last_retry_after_ms is not None
+            else full_jitter_delay_ms(policy, attempts)
+        )
         await sleep(last_backoff_ms / 1000)
 ```
 
@@ -431,7 +443,9 @@ Follow existing review route style. Add a route such as:
 
 ```python
 @router.post("/reviews/source-preflight")
-async def preflight_review_sources(request: PreflightReviewSourcesRequest) -> PreflightReviewSourcesResponse:
+async def preflight_review_sources(
+    request: PreflightReviewSourcesRequest,
+) -> PreflightReviewSourcesResponse:
     service = SourcePreflightService.from_settings(settings)
     hints = await service.preflight_pmids(request.pmids)
     return PreflightReviewSourcesResponse(coverage_hints=hints)
@@ -496,16 +510,16 @@ Expected: FAIL because the extra attempts and fields are not persisted/mapped.
 Extend `record_retrieval_attempt` with optional keyword-only parameters:
 
 ```python
-attempt_count: int = 1,
-last_status_code: int | None = None,
-retry_after_ms: int | None = None,
-backoff_ms: int | None = None,
-terminal_reason: str | None = None,
-pmcid: str | None = None,
-doi: str | None = None,
-license_or_access_hint: str | None = None,
-coverage_reason: str = "unknown",
-pmc_fallback_available: bool = False,
+attempt_count: int = (1,)
+last_status_code: int | None = (None,)
+retry_after_ms: int | None = (None,)
+backoff_ms: int | None = (None,)
+terminal_reason: str | None = (None,)
+pmcid: str | None = (None,)
+doi: str | None = (None,)
+license_or_access_hint: str | None = (None,)
+coverage_reason: str = ("unknown",)
+pmc_fallback_available: bool = (False,)
 ```
 
 Keep all existing callers valid.

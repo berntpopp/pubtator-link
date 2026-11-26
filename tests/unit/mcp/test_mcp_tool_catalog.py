@@ -101,7 +101,7 @@ def test_literature_graph_tools_expose_response_mode_and_size_guidance() -> None
     for name in (
         "get_publication_citation_graph",
         "find_related_evidence_candidates",
-        "build_topic_literature_map",
+        "generate_topic_literature_map",
     ):
         tool = catalog[name]
         assert "response_mode" in tool.input_schema["properties"]

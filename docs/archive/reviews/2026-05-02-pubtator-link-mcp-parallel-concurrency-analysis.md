@@ -196,7 +196,7 @@ async def acquire(self) -> float:
             return 0.0
         else:
             wait_time = (1 - self.tokens) / self.rate
-            return wait_time           # <-- returns without consuming!
+            return wait_time  # <-- returns without consuming!
 ```
 
 The "wait" path returns the suggested wait time *without consuming a token*. The caller (`api/client.py:155-159`) then does `await asyncio.sleep(wait_time)` and **proceeds to the upstream request unconditionally**. There is no second check. So:
@@ -337,6 +337,7 @@ class PubTatorResourceBindingMiddleware:
         finally:
             reset_app_resources(token)
 
+
 app.add_middleware(PubTatorResourceBindingMiddleware, get_resources=...)
 ```
 
@@ -357,10 +358,12 @@ This is the same pattern `asgi-correlation-id` uses (recommended in the observab
 ```python
 semaphore = asyncio.Semaphore(self.retrieval_concurrency)
 
+
 async def retrieve_one(query_index, query):
     async with semaphore:
         result = await self.retrieve_context(...)
         return query_index, result
+
 
 indexed_results = await asyncio.gather(
     *(retrieve_one(index, query) for index, query in enumerate(request.queries))

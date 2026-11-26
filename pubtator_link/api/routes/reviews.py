@@ -156,11 +156,11 @@ async def get_evidence_certainty(
 @router.post(
     "/source-preflight",
     response_model=PreflightReviewSourcesResponse,
-    operation_id="preflight_review_sources",
+    operation_id="get_review_source_coverage",
     summary="Estimate review source coverage before indexing",
 )
 @handle_api_errors
-async def preflight_review_sources(
+async def get_review_source_coverage(
     request: PreflightReviewSourcesRequest,
     service: SourcePreflightServiceDep,
 ) -> PreflightReviewSourcesResponse:
@@ -236,11 +236,11 @@ async def index_review_evidence(
 @router.get(
     "/{review_id}/index",
     response_model=InspectReviewIndexResponse,
-    operation_id="inspect_review_index",
+    operation_id="get_review_index_status",
     summary="Inspect review-scoped index contents",
 )
 @handle_api_errors
-async def inspect_review_index(
+async def get_review_index_status(
     review_id: str,
     service: ReviewContextServiceDep,
     pmids: str | None = None,
@@ -256,7 +256,7 @@ async def inspect_review_index(
     cursor: str | None = None,
 ) -> InspectReviewIndexResponse:
     pmid_list = [pmid.strip() for pmid in pmids.split(",") if pmid.strip()] if pmids else []
-    return await service.inspect_review_index(
+    return await service.get_review_index_status(
         review_id=review_id,
         request=InspectReviewIndexRequest(
             session_id=session_id,

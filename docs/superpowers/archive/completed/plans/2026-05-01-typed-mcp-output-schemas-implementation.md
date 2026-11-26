@@ -597,22 +597,21 @@ async def list_review_indexes(
     limit: int = 50,
     offset: int = 0,
     ttl_seconds: int | None = None,
-) -> list[ReviewIndexInventoryItem]:
-    ...
+) -> list[ReviewIndexInventoryItem]: ...
+
 
 async def get_review_index_summary(
     self,
     review_id: str,
     *,
     ttl_seconds: int | None = None,
-) -> ReviewIndexInventoryItem | None:
-    ...
+) -> ReviewIndexInventoryItem | None: ...
 
-async def delete_review_index(self, review_id: str) -> bool:
-    ...
 
-async def cleanup_expired_review_indexes(self, *, ttl_seconds: int) -> list[str]:
-    ...
+async def delete_review_index(self, review_id: str) -> bool: ...
+
+
+async def cleanup_expired_review_indexes(self, *, ttl_seconds: int) -> list[str]: ...
 ```
 
 Use aggregate SQL over `reviews`, `review_preparation_jobs`, `review_passages`,
@@ -652,8 +651,8 @@ git commit -m "feat: add review index inventory repository"
 In `tests/unit/mcp/test_mcp_facade.py`, add the new non-destructive tools to `EXPECTED_PUBLIC_TOOL_NAMES`:
 
 ```python
-"pubtator.list_review_indexes",
-"pubtator.get_review_index_summary",
+("pubtator.list_review_indexes",)
+("pubtator.get_review_index_summary",)
 ```
 
 Add assertions that `pubtator.delete_review_index` is absent by default.
@@ -752,13 +751,21 @@ and gated destructive routes.
 Register:
 
 ```python
-@mcp.tool(name="pubtator.list_review_indexes", title="List Review Indexes", annotations=READ_ONLY_OPEN_WORLD)
+@mcp.tool(
+    name="pubtator.list_review_indexes",
+    title="List Review Indexes",
+    annotations=READ_ONLY_OPEN_WORLD,
+)
 async def list_review_indexes(limit: int = 50, offset: int = 0) -> ListReviewIndexesResponse:
     service = await get_review_index_lifecycle_service()
     return await list_review_indexes_impl(service=service, limit=limit, offset=offset)
 
 
-@mcp.tool(name="pubtator.get_review_index_summary", title="Get Review Index Summary", annotations=READ_ONLY_OPEN_WORLD)
+@mcp.tool(
+    name="pubtator.get_review_index_summary",
+    title="Get Review Index Summary",
+    annotations=READ_ONLY_OPEN_WORLD,
+)
 async def get_review_index_summary(review_id: str) -> ReviewIndexSummaryResponse:
     service = await get_review_index_lifecycle_service()
     return await get_review_index_summary_impl(service=service, review_id=review_id)

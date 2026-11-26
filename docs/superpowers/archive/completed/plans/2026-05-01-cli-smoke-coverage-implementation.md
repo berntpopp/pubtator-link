@@ -87,7 +87,10 @@ def test_cli_dispatches_http_server(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_asyncio_run(coro: object) -> None:
         calls.append(coro)
 
-    monkeypatch.setattr("sys.argv", ["pubtator-link", "serve", "http", "--host", "0.0.0.0", "--port", "9000", "--reload"])
+    monkeypatch.setattr(
+        "sys.argv",
+        ["pubtator-link", "serve", "http", "--host", "0.0.0.0", "--port", "9000", "--reload"],
+    )
     monkeypatch.setattr(cli, "serve_http", fake_serve_http)
     monkeypatch.setattr(cli.asyncio, "run", fake_asyncio_run)
 
@@ -164,7 +167,9 @@ def test_cli_dispatches_entities_command(monkeypatch: pytest.MonkeyPatch) -> Non
     def fake_asyncio_run(coro: object) -> None:
         calls.append(coro)
 
-    monkeypatch.setattr("sys.argv", ["pubtator-link", "entities", "MEFV", "--concept", "Gene", "--limit", "3"])
+    monkeypatch.setattr(
+        "sys.argv", ["pubtator-link", "entities", "MEFV", "--concept", "Gene", "--limit", "3"]
+    )
     monkeypatch.setattr(cli, "search_entities", fake_search_entities)
     monkeypatch.setattr(cli.asyncio, "run", fake_asyncio_run)
 
@@ -204,7 +209,9 @@ def test_cli_dispatches_export_command(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_asyncio_run(coro: object) -> None:
         calls.append(coro)
 
-    monkeypatch.setattr("sys.argv", ["pubtator-link", "export", "1,2", "--format", "pubtator", "--full"])
+    monkeypatch.setattr(
+        "sys.argv", ["pubtator-link", "export", "1,2", "--format", "pubtator", "--full"]
+    )
     monkeypatch.setattr(cli, "export_publications", fake_export_publications)
     monkeypatch.setattr(cli.asyncio, "run", fake_asyncio_run)
 

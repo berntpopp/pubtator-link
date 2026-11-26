@@ -168,10 +168,7 @@ def _recovery_text_for_context(context: McpErrorContext, fallback_tool: str | No
             "Use mode='full_abstract' for article-local answering; run diagnostics only if "
             "passage retrieval also fails."
         )
-    return (
-        "Run diagnostics. If the review schema is stale, apply database migrations "
-        "and retry."
-    )
+    return "Run diagnostics. If the review schema is stale, apply database migrations and retry."
 ```
 
 Replace the current static `payload["recovery"]` assignment with:
@@ -262,7 +259,9 @@ async def test_full_abstract_mode_returns_all_title_and_abstract_passages() -> N
     ]
     assert all(passage.section in {"title", "abstract"} for passage in response.passages)
     assert not any(drop.reason == "max_passages_per_pmid_exceeded" for drop in response.dropped)
-    assert any(drop.reason == "section_filtered" and drop.section == "methods" for drop in response.dropped)
+    assert any(
+        drop.reason == "section_filtered" and drop.section == "methods" for drop in response.dropped
+    )
     assert response.context_estimate.recommended_mode == "full_abstract"
 ```
 
@@ -693,15 +692,13 @@ Expected: FAIL because the metric does not exist.
 In `pubtator_link/benchmarks/scoring.py`, inside `score_pubmedqa`, compute:
 
 ```python
-    maybe_cases = [case for case in cases if case.gold_label == "maybe"]
-    maybe_decisive_overcalls = sum(
-        1
-        for case in maybe_cases
-        if predictions_by_case_id.get(case.case_id).predicted_label in {"yes", "no"}
-    )
-    maybe_decisive_overcall_rate = (
-        maybe_decisive_overcalls / len(maybe_cases) if maybe_cases else 0.0
-    )
+maybe_cases = [case for case in cases if case.gold_label == "maybe"]
+maybe_decisive_overcalls = sum(
+    1
+    for case in maybe_cases
+    if predictions_by_case_id.get(case.case_id).predicted_label in {"yes", "no"}
+)
+maybe_decisive_overcall_rate = maybe_decisive_overcalls / len(maybe_cases) if maybe_cases else 0.0
 ```
 
 Add to `score_details`:
@@ -827,7 +824,10 @@ def test_pubmedqa_mcp_prompt_mentions_full_abstract_and_maybe_calibration() -> N
 
     assert "mode='full_abstract'" in prompt
     assert "If preflight fails, call get_publication_passages" in prompt
-    assert "Do not convert conditional, underpowered, mixed, or method-limited evidence into yes/no" in prompt
+    assert (
+        "Do not convert conditional, underpowered, mixed, or method-limited evidence into yes/no"
+        in prompt
+    )
 ```
 
 - [ ] **Step 2: Run the failing test**

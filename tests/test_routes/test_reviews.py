@@ -158,7 +158,7 @@ async def test_get_research_session_status_route_maps_lookup_error_to_404() -> N
 
 
 @pytest.mark.asyncio
-async def test_preflight_review_sources_returns_coverage_hints() -> None:
+async def test_get_review_source_coverage_returns_coverage_hints() -> None:
     app = UnifiedServerManager().create_app()
     service = AsyncMock()
     service.preflight_pmids.return_value = [
@@ -408,10 +408,10 @@ async def test_export_review_audit_bundle_route_returns_audit_bundle() -> None:
 
 
 @pytest.mark.asyncio
-async def test_inspect_review_index_returns_sources_and_failures() -> None:
+async def test_get_review_index_status_returns_sources_and_failures() -> None:
     app = UnifiedServerManager().create_app()
     service = AsyncMock()
-    service.inspect_review_index.return_value = InspectReviewIndexResponse(
+    service.get_review_index_status.return_value = InspectReviewIndexResponse(
         review_id="rev_123",
         preparation_status=PreparationStatus(complete=1, failed=1),
         sources=[
@@ -464,18 +464,18 @@ async def test_inspect_review_index_returns_sources_and_failures() -> None:
     assert data["sources"][0]["pmc_fallback_available"] is True
     assert data["sources"][0]["resolver_attempts"] == []
     assert data["index_snapshot_date"] == "2026-05-02"
-    service.inspect_review_index.assert_awaited_once()
-    request = service.inspect_review_index.await_args.kwargs["request"]
+    service.get_review_index_status.assert_awaited_once()
+    request = service.get_review_index_status.await_args.kwargs["request"]
     assert request.include_metadata is True
     assert request.metadata == "full"
     assert request.response_mode == "compact"
 
 
 @pytest.mark.asyncio
-async def test_inspect_review_index_route_accepts_limit_and_cursor() -> None:
+async def test_get_review_index_status_route_accepts_limit_and_cursor() -> None:
     app = UnifiedServerManager().create_app()
     service = AsyncMock()
-    service.inspect_review_index.return_value = InspectReviewIndexResponse(
+    service.get_review_index_status.return_value = InspectReviewIndexResponse(
         review_id="rev_123",
         response_mode="compact",
         preparation_status=PreparationStatus(complete=1),
@@ -501,7 +501,7 @@ async def test_inspect_review_index_route_accepts_limit_and_cursor() -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["next_cursor"] == "cursor-2"
-    request = service.inspect_review_index.await_args.kwargs["request"]
+    request = service.get_review_index_status.await_args.kwargs["request"]
     assert request.limit == 1
     assert request.cursor == "cursor-1"
 

@@ -15,7 +15,7 @@ CALLS: list[tuple[str, dict[str, Any], dict[str, Any] | None]] = [
     ("search_biomedical_entities", {"text": "MEFV", "concept": "Gene"}, None),
     ("get_mesh", {"text": "familial Mediterranean fever", "limit": 3}, None),
     ("get_publication_passages", {"pmid": "42135612", "mode": "compact_passages"}, None),
-    ("estimate_publication_context", {"pmid": "42135612"}, None),
+    ("compute_publication_context", {"pmid": "42135612"}, None),
     (
         "submit_text_annotation",
         {"text": "MEFV and colchicine are relevant to FMF.", "bioconcepts": "Gene,Chemical"},
@@ -29,7 +29,9 @@ CALLS: list[tuple[str, dict[str, Any], dict[str, Any] | None]] = [
 ]
 
 
-def call_tool(base_url: str, name: str, arguments: dict[str, Any]) -> tuple[dict[str, Any], int, int]:
+def call_tool(
+    base_url: str, name: str, arguments: dict[str, Any]
+) -> tuple[dict[str, Any], int, int]:
     started = time.perf_counter()
     response = httpx.post(
         f"{base_url.rstrip('/')}/mcp",

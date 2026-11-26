@@ -175,7 +175,9 @@ async def test_enqueue_preparation_job_returns_already_indexed_for_terminal_job(
     result = await repository.enqueue_preparation_job("review-1", "PMID:1", "pubtator_full_bioc")
 
     assert result == "already_indexed"
-    assert not any("insert into review_preparation_jobs" in sql.lower() for sql, _ in connection.executed)
+    assert not any(
+        "insert into review_preparation_jobs" in sql.lower() for sql, _ in connection.executed
+    )
 ```
 
 - [ ] **Step 5: Run tests to verify red**
@@ -258,7 +260,9 @@ Expected: FAIL because methods/signatures are missing.
 Add protocol and implementation methods:
 
 ```python
-async def link_review_session_source(self, review_id: str, session_id: str, source_id: str) -> None: ...
+async def link_review_session_source(
+    self, review_id: str, session_id: str, source_id: str
+) -> None: ...
 async def research_session_exists(self, review_id: str, session_id: str) -> bool: ...
 async def session_linked_source_ids(self, review_id: str, session_id: str) -> list[str]: ...
 ```
@@ -527,7 +531,10 @@ Add assertions that:
 
 ```python
 assert bundle.session_id == "session-1"
-assert "pubtator.find_entity_relations" in WorkflowHelpService().get_help("clinical_genetics_review").tool_sequence
+assert (
+    "pubtator.find_entity_relations"
+    in WorkflowHelpService().get_help("clinical_genetics_review").tool_sequence
+)
 assert capabilities["schema_policy"]["deprecated_fields"][0]["field"] == "prepare_mode"
 assert capabilities["section_taxonomy"]["canonical_case"] == "lowercase"
 ```

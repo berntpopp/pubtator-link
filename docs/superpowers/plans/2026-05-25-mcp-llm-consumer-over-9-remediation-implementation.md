@@ -122,7 +122,12 @@ CALLS: list[tuple[str, dict[str, Any], int]] = [
     ),
     (
         "find_entity_relations",
-        {"entity_id": "@GENE_MEFV", "limit": 10, "response_mode": "compact", "max_response_chars": 12000},
+        {
+            "entity_id": "@GENE_MEFV",
+            "limit": 10,
+            "response_mode": "compact",
+            "max_response_chars": 12000,
+        },
         12000,
     ),
     ("export_review_audit_bundle", {"review_id": "mefv-vus-smoke", "fallback_inline": True}, 20000),
@@ -169,7 +174,10 @@ def main() -> int:
             "response_chars": payload.get("_response_chars"),
         }
         print(json.dumps(summary, sort_keys=True))
-        if payload.get("success") is not True or int(payload.get("_response_chars") or 0) > max_chars:
+        if (
+            payload.get("success") is not True
+            or int(payload.get("_response_chars") or 0) > max_chars
+        ):
             failed = True
     return 1 if failed else 0
 

@@ -100,7 +100,7 @@ async def _diagnostics_impl(
                 profile,
                 (
                     "search_literature",
-                    "preflight_review_sources",
+                    "get_review_source_coverage",
                     "get_publication_passages",
                 ),
             )

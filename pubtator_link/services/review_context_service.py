@@ -69,9 +69,9 @@ from pubtator_link.services.review_context.packing import (
 )
 from pubtator_link.services.review_context.pagination import (
     InspectReviewIndexCursor,
-    decode_inspect_review_index_cursor,
-    encode_inspect_review_index_cursor,
-    inspect_review_index_scope_hash,
+    decode_get_review_index_status_cursor,
+    encode_get_review_index_status_cursor,
+    get_review_index_status_scope_hash,
 )
 from pubtator_link.services.review_context.quotes import quotes_from_passages
 from pubtator_link.services.review_context.ranking import (
@@ -688,7 +688,7 @@ class ReviewContextService:
             },
         )
 
-    async def inspect_review_index(
+    async def get_review_index_status(
         self,
         review_id: str,
         request: InspectReviewIndexRequest,
@@ -698,7 +698,7 @@ class ReviewContextService:
         preparation_status = await self._preparation_status(
             review_id, session_id=request.session_id
         )
-        scope_hash = inspect_review_index_scope_hash(
+        scope_hash = get_review_index_status_scope_hash(
             review_id=review_id,
             session_id=request.session_id,
             pmids=request.pmids,
@@ -706,7 +706,7 @@ class ReviewContextService:
         source_offset = 0
         failed_source_offset = 0
         if request.cursor:
-            cursor = decode_inspect_review_index_cursor(
+            cursor = decode_get_review_index_status_cursor(
                 request.cursor,
                 expected_scope_hash=scope_hash,
             )
@@ -764,7 +764,7 @@ class ReviewContextService:
             more_failed = remaining_failed_sources > 0
         next_cursor = None
         if request.limit is not None and (more_sources or more_failed):
-            next_cursor = encode_inspect_review_index_cursor(
+            next_cursor = encode_get_review_index_status_cursor(
                 InspectReviewIndexCursor(
                     scope_hash=scope_hash,
                     source_offset=next_source_offset,

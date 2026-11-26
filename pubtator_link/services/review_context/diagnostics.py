@@ -55,17 +55,17 @@ def query_summary(
         zero_result_reason = "no_candidate_matches"
         if result.preparation_status.total == 0:
             zero_result_reason = "review_not_indexed"
-            next_steps = ["index_review_evidence", "inspect_review_index"]
+            next_steps = ["index_review_evidence", "get_review_index_status"]
         elif result.preparation_status.failed and not candidate_count:
             zero_result_reason = "preparation_failed"
-            next_steps = ["inspect_review_index", "retry_failed_pmids"]
+            next_steps = ["get_review_index_status", "retry_failed_pmids"]
         elif candidate_count and dropped_count:
             zero_result_reason = "all_candidates_over_budget"
             next_steps = ["increase_budget", "lower_max_passages_per_query"]
         else:
-            next_steps = ["shorten_query", "drop_filters", "inspect_review_index"]
+            next_steps = ["shorten_query", "drop_filters", "get_review_index_status"]
     elif dropped_count >= returned_count * 3 and dropped_count >= 3:
-        next_steps = ["increase_budget", "narrow_query", "inspect_review_index"]
+        next_steps = ["increase_budget", "narrow_query", "get_review_index_status"]
     return QueryDiagnosticsSummary(
         query=query,
         query_tokens=query_tokens_value,

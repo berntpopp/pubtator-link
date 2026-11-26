@@ -276,7 +276,7 @@ def error_code_for_exception(exc: Exception) -> str:
 def _fallback_for_context(context: McpErrorContext) -> tuple[str | None, dict[str, Any] | None]:
     if context.fallback_tool is not None:
         return context.fallback_tool, context.fallback_args or {}
-    if context.tool_name == "preflight_review_sources" and context.pmids:
+    if context.tool_name == "get_review_source_coverage" and context.pmids:
         return (
             "get_publication_passages",
             {"pmids": context.pmids, "mode": "full_abstract"},
@@ -308,7 +308,7 @@ def _recovery_text_for_context(
         return (
             "Run diagnostics. If the review schema is stale, apply database migrations and retry."
         )
-    if context.tool_name == "preflight_review_sources" and fallback_tool:
+    if context.tool_name == "get_review_source_coverage" and fallback_tool:
         return (
             "Call get_publication_passages with the same PMIDs. "
             "Use mode='full_abstract' for article-local answering; run diagnostics only if "
@@ -323,7 +323,7 @@ def _recovery_text_for_context(
         return "Retry later or run diagnostics if the upstream failure persists."
     if reason == "curated_url_rejected":
         return "Use curated URLs from the configured public literature source allowlist."
-    if context.tool_name == "convert_article_ids":
+    if context.tool_name == "map_article_ids":
         return (
             "Retry with one identifier at a time. If only DOI conversion fails, search "
             "the DOI or title with search_literature."

@@ -59,7 +59,7 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         next_tools=("list_evidence_certainty",),
         resource_links=("pubtator://reviews/{review_id}/audit",),
     ),
-    "convert_article_ids": ToolCatalogSupplement(
+    "map_article_ids": ToolCatalogSupplement(
         category="discovery",
         profiles=("full", "readonly"),
         stability="advanced",
@@ -67,7 +67,7 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         example='{"ids":["PMC123456","10.1000/example"],"source":"auto"}',
         next_tools=("get_publication_metadata",),
     ),
-    "build_topic_literature_map": ToolCatalogSupplement(
+    "generate_topic_literature_map": ToolCatalogSupplement(
         category="publication",
         profiles=("full", "readonly"),
         stability="advanced",
@@ -92,7 +92,7 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         example="{}",
         next_tools=("get_server_capabilities",),
     ),
-    "estimate_publication_context": ToolCatalogSupplement(
+    "compute_publication_context": ToolCatalogSupplement(
         category="publication",
         profiles=("full", "readonly"),
         stability="advanced",
@@ -139,7 +139,7 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         stability="advanced",
         do_not_use_for=("initial topic search without seed PMIDs",),
         example='{"pmids":["12345"],"mode":"similar","limit":20}',
-        next_tools=("preflight_review_sources",),
+        next_tools=("get_review_source_coverage",),
     ),
     "find_related_evidence_candidates": ToolCatalogSupplement(
         category="publication",
@@ -203,7 +203,7 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         stability="lean",
         do_not_use_for=("prepared review RAG retrieval",),
         example='{"pmids":["12345"],"max_passages_per_pmid":6,"verbosity":"standard"}',
-        next_tools=("preflight_review_sources",),
+        next_tools=("get_review_source_coverage",),
     ),
     "get_research_session_status": ToolCatalogSupplement(
         category="review",
@@ -228,7 +228,7 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         stability="admin",
         do_not_use_for=("loading passage samples",),
         example='{"review_id":"demo"}',
-        next_tools=("inspect_review_index",),
+        next_tools=("get_review_index_status",),
         resource_links=("pubtator://reviews/{review_id}",),
     ),
     "get_review_passages_by_id": ToolCatalogSupplement(
@@ -277,10 +277,10 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         stability="lean",
         do_not_use_for=("ad hoc passage retrieval without a review_id",),
         example='{"review_id":"demo","pmids":["12345"],"wait_until_ready":true}',
-        next_tools=("inspect_review_index", "get_review_context_batch"),
+        next_tools=("get_review_index_status", "get_review_context_batch"),
         resource_links=("pubtator://reviews/{review_id}",),
     ),
-    "inspect_review_index": ToolCatalogSupplement(
+    "get_review_index_status": ToolCatalogSupplement(
         category="review",
         profiles=("lean", "full", "readonly"),
         stability="lean",
@@ -338,7 +338,7 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         example='{"gene":"BRCA1","variant":"c.68_69delAG"}',
         next_tools=("search_literature",),
     ),
-    "preflight_review_sources": ToolCatalogSupplement(
+    "get_review_source_coverage": ToolCatalogSupplement(
         category="review",
         profiles=("lean", "full", "readonly"),
         stability="lean",
@@ -395,7 +395,7 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         stability="lean",
         do_not_use_for=("non-guideline exhaustive PubMed search",),
         example='{"text":"asthma treatment adults","limit":5}',
-        next_tools=("preflight_review_sources",),
+        next_tools=("get_review_source_coverage",),
     ),
     "search_literature": ToolCatalogSupplement(
         category="literature",
@@ -403,7 +403,7 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         stability="lean",
         do_not_use_for=("fetching known PMID passage text",),
         example='{"text":"BRCA1 ovarian cancer PARP inhibitor","limit":5,"metadata":"basic"}',
-        next_tools=("preflight_review_sources",),
+        next_tools=("get_review_source_coverage",),
     ),
     "stage_research_session": ToolCatalogSupplement(
         category="review",
@@ -423,13 +423,13 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         next_tools=("get_text_annotation_results",),
         resource_links=("pubtator://text-processing",),
     ),
-    "suggest_corpus": ToolCatalogSupplement(
+    "find_review_corpus": ToolCatalogSupplement(
         category="discovery",
         profiles=("full", "readonly"),
         stability="advanced",
         do_not_use_for=("final evidence retrieval",),
         example='{"question":"EGFR resistance in lung cancer","max_pmids":8}',
-        next_tools=("preflight_review_sources", "index_review_evidence"),
+        next_tools=("get_review_source_coverage", "index_review_evidence"),
     ),
     "workflow_help": ToolCatalogSupplement(
         category="metadata",

@@ -21,8 +21,8 @@ from pubtator_link.mcp.meta_budget import strip_meta_for_repeated_call
 from pubtator_link.mcp.pmc_annotations import fetch_pmc_annotations_impl
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.service_adapters import (
-    build_topic_literature_map_impl,
-    estimate_publication_context_impl,
+    generate_topic_literature_map_impl,
+    compute_publication_context_impl,
     fetch_publication_annotations_impl,
     find_related_evidence_candidates_impl,
     get_publication_citation_graph_impl,
@@ -114,12 +114,12 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             )
 
         @mcp.tool(
-            name="build_topic_literature_map",
+            name="generate_topic_literature_map",
             title="Build Topic Literature Map",
             output_schema=None,
             annotations=READ_ONLY_OPEN_WORLD,
         )
-        async def build_topic_literature_map(
+        async def generate_topic_literature_map(
             query: Annotated[
                 str,
                 Field(
@@ -228,7 +228,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                     await resolve_pmids(pmids, max_items=100) if pmids else (None, None)
                 )
                 service = await get_topic_literature_map_service()
-                result = await build_topic_literature_map_impl(
+                result = await generate_topic_literature_map_impl(
                     service=service,
                     query=selected_query,
                     pmids=selected_pmids,
@@ -262,7 +262,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 tool_pmids = merge_pmids(pmids, None, max_items=100)
             except ValueError:
                 tool_pmids = None
-            result = await run_mcp_tool("build_topic_literature_map", call, pmids=tool_pmids)
+            result = await run_mcp_tool("generate_topic_literature_map", call, pmids=tool_pmids)
             return result if include_meta else strip_meta_for_repeated_call(result)
 
     @mcp.tool(
@@ -544,12 +544,12 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
     if profile != "lean":
 
         @mcp.tool(
-            name="estimate_publication_context",
+            name="compute_publication_context",
             title="Estimate Publication Context",
             output_schema=None,
             annotations=READ_ONLY_OPEN_WORLD,
         )
-        async def estimate_publication_context(
+        async def compute_publication_context(
             pmids: Annotated[
                 list[ArticleId],
                 Field(
@@ -587,7 +587,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             async def call() -> dict[str, Any]:
                 selected_pmids, resolved_from = await resolve_pmids(pmids, max_items=25)
                 service = await get_publication_passage_service()
-                result = await estimate_publication_context_impl(
+                result = await compute_publication_context_impl(
                     service=service,
                     pmids=selected_pmids,
                     sections=cast("list[str] | None", sections),
@@ -604,7 +604,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             except ValueError:
                 tool_pmids = None
             return await run_mcp_tool(
-                "estimate_publication_context",
+                "compute_publication_context",
                 call,
                 pmids=tool_pmids,
             )

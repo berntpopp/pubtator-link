@@ -40,9 +40,9 @@ EXPECTED_LEAN_TOOLS = {
     "get_publication_passages",
     "get_publication_citation_graph",
     "find_related_evidence_candidates",
-    "preflight_review_sources",
+    "get_review_source_coverage",
     "index_review_evidence",
-    "inspect_review_index",
+    "get_review_index_status",
     "ground_question",
     "get_review_context_batch",
     "get_review_audit_trail",
@@ -85,7 +85,7 @@ def test_readonly_preserves_full_surface_read_tools() -> None:
     assert {
         "get_publication_annotations",
         "get_pmc_annotations",
-        "build_topic_literature_map",
+        "generate_topic_literature_map",
     } <= readonly_names
 
 
@@ -152,7 +152,7 @@ def test_related_evidence_is_lean_full_and_readonly() -> None:
 
 
 def test_topic_literature_map_is_available_in_readonly() -> None:
-    tool_name = "build_topic_literature_map"
+    tool_name = "generate_topic_literature_map"
 
     assert tool_name not in _tool_names("lean")
     assert tool_name in _tool_names("full")
@@ -162,7 +162,7 @@ def test_topic_literature_map_is_available_in_readonly() -> None:
 def test_topic_literature_map_is_advertised_in_readonly_profile_metadata() -> None:
     from pubtator_link.mcp.profiles import tool_names_for_profile
 
-    assert "build_topic_literature_map" in tool_names_for_profile("readonly")
+    assert "generate_topic_literature_map" in tool_names_for_profile("readonly")
 
 
 def _hinted_tool_names(value: Any) -> Iterator[str]:
@@ -203,13 +203,13 @@ def _tool_tokens(value: Any) -> set[str]:
 
 def test_reachable_tools_uses_profile_inventory_and_preserves_preference_order() -> None:
     preferred = (
-        "preflight_review_sources",
+        "get_review_source_coverage",
         "index_review_evidence",
         "get_publication_passages",
     )
 
     assert reachable_tools("readonly", preferred) == [
-        "preflight_review_sources",
+        "get_review_source_coverage",
         "get_publication_passages",
     ]
 
@@ -328,15 +328,15 @@ def test_profile_advice_surfaces_only_advertise_reachable_tools(
     if profile == "lean":
         assert detail["workflow"]["recommended_tools"] == [
             "search_literature",
-            "preflight_review_sources",
+            "get_review_source_coverage",
             "index_review_evidence",
-            "inspect_review_index",
+            "get_review_index_status",
             "get_review_context_batch",
         ]
     if profile == "readonly":
         assert detail["workflow"]["recommended_tools"] == [
             "search_literature",
-            "preflight_review_sources",
+            "get_review_source_coverage",
             "get_publication_passages",
         ]
 
@@ -373,7 +373,7 @@ async def test_readonly_capabilities_tool_redacts_writes_from_every_supported_de
     assert set(details) <= set(payload["details"])
     assert payload["core_workflow_tools"] == [
         "search_literature",
-        "preflight_review_sources",
+        "get_review_source_coverage",
         "get_publication_passages",
     ]
     serialized = json.dumps(payload, sort_keys=True)
@@ -387,12 +387,12 @@ def test_readonly_capabilities_workflow_detail_is_a_contiguous_direct_retrieval_
 
     assert payload["core_workflow_tools"] == [
         "search_literature",
-        "preflight_review_sources",
+        "get_review_source_coverage",
         "get_publication_passages",
     ]
     assert payload["details"]["workflow"]["recommended_tools"] == [
         "search_literature",
-        "preflight_review_sources",
+        "get_review_source_coverage",
         "get_publication_passages",
     ]
 
@@ -413,9 +413,9 @@ def test_readonly_server_advice_and_schema_keep_direct_passage_retrieval_reachab
     bundles = get_capabilities_resource(profile="readonly")["workflow_bundles"]
     assert bundles["literature_graph"]["tools"] == [
         "search_literature",
-        "build_topic_literature_map",
+        "generate_topic_literature_map",
         "get_publication_citation_graph",
         "find_related_evidence_candidates",
-        "preflight_review_sources",
+        "get_review_source_coverage",
         "get_publication_passages",
     ]

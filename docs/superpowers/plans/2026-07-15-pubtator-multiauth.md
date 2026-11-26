@@ -39,6 +39,7 @@
 import pytest
 from pubtator_link.config import Settings
 
+
 def _oauth_env() -> dict[str, str]:
     return {
         "PUBTATOR_LINK_AUTH_MODE": "oauth",
@@ -52,16 +53,19 @@ def _oauth_env() -> dict[str, str]:
         "PUBTATOR_LINK_PUBLIC_BASE_URL": "https://pubtator-link.genefoundry.org",
     }
 
+
 def test_auth_mode_defaults_to_none_and_ignores_missing_oauth():
     s = Settings(_env_file=None)
     assert s.auth_mode == "none"
     assert s.require_write_scope is False
     s.validate_oauth_config()  # no-op in none mode
 
+
 def test_oauth_mode_requires_all_fields():
     s = Settings(_env_file=None, auth_mode="oauth")
     with pytest.raises(ValueError, match="oauth mode requires"):
         s.validate_oauth_config()
+
 
 def test_oauth_mode_valid_when_all_present(monkeypatch):
     for k, v in _oauth_env().items():
@@ -81,46 +85,51 @@ Expected: FAIL — `auth_mode`/`validate_oauth_config` do not exist.
 Add to the `Settings` class in `pubtator_link/config.py` (near the existing `mcp_profile`/`mcp_service_token` fields), reusing the existing `Literal`/`Field` imports:
 
 ```python
-    # --- Edge auth (AUTH_MODE=none keeps today's behavior) ---
-    auth_mode: Literal["none", "oauth"] = Field(
-        default="none", description="Edge auth for /mcp: none (open/token) or oauth (Keycloak + service token)"
-    )
-    oauth_authorize_url: str | None = Field(default=None)
-    oauth_token_url: str | None = Field(default=None)
-    oauth_client_id: str | None = Field(default=None)
-    oauth_client_secret: str | None = Field(default=None)
-    oauth_jwt_signing_key: str | None = Field(
-        default=None, description="Fixed key so OAuthProxy tokens/client store survive restarts + KC secret rotation"
-    )
-    jwt_issuer: str | None = Field(default=None)
-    jwt_jwks_url: str | None = Field(default=None)
-    jwt_audience: str | None = Field(
-        default=None, description="Token audience == PubTator resource URI (MUST for a protected resource)"
-    )
-    public_base_url: str | None = Field(
-        default=None, description="Public ROOT origin (PRM/resource base); NOT the audience — avoids /mcp/mcp"
-    )
-    require_write_scope: bool = Field(
-        default=False, description="When true, write tools require the pubtator:write scope"
-    )
+# --- Edge auth (AUTH_MODE=none keeps today's behavior) ---
+auth_mode: Literal["none", "oauth"] = Field(
+    default="none",
+    description="Edge auth for /mcp: none (open/token) or oauth (Keycloak + service token)",
+)
+oauth_authorize_url: str | None = Field(default=None)
+oauth_token_url: str | None = Field(default=None)
+oauth_client_id: str | None = Field(default=None)
+oauth_client_secret: str | None = Field(default=None)
+oauth_jwt_signing_key: str | None = Field(
+    default=None,
+    description="Fixed key so OAuthProxy tokens/client store survive restarts + KC secret rotation",
+)
+jwt_issuer: str | None = Field(default=None)
+jwt_jwks_url: str | None = Field(default=None)
+jwt_audience: str | None = Field(
+    default=None,
+    description="Token audience == PubTator resource URI (MUST for a protected resource)",
+)
+public_base_url: str | None = Field(
+    default=None,
+    description="Public ROOT origin (PRM/resource base); NOT the audience — avoids /mcp/mcp",
+)
+require_write_scope: bool = Field(
+    default=False, description="When true, write tools require the pubtator:write scope"
+)
 
-    def validate_oauth_config(self) -> None:
-        """Fail fast if oauth mode is missing required inputs. No-op in none mode."""
-        if self.auth_mode != "oauth":
-            return
-        required = {
-            "PUBTATOR_LINK_OAUTH_AUTHORIZE_URL": self.oauth_authorize_url,
-            "PUBTATOR_LINK_OAUTH_TOKEN_URL": self.oauth_token_url,
-            "PUBTATOR_LINK_OAUTH_CLIENT_ID": self.oauth_client_id,
-            "PUBTATOR_LINK_OAUTH_CLIENT_SECRET": self.oauth_client_secret,
-            "PUBTATOR_LINK_JWT_ISSUER": self.jwt_issuer,
-            "PUBTATOR_LINK_JWT_JWKS_URL": self.jwt_jwks_url,
-            "PUBTATOR_LINK_JWT_AUDIENCE": self.jwt_audience,
-            "PUBTATOR_LINK_PUBLIC_BASE_URL": self.public_base_url,
-        }
-        missing = [k for k, v in required.items() if not v]
-        if missing:
-            raise ValueError(f"oauth mode requires: {', '.join(missing)}")
+
+def validate_oauth_config(self) -> None:
+    """Fail fast if oauth mode is missing required inputs. No-op in none mode."""
+    if self.auth_mode != "oauth":
+        return
+    required = {
+        "PUBTATOR_LINK_OAUTH_AUTHORIZE_URL": self.oauth_authorize_url,
+        "PUBTATOR_LINK_OAUTH_TOKEN_URL": self.oauth_token_url,
+        "PUBTATOR_LINK_OAUTH_CLIENT_ID": self.oauth_client_id,
+        "PUBTATOR_LINK_OAUTH_CLIENT_SECRET": self.oauth_client_secret,
+        "PUBTATOR_LINK_JWT_ISSUER": self.jwt_issuer,
+        "PUBTATOR_LINK_JWT_JWKS_URL": self.jwt_jwks_url,
+        "PUBTATOR_LINK_JWT_AUDIENCE": self.jwt_audience,
+        "PUBTATOR_LINK_PUBLIC_BASE_URL": self.public_base_url,
+    }
+    missing = [k for k, v in required.items() if not v]
+    if missing:
+        raise ValueError(f"oauth mode requires: {', '.join(missing)}")
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -155,6 +164,7 @@ import pytest
 from pubtator_link.auth import ServiceTokenVerifier, build_auth
 from pubtator_link.config import Settings
 
+
 @pytest.mark.asyncio
 async def test_service_token_verifier_constant_time_accept_reject():
     v = ServiceTokenVerifier("s3cret", scopes=["pubtator:read", "pubtator:write"])
@@ -162,6 +172,7 @@ async def test_service_token_verifier_constant_time_accept_reject():
     assert ok is not None and "pubtator:write" in ok.scopes and ok.client_id == "genefoundry-router"
     assert await v.verify_token("wrong") is None
     assert await v.verify_token("") is None
+
 
 def test_build_auth_none_mode_returns_none():
     assert build_auth(Settings(_env_file=None, auth_mode="none")) is None
@@ -182,6 +193,7 @@ No-token-passthrough: the router authenticates the *caller* at its own edge and
 reaches this backend with its OWN static service credential — never the caller's
 OAuth token. That credential is the ServiceTokenVerifier principal here.
 """
+
 from __future__ import annotations
 
 import secrets
@@ -267,6 +279,7 @@ from fastmcp.server.auth.providers.jwt import JWTVerifier
 from pubtator_link.auth import ServiceTokenVerifier, build_auth
 from pubtator_link.config import Settings
 
+
 def _oauth_settings(**over) -> Settings:
     base = dict(
         auth_mode="oauth",
@@ -284,6 +297,7 @@ def _oauth_settings(**over) -> Settings:
     base.update(over)
     return Settings(_env_file=None, **base)
 
+
 def test_oauth_build_returns_multiauth_with_service_verifier():
     auth = build_auth(_oauth_settings())
     assert isinstance(auth, MultiAuth)
@@ -292,6 +306,7 @@ def test_oauth_build_returns_multiauth_with_service_verifier():
     assert jwt_v.audience == "https://pubtator-link.genefoundry.org/mcp"
     # the router's static token is one of the verifiers
     assert any(isinstance(v, ServiceTokenVerifier) for v in auth.verifiers)
+
 
 @pytest.mark.asyncio
 async def test_oauth_multiauth_accepts_service_token_rejects_garbage():
@@ -319,7 +334,7 @@ def _build_oauth(settings: Settings) -> Any:
     verifier = JWTVerifier(
         jwks_uri=settings.jwt_jwks_url,
         issuer=settings.jwt_issuer,
-        audience=settings.jwt_audience,   # reject tokens not minted for this resource
+        audience=settings.jwt_audience,  # reject tokens not minted for this resource
         base_url=settings.public_base_url,
     )
     oauth = OAuthProxy(
@@ -328,10 +343,10 @@ def _build_oauth(settings: Settings) -> Any:
         upstream_client_id=settings.oauth_client_id,
         upstream_client_secret=settings.oauth_client_secret,
         token_verifier=verifier,
-        base_url=settings.public_base_url,          # ROOT origin (/authorize, /token live here)
-        resource_base_url=settings.public_base_url, # ROOT origin — NOT the audience (avoids /mcp/mcp)
+        base_url=settings.public_base_url,  # ROOT origin (/authorize, /token live here)
+        resource_base_url=settings.public_base_url,  # ROOT origin — NOT the audience (avoids /mcp/mcp)
         jwt_signing_key=settings.oauth_jwt_signing_key,
-        require_authorization_consent="external",   # Keycloak owns login+consent
+        require_authorization_consent="external",  # Keycloak owns login+consent
     )
     verifiers: list[Any] = [verifier]
     if settings.mcp_service_token:
@@ -376,10 +391,12 @@ from fastapi.testclient import TestClient
 from pubtator_link.server_manager import UnifiedServerManager
 from pubtator_link import server_manager as sm
 
+
 def _app(monkeypatch, **settings_over):
     for k, v in settings_over.items():
         monkeypatch.setattr(sm.settings, k, v, raising=False)
     return UnifiedServerManager().create_app(include_mcp=True)
+
 
 def test_none_mode_no_oauth_provider_but_legacy_token_gate(monkeypatch):
     app = _app(monkeypatch, auth_mode="none", mcp_service_token="tok", mcp_profile="readonly")
@@ -387,6 +404,7 @@ def test_none_mode_no_oauth_provider_but_legacy_token_gate(monkeypatch):
     # legacy middleware still gates /mcp when a token is set in none mode
     assert client.post("/mcp").status_code == 401
     assert client.get("/health").status_code == 200
+
 
 def test_oauth_mode_sets_provider_and_skips_legacy_gate(monkeypatch):
     monkeypatch.setattr(sm.settings, "auth_mode", "oauth", raising=False)
@@ -411,10 +429,20 @@ def test_oauth_mode_sets_provider_and_skips_legacy_gate(monkeypatch):
     # the router's service token is accepted by the MCP transport (no legacy double-gate)
     r = client.post(
         "/mcp",
-        headers={"Authorization": "Bearer router-secret", "Accept": "application/json, text/event-stream"},
-        json={"jsonrpc": "2.0", "id": 1, "method": "initialize",
-              "params": {"protocolVersion": "2025-06-18", "capabilities": {},
-                         "clientInfo": {"name": "t", "version": "0"}}},
+        headers={
+            "Authorization": "Bearer router-secret",
+            "Accept": "application/json, text/event-stream",
+        },
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "t", "version": "0"},
+            },
+        },
     )
     assert r.status_code != 401
 ```
@@ -497,30 +525,40 @@ from types import SimpleNamespace
 from fastmcp.exceptions import ToolError
 from pubtator_link.authorization import WriteAuthorizationMiddleware, PUBTATOR_WRITE_TOOLS
 
-class _Ctx:
-    def __init__(self, name): self.message = SimpleNamespace(name=name)
 
-async def _call_next(ctx): return "ok"
+class _Ctx:
+    def __init__(self, name):
+        self.message = SimpleNamespace(name=name)
+
+
+async def _call_next(ctx):
+    return "ok"
+
 
 @pytest.mark.asyncio
 async def test_write_denied_without_scope(monkeypatch):
     import pubtator_link.authorization as az
+
     monkeypatch.setattr(az, "get_access_token", lambda: SimpleNamespace(scopes=["pubtator:read"]))
     mw = WriteAuthorizationMiddleware()
     tool = next(iter(PUBTATOR_WRITE_TOOLS))
     with pytest.raises(ToolError, match="pubtator:write"):
         await mw.on_call_tool(_Ctx(tool), _call_next)
 
+
 @pytest.mark.asyncio
 async def test_write_allowed_with_scope(monkeypatch):
     import pubtator_link.authorization as az
+
     monkeypatch.setattr(az, "get_access_token", lambda: SimpleNamespace(scopes=["pubtator:write"]))
     mw = WriteAuthorizationMiddleware()
     assert await mw.on_call_tool(_Ctx(next(iter(PUBTATOR_WRITE_TOOLS))), _call_next) == "ok"
 
+
 @pytest.mark.asyncio
 async def test_read_tool_never_gated(monkeypatch):
     import pubtator_link.authorization as az
+
     monkeypatch.setattr(az, "get_access_token", lambda: None)
     mw = WriteAuthorizationMiddleware()
     assert await mw.on_call_tool(_Ctx("search_literature"), _call_next) == "ok"
@@ -536,6 +574,7 @@ Expected: FAIL — module does not exist.
 ```python
 # pubtator_link/authorization.py
 """Caller authorization for PubTator write tools (opt-in via require_write_scope)."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -573,9 +612,10 @@ class WriteAuthorizationMiddleware(Middleware):
 Register in `server_manager.py` (FastMCP middleware, added to the `mcp` server, only when gating is on) right after `mcp.auth = build_auth(settings)`:
 
 ```python
-            if settings.auth_mode == "oauth" and settings.require_write_scope:
-                from pubtator_link.authorization import WriteAuthorizationMiddleware
-                mcp.add_middleware(WriteAuthorizationMiddleware())
+if settings.auth_mode == "oauth" and settings.require_write_scope:
+    from pubtator_link.authorization import WriteAuthorizationMiddleware
+
+    mcp.add_middleware(WriteAuthorizationMiddleware())
 ```
 
 - [ ] **Step 4: Run test to verify it passes**

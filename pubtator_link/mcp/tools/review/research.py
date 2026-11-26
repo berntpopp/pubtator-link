@@ -30,12 +30,12 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         "lean",
         "full",
         "readonly",
-        name="preflight_review_sources",
+        name="get_review_source_coverage",
         title="Preflight Review Sources",
         output_schema=None,
         annotations=READ_ONLY_OPEN_WORLD,
     )
-    async def preflight_review_sources(
+    async def get_review_source_coverage(
         pmids: Annotated[
             list[Pmid],
             Field(
@@ -54,7 +54,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         async def call() -> dict[str, Any]:
             selected_pmids = merge_pmids(pmids, pmid)
             service = await review_tools.get_source_preflight_service()
-            return await review_tools.preflight_review_sources_impl(
+            return await review_tools.get_review_source_coverage_impl(
                 service=service,
                 pmids=selected_pmids,
             )
@@ -64,7 +64,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         except ValueError:
             tool_pmids = None
         return await run_mcp_tool(
-            "preflight_review_sources",
+            "get_review_source_coverage",
             call,
             pmids=tool_pmids,
             fallback_tool="get_publication_passages" if tool_pmids else None,

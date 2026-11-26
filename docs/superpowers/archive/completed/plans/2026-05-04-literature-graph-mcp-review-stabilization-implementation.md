@@ -951,8 +951,10 @@ def _attach_normalized_scores(candidates: list[RelatedEvidenceCandidate]) -> Non
     span = high - low
     for candidate in candidates:
         raw = candidate.pubmed_neighbor_score
-        normalized = 1.0 if span == 0 and raw is not None else (
-            (raw - low) / span if raw is not None else None
+        normalized = (
+            1.0
+            if span == 0 and raw is not None
+            else ((raw - low) / span if raw is not None else None)
         )
         candidate.normalized_neighbor_score = normalized
         candidate.signals = deduped_signals(candidate.match_reasons)
@@ -1245,9 +1247,7 @@ Do the same for dry-run budget and pass `budget_source=request.budget_source` in
 Update `build_dropped_summary()` in `batch_budgeting.py`:
 
 ```python
-priority_drops = [
-    pmid for pmid in request.prioritize_pmids if pmid in pmid_counts
-]
+priority_drops = [pmid for pmid in request.prioritize_pmids if pmid in pmid_counts]
 retry_arguments = {
     "max_chars": increase_max_chars_to,
     "max_response_chars": increase_max_response_chars_to,
