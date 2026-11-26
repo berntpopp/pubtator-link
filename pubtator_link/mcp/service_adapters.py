@@ -35,6 +35,7 @@ from pubtator_link.mcp.session_orientation import (
     research_sessions_payload,
 )
 from pubtator_link.mcp.text_annotation_degraded import text_annotation_degraded_payload
+from pubtator_link.mcp.untrusted_content import fence_export_documents, fence_variant_snippets
 from pubtator_link.models.corpus_suggestion import CorpusSuggestionRequest
 from pubtator_link.models.literature_graph import (
     PublicationCitationGraphRequest,
@@ -237,9 +238,8 @@ async def fetch_publication_annotations_impl(
         format=format,
         full=full,
     )
-    if hasattr(result, "model_dump"):
-        return result.model_dump()
-    return dict(result)
+    dumped = result.model_dump() if hasattr(result, "model_dump") else dict(result)
+    return fence_export_documents(dumped, source="pubtator_export")
 
 
 async def get_publication_passages_impl(
@@ -687,8 +687,8 @@ async def lookup_variant_evidence_impl(
         max_literature_pmids=max_literature_pmids,
         include_citations=include_citations,
     )
-    response = await service.lookup(request)
-    return cast(dict[str, Any], response.model_dump())
+    dumped = cast(dict[str, Any], (await service.lookup(request)).model_dump())
+    return fence_variant_snippets(dumped)
 
 
 async def submit_text_annotation_impl(

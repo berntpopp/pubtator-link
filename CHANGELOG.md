@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [7.10.0] - 2026-11-26
+
+### Changed
+
+- **Breaking (MCP wire shape):** upstream prose that three tools returned as plain strings is
+  now a Response-Envelope v1.1 `untrusted_text` object (`kind`, `text`, `provenance`,
+  `raw_sha256`), built by the same `fence_untrusted_text` helper as passage text (#293). Read
+  the prose from `.text`. The REST API keeps its shapes.
+
+  | Tool | Field |
+  |---|---|
+  | `get_variant_evidence` | `result.literature[].snippet` |
+  | `get_publication_annotations`, `get_pmc_annotations` | `result.documents[].passages[].text`, `...passages[].infons.license`, `...passages[].infons.xml`; with `format='biocxml'` the document `content`; with `format='pubtator'` the `sections` values |
+
+- `get_publication_metadata` `results[].bibtex` stays a string: the server renders it from the
+  structured citation fields of the same record, so it is structured data, not upstream prose.
+
 ## [7.9.0] - 2026-11-26
 
 ### Changed

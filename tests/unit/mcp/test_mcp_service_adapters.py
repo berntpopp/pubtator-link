@@ -3509,9 +3509,10 @@ async def test_pmc_adapter_returns_publication_export_shape() -> None:
 
     assert result["pmcids"] == ["PMC7696669"]
     assert result["full_text"] is True
-    assert result["export_data"]["documents"] == [
-        {"id": "PMC7696669", "text": "PubTator full text"}
-    ]
+    (document,) = result["export_data"]["documents"]
+    assert document["id"] == "PMC7696669"
+    assert document["text"]["kind"] == "untrusted_text"  # upstream prose is fenced (#293)
+    assert document["text"]["text"] == "PubTator full text"
 
 
 @pytest.mark.asyncio
