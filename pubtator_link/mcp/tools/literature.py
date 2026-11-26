@@ -13,6 +13,7 @@ from pubtator_link.api.routes.dependencies import (
 )
 from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from pubtator_link.mcp.errors import run_mcp_tool
+from pubtator_link.mcp.foreign_ids import reject_foreign_gene
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.service_adapters import (
     find_entity_relations_impl,
@@ -43,6 +44,15 @@ def with_next_page_command(
     """
     if not isinstance(result.get("_meta"), dict):
         return result
+    # Response-Envelope v1 section 5. These tools page by `page`/`offset`, not by cursor, so
+    # `next_cursor` is always null and the continuation is `next_page`/`next_offset`.
+    result["_meta"]["pagination"] = {
+        "total_count": result.get("total_results"),
+        "has_more": bool(result.get("has_more")),
+        "next_cursor": None,
+        "next_page": result.get("next_page"),
+        "next_offset": result.get("next_offset"),
+    }
     commands = []
     if year_filter := result.get("next_year_filter"):
         commands.append(
@@ -536,6 +546,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         """Use this when a user needs source-attributed variant records and literature evidence for a gene and variant; returns source-attributed variant records plus PMID literature evidence. Does not compute clinical classification."""
 
         async def call() -> dict[str, Any]:
+            reject_foreign_gene(gene, "gene")
             service = await get_variant_evidence_service()
             return await lookup_variant_evidence_impl(
                 service=service,

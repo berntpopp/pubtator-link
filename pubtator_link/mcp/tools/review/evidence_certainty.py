@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from typing import Annotated, Any
+from uuid import UUID
 
+from fastapi import HTTPException
 from fastmcp import FastMCP
 from pydantic import Field
 
@@ -166,19 +168,35 @@ def register_evidence_certainty_tools(mcp: FastMCP, profile: MCPToolProfile) -> 
             str,
             Field(
                 min_length=1,
-                description="Identifier of the stored certainty judgment to fetch.",
-                examples=["certainty-1"],
+                description="UUID of the stored certainty judgment.",
+                examples=["3f2b8c1e-5d47-4a9b-8c21-6e0f4d2a9b17"],
             ),
         ],
     ) -> dict[str, Any]:
         """Use this when a user needs one user-supplied evidence certainty judgment: returns that judgment with its linked passage IDs."""
 
         async def call() -> dict[str, Any]:
+            # Fixed message only; the caller-supplied id is never echoed back.
+            not_found = {
+                "success": False,
+                "error_code": "not_found",
+                "message": "Evidence certainty record not found.",
+                "retryable": False,
+            }
+            try:
+                UUID(certainty_id)  # stored ids are UUIDs; any other string cannot exist
+            except ValueError:
+                return not_found
             service = await review_tools.get_review_evidence_certainty_service()
-            return await review_tools.get_evidence_certainty_impl(
-                service=service,
-                review_id=review_id,
-                certainty_id=certainty_id,
-            )
+            try:
+                return await review_tools.get_evidence_certainty_impl(
+                    service=service,
+                    review_id=review_id,
+                    certainty_id=certainty_id,
+                )
+            except HTTPException as exc:
+                if exc.status_code != 404:
+                    raise
+                return not_found
 
         return await run_mcp_tool("get_evidence_certainty", call)

@@ -160,7 +160,7 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         profiles=("full", "readonly"),
         stability="advanced",
         do_not_use_for=("listing all judgments",),
-        example='{"review_id":"demo","certainty_id":"certainty-1"}',
+        example='{"review_id":"demo","certainty_id":"3f2b8c1e-5d47-4a9b-8c21-6e0f4d2a9b17"}',
         next_tools=("list_evidence_certainty",),
     ),
     "get_neighboring_review_passages": ToolCatalogSupplement(
@@ -268,7 +268,7 @@ TOOL_CATALOG_SUPPLEMENTS: dict[str, ToolCatalogSupplement] = {
         profiles=("full", "readonly"),
         stability="advanced",
         do_not_use_for=("submitting new text",),
-        example='{"session_id":"session-12345678"}',
+        example='{"session_id":"794821B26B4C6F78B645"}',
         next_tools=("search_biomedical_entities",),
     ),
     "index_review_evidence": ToolCatalogSupplement(

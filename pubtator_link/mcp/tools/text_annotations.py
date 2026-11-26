@@ -80,7 +80,7 @@ def register_text_annotation_tools(mcp: FastMCP, profile: MCPToolProfile = "lean
 
             return await run_mcp_tool("submit_text_annotation", call)
 
-    if profile == "lean":
+    if profile != "full":  # no session can be created in another profile (#295)
         return
 
     @mcp.tool(
@@ -94,12 +94,12 @@ def register_text_annotation_tools(mcp: FastMCP, profile: MCPToolProfile = "lean
             str,
             Field(
                 min_length=8,
-                description="PubTator text-annotation session ID returned by a prior request.",
-                examples=["session-12345678"],
+                description="Session ID returned by submit_text_annotation.",
+                examples=["794821B26B4C6F78B645"],
             ),
         ],
     ) -> dict[str, Any]:
-        """Use this when a user has a PubTator text annotation session ID and needs its results; returns the annotated text with entity mentions and IDs once ready. Do not use this for entity lookup from names; use search_biomedical_entities. Next: search_biomedical_entities."""
+        """Use this when a user has a PubTator text annotation session ID and needs its results; returns the annotated text with entity mentions and IDs once ready; status 'processing' means not ready yet or an unknown session (results can take minutes). Do not use this for entity lookup from names; use search_biomedical_entities. Next: search_biomedical_entities."""
 
         async def call() -> dict[str, Any]:
             client = await get_api_client()

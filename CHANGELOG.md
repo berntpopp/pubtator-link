@@ -2,6 +2,40 @@
 
 ## [Unreleased]
 
+## [7.11.0] - 2026-11-26
+
+### Fixed
+
+- `get_text_annotation_results` returned `upstream_unavailable` for every session (#295).
+  The upstream `retrieve.cgi` answers HTTP 400 (documented: 404) until a job is finished and
+  then returns PubTator-format text, not JSON. A not-ready answer is now `status: "processing"`
+  (an unknown session cannot be told apart from a pending one), and a finished job is parsed
+  into `original_text` and `annotations`. Results can take minutes. The REST results route
+  gets the same fix.
+- `get_evidence_certainty` answered `internal` or `upstream_unavailable` for an unknown
+  certainty id; it now answers `not_found`. Its example is a UUID, the form of a stored id.
+- The `not_found` and `invalid_input` errors of `get_research_session_status` carry
+  `retryable`.
+
+### Changed
+
+- **Breaking (MCP surface):** `get_text_annotation_results` is no longer listed in the
+  `readonly` profile (#295). A session id only comes from `submit_text_annotation`, which is a
+  `full`-profile tool, so the results tool is listed where a session can be created.
+- **Breaking (MCP wire shape):** the prose of stored review passages is now a
+  Response-Envelope v1.1 `untrusted_text` object, as publication passages already are: the
+  `text` and `tail_preview` of every passage (and the `text` of its `quote`) returned by
+  `get_review_context`, `get_review_context_batch`, `get_review_passages_by_id`,
+  `get_neighboring_review_passages` and `inspect_review_index`, and the `quote` of each
+  `get_review_audit_trail` item. Read the prose from `.text`.
+  It is applied once, at the egress every tool shares. The REST API keeps its shapes.
+- `get_variant_evidence` rejects a gene given as an HGNC, Ensembl or NCBI Gene id with
+  `invalid_input`, `field`, `allowed_values` and a ready-to-send HGNC converter call in
+  `_meta.next_commands`, instead of searching the identifier as text.
+- `search_literature` and `search_guidelines` report `_meta.pagination` (`total_count`,
+  `has_more`, `next_cursor`, `next_page`, `next_offset`). They page by `page`/`offset`, so
+  `next_cursor` is always null.
+
 ## [7.10.0] - 2026-11-26
 
 ### Changed

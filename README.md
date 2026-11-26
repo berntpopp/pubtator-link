@@ -99,7 +99,6 @@ broader lookup candidates. Candidate variants are not classifications for the qu
 | `get_publication_annotations` | Raw PubTator BioC annotation export for PMIDs |
 | `get_pmc_annotations` | Raw full-text BioC annotation export for PMC IDs |
 | `get_variant_evidence` | Exact/equivalent source classifications, distinct from non-classifying candidates |
-| `get_text_annotation_results` | Results for an asynchronous text-annotation session |
 | `preflight_review_sources` | Source coverage and full-text vs abstract-only outlook before indexing |
 | `inspect_review_index` | Indexed PMIDs, sections, passage counts, and failures for a `review_id` |
 | `get_review_index_summary` | One persisted review index summary, without passage samples |

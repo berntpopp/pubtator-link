@@ -1,12 +1,56 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from typing import Any
 
 TRANSIENT_TEXT_ANNOTATION_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 PENDING_TEXT_ANNOTATION_STATUSES = {"submitted", "processing", "pending", "queued"}
+# retrieve.cgi documents 404 "The Result is not ready"; it answered 400 for a pending session
+# (and for an unknown one: the two cannot be told apart) on 2026-11-26.
+NOT_READY_TEXT_ANNOTATION_STATUS_CODES = {400, 404}
+
+
+def parse_pubtator_text_result(content: str) -> dict[str, Any]:
+    """A finished job in PubTator format: `id|t|text`, then tab rows id, start, end, text, type, id."""
+    original_text = ""
+    annotations: list[dict[str, Any]] = []
+    for line in content.splitlines():
+        if "|t|" in line:
+            original_text = line.split("|t|", 1)[1]
+        cols = line.split("\t")
+        if len(cols) >= 5 and cols[1].isdigit() and cols[2].isdigit():
+            annotations.append(
+                {
+                    "start": int(cols[1]),
+                    "end": int(cols[2]),
+                    "text": cols[3],
+                    "entity_type": cols[4],
+                    "entity_id": cols[5] if len(cols) > 5 else "",
+                }
+            )
+    bioconcept = ",".join(sorted({str(a["entity_type"]) for a in annotations}))
+    return {
+        "status": "completed",
+        "original_text": original_text,
+        "bioconcept": bioconcept,
+        "annotations": annotations,
+    }
+
+
+async def retrieve_text_annotation_result(
+    request: Callable[[], Awaitable[dict[str, Any]]],
+) -> dict[str, Any]:
+    """One retrieve.cgi call as `{status, ...}`: not-ready is `processing`, text is parsed."""
+    try:
+        response = await request()
+    except Exception as exc:
+        if getattr(exc, "status_code", None) in NOT_READY_TEXT_ANNOTATION_STATUS_CODES:
+            return {"status": "processing"}
+        raise
+    content = response.get("content")
+    return parse_pubtator_text_result(content) if isinstance(content, str) else response
 
 
 async def poll_text_annotation_until_ready(

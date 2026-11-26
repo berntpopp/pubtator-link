@@ -9,8 +9,11 @@ class InputNormalizationError(ValueError):
         field_errors: list[dict[str, str]],
         recovery_hint: str,
         next_command: dict[str, Any] | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> None:
         super().__init__("invalid MCP arguments")
+        # Typed top-level frame fields for the error envelope (`field`, `allowed_values`).
+        self.extra = extra or {}
         self.field_errors = field_errors
         self.recovery_hint = recovery_hint
         # A different tool that accepts the input as given (never a replay of this call).
