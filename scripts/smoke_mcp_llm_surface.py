@@ -8,7 +8,6 @@ from typing import Any
 
 import httpx
 
-
 CALLS: list[tuple[str, dict[str, Any], dict[str, Any] | None]] = [
     ("search_literature", {"query": "MEFV colchicine pediatric", "limit": 3}, None),
     ("search_guidelines", {"query": "familial mediterranean fever pediatric"}, None),

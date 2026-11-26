@@ -21,10 +21,10 @@ from pubtator_link.mcp.meta_budget import strip_meta_for_repeated_call
 from pubtator_link.mcp.pmc_annotations import fetch_pmc_annotations_impl
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.service_adapters import (
-    generate_topic_literature_map_impl,
     compute_publication_context_impl,
     fetch_publication_annotations_impl,
     find_related_evidence_candidates_impl,
+    generate_topic_literature_map_impl,
     get_publication_citation_graph_impl,
     get_publication_metadata_impl,
     get_publication_passages_impl,

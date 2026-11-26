@@ -7,7 +7,6 @@ from typing import Any
 
 import httpx
 
-
 CALLS: list[tuple[str, dict[str, Any], int]] = [
     (
         "map_article_ids",

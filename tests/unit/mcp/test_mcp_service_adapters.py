@@ -361,8 +361,8 @@ async def test_get_publication_metadata_impl_preserves_public_100_pmid_cap() -> 
 @pytest.mark.asyncio
 async def test_graph_adapters_default_omitted_response_mode_to_compact() -> None:
     from pubtator_link.mcp.service_adapters import (
-        generate_topic_literature_map_impl,
         find_related_evidence_candidates_impl,
+        generate_topic_literature_map_impl,
         get_publication_citation_graph_impl,
     )
     from pubtator_link.models.literature_graph import (
