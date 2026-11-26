@@ -190,6 +190,15 @@ For reproducible review setup, call `workflow_help`, build candidates with
 `suggest_corpus(question, max_pmids)` or `search_literature(metadata="basic")`, then index
 and inspect with `inspect_review_index(min_sample_chars=80)` before retrieval.
 
+### Result Metadata
+
+Every tool result carries `_meta.request_id` and `_meta.elapsed_ms`. Every successful result
+that carries upstream data also carries `_meta.source`, `_meta.data_version` (`live`: PubTator3
+and NCBI publish no release identifier) and `_meta.retrieved_at` (UTC). `retrieved_at` is the
+oldest fetch behind the result: the start of the call, an earlier fetch that filled a cache entry
+served now, or the oldest stored passage of the review index that was read. `include_meta=false`
+drops the optional orientation content only, never these fields.
+
 ## Claude Desktop HTTP Config
 
 ```json

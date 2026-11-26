@@ -31,9 +31,9 @@ def _reset_async_lru_method_cache(method: object) -> None:
 @pytest.fixture(autouse=True)
 def clear_publication_service_method_caches() -> None:
     """Prevent async-lru method caches from leaking across test event loops."""
-    _reset_async_lru_method_cache(PublicationService.export_publications)
-    _reset_async_lru_method_cache(PublicationService.export_pmc_publications)
-    _reset_async_lru_method_cache(PublicationService.search_publications)
+    _reset_async_lru_method_cache(PublicationService._export_publications_cached)
+    _reset_async_lru_method_cache(PublicationService._export_pmc_publications_cached)
+    _reset_async_lru_method_cache(PublicationService._search_publications_cached)
 
 
 @pytest.fixture

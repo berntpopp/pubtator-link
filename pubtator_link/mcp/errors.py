@@ -4,6 +4,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 from time import perf_counter
 from typing import Any
 
@@ -14,6 +15,7 @@ from fastmcp.tools import ToolResult
 from pydantic import ValidationError as PydanticValidationError
 
 from pubtator_link.api.client import PubTatorAPIError
+from pubtator_link.mcp.egress_meta import EgressCall
 from pubtator_link.mcp.input_normalization import InputNormalizationError
 from pubtator_link.mcp.untrusted_content import sanitize_message
 from pubtator_link.mcp.validation_errors import (
@@ -506,6 +508,8 @@ def install_validation_error_handler(mcp_server: Any) -> None:
             _tool: Any = tool,
         ) -> Any:
             params_token = CURRENT_TOOL_PARAMS.set(tool_param_names(_tool.parameters))
+            call = EgressCall()  # stamps the required _meta on every path below
+            stamp = partial(call.stamp, tool_name=str(_tool.name), arguments=arguments)
             try:
                 result = await _original_run(arguments)
             except (PydanticValidationError, FastMCPValidationError) as exc:  # see docstring
@@ -514,31 +518,34 @@ def install_validation_error_handler(mcp_server: Any) -> None:
                     parameters=dict(_tool.parameters),
                     exc=exc,
                 )
-                return ToolResult(structured_content=payload, is_error=True)
+                return ToolResult(structured_content=await stamp(payload), is_error=True)
             except Exception as exc:  # egress backstop: any leaked error is re-shaped below
                 # A tool error raised OUTSIDE run_mcp_tool (or any leaked exception) would otherwise
                 # reach the wire as isError:true with structuredContent:NULL -- the machine-readable
                 # envelope lost. Re-shape it into the flat error frame so every RAISED error still
                 # carries a non-null structuredContent with a six-value error_code.
                 payload = mcp_tool_error(exc, McpErrorContext(tool_name=str(_tool.name)))
-                return ToolResult(structured_content=payload, is_error=True)
+                return ToolResult(structured_content=await stamp(payload), is_error=True)
             finally:
                 CURRENT_TOOL_PARAMS.reset(params_token)
             structured = getattr(result, "structured_content", None)
+            if not isinstance(structured, dict):
+                return result
+            await stamp(structured)
             # Response-Envelope Standard v1: every ``success: false`` envelope MUST carry MCP
             # ``isError: true`` AND an error_code inside the closed enum. This covers the flat error
             # frame, a raised error re-shaped above, and any business payload that sets success=False
             # on its own (e.g. a partial estimate, a not-found manifest, or an audit bundle too large
             # for inline export). An off-enum or missing code is projected onto the canon at egress,
             # preserving the original under ``error_subtype``.
-            if isinstance(structured, dict) and structured.get("success") is False:
+            if structured.get("success") is False:
                 _canonicalize_envelope_error_code(structured)
-                return ToolResult(
-                    structured_content=structured,
-                    meta=result.meta,
-                    is_error=True,
-                )
-            return result
+            # Rebuilt so the text mirror carries the stamped _meta too.
+            return ToolResult(
+                structured_content=structured,
+                meta=result.meta,
+                is_error=structured.get("success") is False,
+            )
 
         object.__setattr__(tool, "run", wrapped_run)
         object.__setattr__(tool, "_pubtator_validation_wrapped", True)

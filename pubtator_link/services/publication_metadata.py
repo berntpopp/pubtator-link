@@ -20,6 +20,7 @@ from pubtator_link.models.publication_metadata import (
 from pubtator_link.models.review_rerag import CoverageReason, CoverageTier
 from pubtator_link.services.ncbi_discovery import NCBI_EUTILS_BASE_URL
 from pubtator_link.services.ncbi_eutils_rate import eutils_get
+from pubtator_link.services.provenance import record_fetch, utc_now
 
 QueryParamValue = str | int | float | bool | None
 QueryParams = Mapping[str, QueryParamValue | Sequence[QueryParamValue]]
@@ -195,6 +196,7 @@ class NcbiPublicationMetadataClient:
         self._tool_name = tool_name
         self._retry_policy = RetryPolicy()
         self._esummary_cache: dict[str, dict[str, Any]] = {}
+        self._esummary_fetched_at: dict[str, str] = {}
 
     async def close(self) -> None:
         if self._owns_client:
@@ -204,9 +206,12 @@ class NcbiPublicationMetadataClient:
         cached = {
             pmid: self._esummary_cache[pmid] for pmid in pmids if pmid in self._esummary_cache
         }
+        for pmid in cached:  # a cached record keeps its original fetch time
+            record_fetch(self._esummary_fetched_at[pmid])
         missing_pmids = [pmid for pmid in pmids if pmid not in cached]
         if not missing_pmids:
             return cached
+        fetched_at = utc_now()
         params = {"db": "pubmed", "id": ",".join(missing_pmids), "retmode": "json"}
         data = await self._get_json("esummary.fcgi", params=params)
         result = data.get("result", {})
@@ -223,6 +228,7 @@ class NcbiPublicationMetadataClient:
             if isinstance(record, dict) and "error" not in record:
                 records[pmid_key] = record
                 self._esummary_cache[pmid_key] = record
+                self._esummary_fetched_at[pmid_key] = fetched_at
         return records
 
     async def fetch_mesh_headings(self, pmids: list[str]) -> dict[str, list[str]]:

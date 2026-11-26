@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from typing import Any
 
 import mcp.types
@@ -86,6 +87,8 @@ def unknown_tool_envelope() -> dict[str, Any]:
         "fallback_args": None,
         "recovery_action": _UNKNOWN_TOOL_RECOVERY,
         "_meta": {
+            "request_id": uuid.uuid4().hex[:12],
+            "elapsed_ms": 0.0,  # built outside any tool run
             "next_commands": [{"tool": "get_server_capabilities", "arguments": {}}],
             "unsafe_for_clinical_use": True,
         },

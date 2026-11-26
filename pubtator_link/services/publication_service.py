@@ -20,6 +20,7 @@ from ..models.responses import (
     SearchResponse,
     SearchResult,
 )
+from .provenance import record_fetch, utc_now
 
 
 class PublicationService:
@@ -36,7 +37,22 @@ class PublicationService:
         self.logger = logger
 
     @alru_cache(maxsize=cache_config.size, ttl=cache_config.ttl)
+    async def _export_publications_cached(
+        self, pmids_str: str, format: str = "biocjson", full: bool = False
+    ) -> tuple[PublicationExportResponse, str]:
+        """The response and when it was fetched; a cache hit keeps the original time."""
+        fetched_at = utc_now()
+        return await self._export_publications_uncached(pmids_str, format, full), fetched_at
+
     async def export_publications(
+        self, pmids_str: str, format: str = "biocjson", full: bool = False
+    ) -> PublicationExportResponse:
+        """Cached; reports the entry's upstream fetch time to the current tool call."""
+        response, fetched_at = await self._export_publications_cached(pmids_str, format, full)
+        record_fetch(fetched_at)
+        return response
+
+    async def _export_publications_uncached(
         self, pmids_str: str, format: str = "biocjson", full: bool = False
     ) -> PublicationExportResponse:
         """Export publication annotations with caching.
@@ -102,7 +118,22 @@ class PublicationService:
         return await self.export_publications(pmids_str, format, full)
 
     @alru_cache(maxsize=cache_config.size, ttl=cache_config.ttl)
+    async def _export_pmc_publications_cached(
+        self, pmcids_str: str, format: str = "biocjson"
+    ) -> tuple[PMCExportResponse, str]:
+        """The response and when it was fetched; a cache hit keeps the original time."""
+        fetched_at = utc_now()
+        return await self._export_pmc_publications_uncached(pmcids_str, format), fetched_at
+
     async def export_pmc_publications(
+        self, pmcids_str: str, format: str = "biocjson"
+    ) -> PMCExportResponse:
+        """Cached; reports the entry's upstream fetch time to the current tool call."""
+        response, fetched_at = await self._export_pmc_publications_cached(pmcids_str, format)
+        record_fetch(fetched_at)
+        return response
+
+    async def _export_pmc_publications_uncached(
         self, pmcids_str: str, format: str = "biocjson"
     ) -> PMCExportResponse:
         """Export PMC publication annotations with caching.
@@ -163,7 +194,20 @@ class PublicationService:
         return await self.export_pmc_publications(pmcids_str, format)
 
     @alru_cache(maxsize=cache_config.size, ttl=cache_config.ttl)
+    async def _search_publications_cached(
+        self, text: str, page: int = 1
+    ) -> tuple[SearchResponse, str]:
+        """The response and when it was fetched; a cache hit keeps the original time."""
+        fetched_at = utc_now()
+        return await self._search_publications_uncached(text, page), fetched_at
+
     async def search_publications(self, text: str, page: int = 1) -> SearchResponse:
+        """Cached; reports the entry's upstream fetch time to the current tool call."""
+        response, fetched_at = await self._search_publications_cached(text, page)
+        record_fetch(fetched_at)
+        return response
+
+    async def _search_publications_uncached(self, text: str, page: int = 1) -> SearchResponse:
         """Search publications with caching.
 
         Args:
@@ -383,15 +427,15 @@ class PublicationService:
             raise ValueError("Pattern-based cache clearing is not supported.")
 
         cache_infos = [
-            self.export_publications.cache_info(),
-            self.export_pmc_publications.cache_info(),
-            self.search_publications.cache_info(),
+            self._export_publications_cached.cache_info(),
+            self._export_pmc_publications_cached.cache_info(),
+            self._search_publications_cached.cache_info(),
         ]
         cleared_items = sum(info.currsize for info in cache_infos)
 
-        self.export_publications.cache_clear()
-        self.export_pmc_publications.cache_clear()
-        self.search_publications.cache_clear()
+        self._export_publications_cached.cache_clear()
+        self._export_pmc_publications_cached.cache_clear()
+        self._search_publications_cached.cache_clear()
 
         if self.logger:
             self.logger.info("Cache cleared", cleared_items=cleared_items)
@@ -405,9 +449,9 @@ class PublicationService:
             Cache statistics in expected format
         """
         # Get cache info from async-lru for each cached method
-        export_info = self.export_publications.cache_info()
-        pmc_info = self.export_pmc_publications.cache_info()
-        search_info = self.search_publications.cache_info()
+        export_info = self._export_publications_cached.cache_info()
+        pmc_info = self._export_pmc_publications_cached.cache_info()
+        search_info = self._search_publications_cached.cache_info()
 
         # Calculate totals
         total_hits = export_info.hits + pmc_info.hits + search_info.hits
