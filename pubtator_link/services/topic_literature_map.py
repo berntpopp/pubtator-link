@@ -274,6 +274,7 @@ class TopicLiteratureMapService:
                 "top_candidates": len(ranked_candidates),
             }
 
+        replay = request.model_copy(update={"query": None, "pmids": seed_pmids})  # no free text
         meta = graph_request_metadata(
             tool_name="generate_topic_literature_map",
             request=request,
@@ -292,10 +293,10 @@ class TopicLiteratureMapService:
                 "next_commands": [
                     *graph_detail_next_commands(
                         tool_name="generate_topic_literature_map",
-                        request=request,
-                        modes=("full", "nodes_edges"),
+                        request=replay,
+                        modes=("full", "nodes_edges") if seed_pmids else (),
                     ),
-                    *_topic_map_recovery_commands(request, provider_status),
+                    *_topic_map_recovery_commands(replay, provider_status),
                     *hints,
                 ],
                 "provider_status": provider_status,

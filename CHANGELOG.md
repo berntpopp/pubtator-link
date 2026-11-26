@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [8.0.1] - 2026-11-26
+
+### Fixed
+
+- `index_review_evidence` could not requeue a failed source: the requeue wrote
+  `review_preparation_jobs.updated_at`, a column the table does not have, so every retry of a
+  failed PMID answered `upstream_unavailable`. It now resets `queued_at`.
+- `generate_topic_literature_map` no longer copies the caller's free-text `query` into
+  `_meta.next_commands`; the follow-up calls replay the resolved seed PMIDs. In the write
+  profiles, `find_review_corpus` no longer echoes `question` into its `get_review_context_batch`
+  hint (GTS-CORE-TXT-04).
+- The development Compose stack allows the server 1536M: indexing one full-text paper peaked near
+  900 MiB with two workers, and the 512M limit OOM-killed them.
+
 ## [8.0.0] - 2026-11-26
 
 ### Changed

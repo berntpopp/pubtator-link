@@ -486,7 +486,7 @@ class PostgresReviewReragRepository(ReviewResearchSessionRepositoryMixin):
                         set source_kind = $3,
                             status = 'queued',
                             error = null,
-                            updated_at = now()
+                            queued_at = now()
                         where review_id = $1 and source_id = $2
                         """,
                         review_id,
