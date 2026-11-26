@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from typing import Any
 
 import mcp.types
@@ -35,6 +36,8 @@ def actionable_output_validation_error(
         "suggested_action": suggested_action,
         "fallback_response_mode": fallback_response_mode,
         "_meta": {
+            "request_id": uuid.uuid4().hex[:12],
+            "elapsed_ms": 0.0,  # built outside any tool run
             "next_commands": [
                 {"tool": "diagnostics", "arguments": {}},
             ],

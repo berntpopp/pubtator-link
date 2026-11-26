@@ -1274,7 +1274,14 @@ async def test_retrieve_review_context_batch_tool_include_meta_false_strips_meta
 
     payload = result.structured_content
     passage = payload["results"][0]["context_pack"]["passages"][0]
-    assert "_meta" not in payload
+    # include_meta=false drops the optional metadata, never the required fields (#288).
+    assert set(payload["_meta"]) == {
+        "request_id",
+        "elapsed_ms",
+        "source",
+        "data_version",
+        "retrieved_at",
+    }
     assert "provider_status" not in payload
     assert "provider_status" not in payload["results"][0]
     assert "rrf_score" not in passage

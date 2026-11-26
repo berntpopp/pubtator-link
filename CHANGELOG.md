@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+## [7.8.0] - 2026-11-26
+
+### Added
+
+- Response-Envelope v1.2 provenance: every successful result that carries upstream data has
+  `_meta.source` (`pubtator`; `ncbi` for the E-utilities tools), `_meta.data_version` (`live`)
+  and `_meta.retrieved_at` (UTC). `retrieved_at` is the oldest fetch behind the result: the
+  start of the call, the fetch that filled a publication or E-summary cache entry served now,
+  or the oldest stored passage of the review index that was read.
+- `_meta.request_id` and `_meta.elapsed_ms` on every result, success and error
+  (Response-Envelope v1, section 4).
+
+### Fixed
+
+- `include_meta=false` no longer removes the required `_meta` fields. It drops the optional
+  orientation content (`next_commands`, diagnostics, ranking detail) and keeps `request_id`,
+  `elapsed_ms`, `source`, `data_version` and `retrieved_at` (#288). The fields are stamped
+  once, at the egress every tool shares.
+
+### Tests
+
+- Every registered tool is run through the MCP egress with `include_meta` on and off, and its
+  `_meta` is checked against the published envelope JSON Schema v1.2.0, vendored with a pinned
+  SHA-256 (`tests/conformance/envelope-v1.2.schema.json`). The tool payload in that test is
+  canned; `search_literature` is validated with its real payload. Re-vendored the behaviour gate.
+
 ## [7.7.4] - 2026-11-21
 
 ### Fixed
