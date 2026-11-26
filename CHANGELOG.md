@@ -2,6 +2,71 @@
 
 ## [Unreleased]
 
+## [7.9.0] - 2026-11-26
+
+### Changed
+
+- **Breaking (MCP wire shape):** every data tool's successful result now carries its payload
+  under `results` (array) or `result` (object), as Response-Envelope v1 section 1 and the
+  envelope JSON Schema v1.2.0 require (#289). The domain alias is renamed once, at the egress
+  every tool shares; keys beside it are unchanged. The REST API and the MCP resources keep
+  their shapes. Old key -> new key:
+
+  | Tool | Old key | New key |
+  |---|---|---|
+  | `search_biomedical_entities` | `matches` | `results` |
+  | `find_entity_relations` | `related_entities` | `results` |
+  | `suggest_corpus` | `candidates` | `results` |
+  | `convert_article_ids` | `records` | `results` |
+  | `get_mesh` | `descriptors` | `results` |
+  | `get_citation` | `records` | `results` |
+  | `find_related_articles` | `related_articles` | `results` |
+  | `get_publication_passages` | `passages` | `results` |
+  | `get_publication_metadata` | `metadata` | `results` |
+  | `find_related_evidence_candidates` | `candidates` | `results` |
+  | `list_review_indexes` | `indexes` | `results` |
+  | `list_evidence_certainty` | `records` | `results` |
+  | `preflight_review_sources` | `coverage_hints` | `results` |
+  | `list_research_sessions` | `sessions` | `results` |
+  | `get_review_passages_by_id` | `passages` | `results` |
+  | `get_neighboring_review_passages` | `passages` | `results` |
+  | `get_review_audit_trail` | `items` | `results` |
+  | `get_publication_annotations` | `export_data` | `result` |
+  | `get_pmc_annotations` | `export_data` | `result` |
+  | `get_review_index_summary` | `index` | `result` |
+  | `add_evidence_certainty` | `record` | `result` |
+  | `get_evidence_certainty` | `record` | `result` |
+  | `stage_research_session` | `manifest` | `result` |
+  | `get_research_session_status` | `manifest` | `result` |
+  | `get_review_context` | `context_pack` | `result` |
+  | `get_review_context_batch` | `merged_context_pack` | `result` |
+
+  `get_review_context_batch` keeps its per-query `results` beside `result` in `full` mode.
+  Tools without one primary payload now nest their whole payload under `result` (every former
+  top-level key `x` is `result.x`; `resolved_from` stays at the top level):
+  `get_variant_evidence`, `build_topic_literature_map`, `get_publication_citation_graph`,
+  `estimate_publication_context`, `submit_text_annotation`, `get_text_annotation_results`,
+  `index_review_evidence`, `inspect_review_index`, `ground_question`, `review_quickstart`,
+  `export_review_audit_bundle`, `record_review_context`.
+  `search_literature` and `search_guidelines` already returned `results` and are unchanged.
+  The ops tools (`get_server_capabilities`, `workflow_help`, `diagnostics`) are unchanged.
+- The capabilities `output_cheatsheet` and the MCP connection guide name the new paths
+  (`result.passages[]`, `result.citation_map`, `result.review_id`, `results[]`).
+
+### Fixed
+
+- `_meta.retrieved_at` of a review-index result is the oldest fetch of the passages the result
+  returns, not of the whole index. A result that returns no passage (an index summary, a
+  status) still takes the oldest passage of the index.
+- The DOI-to-PMID resolution cache keeps the fetch time of each entry, so a cache hit is dated
+  by the original lookup, not by the call.
+
+### Tests
+
+- Every data tool is run through the MCP egress with its real payload (tool body, service
+  adapter and response models; recorded PubTator3 fixtures behind them), with `include_meta` on
+  and off, and validated against the vendored envelope JSON Schema v1.2.0.
+
 ## [7.8.0] - 2026-11-26
 
 ### Added

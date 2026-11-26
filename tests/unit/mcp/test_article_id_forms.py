@@ -107,7 +107,7 @@ async def test_single_pmid_tool_echoes_one_resolution(
     async with Client(create_pubtator_mcp(profile="full")) as client:
         result = await client.call_tool("get_publication_citation_graph", {"pmid": "PMC3518823"})
 
-    assert result.structured_content["pmid"] == "23248578"
+    assert result.structured_content["result"]["pmid"] == "23248578"
     assert result.structured_content["resolved_from"]["resolved_to"] == "23248578"
 
 

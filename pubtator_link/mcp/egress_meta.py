@@ -1,8 +1,9 @@
-"""The ``_meta`` every tool result leaves with.
+"""The frame and the ``_meta`` every tool result leaves with.
 
-Response-Envelope v1 section 4 (``request_id``, ``elapsed_ms`` on every result) and v1.2
+Response-Envelope v1 section 1 (a success carries its payload under ``results`` or
+``result``), section 4 (``request_id``, ``elapsed_ms`` on every result) and v1.2
 (``source``, ``data_version``, ``retrieved_at`` on every success that carries upstream
-data). Stamped once, at the egress every tool shares, after the tool body has shaped its
+data). Applied once, at the egress every tool shares, after the tool body has shaped its
 payload -- so no tool argument (``include_meta=false``) can switch a required field off.
 """
 
@@ -21,9 +22,77 @@ _NCBI_TOOLS = frozenset(
     {"convert_article_ids", "get_mesh", "get_citation", "find_related_articles"}
 )
 
+# The domain key each tool's primary payload has inside the server (and on the REST API);
+# on the MCP wire it is ``results`` (array) or ``result`` (object). A data tool in neither
+# table has no single primary payload: its whole payload is nested under ``result``.
+_COLLECTION_KEYS = {
+    "search_biomedical_entities": "matches",
+    "find_entity_relations": "related_entities",
+    "suggest_corpus": "candidates",
+    "convert_article_ids": "records",
+    "get_mesh": "descriptors",
+    "get_citation": "records",
+    "find_related_articles": "related_articles",
+    "get_publication_passages": "passages",
+    "get_publication_metadata": "metadata",
+    "find_related_evidence_candidates": "candidates",
+    "list_review_indexes": "indexes",
+    "list_evidence_certainty": "records",
+    "preflight_review_sources": "coverage_hints",
+    "list_research_sessions": "sessions",
+    "get_review_passages_by_id": "passages",
+    "get_neighboring_review_passages": "passages",
+    "get_review_audit_trail": "items",
+}
+_OBJECT_KEYS = {
+    "get_publication_annotations": "export_data",
+    "get_pmc_annotations": "export_data",
+    "get_review_index_summary": "index",
+    "add_evidence_certainty": "record",
+    "get_evidence_certainty": "record",
+    "stage_research_session": "manifest",
+    "get_research_session_status": "manifest",
+    "get_review_context": "context_pack",
+    "get_review_context_batch": "merged_context_pack",
+}
+PRIMARY_KEYS = _COLLECTION_KEYS | _OBJECT_KEYS
 
-async def _review_evidence_fetched_at(review_id: Any) -> list[str]:
-    """When a review index's stored evidence was fetched: its oldest passage."""
+
+def _frame(envelope: dict[str, Any], tool_name: str) -> None:
+    """Put a success payload under ``results`` or ``result``, in place and in key order."""
+    old = PRIMARY_KEYS.get(tool_name)
+    items = list(envelope.items())
+    envelope.clear()
+    if old is not None:
+        collection = tool_name in _COLLECTION_KEYS
+        new = "results" if collection else "result"
+        envelope.update((new if key == old else key, value) for key, value in items)
+        # An empty or absent primary payload keeps the frame (``include_meta=false`` drops it).
+        envelope[new] = envelope.get(new) or ([] if collection else {})
+    elif any(key in ("result", "results") for key, _ in items):
+        envelope.update(items)
+    else:
+        kept = ("success", "_meta", "resolved_from")  # the identifier echo stays beside
+        envelope.update((key, value) for key, value in items if key in kept)
+        envelope["result"] = {key: value for key, value in items if key not in kept}
+
+
+def _passage_ids(value: Any) -> set[str]:
+    """Every ``passage_id`` a payload carries, at any depth."""
+    if isinstance(value, list):
+        return set().union(*map(_passage_ids, value))
+    if not isinstance(value, dict):
+        return set()
+    own = value.get("passage_id")
+    return ({own} if isinstance(own, str) else set()).union(*map(_passage_ids, value.values()))
+
+
+async def _review_evidence_fetched_at(review_id: Any, envelope: dict[str, Any]) -> list[str]:
+    """When the review-index evidence behind a result was fetched.
+
+    The oldest of the passages the result returns; a result that returns no passage
+    (an index summary, a status) describes the whole index and takes its oldest passage.
+    """
     if not isinstance(review_id, str):
         return []
     from pubtator_link.api.routes.dependencies import review
@@ -33,10 +102,14 @@ async def _review_evidence_fetched_at(review_id: Any) -> list[str]:
     repository = resources.review_repository if resources else review._review_repository
     if repository is None:  # no review database in this process
         return []
+    sql = "select min(created_at) from review_passages where review_id = $1"
+    used = sorted(_passage_ids(envelope))
     try:
         async with repository._acquire() as connection:
-            oldest = await connection.fetchval(
-                "select min(created_at) from review_passages where review_id = $1", review_id
+            oldest = await (
+                connection.fetchval(f"{sql} and passage_id = any($2::text[])", review_id, used)
+                if used
+                else connection.fetchval(sql, review_id)
             )
     except Exception:  # provenance lookup must never fail a tool result
         return []
@@ -64,7 +137,8 @@ class EgressCall:
             # The oldest fetch dates the result: the start of this call (every live
             # upstream request follows it), an earlier fetch that filled a cache entry
             # served now, or the stored evidence of the review index that was read.
-            stored = await _review_evidence_fetched_at(arguments.get("review_id"))
+            stored = await _review_evidence_fetched_at(arguments.get("review_id"), envelope)
+            _frame(envelope, tool_name)
             meta.setdefault("source", "ncbi" if tool_name in _NCBI_TOOLS else "pubtator")
             # PubTator3 and the NCBI services behind it publish no release identifier.
             meta.setdefault("data_version", "live")

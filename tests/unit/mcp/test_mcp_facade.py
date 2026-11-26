@@ -1528,7 +1528,7 @@ async def test_get_publication_passages_structured_and_text_mirrors_agree(
 
     structured = result.structured_content
     mirrored = json.loads(result.content[0].text)
-    fenced = structured["passages"][0]["text"]
+    fenced = structured["results"][0]["text"]
     assert mirrored == structured
     assert fenced["kind"] == "untrusted_text"
     assert fenced["raw_sha256"] == hashlib.sha256(raw.encode()).hexdigest()
@@ -1680,8 +1680,8 @@ async def test_submit_text_annotation_tool_waits_for_result(monkeypatch) -> None
     result = await tool.run({"text": "MEFV and colchicine", "wait": True})
 
     assert result.structured_content["success"] is True
-    assert result.structured_content["status"] == "completed"
-    assert result.structured_content["annotations"][0]["entity_id"] == "@GENE_4210"
+    assert result.structured_content["result"]["status"] == "completed"
+    assert result.structured_content["result"]["annotations"][0]["entity_id"] == "@GENE_4210"
 
 
 def test_export_review_audit_bundle_exposes_export_options() -> None:
@@ -1989,6 +1989,4 @@ def test_capabilities_include_context_management_cheatsheet() -> None:
     assert "search_literature" in capabilities["tools"]
     assert "get_review_context_batch" in capabilities["sample_calls"]
     assert capabilities["large_output_guidance"]["prefer"] == "get_publication_passages"
-    assert capabilities["output_cheatsheet"]["batch_merged_passages"] == (
-        "merged_context_pack.passages[]"
-    )
+    assert capabilities["output_cheatsheet"]["batch_merged_passages"] == "result.passages[]"

@@ -7,6 +7,8 @@ from typing import Any
 
 import httpx
 
+from pubtator_link.services.provenance import record_fetch, utc_now
+
 
 @dataclass(frozen=True)
 class DoiResolutionResult:
@@ -50,6 +52,7 @@ class DoiPmidResolver:
         self._source_cache: dict[str, str] = {}
         self._unresolved_cache: set[str] = set()
         self._unresolved_no_match_cache: dict[str, dict[str, int]] = {}
+        self._fetched_at: dict[str, str] = {}  # when each DOI was last looked up upstream
 
     async def resolve(self, dois: list[str], *, max_ids: int) -> DoiResolutionResult:
         normalized = _dedupe_dois(dois)
@@ -68,6 +71,8 @@ class DoiPmidResolver:
         timeout_count = 0
 
         for doi in selected:
+            if doi in self._pmid_cache or doi in self._unresolved_cache:
+                record_fetch(self._fetched_at[doi])  # a cached answer keeps its fetch time
             cached_pmid = self._pmid_cache.get(doi)
             if cached_pmid is not None:
                 resolved[doi] = cached_pmid
@@ -117,6 +122,7 @@ class DoiPmidResolver:
             )
 
         remaining = list(missing)
+        self._fetched_at.update(dict.fromkeys(missing, utc_now()))
         failed_or_timeout: set[str] = set()
         if self.discovery_service is not None and remaining:
             try:
