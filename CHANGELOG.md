@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [8.0.2] - 2026-11-26
+
+### Fixed
+
+- The README now names every tool that declares `readOnlyHint: false` (GTS-CORE-RO-01): a
+  "Tools that write" list gives the state each `lean`/`full` write tool changes, and a unit
+  test fails if a write tool registered in the `full` profile is missing from the README.
+
 ## [8.0.1] - 2026-11-26
 
 ### Fixed
