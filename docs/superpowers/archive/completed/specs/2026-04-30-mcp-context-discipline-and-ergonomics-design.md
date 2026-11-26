@@ -284,8 +284,7 @@ async def retrieve_review_context_batch_v2(
     max_chars: int = 12000,
     max_response_chars: int = 24000,
     include_tables: bool = False,
-) -> dict[str, Any]:
-    ...
+) -> dict[str, Any]: ...
 ```
 
 The existing wrapped tools remain documented as compatibility tools. New docs

@@ -189,8 +189,8 @@ In `shaped_search_result`, compute authors once before building `SearchResult`:
 Then set:
 
 ```python
-        authors=raw_authors if include_author_array else [],
-        first_author_et_al=_author_summary(raw_authors),
+authors = (raw_authors if include_author_array else [],)
+first_author_et_al = (_author_summary(raw_authors),)
 ```
 
 Replace the start of `_merge_metadata_fields` with:
@@ -406,7 +406,7 @@ In `pubtator_link/services/diagnostics.py`, before returning
 Then pass it into the response:
 
 ```python
-            minimum_workflow=minimum_workflow,
+minimum_workflow = (minimum_workflow,)
 ```
 
 After Task 4 adds `pubtator.ground_question`, update this block to include:
@@ -674,8 +674,8 @@ async def _json_error_response(send: Send, *, status_code: int, payload: dict[st
 In `UnifiedServerManager.create_app`, update the CORS middleware kwargs:
 
 ```python
-            allow_methods=settings.cors_allow_methods,
-            allow_headers=settings.cors_allow_headers,
+allow_methods = (settings.cors_allow_methods,)
+allow_headers = (settings.cors_allow_headers,)
 ```
 
 Add request-size middleware after CORS:
@@ -746,12 +746,8 @@ def test_error_code_for_typed_review_errors() -> None:
     assert error_code_for_exception(ReviewIndexUnavailableError("db unavailable")) == (
         "review_index_unavailable"
     )
-    assert error_code_for_exception(UpstreamUnavailableError("timeout")) == (
-        "upstream_unavailable"
-    )
-    assert error_code_for_exception(ValidationFailureError("bad input")) == (
-        "validation_failed"
-    )
+    assert error_code_for_exception(UpstreamUnavailableError("timeout")) == ("upstream_unavailable")
+    assert error_code_for_exception(ValidationFailureError("bad input")) == ("validation_failed")
 
 
 def test_error_code_legacy_schema_text_fallback_still_works() -> None:
@@ -851,9 +847,7 @@ Replace the schema-current startup failure:
 with:
 
 ```python
-                raise ReviewSchemaStaleError(
-                    f"Review database schema is not current: {missing}"
-                )
+raise ReviewSchemaStaleError(f"Review database schema is not current: {missing}")
 ```
 
 - [ ] **Step 7: Run MCP and review error tests**
@@ -1060,7 +1054,9 @@ async def ground_question_impl(
         )
         next_tools = ["pubtator.retrieve_review_context_batch", "pubtator.record_review_context"]
     else:
-        recovery.append("Indexing has not produced passages yet; inspect the review index and retry retrieval.")
+        recovery.append(
+            "Indexing has not produced passages yet; inspect the review index and retry retrieval."
+        )
 
     return GroundQuestionResponse(
         question=normalized_question,
@@ -1151,7 +1147,8 @@ In `pubtator_link/mcp/catalog.py`, add a `ToolCatalogSupplement` for
 In `pubtator_link/mcp/facade.py`, update instructions to include:
 
 ```python
-"For one-call grounded evidence use pubtator.ground_question; for explicit control use "
+"For one-call grounded evidence use pubtator.ground_question; for explicit control use"
+
 "search -> preflight -> index -> inspect -> retrieve. "
 ```
 

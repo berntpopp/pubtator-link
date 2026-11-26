@@ -137,7 +137,7 @@ def register_evidence_certainty_tools(mcp: FastMCP, profile: MCPToolProfile) -> 
             ),
         ],
     ) -> dict[str, Any]:
-        """Use this when a user needs user-supplied evidence certainty judgments for a review; returns the stored judgments for that review."""
+        """Use this when a user needs a review's user-supplied evidence certainty judgments; returns the stored judgments."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_review_evidence_certainty_service()

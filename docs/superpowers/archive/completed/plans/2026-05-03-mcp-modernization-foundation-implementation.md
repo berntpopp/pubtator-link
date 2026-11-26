@@ -229,7 +229,9 @@ from pubtator_link.mcp.profiles import MCPToolProfile, normalize_mcp_profile
 
 
 def create_pubtator_mcp(profile: MCPToolProfile | str | None = None) -> FastMCP:
-    selected_profile = normalize_mcp_profile(str(profile) if profile is not None else settings.mcp_profile)
+    selected_profile = normalize_mcp_profile(
+        str(profile) if profile is not None else settings.mcp_profile
+    )
     mcp = FastMCP(...)
     register_metadata(mcp, profile=selected_profile)
     register_literature_tools(mcp, profile=selected_profile)
@@ -282,9 +284,7 @@ def test_full_profile_all_tools_have_output_schemas() -> None:
 
     mcp = create_pubtator_mcp(profile="full")
     missing = [
-        name
-        for name, tool in mcp._tool_manager._tools.items()
-        if not _tool_output_schema(tool)
+        name for name, tool in mcp._tool_manager._tools.items() if not _tool_output_schema(tool)
     ]
 
     assert missing == []
@@ -428,7 +428,17 @@ from typing import Any, Literal
 
 from pubtator_link.mcp.profiles import MCPToolProfile
 
-ToolCategory = Literal["metadata", "diagnostics", "literature", "discovery", "publication", "review", "retrieval", "annotation", "audit"]
+ToolCategory = Literal[
+    "metadata",
+    "diagnostics",
+    "literature",
+    "discovery",
+    "publication",
+    "review",
+    "retrieval",
+    "annotation",
+    "audit",
+]
 ToolStability = Literal["lean", "advanced", "compat", "admin"]
 
 
@@ -930,13 +940,12 @@ async def record_llm_context_event(
     self,
     review_id: str,
     request: RecordReviewContextRequest,
-) -> RecordReviewContextResponse:
-    ...
+) -> RecordReviewContextResponse: ...
+
 
 async def get_latest_llm_context(
     self, review_id: str, *, session_id: str | None = None
-) -> ReviewLlmContext | None:
-    ...
+) -> ReviewLlmContext | None: ...
 ```
 
 The implementation inserts a compact context snapshot and event in one
@@ -1027,13 +1036,11 @@ from pubtator_link.models.review_rerag import (
 class LlmReviewContextRepository(Protocol):
     async def record_llm_context_event(
         self, review_id: str, request: RecordReviewContextRequest
-    ) -> RecordReviewContextResponse:
-        ...
+    ) -> RecordReviewContextResponse: ...
 
     async def get_latest_llm_context(
         self, review_id: str, *, session_id: str | None = None
-    ) -> ReviewLlmContext | None:
-        ...
+    ) -> ReviewLlmContext | None: ...
 
 
 class LlmReviewContextService:
@@ -1158,7 +1165,14 @@ At the start of `retrieve_context_batch()`, after session validation, fetch the
 shared state once with `asyncio.gather()` where safe:
 
 ```python
-status, preparation_pmids, indexed_pmids, available_sections, source_summaries, failed_sources = await asyncio.gather(
+(
+    status,
+    preparation_pmids,
+    indexed_pmids,
+    available_sections,
+    source_summaries,
+    failed_sources,
+) = await asyncio.gather(
     self._preparation_status(review_id, session_id=request.session_id),
     self._preparation_pmids(review_id, session_id=request.session_id),
     self.repository.indexed_pmids(review_id, session_id=request.session_id),

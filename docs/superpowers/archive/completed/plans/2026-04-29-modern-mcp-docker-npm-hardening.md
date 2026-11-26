@@ -254,7 +254,9 @@ class SearchLiteratureRequest(BaseModel):
     text: str = Field(min_length=1, max_length=1000)
     page: int = Field(default=1, ge=1, le=1000)
     sort: str | None = Field(default=None, description="Examples: 'score desc', 'date desc'.")
-    filters: str | None = Field(default=None, description="Optional PubTator search filters as JSON.")
+    filters: str | None = Field(
+        default=None, description="Optional PubTator search filters as JSON."
+    )
     sections: str | None = Field(default=None, description="Comma-separated document sections.")
 
 
@@ -276,14 +278,18 @@ class SearchBiomedicalEntitiesRequest(BaseModel):
 
 
 class FindEntityRelationsRequest(BaseModel):
-    entity_id: str = Field(min_length=1, description="PubTator entity ID such as @CHEMICAL_remdesivir.")
+    entity_id: str = Field(
+        min_length=1, description="PubTator entity ID such as @CHEMICAL_remdesivir."
+    )
     relation_type: str | None = None
     target_entity_type: str | None = None
 
 
 class SubmitTextAnnotationRequest(BaseModel):
     text: str = Field(min_length=1, max_length=10000)
-    bioconcepts: str = Field(default="Gene", description="Comma-separated PubTator bioconcepts or 'all'.")
+    bioconcepts: str = Field(
+        default="Gene", description="Comma-separated PubTator bioconcepts or 'all'."
+    )
 
 
 class GetTextAnnotationResultsRequest(BaseModel):
@@ -437,7 +443,9 @@ def create_pubtator_mcp() -> FastMCP:
         raise NotImplementedError("Task 3 wires this tool to PubTator3 services.")
 
     @mcp.tool(name="pubtator.fetch_publication_annotations", title="Fetch Publication Annotations")
-    async def fetch_publication_annotations(request: FetchPublicationAnnotationsRequest) -> dict[str, Any]:
+    async def fetch_publication_annotations(
+        request: FetchPublicationAnnotationsRequest,
+    ) -> dict[str, Any]:
         """Use this when a user provides PubMed IDs and needs PubTator annotations. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         raise NotImplementedError("Task 3 wires this tool to PubTator3 services.")
 
@@ -447,7 +455,9 @@ def create_pubtator_mcp() -> FastMCP:
         raise NotImplementedError("Task 3 wires this tool to PubTator3 services.")
 
     @mcp.tool(name="pubtator.search_biomedical_entities", title="Search Biomedical Entities")
-    async def search_biomedical_entities(request: SearchBiomedicalEntitiesRequest) -> dict[str, Any]:
+    async def search_biomedical_entities(
+        request: SearchBiomedicalEntitiesRequest,
+    ) -> dict[str, Any]:
         """Use this when a user needs canonical PubTator biomedical entity IDs. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
         raise NotImplementedError("Task 3 wires this tool to PubTator3 services.")
 
@@ -462,7 +472,9 @@ def create_pubtator_mcp() -> FastMCP:
         raise NotImplementedError("Task 3 wires this tool to PubTator3 services.")
 
     @mcp.tool(name="pubtator.get_text_annotation_results", title="Get Text Annotation Results")
-    async def get_text_annotation_results(request: GetTextAnnotationResultsRequest) -> dict[str, Any]:
+    async def get_text_annotation_results(
+        request: GetTextAnnotationResultsRequest,
+    ) -> dict[str, Any]:
         """Use this when a user has a PubTator text annotation session ID and needs its results."""
         raise NotImplementedError("Task 3 wires this tool to PubTator3 services.")
 
@@ -547,7 +559,9 @@ async def test_search_entities_adapter_calls_client() -> None:
     from pubtator_link.mcp.tools import SearchBiomedicalEntitiesRequest
 
     class FakeClient:
-        async def autocomplete_entity(self, query: str, concept: str | None, limit: int) -> list[dict[str, object]]:
+        async def autocomplete_entity(
+            self, query: str, concept: str | None, limit: int
+        ) -> list[dict[str, object]]:
             return [{"_id": "@GENE_672", "name": "BRCA1", "biotype": "Gene", "score": 1.0}]
 
     result = await search_biomedical_entities_impl(
@@ -565,7 +579,9 @@ async def test_publication_adapter_validates_pmids() -> None:
     from pubtator_link.mcp.tools import FetchPublicationAnnotationsRequest
 
     class FakeService:
-        async def export_publications_list(self, pmids: list[str], format: str, full: bool) -> dict[str, object]:
+        async def export_publications_list(
+            self, pmids: list[str], format: str, full: bool
+        ) -> dict[str, object]:
             return {"pmids": pmids, "format": format, "full_text": full, "count": len(pmids)}
 
     result = await fetch_publication_annotations_impl(
@@ -685,11 +701,21 @@ Replace `fetch_publication_annotations` body:
 Add the remaining adapter functions in `service_adapters.py`, each with a fake-client test before implementation:
 
 ```python
-async def search_literature_impl(request: SearchLiteratureRequest, *, client: PubTator3Client) -> dict[str, Any]: ...
-async def fetch_pmc_annotations_impl(request: FetchPmcAnnotationsRequest, *, service: PublicationService) -> dict[str, Any]: ...
-async def find_entity_relations_impl(request: FindEntityRelationsRequest, *, client: PubTator3Client) -> dict[str, Any]: ...
-async def submit_text_annotation_impl(request: SubmitTextAnnotationRequest, *, client: PubTator3Client) -> dict[str, Any]: ...
-async def get_text_annotation_results_impl(request: GetTextAnnotationResultsRequest, *, client: PubTator3Client) -> dict[str, Any]: ...
+async def search_literature_impl(
+    request: SearchLiteratureRequest, *, client: PubTator3Client
+) -> dict[str, Any]: ...
+async def fetch_pmc_annotations_impl(
+    request: FetchPmcAnnotationsRequest, *, service: PublicationService
+) -> dict[str, Any]: ...
+async def find_entity_relations_impl(
+    request: FindEntityRelationsRequest, *, client: PubTator3Client
+) -> dict[str, Any]: ...
+async def submit_text_annotation_impl(
+    request: SubmitTextAnnotationRequest, *, client: PubTator3Client
+) -> dict[str, Any]: ...
+async def get_text_annotation_results_impl(
+    request: GetTextAnnotationResultsRequest, *, client: PubTator3Client
+) -> dict[str, Any]: ...
 ```
 
 Use the existing route modules as the behavioral reference:
@@ -974,19 +1000,19 @@ REMOTE_JOB_ANNOTATIONS = ToolAnnotations(
 For read-only PubTator/NCBI lookup tools, add:
 
 ```python
-annotations=READ_ONLY_OPEN_WORLD
+annotations = READ_ONLY_OPEN_WORLD
 ```
 
 For `pubtator.get_server_capabilities`, add:
 
 ```python
-annotations=READ_ONLY_CLOSED_WORLD
+annotations = READ_ONLY_CLOSED_WORLD
 ```
 
 For `pubtator.submit_text_annotation`, add:
 
 ```python
-annotations=REMOTE_JOB_ANNOTATIONS
+annotations = REMOTE_JOB_ANNOTATIONS
 ```
 
 Use descriptions that begin with “Use this when” and include the research-use notice.

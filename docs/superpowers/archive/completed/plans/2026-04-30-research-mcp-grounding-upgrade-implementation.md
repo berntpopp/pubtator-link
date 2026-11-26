@@ -82,7 +82,9 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
     assert "large_output_guidance" in capabilities
     assert "review_rerag" in capabilities
     assert "search -> index -> inspect -> retrieve" in capabilities["recommended_workflows"][0]
-    assert "pubtator.get_publication_passages" in capabilities["tool_groups"]["publication_grounding"]
+    assert (
+        "pubtator.get_publication_passages" in capabilities["tool_groups"]["publication_grounding"]
+    )
     assert "pubtator.inspect_review_index" in capabilities["tool_groups"]["review_grounding"]
 ```
 
@@ -108,7 +110,7 @@ Expected: FAIL because instructions, resource keys, and new future tool names ar
 Set `instructions` in `create_pubtator_mcp()` to one compact literal:
 
 ```python
-instructions=(
+instructions = (
     "PubTator-Link grounds biomedical literature work: search PubMed/PubTator, "
     "fetch compact passages or raw BioC, inspect review indexes, retrieve "
     "review-scoped RAG context, find entity relations, and submit/get text annotations. "
@@ -290,6 +292,7 @@ PassageDropReasonCode = Literal[
 ]
 PublicationPassageSource = Literal["pubtator_abstract", "pubtator_full_bioc"]
 
+
 class PublicationPassageRequest(BaseModel):
     pmids: list[str] = Field(min_length=1, max_length=25)
     sections: list[str] = Field(default_factory=list)
@@ -299,6 +302,7 @@ class PublicationPassageRequest(BaseModel):
     max_chars: int = Field(default=12000, ge=1000, le=50000)
     include_tables: bool = True
     include_references: bool = False
+
 
 class PublicationContextEstimateRequest(BaseModel):
     pmids: list[str] = Field(min_length=1, max_length=25)
@@ -343,15 +347,17 @@ async def test_publication_passages_endpoint_returns_compact_passages() -> None:
     service.get_passages.return_value = PublicationPassageResponse(
         pmids=["111"],
         mode="compact_passages",
-        passages=[PublicationPassage(
-            passage_id="PMID:111:abstract:0",
-            pmid="111",
-            pmcid=None,
-            section="abstract",
-            text="Abstract text",
-            char_count=13,
-            source="pubtator_abstract",
-        )],
+        passages=[
+            PublicationPassage(
+                passage_id="PMID:111:abstract:0",
+                pmid="111",
+                pmcid=None,
+                section="abstract",
+                text="Abstract text",
+                char_count=13,
+                source="pubtator_abstract",
+            )
+        ],
         dropped=[],
         context_estimate=PublicationContextEstimate(
             estimated_passages=1,
@@ -425,9 +431,29 @@ git commit -m "feat: add compact publication passage tools"
 Add model classes for expected shapes in tests:
 
 ```python
-ReviewIndexTotals(pmid_count=1, source_count=1, passage_count=2, char_count=30, failed_source_count=1)
-ReviewSourceSummary(source_id="111", pmid="111", source_kind="pubtator_abstract", job_status="complete", error=None, attempt_statuses=["success"], sections=["abstract"], passage_count=2, char_count=30, sample_passages=[])
-FailedSourceSummary(source_id="222", pmid="222", source_kind="pubtator_full_bioc", job_status="failed", error="not available", attempt_statuses=["not_available"])
+ReviewIndexTotals(
+    pmid_count=1, source_count=1, passage_count=2, char_count=30, failed_source_count=1
+)
+ReviewSourceSummary(
+    source_id="111",
+    pmid="111",
+    source_kind="pubtator_abstract",
+    job_status="complete",
+    error=None,
+    attempt_statuses=["success"],
+    sections=["abstract"],
+    passage_count=2,
+    char_count=30,
+    sample_passages=[],
+)
+FailedSourceSummary(
+    source_id="222",
+    pmid="222",
+    source_kind="pubtator_full_bioc",
+    job_status="failed",
+    error="not available",
+    attempt_statuses=["not_available"],
+)
 ```
 
 Extend `FakeReviewContextRepository` with methods returning these values, then assert:
@@ -462,6 +488,7 @@ class ReviewPassageSample(BaseModel):
     text: str
     char_count: int
 
+
 class ReviewSourceSummary(BaseModel):
     source_id: str
     pmid: str | None = None
@@ -474,6 +501,7 @@ class ReviewSourceSummary(BaseModel):
     char_count: int = 0
     sample_passages: list[ReviewPassageSample] = Field(default_factory=list)
 
+
 class FailedSourceSummary(BaseModel):
     source_id: str
     pmid: str | None = None
@@ -482,6 +510,7 @@ class FailedSourceSummary(BaseModel):
     error: str | None = None
     attempt_statuses: list[str] = Field(default_factory=list)
 
+
 class ReviewIndexTotals(BaseModel):
     pmid_count: int = 0
     source_count: int = 0
@@ -489,10 +518,12 @@ class ReviewIndexTotals(BaseModel):
     char_count: int = 0
     failed_source_count: int = 0
 
+
 class InspectReviewIndexRequest(BaseModel):
     pmids: list[str] = Field(default_factory=list)
     include_passage_samples: bool = False
     sample_per_pmid: int = Field(default=2, ge=1, le=5)
+
 
 class InspectReviewIndexResponse(BaseModel):
     success: bool = True
@@ -628,7 +659,9 @@ request = RetrieveReviewContextBatchRequest(
 )
 response = await service.retrieve_context_batch("review-1", request)
 assert [result.context_pack.question for result in response.results] == request.queries
-assert len({p.passage_id for p in response.merged_context_pack.passages}) == len(response.merged_context_pack.passages)
+assert len({p.passage_id for p in response.merged_context_pack.passages}) == len(
+    response.merged_context_pack.passages
+)
 assert all(result.diagnostics is not None for result in response.results)
 ```
 
@@ -672,6 +705,7 @@ class RetrieveReviewContextBatchRequest(BaseModel):
     max_chars: int = Field(default=12000, ge=500, le=50000)
     deduplicate_passages: bool = True
     include_diagnostics: bool = True
+
 
 class RetrieveReviewContextBatchResponse(BaseModel):
     success: bool = True

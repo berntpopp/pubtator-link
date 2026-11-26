@@ -19,9 +19,7 @@ from pubtator_link.services.provenance import start_fetch_log, utc_now, utc_z
 # Tools that orient a client and return no upstream data (outside the v1.2 rule).
 OPS_TOOLS = frozenset({"get_server_capabilities", "workflow_help", "diagnostics"})
 # Tools that answer from NCBI E-utilities / the PMC ID converter, not from PubTator3.
-_NCBI_TOOLS = frozenset(
-    {"convert_article_ids", "get_mesh", "get_citation", "find_related_articles"}
-)
+_NCBI_TOOLS = frozenset({"map_article_ids", "get_mesh", "get_citation", "find_related_articles"})
 
 # The domain key each tool's primary payload has inside the server (and on the REST API);
 # on the MCP wire it is ``results`` (array) or ``result`` (object). A data tool in neither
@@ -29,8 +27,8 @@ _NCBI_TOOLS = frozenset(
 _COLLECTION_KEYS = {
     "search_biomedical_entities": "matches",
     "find_entity_relations": "related_entities",
-    "suggest_corpus": "candidates",
-    "convert_article_ids": "records",
+    "find_review_corpus": "candidates",
+    "map_article_ids": "records",
     "get_mesh": "descriptors",
     "get_citation": "records",
     "find_related_articles": "related_articles",
@@ -39,7 +37,7 @@ _COLLECTION_KEYS = {
     "find_related_evidence_candidates": "candidates",
     "list_review_indexes": "indexes",
     "list_evidence_certainty": "records",
-    "preflight_review_sources": "coverage_hints",
+    "get_review_source_coverage": "coverage_hints",
     "list_research_sessions": "sessions",
     "get_review_passages_by_id": "passages",
     "get_neighboring_review_passages": "passages",

@@ -30,31 +30,31 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         "lean",
         "full",
         "readonly",
-        name="preflight_review_sources",
+        name="get_review_source_coverage",
         title="Preflight Review Sources",
         output_schema=None,
         annotations=READ_ONLY_OPEN_WORLD,
     )
-    async def preflight_review_sources(
+    async def get_review_source_coverage(
         pmids: Annotated[
             list[Pmid],
             Field(
                 min_length=1,
-                description="PubMed IDs to check source coverage and full-text availability for.",
+                description="PMIDs to check source coverage for.",
                 examples=[["25741868"]],
             ),
         ],
         pmid: Annotated[
             Pmid | None,
-            Field(min_length=1, description="Single-PMID convenience alias, merged with `pmids`."),
+            Field(min_length=1, description="Single-PMID alias, merged with `pmids`."),
         ] = None,
     ) -> dict[str, Any]:
-        """Use this when a user needs PMID source coverage, PMC fallback availability, and likely full-text versus abstract-only retrieval before indexing review evidence; returns per-PMID source coverage and fallback availability."""
+        """Use this when a user needs PMID source coverage before indexing review evidence; returns per-PMID coverage, PMC fallback availability and likely full-text versus abstract-only retrieval."""
 
         async def call() -> dict[str, Any]:
             selected_pmids = merge_pmids(pmids, pmid)
             service = await review_tools.get_source_preflight_service()
-            return await review_tools.preflight_review_sources_impl(
+            return await review_tools.get_review_source_coverage_impl(
                 service=service,
                 pmids=selected_pmids,
             )
@@ -64,7 +64,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         except ValueError:
             tool_pmids = None
         return await run_mcp_tool(
-            "preflight_review_sources",
+            "get_review_source_coverage",
             call,
             pmids=tool_pmids,
             fallback_tool="get_publication_passages" if tool_pmids else None,
@@ -134,9 +134,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         stage_full_text: Annotated[
             bool, Field(description="Queue full-text preparation for staged candidates.")
         ] = True,
-        include_meta: Annotated[
-            bool, Field(description="Include the _meta orientation block.")
-        ] = True,
+        include_meta: Annotated[bool, Field(description="Include the _meta block.")] = True,
     ) -> dict[str, Any]:
         """Use this when a user needs to stage candidate PMIDs with coverage hints and queued review preparation after search planning; returns the session ID and staged candidates."""
 
@@ -221,7 +219,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         ] = "lean",
         max_response_chars: Annotated[
             MaxResponseChars,
-            Field(description="Response character budget: 'auto' (default) or an integer cap."),
+            Field(description="Response character cap, or 'auto'."),
         ] = "auto",
     ) -> dict[str, Any]:
         """Use this when a user wants one compact grounded evidence workflow from a question: search literature, index candidate PMIDs, inspect readiness, and retrieve citable review context."""
@@ -326,7 +324,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             Field(min_length=1, description="Optional review index the session belongs to."),
         ] = None,
     ) -> dict[str, Any]:
-        """Use this when a user needs staged candidate, coverage, and preparation status for a research session; returns staged candidate PMIDs, coverage hints and preparation status."""
+        """Use this when a user needs a research session's status; returns staged candidate PMIDs, coverage hints and preparation status."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_research_session_service()
@@ -351,7 +349,7 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             str | None,
             Field(
                 min_length=1,
-                description="Optional review index to list sessions for; omit for recent global sessions.",
+                description="Review index to list sessions for; omit for recent sessions.",
             ),
         ] = None,
         limit: Annotated[
@@ -366,11 +364,11 @@ def register_research_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             str | None,
             Field(
                 min_length=1,
-                description="Opaque cursor returned by a previous session-list page.",
+                description="Cursor from the previous page.",
             ),
         ] = None,
     ) -> dict[str, Any]:
-        """Use this when a user needs staged research sessions for orientation or one review ID; returns session IDs with review IDs and status."""
+        """Use this when a user needs staged research sessions, globally or for one review ID; returns session IDs with review IDs and status."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_research_session_service()

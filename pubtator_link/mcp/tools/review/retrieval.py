@@ -45,7 +45,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             str,
             Field(
                 min_length=1,
-                description="Prepared review index to retrieve citable context from.",
+                description="Prepared review index to retrieve from.",
                 examples=["demo"],
             ),
         ],
@@ -57,9 +57,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 examples=["EGFR resistance"],
             ),
         ],
-        session_id: Annotated[
-            str | None, Field(description="Optional staged session to scope retrieval to.")
-        ] = None,
+        session_id: Annotated[str | None, Field(description="Staged session to scope to.")] = None,
         pmids: Annotated[
             list[Pmid] | None,
             Field(description="Restrict retrieval to these PMIDs.", examples=[["12345"]]),
@@ -84,7 +82,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             int, Field(ge=500, le=50_000, description="Soft total character budget for passages.")
         ] = 6000,
         include_diagnostics: Annotated[
-            bool, Field(description="Include retrieval diagnostics in the response.")
+            bool, Field(description="Include retrieval diagnostics.")
         ] = False,
         include_tables: Annotated[bool, Field(description="Include table passages.")] = False,
         include_references: Annotated[
@@ -92,27 +90,25 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         ] = False,
         table_mode: Annotated[
             ReviewTableMode,
-            Field(description="Table rendering: 'off', 'preview' (default), or 'full'."),
+            Field(description="Table rendering."),
         ] = "preview",
         section_policy: Annotated[
             SampleSectionPolicy,
-            Field(description="Passage ordering: 'evidence_first' (default) or 'original_order'."),
+            Field(description="Passage ordering."),
         ] = "evidence_first",
         allow_truncated_passages: Annotated[
-            bool, Field(description="Allow per-passage truncation to fit the char budget.")
+            bool, Field(description="Truncate passages to fit the char budget.")
         ] = True,
         max_chars_per_passage: Annotated[
             int, Field(ge=300, le=10_000, description="Character cap per returned passage.")
         ] = 2200,
         include_resolver_trace: Annotated[
-            bool, Field(description="Include the source-resolver trace for auditing.")
+            bool, Field(description="Include the source-resolver trace.")
         ] = False,
-        include_meta: Annotated[
-            bool, Field(description="Include the _meta orientation block.")
-        ] = True,
+        include_meta: Annotated[bool, Field(description="Include the _meta block.")] = True,
         ctx: Context | None = None,
     ) -> dict[str, Any]:
-        """Use this when a review needs compact citable context from prepared review passages instead of raw BioC export; returns ranked citable passages with stable passage IDs and PMIDs. Use a short keyword query and PMID filters. If zero passages are returned, simplify the query, inspect the review index, or fall back to get_publication_annotations."""
+        """Use this when a review needs compact citable context from prepared passages; returns ranked passages with stable passage IDs and PMIDs. Use a short keyword query and PMID filters. If zero passages are returned, simplify the query, inspect the index, or fall back to get_publication_annotations."""
 
         async def call() -> dict[str, Any]:
             selected_question = question
@@ -162,7 +158,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             str,
             Field(
                 min_length=1,
-                description="Prepared review index to retrieve citable context from.",
+                description="Prepared review index to retrieve from.",
                 examples=["demo"],
             ),
         ],
@@ -170,13 +166,11 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             list[str],
             Field(
                 min_length=1,
-                description="Short keyword query variants to retrieve context for in one call.",
+                description="Short keyword query variants.",
                 examples=[["EGFR resistance", "osimertinib resistance"]],
             ),
         ],
-        session_id: Annotated[
-            str | None, Field(description="Optional staged session to scope retrieval to.")
-        ] = None,
+        session_id: Annotated[str | None, Field(description="Staged session to scope to.")] = None,
         pmids: Annotated[
             list[Pmid] | None,
             Field(description="Restrict retrieval to these PMIDs.", examples=[["12345"]]),
@@ -196,7 +190,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         ] = None,
         response_mode: Annotated[
             ReviewBatchResponseMode,
-            Field(description="Payload shape (default 'compact'); 'quotes' for short snippets."),
+            Field(description="Payload shape; 'quotes' gives short snippets."),
         ] = "compact",
         max_passages_per_query: Annotated[
             int, Field(ge=1, le=50, description="Maximum passages per query variant.")
@@ -206,22 +200,22 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         ] = 20,
         max_chars: Annotated[
             int | None,
-            Field(ge=200, le=200_000, description="Optional soft total character budget."),
+            Field(ge=200, le=200_000, description="Soft total character budget."),
         ] = None,
         max_response_chars: Annotated[
             MaxResponseChars,
-            Field(description="Response character budget: 'auto' (default) or an integer cap."),
+            Field(description="Response character cap, or 'auto'."),
         ] = "auto",
         verbosity: Annotated[
             ReviewResponseVerbosity,
-            Field(description="Field verbosity: 'lean', 'standard' (default), or 'full'."),
+            Field(description="Field verbosity."),
         ] = "standard",
         deduplicate_passages: Annotated[
             bool, Field(description="Merge duplicate passages across query variants.")
         ] = True,
         budget_strategy: Annotated[
             BudgetStrategy | None,
-            Field(description="Passage budget split (default 'query_fair')."),
+            Field(description="Passage budget split."),
         ] = "query_fair",
         min_passages_per_source: Annotated[
             int, Field(ge=0, le=50, description="Guaranteed minimum passages per source.")
@@ -234,7 +228,7 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             Field(description="PMIDs to prioritize in budgeting.", examples=[["12345"]]),
         ] = None,
         include_diagnostics: Annotated[
-            bool, Field(description="Include retrieval diagnostics in the response.")
+            bool, Field(description="Include retrieval diagnostics.")
         ] = False,
         include_tables: Annotated[bool, Field(description="Include table passages.")] = False,
         include_references: Annotated[
@@ -242,30 +236,28 @@ def register_retrieval_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         ] = False,
         table_mode: Annotated[
             ReviewTableMode,
-            Field(description="Table rendering: 'off', 'preview' (default), or 'full'."),
+            Field(description="Table rendering."),
         ] = "preview",
         section_policy: Annotated[
             SampleSectionPolicy,
-            Field(description="Passage ordering: 'evidence_first' (default) or 'original_order'."),
+            Field(description="Passage ordering."),
         ] = "evidence_first",
         allow_truncated_passages: Annotated[
-            bool, Field(description="Allow per-passage truncation to fit the char budget.")
+            bool, Field(description="Truncate passages to fit the char budget.")
         ] = True,
         max_chars_per_passage: Annotated[
             int, Field(ge=100, le=20000, description="Character cap per returned passage.")
         ] = 2200,
         dry_run: Annotated[
-            bool, Field(description="Return budgeting diagnostics without passage text.")
+            bool, Field(description="Budgeting diagnostics only, no passage text.")
         ] = False,
         include_resolver_trace: Annotated[
-            bool, Field(description="Include the source-resolver trace for auditing.")
+            bool, Field(description="Include the source-resolver trace.")
         ] = False,
-        include_meta: Annotated[
-            bool, Field(description="Include the _meta orientation block.")
-        ] = True,
+        include_meta: Annotated[bool, Field(description="Include the _meta block.")] = True,
         ctx: Context | None = None,
     ) -> dict[str, Any]:
-        """Use this when a user wants multiple short review retrieval query variants in one call; returns merged citable passages and per-query summaries. Compact (default): query_fair budgeting, next_steps for zero-result queries. Use response_mode="quotes" for short citable snippets or dry_run for diagnostics without passage text."""
+        """Use this when a user wants multiple short review retrieval query variants in one call; returns merged citable passages and per-query summaries. response_mode='quotes' gives short snippets; dry_run gives diagnostics without text."""
 
         async def call() -> dict[str, Any]:
             selected_pmids = merge_pmids(pmids, None, max_items=100) if pmids else None

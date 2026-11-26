@@ -64,7 +64,7 @@ Without a database the review tools degrade: call `diagnostics`, then fall back 
 
 ### Readonly evidence workflow
 
-The readonly evidence workflow is `search_literature` → `preflight_review_sources` →
+The readonly evidence workflow is `search_literature` → `get_review_source_coverage` →
 `get_publication_passages`; it ends in direct passage retrieval and never asks a public
 caller to stage or index a corpus. `index_review_evidence` is available only to
 configured, authenticated non-readonly profiles.
@@ -83,24 +83,24 @@ broader lookup candidates. Candidate variants are not classifications for the qu
 | `diagnostics` | Subsystem status and recovery commands |
 | `search_literature` | PubMed literature search through PubTator3 |
 | `search_guidelines` | Guideline, consensus, and systematic-review papers |
-| `suggest_corpus` | Compact review-feeding candidate PMID corpus for a question |
+| `find_review_corpus` | Compact review-feeding candidate PMID corpus for a question |
 | `search_biomedical_entities` | Canonical PubTator entity IDs (gene, disease, chemical, species, variant, cell line) |
 | `find_entity_relations` | Literature-derived related entities for a PubTator entity |
 | `get_mesh` | MeSH descriptors and candidate PubMed search terms |
 | `get_citation` | Candidate PMIDs from a free-text citation |
-| `convert_article_ids` | Normalize PMIDs, PMCIDs, and DOIs to candidate PMIDs |
+| `map_article_ids` | Normalize PMIDs, PMCIDs, and DOIs to candidate PMIDs |
 | `find_related_articles` | Similar, cited-by, or reference-linked articles for seed PMIDs |
 | `find_related_evidence_candidates` | Full-text-preferred related candidates for one seed PMID |
 | `get_publication_citation_graph` | Reference and cited-by neighbours for one publication |
-| `build_topic_literature_map` | Bounded topic map across papers, authors, citations, and entities |
+| `generate_topic_literature_map` | Bounded topic map across papers, authors, citations, and entities |
 | `get_publication_metadata` | Citation-grade metadata for known PMIDs |
 | `get_publication_passages` | Compact citable passages for PMIDs, without raw BioC |
-| `estimate_publication_context` | Estimate passage count and context size before fetching |
+| `compute_publication_context` | Estimate passage count and context size before fetching |
 | `get_publication_annotations` | Raw PubTator BioC annotation export for PMIDs |
 | `get_pmc_annotations` | Raw full-text BioC annotation export for PMC IDs |
 | `get_variant_evidence` | Exact/equivalent source classifications, distinct from non-classifying candidates |
-| `preflight_review_sources` | Source coverage and full-text vs abstract-only outlook before indexing |
-| `inspect_review_index` | Indexed PMIDs, sections, passage counts, and failures for a `review_id` |
+| `get_review_source_coverage` | Source coverage and full-text vs abstract-only outlook before indexing |
+| `get_review_index_status` | Indexed PMIDs, sections, passage counts, and failures for a `review_id` |
 | `get_review_index_summary` | One persisted review index summary, without passage samples |
 | `list_review_indexes` | Persisted review indexes with status, counts, and storage size |
 | `get_review_context` | Compact citable context from prepared review passages |

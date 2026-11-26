@@ -193,95 +193,95 @@ In `tests/unit/mcp/test_mcp_facade.py`, extend `test_common_mcp_tools_are_flat_a
 Append to `tests/test_routes/test_search.py` inside `TestSearchRoutes`:
 
 ```python
-    @patch.object(PubTator3Client, "search_publications")
-    def test_search_publications_maps_pubtator3_count_and_metadata(
-        self, mock_search, test_client
-    ):
-        """Route maps upstream PubTator3 count/page fields and structured metadata."""
-        mock_search.return_value = {
-            "count": 2776,
-            "total_pages": 278,
-            "page_size": 10,
-            "results": [
-                {
-                    "pmid": 39596913,
-                    "title": "The Superiority of Compressed Colchicine Tablets.",
-                    "journal": "Medicina (Kaunas)",
-                    "authors": ["Kaya MN"],
-                    "date": "2024-10-22T00:00:00Z",
-                    "doi": "10.3390/medicina60111728",
-                    "meta_date_publication": "2024 Oct 22",
-                    "meta_volume": "60",
-                    "meta_issue": "11",
-                    "meta_pages": "1728",
-                    "publication_types": ["Journal Article"],
-                    "citations": {
-                        "NLM": (
-                            "Kaya MN. The Superiority of Compressed Colchicine "
-                            "Tablets. Medicina (Kaunas). 2024;60(11):1728. "
-                            "PMID: 39596913"
-                        )
-                    },
-                }
-            ],
-        }
+@patch.object(PubTator3Client, "search_publications")
+def test_search_publications_maps_pubtator3_count_and_metadata(self, mock_search, test_client):
+    """Route maps upstream PubTator3 count/page fields and structured metadata."""
+    mock_search.return_value = {
+        "count": 2776,
+        "total_pages": 278,
+        "page_size": 10,
+        "results": [
+            {
+                "pmid": 39596913,
+                "title": "The Superiority of Compressed Colchicine Tablets.",
+                "journal": "Medicina (Kaunas)",
+                "authors": ["Kaya MN"],
+                "date": "2024-10-22T00:00:00Z",
+                "doi": "10.3390/medicina60111728",
+                "meta_date_publication": "2024 Oct 22",
+                "meta_volume": "60",
+                "meta_issue": "11",
+                "meta_pages": "1728",
+                "publication_types": ["Journal Article"],
+                "citations": {
+                    "NLM": (
+                        "Kaya MN. The Superiority of Compressed Colchicine "
+                        "Tablets. Medicina (Kaunas). 2024;60(11):1728. "
+                        "PMID: 39596913"
+                    )
+                },
+            }
+        ],
+    }
 
-        response = test_client.get(
-            "/api/search/",
-            params={"text": "familial Mediterranean fever colchicine", "page": 1},
-        )
+    response = test_client.get(
+        "/api/search/",
+        params={"text": "familial Mediterranean fever colchicine", "page": 1},
+    )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["total_results"] == 2776
-        assert data["total_pages"] == 278
-        assert data["per_page"] == 10
-        result = data["results"][0]
-        assert result["pub_date"] == "2024 Oct 22"
-        assert result["date"] == "2024-10-22T00:00:00Z"
-        assert result["doi"] == "10.3390/medicina60111728"
-        assert result["volume"] == "60"
-        assert result["issue"] == "11"
-        assert result["pages"] == "1728"
-        assert result["publication_types"] == ["Journal Article"]
-        assert result["citations"]["NLM"].endswith("39596913")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_results"] == 2776
+    assert data["total_pages"] == 278
+    assert data["per_page"] == 10
+    result = data["results"][0]
+    assert result["pub_date"] == "2024 Oct 22"
+    assert result["date"] == "2024-10-22T00:00:00Z"
+    assert result["doi"] == "10.3390/medicina60111728"
+    assert result["volume"] == "60"
+    assert result["issue"] == "11"
+    assert result["pages"] == "1728"
+    assert result["publication_types"] == ["Journal Article"]
+    assert result["citations"]["NLM"].endswith("39596913")
 
-    @patch.object(PubTator3Client, "search_publications")
-    def test_search_publications_merges_flat_filters(self, mock_search, test_client):
-        """Route merges flat publication/year filters into existing filter JSON."""
-        mock_search.return_value = {"count": 0, "total_pages": 0, "page_size": 10, "results": []}
 
-        response = test_client.get(
-            "/api/search/",
-            params={
-                "text": "FMF guideline",
-                "filters": '{"journal":["Ann Rheum Dis"]}',
-                "publication_types": ["Guideline", "Practice Guideline"],
-                "year_min": 2020,
-                "year_max": 2026,
-            },
-        )
+@patch.object(PubTator3Client, "search_publications")
+def test_search_publications_merges_flat_filters(self, mock_search, test_client):
+    """Route merges flat publication/year filters into existing filter JSON."""
+    mock_search.return_value = {"count": 0, "total_pages": 0, "page_size": 10, "results": []}
 
-        assert response.status_code == 200
-        _, kwargs = mock_search.call_args
-        assert kwargs["filters"] == (
-            '{"journal":["Ann Rheum Dis"],"type":["Guideline","Practice Guideline"],'
-            '"year":{"min":2020,"max":2026}}'
-        )
+    response = test_client.get(
+        "/api/search/",
+        params={
+            "text": "FMF guideline",
+            "filters": '{"journal":["Ann Rheum Dis"]}',
+            "publication_types": ["Guideline", "Practice Guideline"],
+            "year_min": 2020,
+            "year_max": 2026,
+        },
+    )
 
-    def test_search_publications_rejects_flat_filter_conflict(self, test_client):
-        """Route rejects duplicate raw and flat filter keys."""
-        response = test_client.get(
-            "/api/search/",
-            params={
-                "text": "FMF guideline",
-                "filters": '{"type":["Review"]}',
-                "publication_types": ["Guideline"],
-            },
-        )
+    assert response.status_code == 200
+    _, kwargs = mock_search.call_args
+    assert kwargs["filters"] == (
+        '{"journal":["Ann Rheum Dis"],"type":["Guideline","Practice Guideline"],'
+        '"year":{"min":2020,"max":2026}}'
+    )
 
-        assert response.status_code == 422
-        assert "type" in response.text
+
+def test_search_publications_rejects_flat_filter_conflict(self, test_client):
+    """Route rejects duplicate raw and flat filter keys."""
+    response = test_client.get(
+        "/api/search/",
+        params={
+            "text": "FMF guideline",
+            "filters": '{"type":["Review"]}',
+            "publication_types": ["Guideline"],
+        },
+    )
+
+    assert response.status_code == 422
+    assert "type" in response.text
 ```
 
 - [ ] **Step 5: Run focused tests and verify they fail**
@@ -299,12 +299,10 @@ Expected: FAIL because `SearchResult` lacks metadata fields, search mapping read
 In `pubtator_link/models/responses.py`, add fields to `SearchResult` after `citations`:
 
 ```python
-    volume: str | None = Field(default=None, description="Journal volume")
-    issue: str | None = Field(default=None, description="Journal issue")
-    pages: str | None = Field(default=None, description="Page range")
-    publication_types: list[str] = Field(
-        default_factory=list, description="Publication types"
-    )
+volume: str | None = Field(default=None, description="Journal volume")
+issue: str | None = Field(default=None, description="Journal issue")
+pages: str | None = Field(default=None, description="Page range")
+publication_types: list[str] = Field(default_factory=list, description="Publication types")
 ```
 
 Replace `map_date_fields` with:
@@ -382,9 +380,9 @@ from pubtator_link.api.search_filters import merge_search_filters
 In `pubtator_link/mcp/service_adapters.py`, change `search_literature_impl` signature to include:
 
 ```python
-    publication_types: list[str] | None = None,
-    year_min: int | None = None,
-    year_max: int | None = None,
+publication_types: list[str] | None = (None,)
+year_min: int | None = (None,)
+year_max: int | None = (None,)
 ```
 
 Inside the function, before `client.search_publications`, add:
@@ -403,24 +401,26 @@ Pass `filters=merged_filters` to `client.search_publications`.
 In the `SearchResult` construction, map the new fields:
 
 ```python
-            pub_date=item.get("pub_date") or item.get("meta_date_publication") or item.get("date"),
-            pmcid=item.get("pmcid"),
-            doi=item.get("doi"),
-            date=item.get("date"),
-            text_hl=item.get("text_hl"),
-            citations=item.get("citations"),
-            volume=item.get("volume") or item.get("meta_volume"),
-            issue=item.get("issue") or item.get("meta_issue"),
-            pages=item.get("pages") or item.get("meta_pages"),
-            publication_types=item.get("publication_types", []),
+pub_date = (item.get("pub_date") or item.get("meta_date_publication") or item.get("date"),)
+pmcid = (item.get("pmcid"),)
+doi = (item.get("doi"),)
+date = (item.get("date"),)
+text_hl = (item.get("text_hl"),)
+citations = (item.get("citations"),)
+volume = (item.get("volume") or item.get("meta_volume"),)
+issue = (item.get("issue") or item.get("meta_issue"),)
+pages = (item.get("pages") or item.get("meta_pages"),)
+publication_types = (item.get("publication_types", []),)
 ```
 
 Replace count/page mapping with:
 
 ```python
-    total_results = int(result.get("count", result.get("total", len(search_results))))
-    per_page = int(result.get("page_size", result.get("per_page", len(search_results) or 20)))
-    total_pages = int(result.get("total_pages") or ((total_results + per_page - 1) // per_page if per_page else 0))
+total_results = int(result.get("count", result.get("total", len(search_results))))
+per_page = int(result.get("page_size", result.get("per_page", len(search_results) or 20)))
+total_pages = int(
+    result.get("total_pages") or ((total_results + per_page - 1) // per_page if per_page else 0)
+)
 ```
 
 - [ ] **Step 9: Update MCP facade search schema**
@@ -428,9 +428,9 @@ Replace count/page mapping with:
 In `pubtator_link/mcp/facade.py`, add parameters to `search_literature`:
 
 ```python
-        publication_types: list[str] | None = None,
-        year_min: int | None = None,
-        year_max: int | None = None,
+publication_types: list[str] | None = (None,)
+year_min: int | None = (None,)
+year_max: int | None = (None,)
 ```
 
 Pass them into `search_literature_impl`.
@@ -446,18 +446,18 @@ Update the docstring to mention flat publication/year filters:
 In `pubtator_link/api/routes/search.py`, add query parameters to the GET search route:
 
 ```python
-    publication_types: Annotated[
-        list[str] | None,
-        Query(description="Publication type filters, e.g. Guideline or Practice Guideline"),
-    ] = None,
-    year_min: Annotated[
-        int | None,
-        Query(ge=1800, le=2030, description="Minimum publication year"),
-    ] = None,
-    year_max: Annotated[
-        int | None,
-        Query(ge=1800, le=2030, description="Maximum publication year"),
-    ] = None,
+publication_types: Annotated[
+    list[str] | None,
+    Query(description="Publication type filters, e.g. Guideline or Practice Guideline"),
+] = (None,)
+year_min: Annotated[
+    int | None,
+    Query(ge=1800, le=2030, description="Minimum publication year"),
+] = (None,)
+year_max: Annotated[
+    int | None,
+    Query(ge=1800, le=2030, description="Maximum publication year"),
+] = (None,)
 ```
 
 Import the shared helper:
@@ -539,13 +539,16 @@ def test_context_passage_generates_stable_citation_key() -> None:
 
     assert passage.stable_citation_key.startswith("c_")
     assert len(passage.stable_citation_key) == 12
-    assert passage.stable_citation_key == ContextPassage(
-        citation_key="S9",
-        passage_id="PMID:40234174:abstract:1",
-        pmid="40234174",
-        section="ABSTRACT",
-        text="Different response ordering.",
-    ).stable_citation_key
+    assert (
+        passage.stable_citation_key
+        == ContextPassage(
+            citation_key="S9",
+            passage_id="PMID:40234174:abstract:1",
+            pmid="40234174",
+            section="ABSTRACT",
+            text="Different response ordering.",
+        ).stable_citation_key
+    )
 
 
 def test_context_pack_generates_stable_citation_map() -> None:
@@ -559,9 +562,7 @@ def test_context_pack_generates_stable_citation_map() -> None:
     )
     pack = ContextPack(question="FMF", passages=[passage], citation_map={"S1": passage.passage_id})
 
-    assert pack.stable_citation_map == {
-        passage.stable_citation_key: "PMID:40234174:abstract:1"
-    }
+    assert pack.stable_citation_map == {passage.stable_citation_key: "PMID:40234174:abstract:1"}
 ```
 
 - [ ] **Step 2: Add failing service test for stable maps in batch output**
@@ -881,7 +882,10 @@ async def test_batch_source_fair_respects_global_budget_precedence() -> None:
 
     assert len(response.merged_context_pack.passages) == 3
     assert response.merged_context_pack.dropped
-    assert any(drop.reason in {"max_total_passages_exceeded", "source_budget_exceeded"} for drop in response.merged_context_pack.dropped)
+    assert any(
+        drop.reason in {"max_total_passages_exceeded", "source_budget_exceeded"}
+        for drop in response.merged_context_pack.dropped
+    )
 ```
 
 Before this test can pass, update `QueryMappedReviewContextRepository` in the same test file to support source coverage:
@@ -918,35 +922,31 @@ In `FakeReviewContextRepository.list_review_sources`, replace `return self.sourc
 In `QueryMappedReviewContextRepository.list_review_sources`, add:
 
 ```python
-    async def list_review_sources(
-        self,
-        review_id: str,
-        pmids: Sequence[str] | None = None,
-        *,
-        include_passage_samples: bool = False,
-        sample_per_pmid: int = 2,
-    ) -> list[ReviewSourceSummary]:
-        all_passages = [
-            passage
-            for passages in self.passages_by_query.values()
-            for passage in passages
-        ]
-        pmid_filter = set(pmids or [])
-        seen_pmids = {
-            passage.pmid
-            for passage in all_passages
-            if passage.pmid is not None and (not pmid_filter or passage.pmid in pmid_filter)
-        }
-        return [
-            ReviewSourceSummary(
-                source_id=f"source-{pmid}",
-                source_kind="pubtator_full_bioc",
-                job_status="complete",
-                pmid=pmid,
-                coverage=self.source_coverages.get(pmid, "unknown"),
-            )
-            for pmid in sorted(seen_pmids)
-        ]
+async def list_review_sources(
+    self,
+    review_id: str,
+    pmids: Sequence[str] | None = None,
+    *,
+    include_passage_samples: bool = False,
+    sample_per_pmid: int = 2,
+) -> list[ReviewSourceSummary]:
+    all_passages = [passage for passages in self.passages_by_query.values() for passage in passages]
+    pmid_filter = set(pmids or [])
+    seen_pmids = {
+        passage.pmid
+        for passage in all_passages
+        if passage.pmid is not None and (not pmid_filter or passage.pmid in pmid_filter)
+    }
+    return [
+        ReviewSourceSummary(
+            source_id=f"source-{pmid}",
+            source_kind="pubtator_full_bioc",
+            job_status="complete",
+            pmid=pmid,
+            coverage=self.source_coverages.get(pmid, "unknown"),
+        )
+        for pmid in sorted(seen_pmids)
+    ]
 ```
 
 - [ ] **Step 3: Run strategy tests and verify they fail**
@@ -999,8 +999,8 @@ Add to `RetrieveReviewContextBatchResponse`:
 In `pubtator_link/mcp/service_adapters.py`, add params to `retrieve_review_context_batch_impl`:
 
 ```python
-    budget_strategy: BudgetStrategy = "query_fair",
-    min_passages_per_source: int = 1,
+budget_strategy: BudgetStrategy = ("query_fair",)
+min_passages_per_source: int = (1,)
 ```
 
 Import `BudgetStrategy` from `review_rerag` and pass both into `RetrieveReviewContextBatchRequest`.
@@ -1171,7 +1171,7 @@ Update `drop_passage()` to increment `dropped_count` for `passage.pmid`:
 Return summaries:
 
 ```python
-            source_budget_summaries=list(source_budget.values()),
+source_budget_summaries = (list(source_budget.values()),)
 ```
 
 - [ ] **Step 10: Run strategy tests and verify they pass**

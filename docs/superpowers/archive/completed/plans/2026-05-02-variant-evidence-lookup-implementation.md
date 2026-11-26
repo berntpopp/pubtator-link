@@ -50,7 +50,9 @@ def test_variant_request_requires_gene_and_one_variant_expression() -> None:
 def test_variant_response_has_no_computed_classification_field() -> None:
     response = VariantEvidenceResponse(
         query={"gene": "MEFV", "variant": "c.2177T>C"},
-        warnings=["Classifications are source-attributed; PubTator-Link does not compute clinical significance."],
+        warnings=[
+            "Classifications are source-attributed; PubTator-Link does not compute clinical significance."
+        ],
     )
 
     dumped = response.model_dump()
@@ -69,6 +71,7 @@ Define:
 
 ```python
 VariantEvidenceSource = Literal["clinvar", "pubtator"]
+
 
 class VariantEvidenceRequest(BaseModel):
     gene: str = Field(min_length=1)
@@ -110,9 +113,13 @@ async def test_clinvar_query_construction_uses_gene_and_variant() -> None:
     client = FakeClinVarHttpClient()
     service = ClinVarService(client)
 
-    await service.lookup(gene="MEFV", variant_terms=["c.2177T>C"], condition="familial Mediterranean fever")
+    await service.lookup(
+        gene="MEFV", variant_terms=["c.2177T>C"], condition="familial Mediterranean fever"
+    )
 
-    assert client.esearch_terms[0] == 'MEFV[gene] AND "c.2177T>C" AND "familial Mediterranean fever"'
+    assert (
+        client.esearch_terms[0] == 'MEFV[gene] AND "c.2177T>C" AND "familial Mediterranean fever"'
+    )
 
 
 def test_parse_clinvar_summary_source_attributed_classification() -> None:
@@ -223,8 +230,12 @@ git commit -m "feat: combine variant database and literature evidence"
 Create:
 
 ```python
-def test_lookup_variant_evidence_route_returns_source_attributed_records(client, monkeypatch) -> None:
-    monkeypatch.setattr("pubtator_link.api.routes.variants.get_variant_evidence_service", fake_dependency)
+def test_lookup_variant_evidence_route_returns_source_attributed_records(
+    client, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        "pubtator_link.api.routes.variants.get_variant_evidence_service", fake_dependency
+    )
 
     response = client.post(
         "/api/variants/evidence",
@@ -341,7 +352,9 @@ def test_phenotype_is_valid_entity_concept() -> None:
 
 @pytest.mark.asyncio
 async def test_search_biomedical_entities_accepts_phenotype() -> None:
-    result = await search_biomedical_entities_impl("familial Mediterranean fever", concept="Phenotype", client=FakeClient())
+    result = await search_biomedical_entities_impl(
+        "familial Mediterranean fever", concept="Phenotype", client=FakeClient()
+    )
 
     assert result["concept"] == "Phenotype"
 ```

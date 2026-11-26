@@ -870,7 +870,7 @@ async def test_build_map_returns_partial_response_when_citation_stage_times_out(
     assert citation_status.message is not None
     assert "timed out" in citation_status.message
     assert any(
-        command["tool"] == "build_topic_literature_map"
+        command["tool"] == "generate_topic_literature_map"
         and command["arguments"]["include_citations"] is False
         and command["arguments"]["timeout_ms"] == 50
         for command in response.meta.next_commands

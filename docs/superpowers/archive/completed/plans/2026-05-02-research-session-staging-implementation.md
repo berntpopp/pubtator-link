@@ -362,9 +362,7 @@ def _research_session_candidate_from_row(row: Mapping[str, Any]) -> ResearchSess
         title=row.get("title"),
         status=row.get("status", "candidate"),
         decision_reason=row.get("decision_reason", "selected_by_rank"),
-        coverage_hint=(
-            SourceCoverageHint.model_validate(coverage_hint) if coverage_hint else None
-        ),
+        coverage_hint=(SourceCoverageHint.model_validate(coverage_hint) if coverage_hint else None),
         source_id=row.get("source_id"),
         error=row.get("error"),
     )
@@ -931,16 +929,16 @@ ResearchSessionServiceDep = Annotated[
 In `pubtator_link/api/routes/reviews.py`, import:
 
 ```python
-ResearchSessionServiceDep,
+(ResearchSessionServiceDep,)
 ```
 
 and models:
 
 ```python
-ListResearchSessionsResponse,
-ResearchSessionStatusResponse,
-StageResearchSessionRequest,
-StageResearchSessionResponse,
+(ListResearchSessionsResponse,)
+(ResearchSessionStatusResponse,)
+(StageResearchSessionRequest,)
+(StageResearchSessionResponse,)
 ```
 
 Add routes:
@@ -1108,9 +1106,9 @@ async def stage_research_session_impl(
 async def get_research_session_status_impl(
     *, service: Any, review_id: str, session_id: str
 ) -> dict[str, Any]:
-    return (
-        await service.get_status(review_id=review_id, session_id=session_id)
-    ).model_dump(by_alias=True)
+    return (await service.get_status(review_id=review_id, session_id=session_id)).model_dump(
+        by_alias=True
+    )
 
 
 async def list_research_sessions_impl(*, service: Any, review_id: str) -> dict[str, Any]:
@@ -1122,13 +1120,13 @@ async def list_research_sessions_impl(*, service: Any, review_id: str) -> dict[s
 In `pubtator_link/mcp/tools/review.py`, import dependency, adapters, and schemas:
 
 ```python
-get_research_session_service,
-stage_research_session_impl,
-get_research_session_status_impl,
-list_research_sessions_impl,
-ListResearchSessionsResponse,
-ResearchSessionStatusResponse,
-StageResearchSessionResponse,
+(get_research_session_service,)
+(stage_research_session_impl,)
+(get_research_session_status_impl,)
+(list_research_sessions_impl,)
+(ListResearchSessionsResponse,)
+(ResearchSessionStatusResponse,)
+(StageResearchSessionResponse,)
 ```
 
 Add tools inside `register_review_tools()`:

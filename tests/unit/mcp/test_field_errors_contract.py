@@ -92,10 +92,10 @@ async def test_inverted_year_range_names_both_fields_before_any_upstream_call(
     [
         ("get_publication_passages", "pmids", {}),
         ("get_publication_metadata", "pmids", {}),
-        ("preflight_review_sources", "pmids", {}),
+        ("get_review_source_coverage", "pmids", {}),
         ("index_review_evidence", "pmids", {"review_id": "demo"}),
-        ("inspect_review_index", "pmids", {"review_id": "demo"}),
-        ("suggest_corpus", "must_include_pmids", {"question": "AVIL nephrotic syndrome"}),
+        ("get_review_index_status", "pmids", {"review_id": "demo"}),
+        ("find_review_corpus", "must_include_pmids", {"question": "AVIL nephrotic syndrome"}),
         ("get_review_context_batch", "prioritize_pmids", {"review_id": "demo", "queries": ["x"]}),
     ],
 )
@@ -149,7 +149,7 @@ def test_merge_pmids_names_the_list_field_for_empty_and_oversized_input() -> Non
 
 
 @pytest.mark.parametrize("profile", ["full", "readonly"])
-async def test_pmcid_in_pmids_points_to_convert_article_ids(
+async def test_pmcid_in_pmids_points_to_map_article_ids(
     profile: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A PMCID that does not convert is a caller-fixable ID-kind error (#267, router #319)."""
@@ -170,11 +170,11 @@ async def test_pmcid_in_pmids_points_to_convert_article_ids(
     assert result.is_error is True
     assert payload["error_code"] == "invalid_input"
     assert payload["field_errors"][0]["field"] == "pmids"
-    assert "convert_article_ids" in payload["field_errors"][0]["reason"]
-    assert payload["fallback_tool"] == "convert_article_ids"
-    assert {"tool": "convert_article_ids", "arguments": {"ids": ["PMC3518823"]}} in payload[
-        "_meta"
-    ]["next_commands"]
+    assert "map_article_ids" in payload["field_errors"][0]["reason"]
+    assert payload["fallback_tool"] == "map_article_ids"
+    assert {"tool": "map_article_ids", "arguments": {"ids": ["PMC3518823"]}} in payload["_meta"][
+        "next_commands"
+    ]
 
 
 def test_passages_tool_schema_max_chars_matches_runtime_model() -> None:

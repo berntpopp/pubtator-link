@@ -53,7 +53,11 @@ def test_search_result_authors_are_publication_author_shape() -> None:
     )
 
     assert result.authors[0].last_name == "Smith"
-    assert result.model_dump()["authors"][0] == {"last_name": "Smith", "fore_name": None, "initials": "J"}
+    assert result.model_dump()["authors"][0] == {
+        "last_name": "Smith",
+        "fore_name": None,
+        "initials": "J",
+    }
 ```
 
 - [ ] **Step 2: Run tests to verify red**

@@ -49,12 +49,12 @@ def _tool_categories() -> dict[str, list[str]]:
 def _workflow_bundles(profile: MCPToolProfile | None = None) -> dict[str, Any]:
     tools = [
         "search_literature",
-        "build_topic_literature_map",
+        "generate_topic_literature_map",
         "get_publication_citation_graph",
         "find_related_evidence_candidates",
     ]
     tools.extend(
-        ["preflight_review_sources", "get_publication_passages"]
+        ["get_review_source_coverage", "get_publication_passages"]
         if profile == "readonly"
         else ["index_review_evidence", "get_review_context_batch"]
     )
@@ -173,15 +173,15 @@ def _get_capabilities_details_resource(profile: MCPToolProfile | None = None) ->
             "review_quickstart",
             "search_literature",
             "search_guidelines",
-            "convert_article_ids",
+            "map_article_ids",
             "get_mesh",
             "get_citation",
             "find_related_articles",
-            "suggest_corpus",
+            "find_review_corpus",
             "diagnostics",
             "get_publication_metadata",
             "get_publication_passages",
-            "estimate_publication_context",
+            "compute_publication_context",
             "get_publication_annotations",
             "get_pmc_annotations",
             "search_biomedical_entities",
@@ -189,12 +189,12 @@ def _get_capabilities_details_resource(profile: MCPToolProfile | None = None) ->
             "get_variant_evidence",
             "submit_text_annotation",
             "get_text_annotation_results",
-            "preflight_review_sources",
+            "get_review_source_coverage",
             "stage_research_session",
             "get_research_session_status",
             "list_research_sessions",
             "index_review_evidence",
-            "inspect_review_index",
+            "get_review_index_status",
             "ground_question",
             "get_review_context",
             "get_review_context_batch",
@@ -218,11 +218,11 @@ def _get_capabilities_details_resource(profile: MCPToolProfile | None = None) ->
                 "get_variant_evidence",
             ],
             "indexing": [
-                "preflight_review_sources",
+                "get_review_source_coverage",
                 "review_quickstart",
                 "stage_research_session",
                 "index_review_evidence",
-                "inspect_review_index",
+                "get_review_index_status",
                 "ground_question",
             ],
             "retrieval": [
@@ -235,16 +235,16 @@ def _get_capabilities_details_resource(profile: MCPToolProfile | None = None) ->
             "metadata": [
                 "get_publication_metadata",
                 "get_publication_passages",
-                "estimate_publication_context",
+                "compute_publication_context",
                 "diagnostics",
             ],
         },
         "workflow": {
             "recommended_tools": [
                 "search_literature",
-                "preflight_review_sources",
+                "get_review_source_coverage",
                 "index_review_evidence",
-                "inspect_review_index",
+                "get_review_index_status",
                 "ground_question",
                 "diagnostics",
                 "get_review_context_batch",
@@ -263,7 +263,7 @@ def _get_capabilities_details_resource(profile: MCPToolProfile | None = None) ->
             "to get_publication_passages with the same PMIDs.",
             "Discovery tools can normalize MeSH terms, resolve citations or article IDs, "
             "and expand seed PMIDs before staging or indexing candidate PMIDs.",
-            "Use suggest_corpus to turn a research question into a compact candidate PMID corpus.",
+            "Use find_review_corpus to turn a research question into a compact candidate PMID corpus.",
             "Use search_literature(metadata='basic') for compact citation fields during candidate screening.",
             "Review index responses expose index_snapshot_date for stable audit provenance.",
             "For live research sessions, call `stage_research_session` with a "
@@ -274,10 +274,10 @@ def _get_capabilities_details_resource(profile: MCPToolProfile | None = None) ->
         "discovery_workflow": [
             "Use get_mesh to normalize biomedical vocabulary before search.",
             "Use get_citation when a user provides formatted references.",
-            "Use convert_article_ids when a user provides DOI, PMCID, or mixed article IDs.",
+            "Use map_article_ids when a user provides DOI, PMCID, or mixed article IDs.",
             "Use find_related_articles to expand from seed PMIDs.",
             "Use find_entity_relations to explore relation evidence for grounded entities.",
-            "Use suggest_corpus to build a small role-labeled candidate corpus.",
+            "Use find_review_corpus to build a small role-labeled candidate corpus.",
             "Pass discovery candidate_pmids as pmids to stage_research_session "
             "before indexing large corpora.",
         ],
@@ -287,10 +287,10 @@ def _get_capabilities_details_resource(profile: MCPToolProfile | None = None) ->
             "search_guidelines",
             "search_biomedical_entities",
             "get_publication_passages",
-            "preflight_review_sources",
+            "get_review_source_coverage",
             "stage_research_session",
             "index_review_evidence",
-            "inspect_review_index",
+            "get_review_index_status",
             "ground_question",
             "get_review_context_batch",
             "review_quickstart",
@@ -342,12 +342,12 @@ def _get_capabilities_details_resource(profile: MCPToolProfile | None = None) ->
                 "search_guidelines",
             ],
             "discovery": [
-                "convert_article_ids",
+                "map_article_ids",
                 "get_mesh",
                 "get_citation",
                 "find_related_articles",
                 "find_entity_relations",
-                "suggest_corpus",
+                "find_review_corpus",
             ],
             "diagnostics": [
                 "diagnostics",
@@ -358,18 +358,18 @@ def _get_capabilities_details_resource(profile: MCPToolProfile | None = None) ->
             "publication_grounding": [
                 "get_publication_metadata",
                 "get_publication_passages",
-                "estimate_publication_context",
+                "compute_publication_context",
                 "get_publication_annotations",
                 "get_pmc_annotations",
             ],
             "review_grounding": [
-                "preflight_review_sources",
+                "get_review_source_coverage",
                 "review_quickstart",
                 "stage_research_session",
                 "get_research_session_status",
                 "list_research_sessions",
                 "index_review_evidence",
-                "inspect_review_index",
+                "get_review_index_status",
                 "ground_question",
                 "get_review_context",
                 "get_review_context_batch",
@@ -434,7 +434,7 @@ def _get_capabilities_details_resource(profile: MCPToolProfile | None = None) ->
             "get_citation": {
                 "citations": ["Biochem Med (Zagreb). 2024;34(1):010501"],
             },
-            "convert_article_ids": {
+            "map_article_ids": {
                 "ids": ["10.1186/s13023-024-03102-5", "PMC11000000"],
             },
             "find_related_articles": {
@@ -453,7 +453,7 @@ def _get_capabilities_details_resource(profile: MCPToolProfile | None = None) ->
                 "condition": "familial Mediterranean fever",
                 "max_literature_pmids": 10,
             },
-            "suggest_corpus": {
+            "find_review_corpus": {
                 "question": "FMF MEFV VUS colchicine",
                 "max_pmids": 8,
             },
@@ -488,7 +488,7 @@ def _get_capabilities_details_resource(profile: MCPToolProfile | None = None) ->
                 "topic": "MEFV colchicine familial Mediterranean fever guideline",
                 "n_pmids": 8,
             },
-            "preflight_review_sources": {
+            "get_review_source_coverage": {
                 "pmids": ["40234174"],
             },
             "stage_research_session": {
@@ -618,8 +618,8 @@ def _get_capabilities_details_resource(profile: MCPToolProfile | None = None) ->
                 "stage_research_session",
                 "get_research_session_status",
                 "list_research_sessions",
-                "preflight_review_sources",
-                "inspect_review_index",
+                "get_review_source_coverage",
+                "get_review_index_status",
                 "get_review_context",
                 "get_review_context_batch",
                 "get_review_passages_by_id",
@@ -674,14 +674,14 @@ def _get_capabilities_details_resource(profile: MCPToolProfile | None = None) ->
         }
         details["recommended_workflows"] = [
             "Call workflow_help for the canonical task-specific sequence.",
-            "search_literature -> preflight_review_sources -> get_publication_passages "
+            "search_literature -> get_review_source_coverage -> get_publication_passages "
             "for direct citable retrieval.",
             "Use get_publication_metadata when citation-grade PMID metadata is needed.",
             "If preparation is unavailable, use get_publication_passages with the same PMIDs.",
         ]
         details["review_rerag"]["workflow"] = [
             "search_literature for candidate PMIDs.",
-            "preflight_review_sources to estimate source coverage.",
+            "get_review_source_coverage to estimate source coverage.",
             "get_publication_passages for direct citable retrieval.",
         ]
     elif profile == "lean":
@@ -690,15 +690,15 @@ def _get_capabilities_details_resource(profile: MCPToolProfile | None = None) ->
         }
         details["recommended_workflows"] = [
             "Call workflow_help for the canonical task-specific sequence.",
-            "search_literature -> preflight_review_sources -> index_review_evidence -> "
-            "inspect_review_index -> get_review_context_batch for review-scoped retrieval.",
+            "search_literature -> get_review_source_coverage -> index_review_evidence -> "
+            "get_review_index_status -> get_review_context_batch for review-scoped retrieval.",
             "Use get_publication_metadata when citation-grade PMID metadata is needed.",
         ]
         details["review_rerag"]["workflow"] = [
             "search_literature for candidate PMIDs.",
-            "preflight_review_sources to estimate source coverage.",
+            "get_review_source_coverage to estimate source coverage.",
             "index_review_evidence to prepare selected sources.",
-            "inspect_review_index to confirm preparation status.",
+            "get_review_index_status to confirm preparation status.",
             "get_review_context_batch for citable context across query variants.",
         ]
     return details

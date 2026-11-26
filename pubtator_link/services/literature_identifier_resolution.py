@@ -126,7 +126,7 @@ class DoiPmidResolver:
         failed_or_timeout: set[str] = set()
         if self.discovery_service is not None and remaining:
             try:
-                response = await self.discovery_service.convert_article_ids(
+                response = await self.discovery_service.map_article_ids(
                     remaining,
                     source="doi",
                 )

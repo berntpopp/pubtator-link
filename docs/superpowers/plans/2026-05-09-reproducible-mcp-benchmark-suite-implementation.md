@@ -193,9 +193,11 @@ def test_jsonb_models_include_schema_version() -> None:
     payload = CliInvocation(command=["claude", "--print"], env_hash="abc")
     assert payload.model_dump()["_schema_version"] == 1
 
+
 def test_cli_invocation_rejects_string_command() -> None:
     with pytest.raises(ValidationError):
         CliInvocation(command="claude --print", env_hash="abc")
+
 
 def test_source_access_values_are_closed_enum() -> None:
     assert SourceAccess("abstract_only") == SourceAccess.ABSTRACT_ONLY
@@ -218,21 +220,25 @@ class SourceAccess(StrEnum):
     METADATA_ONLY = "metadata_only"
     MISSING = "missing"
 
+
 class BenchmarkMode(StrEnum):
     NO_TOOLS = "no_tools"
     ORACLE_CONTEXT = "oracle_context"
     MCP_ORACLE_PMID = "mcp_oracle_pmid"
     MCP_OPEN_RETRIEVAL = "mcp_open_retrieval"
 
+
 class VersionedJsonModel(BaseModel):
     schema_version: int = Field(default=1, alias="_schema_version")
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
 
 class CliInvocation(VersionedJsonModel):
     command: list[str]
     cwd: str | None = None
     env_hash: str
     timeout_s: int | None = None
+
 
 class SuiteConfig(BaseModel):
     name: str
@@ -275,11 +281,13 @@ def test_load_suite_resolves_case_file_from_repo_root() -> None:
     assert suite.name == "pubmedqa_smoke"
     assert suite.case_file == Path("benchmarks/cases/pubmedqa/article_local_smoke_10.jsonl")
 
+
 def test_case_prompt_context_excludes_gold_label() -> None:
     case = load_cases(Path("benchmarks/cases/pubmedqa/article_local_smoke_10.jsonl"))[0]
     context = case.to_prompt_context(mode=BenchmarkMode.NO_TOOLS)
     assert "gold_label" not in context.model_dump()
     assert context.target_pmids == []
+
 
 def test_seeded_sampling_is_stable() -> None:
     cases = load_cases(Path("benchmarks/cases/pubmedqa/article_local_smoke_10.jsonl"))
@@ -342,6 +350,7 @@ def test_prompt_hash_is_sha256_of_template_bytes() -> None:
     path = Path("benchmarks/prompts/answer_pubmedqa_article_local_v1.md")
     template = load_prompt_template(path)
     assert template.template_hash == hashlib.sha256(path.read_bytes()).hexdigest()
+
 
 def test_render_pubmedqa_prompt_hides_gold() -> None:
     prompt = render_prompt(template_path, prompt_context)
@@ -408,10 +417,12 @@ def test_parse_answer_stack() -> None:
     assert stack.adapter == "codex_cli"
     assert stack.model == "gpt-5.4"
 
+
 def test_dry_run_adapter_returns_one_prediction_per_case() -> None:
     result = DryRunAdapter().run(prompt=prompt, cases=cases, mode=BenchmarkMode.NO_TOOLS)
     assert result.exit_status == 0
     assert [p.case_id for p in result.predictions] == [c.case_id for c in cases]
+
 
 def test_adapter_registry_exposes_required_adapters() -> None:
     assert set(adapter_registry()) >= {"claude_code", "codex_cli", "gemini_cli", "dry_run"}
@@ -428,6 +439,7 @@ Define:
 ```python
 class CliAdapter(Protocol):
     name: str
+
     def version(self) -> str | None: ...
     def run(self, request: AdapterRequest) -> AdapterResult: ...
 ```
@@ -463,6 +475,7 @@ def test_artifact_writer_records_hashes(tmp_path: Path) -> None:
     records = writer.finalize_artifact_records()
     assert records[0].relative_path == "manifest.json"
     assert len(records[0].sha256) == 64
+
 
 def test_artifact_writer_writes_gold_separately(tmp_path: Path) -> None:
     writer.write_cases(cases)
@@ -517,6 +530,7 @@ def test_pubmedqa_accuracy_macro_f1_and_confusion() -> None:
     assert scores.confusion_matrix["yes"]["yes"] == 4
     assert "maybe" in scores.f1_by_class
 
+
 def test_invalid_label_counts_incorrect_and_parse_failure() -> None:
     scores = score_pubmedqa(gold_cases, [PredictionRecord(case_id="x", predicted_label="unclear")])
     assert scores.empty_output_count == 0
@@ -560,6 +574,7 @@ def test_bioasq_citation_precision_recall_and_source_access() -> None:
     assert scores.score_details["citation_recall"] == 1.0
     assert scores.score_details["citation_precision"] == 1.0
     assert scores.gold_source_access_rate["abstract_only"] == 1.0
+
 
 def test_dangerous_error_counts_are_separate_from_lexical_scores() -> None:
     scores = score_bioasq_ideal(gold_cases, predictions_with_wrong_direction)
@@ -610,6 +625,7 @@ def test_benchmark_migration_defines_required_tables() -> None:
     assert "create table if not exists benchmark_runs" in sql.lower()
     assert "create table if not exists benchmark_pairwise_comparisons" in sql.lower()
     assert "create view benchmark_model_comparisons" in sql.lower()
+
 
 def test_schema_diagnostics_require_benchmark_tables() -> None:
     required = required_review_schema_items()
@@ -679,6 +695,7 @@ def test_validate_jsonb_rejects_missing_schema_version() -> None:
     with pytest.raises(ValidationError):
         validate_jsonb(CliInvocation, {"command": ["claude"], "env_hash": "abc"})
 
+
 async def test_synthetic_run_persists_rows(postgres_url: str) -> None:
     storage = BenchmarkStorage(postgres_url)
     await storage.insert_run(manifest)
@@ -725,19 +742,22 @@ Expected: PASS or integration SKIP when PostgreSQL is unavailable.
 
 ```python
 def test_benchmark_cli_dry_run_writes_bundle(tmp_path: Path) -> None:
-    exit_code = main([
-        "run",
-        "--suite",
-        "benchmarks/suites/pubmedqa_smoke.yaml",
-        "--answer-stack",
-        "dry_run:deterministic",
-        "--artifact-dir",
-        str(tmp_path),
-        "--no-db",
-        "--dry-run",
-    ])
+    exit_code = main(
+        [
+            "run",
+            "--suite",
+            "benchmarks/suites/pubmedqa_smoke.yaml",
+            "--answer-stack",
+            "dry_run:deterministic",
+            "--artifact-dir",
+            str(tmp_path),
+            "--no-db",
+            "--dry-run",
+        ]
+    )
     assert exit_code == 0
     assert next(tmp_path.glob("*/manifest.json")).exists()
+
 
 def test_v1_rejects_resume_flag() -> None:
     assert main(["run", "--suite", "benchmarks/suites/pubmedqa_smoke.yaml", "--resume"]) == 2
@@ -805,6 +825,7 @@ def test_pairwise_comparison_requires_aligned_cases() -> None:
     with pytest.raises(ValueError, match="same case order"):
         compare_runs(left_run, right_run_with_different_order)
 
+
 def test_mcnemar_counts_and_accuracy_delta() -> None:
     comparison = compare_runs(left_run, right_run)
     assert comparison.mcnemar_b == 2
@@ -847,6 +868,7 @@ def test_codex_event_parser_extracts_mcp_tool_calls() -> None:
     events = parse_cli_events(Path("tests/fixtures/benchmarks/codex_mcp.events.jsonl"))
     assert events.tool_calls[0].tool_name == "get_publication_passages"
     assert events.tool_calls[0].coverage_summary["abstract_only"] == 10
+
 
 def test_no_tools_summary_records_zero_mcp_calls() -> None:
     analysis = analyze_events([])
@@ -897,6 +919,7 @@ def test_summary_includes_source_access_and_dangerous_errors() -> None:
     assert "abstract_only" in text
     assert "wrong_direction_count" in text
 
+
 def test_summary_refuses_mixed_dataset_combined_accuracy() -> None:
     with pytest.raises(ValueError, match="mixed datasets"):
         render_combined_summary([pubmedqa_scores, bioasq_scores], combine_mixed_task=False)
@@ -946,6 +969,7 @@ def test_self_judgment_requires_trace_bound_dimensions() -> None:
     payload = SelfJudgmentPayload.model_validate(raw_payload)
     assert payload.dimensions["argument_clarity"].score == 8
     assert payload.overall_score == 7
+
 
 def test_self_judgment_rejects_unknown_dimension() -> None:
     raw_payload["dimensions"]["clinical_accuracy"] = {"score": 10}

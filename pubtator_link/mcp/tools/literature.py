@@ -80,9 +80,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 min_length=1,
                 max_length=1000,
                 description=(
-                    "Free-text PubMed/PubTator3 query: entity names, gene symbols, HGVS, or a "
-                    "natural-language topic. PubTator3 matches across title, abstract, and, for "
-                    "open-access articles, full text."
+                    "PubMed query: entity names, gene symbols, HGVS or a topic; matches title, abstract and open-access full text."
                 ),
                 examples=["BRCA1 ovarian cancer PARP inhibitor"],
             ),
@@ -93,8 +91,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 ge=1,
                 le=1000,
                 description=(
-                    "1-based PubTator3 result page (10 hits each). To continue, use "
-                    "`next_page`/`next_offset` from the previous response."
+                    "1-based result page (10 hits each); continue with `next_page`/`next_offset`."
                 ),
             ),
         ] = 1,
@@ -103,16 +100,14 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             Field(
                 ge=0,
                 le=99,
-                description="0-based start position inside `page`; set it from `next_offset`.",
+                description="0-based start within `page`, from `next_offset`.",
             ),
         ] = 0,
         sort: Annotated[
             str | None,
             Field(
                 description=(
-                    "Sort order. Accepts 'date desc' (newest first), 'score desc' "
-                    "(relevance, default), or '_id desc'. Synonyms such as 'date' or "
-                    "'relevance' are normalized; PubTator3 sorts descending only."
+                    "'score desc' (relevance, default), 'date desc' (newest first) or '_id desc'; descending only."
                 ),
             ),
         ] = None,
@@ -120,18 +115,14 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             dict[str, Any] | str | None,
             Field(
                 description=(
-                    'Filter object (or JSON string), e.g. {"type":["Retracted Publication"]}; '
-                    "keys type/journal/year. Prefer publication_types/year_min/year_max."
+                    'Filter object or JSON (keys type/journal/year), e.g. {"type":["Review"]}; prefer publication_types/year_min/year_max.'
                 ),
             ),
         ] = None,
         publication_types: Annotated[
             list[PublicationType] | None,
             Field(
-                description=(
-                    "Restrict to these PubMed publication types (case-sensitive, Title-Case), "
-                    "AND-combined with the query."
-                ),
+                description=("PubMed publication types (Title-Case), AND-ed with the query."),
                 examples=[["Review", "Meta-Analysis"]],
             ),
         ] = None,
@@ -146,76 +137,61 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         sections: Annotated[
             list[SearchSection] | None,
             Field(
-                description=(
-                    "Restrict the text match to these article sections (lowercase, case-sensitive)."
-                ),
+                description=("Article sections to match the text in."),
                 examples=[["title", "abstract"]],
             ),
         ] = None,
         response_mode: Annotated[
             SearchResponseMode,
-            Field(
-                description="Payload verbosity: 'compact' (default, LLM-friendly), 'standard', or 'full'."
-            ),
+            Field(description="Payload verbosity."),
         ] = "compact",
         include_citations: Annotated[
             IncludeCitations,
-            Field(
-                description="Citation rendering per hit: 'none' (default), 'nlm', 'bibtex', or 'both'."
-            ),
+            Field(description="Citation format per hit."),
         ] = "none",
         text_hl_format: Annotated[
             TextHighlightFormat,
-            Field(
-                description="Match-highlight rendering: 'none', 'plain' (default), or 'annotated'."
-            ),
+            Field(description="Match-highlight format."),
         ] = "plain",
         limit: Annotated[
             int | None,
             Field(
                 ge=1,
                 le=20,
-                description=(
-                    "Max hits to return, at most the rest of `page`; `returned` and "
-                    "`has_more` report what was cut."
-                ),
+                description=("Max hits, at most the rest of `page`; see `returned`/`has_more`."),
             ),
         ] = 5,
         entity_ids: Annotated[
             list[PubTatorEntityId] | None,
             Field(
                 description=(
-                    "Restrict to articles mentioning these PubTator entity IDs (resolve them "
-                    "first with search_biomedical_entities), AND-combined with the query."
+                    "PubTator entity IDs (from search_biomedical_entities) articles must mention; AND-ed with the query."
                 ),
                 examples=[["@GENE_BRCA1"]],
             ),
         ] = None,
         guideline_boost: Annotated[
             bool,
-            Field(
-                description="Boost guideline / systematic-review / consensus articles in ranking."
-            ),
+            Field(description="Boost guideline/systematic-review/consensus articles."),
         ] = False,
         coverage: Annotated[
             SearchCoverageMode,
-            Field(description="'none' (default) or 'preflight' to attach source-coverage hints."),
+            Field(description="'preflight' attaches source-coverage hints."),
         ] = "none",
         metadata: Annotated[
             SearchMetadataMode,
             Field(
                 description=(
-                    "Metadata enrichment per hit: 'none', 'basic' (default), 'with_abstract' "
-                    "(abstract preview, max 640 chars), or 'full'."
+                    "Per-hit metadata; 'with_abstract' adds an abstract preview (max 640 chars)."
                 ),
             ),
         ] = "basic",
         include_meta: Annotated[
             bool,
-            Field(description="Include the _meta orientation block (next_commands, provenance)."),
+            Field(description="Include the _meta block (next_commands, provenance)."),
         ] = True,
     ) -> dict[str, Any]:
-        """Use this when a user needs PubMed biomedical literature search via PubTator3: returns ranked articles (PMID, title, journal, year, citation). Supports flat and section filters and coverage='preflight'. If preflight_error_code is coverage_preflight_internal_error, retryable=false: continue with results or inspect diagnostics."""
+        """Use this when a user needs PubMed literature search via PubTator3; returns ranked articles (PMID, title, journal, year, citation). On preflight_error_code coverage_preflight_internal_error (retryable=false) continue with the results."""
         arguments = {k: v for k, v in locals().items() if v is not None and k not in _CLOSURE}
 
         async def call() -> dict[str, Any]:
@@ -268,8 +244,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 min_length=1,
                 max_length=1000,
                 description=(
-                    "Free-text research question to find guideline, recommendation, consensus, "
-                    "or systematic-review articles for."
+                    "Research question to find guideline, consensus or systematic-review articles for."
                 ),
                 examples=["asthma treatment adults"],
             ),
@@ -280,8 +255,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 ge=1,
                 le=1000,
                 description=(
-                    "1-based PubTator3 result page (10 hits each). To continue, use "
-                    "`next_page`/`next_offset` from the previous response."
+                    "1-based result page (10 hits each); continue with `next_page`/`next_offset`."
                 ),
             ),
         ] = 1,
@@ -290,7 +264,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             Field(
                 ge=0,
                 le=99,
-                description="0-based start position inside `page`; set it from `next_offset`.",
+                description="0-based start within `page`, from `next_offset`.",
             ),
         ] = 0,
         year_min: Annotated[
@@ -304,7 +278,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         sections: Annotated[
             list[SearchSection] | None,
             Field(
-                description="Restrict the text match to these article sections (lowercase).",
+                description="Article sections to match the text in.",
                 examples=[["title", "abstract"]],
             ),
         ] = None,
@@ -316,18 +290,17 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             list[PubTatorEntityId] | None,
             Field(
                 description=(
-                    "Restrict to articles mentioning these PubTator entity IDs (resolve them "
-                    "first with search_biomedical_entities)."
+                    "PubTator entity IDs (from search_biomedical_entities) articles must mention."
                 ),
                 examples=[["@GENE_BRCA1"]],
             ),
         ] = None,
         coverage: Annotated[
             SearchCoverageMode,
-            Field(description="'preflight' (default) or 'none' to skip source-coverage hints."),
+            Field(description="'none' skips source-coverage hints."),
         ] = "preflight",
     ) -> dict[str, Any]:
-        """Use this when a user needs guideline, recommendation, consensus, or systematic review papers for a biomedical research question; returns ranked candidate PMIDs with titles. Wraps search_literature with guideline/systematic-review filters and guideline boosting; not an independent guideline database."""
+        """Use this when a user needs guideline, consensus or systematic-review papers for a research question; returns ranked candidate PMIDs with titles. Wraps search_literature with guideline filters and boosting; not a guideline database."""
         arguments = {k: v for k, v in locals().items() if v is not None and k not in _CLOSURE}
 
         async def call() -> dict[str, Any]:
@@ -371,23 +344,21 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             str,
             Field(
                 min_length=1,
-                description="Entity name or fragment to resolve, e.g. a gene symbol or disease name.",
+                description="Entity name or fragment, e.g. a gene symbol.",
                 examples=["TP53"],
             ),
         ],
         concept: Annotated[
             Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine", "Phenotype"]
             | None,
-            Field(
-                description="Restrict autocomplete to one PubTator concept type; omit for all types."
-            ),
+            Field(description="Concept type to restrict to; omit for all."),
         ] = None,
         limit: Annotated[
             int,
             Field(ge=1, le=100, description="Maximum entity candidates to return."),
         ] = 10,
     ) -> dict[str, Any]:
-        """Use this when a user needs canonical PubTator biomedical entity IDs for genes, diseases, chemicals, species, variants, or cell lines; returns matching entity IDs with names and types."""
+        """Use this when a user needs canonical PubTator entity IDs for genes, diseases, chemicals, species, variants or cell lines; returns matching IDs with names and types."""
 
         async def call() -> dict[str, Any]:
             client = await get_api_client()
@@ -413,10 +384,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 str,
                 Field(
                     min_length=1,
-                    description=(
-                        "PubTator entity ID to expand from, e.g. @CHEMICAL_remdesivir "
-                        "(resolve names with search_biomedical_entities first)."
-                    ),
+                    description=("PubTator entity ID to expand (from search_biomedical_entities)."),
                     examples=["@CHEMICAL_remdesivir"],
                 ),
             ],
@@ -438,10 +406,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 ]
                 | None,
                 Field(
-                    description=(
-                        "Optional relation type to keep, e.g. 'treat', 'cause', 'associate'; "
-                        "omit for all relation types."
-                    ),
+                    description=("Relation type to keep; omit for all."),
                 ),
             ] = None,
             target_entity_type: Annotated[
@@ -456,10 +421,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 ]
                 | None,
                 Field(
-                    description=(
-                        "Optional target concept type to keep, e.g. 'Disease' or 'Chemical'; "
-                        "omit for all target types."
-                    ),
+                    description=("Target concept type to keep; omit for all."),
                 ),
             ] = None,
             limit: Annotated[
@@ -468,7 +430,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             ] = 20,
             response_mode: Annotated[
                 Literal["compact", "standard", "full"],
-                Field(description="Payload verbosity: 'compact' (default), 'standard', or 'full'."),
+                Field(description="Payload verbosity."),
             ] = "compact",
             max_response_chars: Annotated[
                 int,
@@ -477,7 +439,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
                 ),
             ] = 12_000,
         ) -> dict[str, Any]:
-            """Use this when a user has a PubTator entity ID and needs literature-derived related entities to expand a corpus; returns related PubTator entity IDs with relation types. Do not use this for canonical entity lookup; use search_biomedical_entities. Next: search_literature."""
+            """Use this when a user has a PubTator entity ID and needs literature-derived related entities; returns related entity IDs with relation types. For ID lookup use search_biomedical_entities. Next: search_literature."""
 
             async def call() -> dict[str, Any]:
                 client = await get_api_client()
@@ -512,10 +474,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
             str,
             Field(
                 min_length=1,
-                description=(
-                    "cDNA/HGVS or rsID variant string. Required; use `protein`/`condition` to "
-                    "refine."
-                ),
+                description=("cDNA/HGVS or rsID; refine with `protein`/`condition`."),
                 examples=["c.68_69delAG"],
             ),
         ],
@@ -525,7 +484,7 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         ] = None,
         condition: Annotated[
             str | None,
-            Field(min_length=1, description="Optional condition/phenotype to scope the evidence."),
+            Field(min_length=1, description="Condition/phenotype to scope the evidence."),
         ] = None,
         sources: Annotated[
             list[VariantEvidenceSource] | None,
@@ -540,10 +499,10 @@ def register_literature_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") ->
         ] = 20,
         include_citations: Annotated[
             bool,
-            Field(description="Attach formatted citations for the supporting PMIDs."),
+            Field(description="Attach formatted citations."),
         ] = True,
     ) -> dict[str, Any]:
-        """Use this when a user needs source-attributed variant records and literature evidence for a gene and variant; returns source-attributed variant records plus PMID literature evidence. Does not compute clinical classification."""
+        """Use this when a user needs evidence for a gene variant; returns source-attributed variant records plus PMID literature evidence. No clinical classification."""
 
         async def call() -> dict[str, Any]:
             reject_foreign_gene(gene, "gene")

@@ -22,7 +22,7 @@ from pubtator_link.models.literature_graph import PMID_PATTERN
 # PubTator3 search `sections` filter — lowercase section labels.
 SearchSection = Literal["title", "abstract", "introduction", "methods", "results", "discussion"]
 
-# BioC passage section labels get_publication_passages / estimate_publication_context filter on.
+# BioC passage section labels get_publication_passages / compute_publication_context filter on.
 # The passage service matches these case-insensitively; the schema declares the canonical uppercase
 # BioC labels so an out-of-set value is rejected instead of silently returning zero passages (S4).
 PassageSection = Literal[

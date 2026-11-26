@@ -10,7 +10,7 @@ QueryParamValue = str | int | float | bool | None
 GetAbsolute = Callable[[str, Mapping[str, QueryParamValue]], Awaitable[httpx.Response]]
 
 
-async def convert_article_ids_individually(
+async def map_article_ids_individually(
     *,
     ids: Sequence[str],
     source: ArticleIdKind,

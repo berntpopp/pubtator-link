@@ -193,7 +193,9 @@ async def test_create_app_resources_builds_core_services_without_database(
     logger = object()
 
     monkeypatch.setattr(dependencies, "PubTator3Client", lambda logger=None: client)
-    monkeypatch.setattr(dependencies, "PublicationService", lambda client, logger=None: ("pub", client, logger))
+    monkeypatch.setattr(
+        dependencies, "PublicationService", lambda client, logger=None: ("pub", client, logger)
+    )
     monkeypatch.setattr(
         dependencies,
         "PublicationPassageService",
@@ -233,7 +235,9 @@ async def test_create_app_resources_builds_review_resources_with_database(
         return pool
 
     monkeypatch.setattr(dependencies, "PubTator3Client", lambda logger=None: client)
-    monkeypatch.setattr(dependencies, "PublicationService", lambda client, logger=None: ("pub", client, logger))
+    monkeypatch.setattr(
+        dependencies, "PublicationService", lambda client, logger=None: ("pub", client, logger)
+    )
     monkeypatch.setattr(
         dependencies,
         "PublicationPassageService",
@@ -265,7 +269,9 @@ async def test_create_app_resources_builds_review_resources_with_database(
         "ReviewPreparationQueue",
         lambda config, repository, preparation, logger: queue,
     )
-    monkeypatch.setattr(dependencies, "ReviewContextService", lambda repository: ("context", repository))
+    monkeypatch.setattr(
+        dependencies, "ReviewContextService", lambda repository: ("context", repository)
+    )
 
     resources = await dependencies.create_app_resources(logger=logger)
 
@@ -482,9 +488,7 @@ async def create_app_resources(logger: FilteringBoundLogger) -> AppResources:
     """Create resources owned by one FastAPI application lifespan."""
     api_client = PubTator3Client(logger=logger)
     publication_service = PublicationService(client=api_client, logger=logger)
-    publication_passage_service = PublicationPassageService(
-        publication_service=publication_service
-    )
+    publication_passage_service = PublicationPassageService(publication_service=publication_service)
 
     review_pool: asyncpg.Pool | None = None
     review_repository: PostgresReviewReragRepository | None = None

@@ -705,7 +705,9 @@ async def test_fetch_bytes_accepts_small_pdf(respx_mock, monkeypatch) -> None:
         Mock(return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))]),
     )
     respx_mock.get("https://example.org/small.pdf").mock(
-        return_value=httpx.Response(200, headers={"content-type": "application/pdf"}, content=b"%PDF-1.7")
+        return_value=httpx.Response(
+            200, headers={"content-type": "application/pdf"}, content=b"%PDF-1.7"
+        )
     )
     fetcher = SafeUrlFetcher(config())
 
@@ -759,7 +761,9 @@ class SafeUrlFetcher:
             raise UrlSafetyError("HTTP URLs are disabled")
         if not parsed.hostname:
             raise UrlSafetyError("URL must include a hostname")
-        self._validate_hostname(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80))
+        self._validate_hostname(
+            parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80)
+        )
 
     async def fetch_bytes(self, url: str, *, max_bytes: int) -> tuple[bytes, str | None]:
         current_url = url
@@ -846,7 +850,10 @@ from pubtator_link.repositories.review_rerag import PostgresReviewReragRepositor
 @pytest.mark.asyncio
 async def test_enqueue_preparation_job_creates_review_and_upserts_job() -> None:
     conn = AsyncMock()
-    conn.fetchrow.return_value = {"job_id": "00000000-0000-0000-0000-000000000001", "status": "queued"}
+    conn.fetchrow.return_value = {
+        "job_id": "00000000-0000-0000-0000-000000000001",
+        "status": "queued",
+    }
     pool = Mock()
     pool.acquire.return_value.__aenter__.return_value = conn
     repo = PostgresReviewReragRepository(pool)
@@ -1211,19 +1218,27 @@ def config() -> ReviewReragConfig:
 
 
 def test_looks_like_pdf_accepts_only_pdf_bytes() -> None:
-    service = FullTextPreparationService(config=config(), repository=AsyncMock(), pubtator_client=AsyncMock())
+    service = FullTextPreparationService(
+        config=config(), repository=AsyncMock(), pubtator_client=AsyncMock()
+    )
 
     assert service.looks_like_pdf(b"%PDF-1.7\n") is True
     assert service.looks_like_pdf(b"<!doctype html>") is False
 
 
 def test_normalize_bioc_document_builds_review_passages() -> None:
-    service = FullTextPreparationService(config=config(), repository=AsyncMock(), pubtator_client=AsyncMock())
+    service = FullTextPreparationService(
+        config=config(), repository=AsyncMock(), pubtator_client=AsyncMock()
+    )
     document = {
         "id": "40234174",
         "passages": [
             {"infons": {"type": "title"}, "text": "FMF treatment", "offset": 0},
-            {"infons": {"type": "abstract"}, "text": "Colchicine should start after diagnosis.", "offset": 15},
+            {
+                "infons": {"type": "abstract"},
+                "text": "Colchicine should start after diagnosis.",
+                "offset": 15,
+            },
         ],
     }
 
@@ -1278,7 +1293,9 @@ async def test_prepare_curated_url_records_blocked_html() -> None:
         url_fetcher=fetcher,
     )
 
-    result = await service.prepare_curated_url(review_id="rev_123", url="https://example.org/paper.pdf")
+    result = await service.prepare_curated_url(
+        review_id="rev_123", url="https://example.org/paper.pdf"
+    )
 
     assert result == "failed"
     repository.record_retrieval_attempt.assert_awaited_once()
@@ -1816,7 +1833,9 @@ class ReviewContextService:
             ranked,
             max_passages=request.max_passages,
             max_chars=request.max_chars,
-            max_passages_per_pmid=1000 if len(request.pmids) == 1 else request.max_passages_per_pmid,
+            max_passages_per_pmid=1000
+            if len(request.pmids) == 1
+            else request.max_passages_per_pmid,
         )
         passages = [
             ContextPassage(
@@ -2322,25 +2341,26 @@ REVIEW_WRITE_ANNOTATIONS = ToolAnnotations(
 Add tools inside `create_pubtator_mcp`:
 
 ```python
-    @mcp.tool(
-        name="pubtator.index_review_evidence",
-        title="Index Review Evidence",
-        annotations=REVIEW_WRITE_ANNOTATIONS,
-    )
-    async def index_review_evidence(request: IndexReviewEvidenceMcpRequest) -> dict[str, Any]:
-        """Queue review-scoped evidence preparation. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        queue = await get_review_queue()
-        return await index_review_evidence_impl(request, queue=queue)
+@mcp.tool(
+    name="pubtator.index_review_evidence",
+    title="Index Review Evidence",
+    annotations=REVIEW_WRITE_ANNOTATIONS,
+)
+async def index_review_evidence(request: IndexReviewEvidenceMcpRequest) -> dict[str, Any]:
+    """Queue review-scoped evidence preparation. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+    queue = await get_review_queue()
+    return await index_review_evidence_impl(request, queue=queue)
 
-    @mcp.tool(
-        name="pubtator.retrieve_review_context",
-        title="Retrieve Review Context",
-        annotations=READ_ONLY_OPEN_WORLD,
-    )
-    async def retrieve_review_context(request: RetrieveReviewContextMcpRequest) -> dict[str, Any]:
-        """Retrieve a compact context pack from prepared review passages. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
-        service = await get_review_context_service()
-        return await retrieve_review_context_impl(request, service=service)
+
+@mcp.tool(
+    name="pubtator.retrieve_review_context",
+    title="Retrieve Review Context",
+    annotations=READ_ONLY_OPEN_WORLD,
+)
+async def retrieve_review_context(request: RetrieveReviewContextMcpRequest) -> dict[str, Any]:
+    """Retrieve a compact context pack from prepared review passages. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""
+    service = await get_review_context_service()
+    return await retrieve_review_context_impl(request, service=service)
 ```
 
 Import dependency providers:
@@ -2431,48 +2451,50 @@ async def test_advisory_lock_wraps_preparation_callback() -> None:
 Implement in `PostgresReviewReragRepository`:
 
 ```python
-    async def mark_job_running(self, *, review_id: str, source_id: str) -> None:
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                """
-                update review_preparation_jobs
-                set status = 'running', started_at = now(), error = null
-                where review_id = $1 and source_id = $2
-                """,
-                review_id,
-                source_id,
-            )
+async def mark_job_running(self, *, review_id: str, source_id: str) -> None:
+    async with self.pool.acquire() as conn:
+        await conn.execute(
+            """
+            update review_preparation_jobs
+            set status = 'running', started_at = now(), error = null
+            where review_id = $1 and source_id = $2
+            """,
+            review_id,
+            source_id,
+        )
 
-    async def mark_job_finished(
-        self, *, review_id: str, source_id: str, status: str, error: str | None
-    ) -> None:
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                """
-                update review_preparation_jobs
-                set status = $3, finished_at = now(), error = $4
-                where review_id = $1 and source_id = $2
-                """,
-                review_id,
-                source_id,
-                status,
-                error,
-            )
 
-    async def with_preparation_lock(
-        self,
-        *,
-        review_id: str,
-        source_id: str,
-        callback: Callable[[], Awaitable[str]],
-    ) -> str:
-        async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                await conn.execute(
-                    "select pg_advisory_xact_lock(hashtextextended($1, 0))",
-                    f"{review_id}:{source_id}",
-                )
-                return await callback()
+async def mark_job_finished(
+    self, *, review_id: str, source_id: str, status: str, error: str | None
+) -> None:
+    async with self.pool.acquire() as conn:
+        await conn.execute(
+            """
+            update review_preparation_jobs
+            set status = $3, finished_at = now(), error = $4
+            where review_id = $1 and source_id = $2
+            """,
+            review_id,
+            source_id,
+            status,
+            error,
+        )
+
+
+async def with_preparation_lock(
+    self,
+    *,
+    review_id: str,
+    source_id: str,
+    callback: Callable[[], Awaitable[str]],
+) -> str:
+    async with self.pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                "select pg_advisory_xact_lock(hashtextextended($1, 0))",
+                f"{review_id}:{source_id}",
+            )
+            return await callback()
 ```
 
 - [ ] **Step 2: Add queue status transitions**
@@ -2480,37 +2502,38 @@ Implement in `PostgresReviewReragRepository`:
 Modify `_worker` in `pubtator_link/services/review_preparation_queue.py`:
 
 ```python
-            try:
-                await self.repository.mark_job_running(review_id=review_id, source_id=source_id)
-                async def run_preparation() -> str:
-                    if item_kind == "pmid":
-                        return await asyncio.wait_for(
-                            self.preparation.prepare_pmid(review_id=review_id, pmid=value),
-                            timeout=self.config.document_timeout_seconds,
-                        )
-                    return await asyncio.wait_for(
-                        self.preparation.prepare_curated_url(review_id=review_id, url=value),
-                        timeout=self.config.document_timeout_seconds,
-                    )
+try:
+    await self.repository.mark_job_running(review_id=review_id, source_id=source_id)
 
-                result = await self.repository.with_preparation_lock(
-                    review_id=review_id,
-                    source_id=source_id,
-                    callback=run_preparation,
-                )
-                await self.repository.mark_job_finished(
-                    review_id=review_id,
-                    source_id=source_id,
-                    status=result,
-                    error=None,
-                )
-            except Exception as exc:
-                await self.repository.mark_job_finished(
-                    review_id=review_id,
-                    source_id=source_id,
-                    status="failed",
-                    error=str(exc)[:500],
-                )
+    async def run_preparation() -> str:
+        if item_kind == "pmid":
+            return await asyncio.wait_for(
+                self.preparation.prepare_pmid(review_id=review_id, pmid=value),
+                timeout=self.config.document_timeout_seconds,
+            )
+        return await asyncio.wait_for(
+            self.preparation.prepare_curated_url(review_id=review_id, url=value),
+            timeout=self.config.document_timeout_seconds,
+        )
+
+    result = await self.repository.with_preparation_lock(
+        review_id=review_id,
+        source_id=source_id,
+        callback=run_preparation,
+    )
+    await self.repository.mark_job_finished(
+        review_id=review_id,
+        source_id=source_id,
+        status=result,
+        error=None,
+    )
+except Exception as exc:
+    await self.repository.mark_job_finished(
+        review_id=review_id,
+        source_id=source_id,
+        status="failed",
+        error=str(exc)[:500],
+    )
 ```
 
 - [ ] **Step 3: Add real PostgreSQL integration schema test**

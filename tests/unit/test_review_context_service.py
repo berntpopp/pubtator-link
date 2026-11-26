@@ -953,7 +953,7 @@ async def test_embedding_rerank_provider_unavailable_falls_back_to_lexical_diagn
 
 
 @pytest.mark.asyncio
-async def test_inspect_review_index_returns_sources_totals_and_failures() -> None:
+async def test_get_review_index_status_returns_sources_totals_and_failures() -> None:
     repository = FakeReviewContextRepository(
         [],
         preparation_status={"complete": 1, "failed": 1},
@@ -997,7 +997,7 @@ async def test_inspect_review_index_returns_sources_totals_and_failures() -> Non
     )
     service = ReviewContextService(repository)
 
-    response = await service.inspect_review_index(
+    response = await service.get_review_index_status(
         review_id="review-1",
         request=InspectReviewIndexRequest(
             pmids=["111"],
@@ -1040,7 +1040,7 @@ async def test_inspect_review_index_returns_sources_totals_and_failures() -> Non
     ]
 
 
-def test_inspect_review_index_response_serializes_pagination_fields() -> None:
+def test_get_review_index_status_response_serializes_pagination_fields() -> None:
     response = InspectReviewIndexResponse(
         review_id="review-1",
         response_mode="compact",
@@ -1063,7 +1063,7 @@ def test_inspect_review_index_response_serializes_pagination_fields() -> None:
 
 
 @pytest.mark.asyncio
-async def test_inspect_review_index_paginates_sources_and_failed_sources() -> None:
+async def test_get_review_index_status_paginates_sources_and_failed_sources() -> None:
     repository = FakeReviewContextRepository([], preparation_status={"complete": 3, "failed": 2})
     repository.source_summaries = [
         ReviewSourceSummary(
@@ -1091,11 +1091,11 @@ async def test_inspect_review_index_paginates_sources_and_failed_sources() -> No
     )
     service = ReviewContextService(repository)
 
-    first = await service.inspect_review_index(
+    first = await service.get_review_index_status(
         "review-1",
         InspectReviewIndexRequest(response_mode="compact", limit=2),
     )
-    second = await service.inspect_review_index(
+    second = await service.get_review_index_status(
         "review-1",
         InspectReviewIndexRequest(
             response_mode="compact",
@@ -1117,7 +1117,7 @@ async def test_inspect_review_index_paginates_sources_and_failed_sources() -> No
 
 
 @pytest.mark.asyncio
-async def test_inspect_review_index_includes_coverage_summary() -> None:
+async def test_get_review_index_status_includes_coverage_summary() -> None:
     repository = FakeReviewContextRepository([])
     repository.source_summaries = [
         ReviewSourceSummary(
@@ -1144,7 +1144,7 @@ async def test_inspect_review_index_includes_coverage_summary() -> None:
     ]
     service = ReviewContextService(repository)
 
-    response = await service.inspect_review_index("review-1", InspectReviewIndexRequest())
+    response = await service.get_review_index_status("review-1", InspectReviewIndexRequest())
 
     assert response.coverage_summary == {
         "full_text": 1,
@@ -1155,7 +1155,7 @@ async def test_inspect_review_index_includes_coverage_summary() -> None:
 
 
 @pytest.mark.asyncio
-async def test_inspect_review_index_attaches_citation_metadata() -> None:
+async def test_get_review_index_status_attaches_citation_metadata() -> None:
     repository = FakeReviewContextRepository([], preparation_status={"complete": 1})
     repository.source_summaries = [
         ReviewSourceSummary(
@@ -1168,7 +1168,7 @@ async def test_inspect_review_index_attaches_citation_metadata() -> None:
     metadata_service = FakeMetadataService()
     service = ReviewContextService(repository, metadata_service=metadata_service)
 
-    response = await service.inspect_review_index(
+    response = await service.get_review_index_status(
         review_id="review-1",
         request=InspectReviewIndexRequest(include_metadata=True, metadata="basic"),
     )
@@ -1180,7 +1180,7 @@ async def test_inspect_review_index_attaches_citation_metadata() -> None:
 
 
 @pytest.mark.asyncio
-async def test_inspect_review_index_batches_metadata_for_pages_over_public_cap() -> None:
+async def test_get_review_index_status_batches_metadata_for_pages_over_public_cap() -> None:
     repository = FakeReviewContextRepository([], preparation_status={"complete": 105})
     repository.source_summaries = [
         ReviewSourceSummary(
@@ -1194,7 +1194,7 @@ async def test_inspect_review_index_batches_metadata_for_pages_over_public_cap()
     metadata_service = RecordingMetadataService()
     service = ReviewContextService(repository, metadata_service=metadata_service)
 
-    response = await service.inspect_review_index(
+    response = await service.get_review_index_status(
         review_id="review-1",
         request=InspectReviewIndexRequest(include_metadata=True, metadata="basic"),
     )
@@ -1207,7 +1207,7 @@ async def test_inspect_review_index_batches_metadata_for_pages_over_public_cap()
 
 
 @pytest.mark.asyncio
-async def test_inspect_review_index_metadata_only_fetches_current_page() -> None:
+async def test_get_review_index_status_metadata_only_fetches_current_page() -> None:
     repository = FakeReviewContextRepository([], preparation_status={"complete": 120})
     repository.source_summaries = [
         ReviewSourceSummary(
@@ -1222,7 +1222,7 @@ async def test_inspect_review_index_metadata_only_fetches_current_page() -> None
     metadata_service = RecordingMetadataService()
     service = ReviewContextService(repository, metadata_service=metadata_service)
 
-    response = await service.inspect_review_index(
+    response = await service.get_review_index_status(
         review_id="review-1",
         request=InspectReviewIndexRequest(
             include_metadata=True,
@@ -1238,7 +1238,7 @@ async def test_inspect_review_index_metadata_only_fetches_current_page() -> None
 
 
 @pytest.mark.asyncio
-async def test_inspect_review_index_full_metadata_preserves_full_options() -> None:
+async def test_get_review_index_status_full_metadata_preserves_full_options() -> None:
     repository = FakeReviewContextRepository([], preparation_status={"complete": 1})
     repository.source_summaries = [
         ReviewSourceSummary(
@@ -1251,7 +1251,7 @@ async def test_inspect_review_index_full_metadata_preserves_full_options() -> No
     metadata_service = RecordingMetadataService()
     service = ReviewContextService(repository, metadata_service=metadata_service)
 
-    await service.inspect_review_index(
+    await service.get_review_index_status(
         review_id="review-1",
         request=InspectReviewIndexRequest(include_metadata=True, metadata="full"),
     )
@@ -1263,7 +1263,7 @@ async def test_inspect_review_index_full_metadata_preserves_full_options() -> No
 
 
 @pytest.mark.asyncio
-async def test_inspect_review_index_compact_serialization_omits_bulky_source_fields() -> None:
+async def test_get_review_index_status_compact_serialization_omits_bulky_source_fields() -> None:
     repository = FakeReviewContextRepository([], preparation_status={"complete": 1, "failed": 1})
     attempt = ResolverAttemptSummary(
         source_kind="pubtator_full_bioc",
@@ -1301,7 +1301,7 @@ async def test_inspect_review_index_compact_serialization_omits_bulky_source_fie
     ]
     service = ReviewContextService(repository)
 
-    response = await service.inspect_review_index(
+    response = await service.get_review_index_status(
         review_id="review-1",
         request=InspectReviewIndexRequest(
             response_mode="compact",

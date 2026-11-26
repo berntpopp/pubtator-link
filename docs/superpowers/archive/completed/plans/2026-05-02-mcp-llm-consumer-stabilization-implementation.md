@@ -157,7 +157,10 @@ def test_schema_repair_statements_are_non_destructive() -> None:
     assert "drop table" not in joined
     assert "drop column" not in joined
     assert "truncate" not in joined
-    assert any("alter table reviews add column if not exists updated_at" in item.lower() for item in statements)
+    assert any(
+        "alter table reviews add column if not exists updated_at" in item.lower()
+        for item in statements
+    )
 ```
 
 Extend `tests/unit/test_review_schema_sql.py`:
@@ -380,13 +383,9 @@ def migration_files() -> list[tuple[str, str]]:
 
 
 def schema_repair_statements() -> list[str]:
-    migration = resources.files(MIGRATIONS_PACKAGE).joinpath(
-        "0002_review_schema_drift_repair.sql"
-    )
+    migration = resources.files(MIGRATIONS_PACKAGE).joinpath("0002_review_schema_drift_repair.sql")
     return [
-        statement.strip()
-        for statement in migration.read_text().split(";")
-        if statement.strip()
+        statement.strip() for statement in migration.read_text().split(";") if statement.strip()
     ]
 
 
@@ -465,17 +464,20 @@ async def inspect_review_schema(database_url: str | None = None) -> ReviewSchema
             """
         )
         columns = {(row["table_name"], row["column_name"]) for row in column_rows}
-        migration_rows = await connection.fetch(
-            """
+        migration_rows = (
+            await connection.fetch(
+                """
             select version
             from schema_migrations
             order by version
             """
-        ) if "schema_migrations" in tables else []
+            )
+            if "schema_migrations" in tables
+            else []
+        )
         missing_tables = sorted(required.tables - tables)
         missing_columns = [
-            f"{table}.{column}"
-            for table, column in sorted(required.columns - columns)
+            f"{table}.{column}" for table, column in sorted(required.columns - columns)
         ]
         return ReviewSchemaDiagnostics(
             connected=True,
@@ -662,8 +664,8 @@ require_schema_current: bool = True
 Modify `ReviewReragConfig.from_settings`:
 
 ```python
-auto_migrate=server_settings.auto_migrate,
-require_schema_current=server_settings.require_schema_current,
+auto_migrate = (server_settings.auto_migrate,)
+require_schema_current = (server_settings.require_schema_current,)
 ```
 
 - [ ] **Step 4: Run migrations before pool creation**
@@ -873,10 +875,14 @@ def error_code_for_exception(exc: Exception) -> str:
 def _fallback_for_context(context: McpErrorContext) -> tuple[str | None, dict[str, Any] | None]:
     if context.fallback_tool is not None:
         return context.fallback_tool, context.fallback_args or {}
-    if context.tool_name in {
-        "pubtator.index_review_evidence",
-        "pubtator.stage_research_session",
-    } and context.pmids:
+    if (
+        context.tool_name
+        in {
+            "pubtator.index_review_evidence",
+            "pubtator.stage_research_session",
+        }
+        and context.pmids
+    ):
         return (
             "pubtator.get_publication_passages",
             {"pmids": context.pmids, "mode": "compact_passages"},
@@ -1347,7 +1353,9 @@ def _plain_text_hl(value: str | None) -> str | None:
     return " ".join(text.split())
 
 
-def _shape_citations(citations: dict[str, str] | None, mode: IncludeCitations) -> dict[str, str] | None:
+def _shape_citations(
+    citations: dict[str, str] | None, mode: IncludeCitations
+) -> dict[str, str] | None:
     if not citations or mode == "none":
         return None
     shaped: dict[str, str] = {}
@@ -1384,7 +1392,9 @@ def _guideline_rank_features(item: dict[str, Any]) -> dict[str, Any]:
     publication_types = [str(value).lower() for value in item.get("publication_types", [])]
     title = str(item.get("title") or "").lower()
     abstract = str(item.get("abstract") or "").lower()
-    type_boost = sum(3 for value in publication_types if any(term in value for term in GUIDELINE_TYPES))
+    type_boost = sum(
+        3 for value in publication_types if any(term in value for term in GUIDELINE_TYPES)
+    )
     term_boost = sum(1 for term in GUIDELINE_TERMS if term in title or term in abstract)
     return {"guideline_boost": type_boost + term_boost}
 ```
@@ -1424,10 +1434,15 @@ guideline_boost: bool = False
 Add `pubtator.search_guidelines` as a wrapper that calls `search_literature_impl` with:
 
 ```python
-publication_types=["Guideline", "Practice Guideline", "Consensus Development Conference", "Systematic Review"]
-guideline_boost=True
-include_citations="nlm"
-limit=5
+publication_types = [
+    "Guideline",
+    "Practice Guideline",
+    "Consensus Development Conference",
+    "Systematic Review",
+]
+guideline_boost = True
+include_citations = "nlm"
+limit = 5
 ```
 
 For REST, expose the same options but keep defaults:
@@ -1513,7 +1528,9 @@ Expected: fail because `matched_terms` is missing.
 Add to `EntityMatch`:
 
 ```python
-matched_terms: list[str] = Field(default_factory=list, description="Terms derived from upstream match metadata")
+matched_terms: list[str] = Field(
+    default_factory=list, description="Terms derived from upstream match metadata"
+)
 ```
 
 Add helper:
@@ -1681,7 +1698,11 @@ for pmid in request.pmids:
     coverage_reason_by_pmid[pmid] = reason
     if coverage == "unknown":
         failed_pmids.append(FailedPublicationPmid(pmid=pmid, reason="No PubTator passages found"))
-    if request.full and request.mode == "section_text" and coverage in {"abstract_only", "title_only"}:
+    if (
+        request.full
+        and request.mode == "section_text"
+        and coverage in {"abstract_only", "title_only"}
+    ):
         warnings.append(
             f"No full-text section passages were available for PMID {pmid}; returned {coverage.replace('_', '-')} PubTator passages."
         )
@@ -1789,7 +1810,7 @@ if coverage == "preflight" and preflight_service is not None:
 If preflight fails, add a response-level warning in `source_versions` or `message`:
 
 ```python
-message="Coverage preflight failed; search results returned without coverage hints."
+message = "Coverage preflight failed; search results returned without coverage hints."
 ```
 
 - [ ] **Step 4: Wire MCP and REST dependencies**
@@ -1885,8 +1906,8 @@ Expected: fail because `dry_run`, response metadata, and new zero-result reason 
 In `ZeroResultReason`, add:
 
 ```python
-"no_pmids_indexed",
-"coverage_abstract_only",
+("no_pmids_indexed",)
+("coverage_abstract_only",)
 ```
 
 In `RetrieveReviewContextBatchRequest`, add:

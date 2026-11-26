@@ -9,7 +9,7 @@ def test_review_rerag_tools_are_exposed_with_expected_names() -> None:
     tool_names = set(mcp._tool_manager._tools)
 
     assert "index_review_evidence" in tool_names
-    assert "inspect_review_index" in tool_names
+    assert "get_review_index_status" in tool_names
     assert "get_review_context" in tool_names
     assert "get_review_context_batch" in tool_names
 
@@ -20,7 +20,7 @@ def test_review_tools_are_registered_with_flat_canonical_schemas() -> None:
 
     removed_suffix = "_v" + "2"
     for removed_name in (
-        f"inspect_review_index{removed_suffix}",
+        f"get_review_index_status{removed_suffix}",
         f"get_review_context{removed_suffix}",
         f"get_review_context_batch{removed_suffix}",
     ):
@@ -36,7 +36,7 @@ def test_review_tools_are_registered_with_flat_canonical_schemas() -> None:
     assert properties["min_passages_per_pmid"]["default"] == 0
     assert properties["include_diagnostics"]["default"] is False
     assert "prioritize_pmids" in properties
-    inspect_properties = tools["inspect_review_index"].parameters["properties"]
+    inspect_properties = tools["get_review_index_status"].parameters["properties"]
     assert inspect_properties["include_metadata"]["default"] is False
     assert inspect_properties["metadata"]["default"] == "basic"
 
@@ -48,9 +48,9 @@ def test_batch_response_mode_schema_includes_quotes() -> None:
     assert "quotes" in schema["properties"]["response_mode"]["enum"]
 
 
-def test_inspect_review_index_schema_exposes_pagination_args() -> None:
+def test_get_review_index_status_schema_exposes_pagination_args() -> None:
     mcp = create_pubtator_mcp()
-    schema = mcp._tool_manager._tools["inspect_review_index"].parameters
+    schema = mcp._tool_manager._tools["get_review_index_status"].parameters
 
     assert schema["properties"]["limit"]["default"] == 50
     assert "cursor" in schema["properties"]
@@ -94,7 +94,7 @@ def test_review_rerag_tool_descriptions_explain_workflow_and_query_style() -> No
     tools = mcp._tool_manager._tools
 
     index_description = tools["index_review_evidence"].description
-    inspect_description = tools["inspect_review_index"].description
+    inspect_description = tools["get_review_index_status"].description
     retrieve_description = tools["get_review_context"].description
     batch_description = tools["get_review_context_batch"].description
 

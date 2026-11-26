@@ -9,7 +9,7 @@
 # (Phase 5 — Structural debt).
 
 # Grew when the MCP contract-hardening (genefoundry-router#126) documented every input property
-# (Tool-Schema Documentation Standard v1). Decomposition: split build_topic_literature_map into
+# (Tool-Schema Documentation Standard v1). Decomposition: split generate_topic_literature_map into
 # its own module (publications.py) and extract the error-code canon into error_codes.py (errors.py).
 # Raised 628 -> 634 for the format=pubtator + full=true up-front rejection (#231).
 # Raised 634 -> 645: PMCID/DOI accepted + resolved_from echo (genefoundry-router #319).

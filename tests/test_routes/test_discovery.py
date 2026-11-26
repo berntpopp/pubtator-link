@@ -25,10 +25,10 @@ from pubtator_link.server_manager import UnifiedServerManager
 
 
 @pytest.mark.asyncio
-async def test_convert_article_ids_route_returns_candidates() -> None:
+async def test_map_article_ids_route_returns_candidates() -> None:
     app = UnifiedServerManager().create_app()
     service = AsyncMock()
-    service.convert_article_ids.return_value = ArticleIdConversionResponse(
+    service.map_article_ids.return_value = ArticleIdConversionResponse(
         records=[
             ArticleIdConversionRecord(
                 input_id="PMC123",
@@ -51,14 +51,14 @@ async def test_convert_article_ids_route_returns_candidates() -> None:
 
     assert response.status_code == 200
     assert response.json()["candidate_pmids"] == ["123"]
-    service.convert_article_ids.assert_awaited_once_with(ids=["PMC123"], source="auto")
+    service.map_article_ids.assert_awaited_once_with(ids=["PMC123"], source="auto")
 
 
 @pytest.mark.asyncio
-async def test_convert_article_ids_route_rejects_target_filtering() -> None:
+async def test_map_article_ids_route_rejects_target_filtering() -> None:
     app = UnifiedServerManager().create_app()
     service = AsyncMock()
-    service.convert_article_ids.return_value = ArticleIdConversionResponse(records=[])
+    service.map_article_ids.return_value = ArticleIdConversionResponse(records=[])
     app.dependency_overrides[get_discovery_service] = lambda: service
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -69,7 +69,7 @@ async def test_convert_article_ids_route_rejects_target_filtering() -> None:
 
     assert response.status_code == 400
     assert response.json()["detail"] == "target filtering is not supported yet"
-    service.convert_article_ids.assert_not_called()
+    service.map_article_ids.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -220,7 +220,7 @@ async def test_related_articles_route_returns_candidate_pmids() -> None:
 
 
 @pytest.mark.asyncio
-async def test_suggest_corpus_route_returns_candidate_pmids() -> None:
+async def test_find_review_corpus_route_returns_candidate_pmids() -> None:
     app = UnifiedServerManager().create_app()
     service = AsyncMock()
     service.suggest.return_value = CorpusSuggestionResponse(

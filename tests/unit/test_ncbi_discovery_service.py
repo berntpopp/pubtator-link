@@ -59,7 +59,7 @@ class SequentialStatusTransport:
 
 
 class FakeDiscoveryClient:
-    async def convert_article_ids(
+    async def map_article_ids(
         self,
         ids: Sequence[str],
         source: ArticleIdKind,
@@ -116,10 +116,10 @@ class FakeDiscoveryClient:
 
 
 @pytest.mark.asyncio
-async def test_convert_article_ids_adds_candidates_and_next_commands() -> None:
+async def test_map_article_ids_adds_candidates_and_next_commands() -> None:
     service = DiscoveryService(FakeDiscoveryClient())
 
-    response = await service.convert_article_ids(["PMC123", "bad"])
+    response = await service.map_article_ids(["PMC123", "bad"])
 
     assert response.candidate_pmids == ["123"]
     assert response.unresolved == ["bad"]
@@ -136,13 +136,13 @@ async def test_convert_article_ids_adds_candidates_and_next_commands() -> None:
 async def test_readonly_article_id_conversion_uses_direct_retrieval_follow_up() -> None:
     service = DiscoveryService(FakeDiscoveryClient())
 
-    response = await service.convert_article_ids(
+    response = await service.map_article_ids(
         ["PMC123", "bad"],
         profile="readonly",
     )
 
     assert response.meta.next_commands == [
-        {"tool": "preflight_review_sources", "arguments": {"pmids": ["123"]}},
+        {"tool": "get_review_source_coverage", "arguments": {"pmids": ["123"]}},
         {"tool": "get_publication_passages", "arguments": {"pmids": ["123"]}},
     ]
 
@@ -160,7 +160,7 @@ async def test_lookup_citation_extracts_nbk_and_adds_recovery_hint() -> None:
                 )
             ]
 
-        async def convert_article_ids(self, ids, source):
+        async def map_article_ids(self, ids, source):
             assert ids == ["NBK1139"]
             return [
                 ArticleIdConversionRecord(
@@ -304,7 +304,7 @@ async def test_ncbi_client_parses_id_conversion_json() -> None:
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
     client = NcbiDiscoveryClient(http_client=http_client)
 
-    records = await client.convert_article_ids(["10.1000/example", "PMC123", "bad"], "auto")
+    records = await client.map_article_ids(["10.1000/example", "PMC123", "bad"], "auto")
 
     assert [record.input_id for record in records] == ["10.1000/example", "PMC123", "bad"]
     assert records[0].status == "resolved"
@@ -340,7 +340,7 @@ async def test_ncbi_client_retries_mixed_id_conversion_per_identifier_after_batc
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
     client = NcbiDiscoveryClient(http_client=http_client)
 
-    records = await client.convert_article_ids(
+    records = await client.map_article_ids(
         ["24166952", "PMC12758588", "10.1038/s41431-022-01127-3"],
         "auto",
     )
@@ -373,7 +373,7 @@ async def test_ncbi_client_sends_idtype_for_explicit_source() -> None:
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(transport))
     client = NcbiDiscoveryClient(http_client=http_client)
 
-    records = await client.convert_article_ids(["PMC123"], "pmcid")
+    records = await client.map_article_ids(["PMC123"], "pmcid")
 
     assert records[0].status == "resolved"
     assert transport.requests[0].url.params["ids"] == "PMC123"

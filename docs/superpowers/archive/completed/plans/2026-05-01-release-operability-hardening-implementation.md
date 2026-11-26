@@ -235,20 +235,21 @@ git commit -m "ci: add tagged release validation workflow"
 Add to `tests/test_routes/test_health.py`:
 
 ```python
-    def test_readiness_endpoint_without_database_config(self, test_client):
-        response = test_client.get("/ready")
+def test_readiness_endpoint_without_database_config(self, test_client):
+    response = test_client.get("/ready")
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "ready"
-        assert data["version"] == "1.0.0"
-        assert data["dependencies"]["database"]["status"] == "not_configured"
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ready"
+    assert data["version"] == "1.0.0"
+    assert data["dependencies"]["database"]["status"] == "not_configured"
 
-    def test_readiness_endpoint_content_type(self, test_client):
-        response = test_client.get("/ready")
 
-        assert response.status_code == 200
-        assert "application/json" in response.headers["content-type"]
+def test_readiness_endpoint_content_type(self, test_client):
+    response = test_client.get("/ready")
+
+    assert response.status_code == 200
+    assert "application/json" in response.headers["content-type"]
 ```
 
 - [ ] **Step 2: Run tests to verify failure**
@@ -322,17 +323,18 @@ git commit -m "feat: add readiness endpoint"
 Add:
 
 ```python
-    def test_request_id_header_is_preserved(self, test_client):
-        response = test_client.get("/health", headers={"X-Request-ID": "req-123"})
+def test_request_id_header_is_preserved(self, test_client):
+    response = test_client.get("/health", headers={"X-Request-ID": "req-123"})
 
-        assert response.status_code == 200
-        assert response.headers["X-Request-ID"] == "req-123"
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"] == "req-123"
 
-    def test_request_id_header_is_generated_when_missing(self, test_client):
-        response = test_client.get("/health")
 
-        assert response.status_code == 200
-        assert response.headers["X-Request-ID"]
+def test_request_id_header_is_generated_when_missing(self, test_client):
+    response = test_client.get("/health")
+
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"]
 ```
 
 - [ ] **Step 2: Run tests to verify failure**

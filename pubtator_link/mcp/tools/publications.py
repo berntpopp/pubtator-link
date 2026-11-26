@@ -21,10 +21,10 @@ from pubtator_link.mcp.meta_budget import strip_meta_for_repeated_call
 from pubtator_link.mcp.pmc_annotations import fetch_pmc_annotations_impl
 from pubtator_link.mcp.profiles import MCPToolProfile
 from pubtator_link.mcp.service_adapters import (
-    build_topic_literature_map_impl,
-    estimate_publication_context_impl,
+    compute_publication_context_impl,
     fetch_publication_annotations_impl,
     find_related_evidence_candidates_impl,
+    generate_topic_literature_map_impl,
     get_publication_citation_graph_impl,
     get_publication_metadata_impl,
     get_publication_passages_impl,
@@ -48,8 +48,7 @@ LiteratureGraphBias = Literal[
 # BioC passage section labels get_publication_passages filters on (case-insensitive upstream).
 _SECTIONS_FIELD = Field(
     description=(
-        "Restrict to these BioC section labels (case-insensitive); omit for all. A missing "
-        "section contributes no passages; a table usually yields a caption and a body passage."
+        "BioC section labels to keep (case-insensitive); omit for all. A table usually yields a caption and a body passage."
     ),
     examples=[["ABSTRACT", "RESULTS"]],
 )
@@ -70,22 +69,20 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 Field(
                     min_length=1,
                     max_length=50,
-                    description="PMIDs (or PMCIDs/DOIs, converted) to export raw PubTator BioC annotations for.",
+                    description="PMIDs (or PMCIDs/DOIs, converted) to export.",
                     examples=[["25741868"]],
                 ),
             ],
             format: Annotated[
                 Literal["pubtator", "biocxml", "biocjson"],
-                Field(
-                    description="Export serialization: 'biocjson' (default), 'biocxml', or 'pubtator'."
-                ),
+                Field(description="Export format."),
             ] = "biocjson",
             full: Annotated[
                 bool,
-                Field(description="Request full-text annotations where available (else abstract)."),
+                Field(description="Full-text annotations where available (else abstract)."),
             ] = False,
         ) -> dict[str, Any]:
-            """Use this when a user provides PubMed IDs and needs raw PubTator BioC annotation export; returns BioC documents with passages and entity annotations. Do not use this for compact grounded answers; use get_publication_passages. Next: get_publication_passages."""
+            """Use this when a user needs raw PubTator BioC annotations for PMIDs; returns BioC documents with passages and entity annotations. For grounded answers use get_publication_passages. Next: get_publication_passages."""
 
             async def call() -> dict[str, Any]:
                 if full and format == "pubtator":  # PubTator3 ignores full for this format
@@ -114,18 +111,18 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             )
 
         @mcp.tool(
-            name="build_topic_literature_map",
+            name="generate_topic_literature_map",
             title="Build Topic Literature Map",
             output_schema=None,
             annotations=READ_ONLY_OPEN_WORLD,
         )
-        async def build_topic_literature_map(
+        async def generate_topic_literature_map(
             query: Annotated[
                 str,
                 Field(
                     min_length=1,
                     max_length=1000,
-                    description="Topic or research question to build the literature map around.",
+                    description="Topic or research question to map.",
                     examples=["familial Mediterranean fever colchicine"],
                 ),
             ],
@@ -134,7 +131,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 Field(
                     min_length=1,
                     max_length=100,
-                    description="Optional seed PMIDs (or PMCIDs/DOIs, converted) to anchor the map on.",
+                    description="Seed PMIDs (or PMCIDs/DOIs, converted) to anchor the map.",
                     examples=[["31036433"]],
                 ),
             ] = None,
@@ -146,7 +143,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             ] = 5,
             response_mode: Annotated[
                 LiteratureGraphResponseModeArg,
-                Field(description="Payload shape: 'compact' (default), 'nodes_edges', or 'full'."),
+                Field(description="Payload shape."),
             ] = "compact",
             max_candidates: Annotated[
                 int, Field(ge=1, le=50, description="Maximum ranked candidate papers.")
@@ -200,7 +197,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 bool, Field(description="Return a partial map if a sub-step times out.")
             ] = True,
             expand_query_seeds: Annotated[
-                bool, Field(description="Seed the map from a query search when no PMIDs are given.")
+                bool, Field(description="Seed from a query search when no PMIDs are given.")
             ] = False,
             citation_graph_timeout_ms: Annotated[
                 int | None,
@@ -216,11 +213,9 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 int | None,
                 Field(ge=1, le=120_000, description="Per-step timeout for metadata backfill."),
             ] = 10_000,
-            include_meta: Annotated[
-                bool, Field(description="Include the _meta orientation block.")
-            ] = True,
+            include_meta: Annotated[bool, Field(description="Include the _meta block.")] = True,
         ) -> dict[str, Any]:
-            """Use this when a user needs a bounded topic-level literature map from a topic query, optionally seeded with PMIDs: returns candidate PMID lanes with bounded summaries. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: get_publication_passages."""
+            """Use this when a user needs a bounded literature map for a topic, optionally seeded with PMIDs; returns candidate PMID lanes with bounded summaries and response_size_class. response_mode='compact' (default) suits candidate selection; full can be large (debug). Next: get_publication_passages."""
 
             async def call() -> dict[str, Any]:
                 selected_query = query
@@ -228,7 +223,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                     await resolve_pmids(pmids, max_items=100) if pmids else (None, None)
                 )
                 service = await get_topic_literature_map_service()
-                result = await build_topic_literature_map_impl(
+                result = await generate_topic_literature_map_impl(
                     service=service,
                     query=selected_query,
                     pmids=selected_pmids,
@@ -262,7 +257,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 tool_pmids = merge_pmids(pmids, None, max_items=100)
             except ValueError:
                 tool_pmids = None
-            result = await run_mcp_tool("build_topic_literature_map", call, pmids=tool_pmids)
+            result = await run_mcp_tool("generate_topic_literature_map", call, pmids=tool_pmids)
             return result if include_meta else strip_meta_for_repeated_call(result)
 
     @mcp.tool(
@@ -277,7 +272,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             Field(
                 min_length=1,
                 max_length=25,
-                description="PMIDs (or PMCIDs/DOIs, converted) to fetch compact citable passages for.",
+                description="PMIDs (or PMCIDs/DOIs, converted) to fetch passages for.",
                 examples=[["25741868"]],
             ),
         ],
@@ -286,14 +281,11 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             PublicationPassageMode,
             Field(
                 description=(
-                    "Passage selection: 'compact_passages' (default), 'full_abstract' (all "
-                    "title/abstract passages), 'abstracts', or 'section_text'."
+                    "Passage selection; 'full_abstract' returns all title/abstract passages."
                 ),
             ),
         ] = "compact_passages",
-        full: Annotated[
-            bool, Field(description="Prefer full-text passages where the article is open-access.")
-        ] = False,
+        full: Annotated[bool, Field(description="Prefer open-access full-text passages.")] = False,
         max_passages_per_pmid: Annotated[
             int, Field(ge=1, le=30, description="Max passages per PMID (or PMID+section).")
         ] = 6,
@@ -305,14 +297,14 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             bool, Field(description="Include reference-list passages.")
         ] = False,
         dry_run: Annotated[
-            bool, Field(description="Return a size/coverage estimate without passage text.")
+            bool, Field(description="Size/coverage estimate only, no passage text.")
         ] = False,
         verbosity: Annotated[
             Verbosity,
-            Field(description="'lean', 'standard' (default), or 'full' (+ each dropped row)."),
+            Field(description="Field verbosity; 'full' lists each dropped row."),
         ] = "standard",
     ) -> dict[str, Any]:
-        """Use this when a user needs the text of a PubMed/PMC article by PMID: returns citable passages (title, abstract and, for open-access PMC articles, full text incl. figure captions and tables), not raw BioC. For article-local answering use mode='full_abstract' first (untruncated); sections (FIG, TABLE, RESULTS, ...) selects full text; check coverage_by_pmid. Not for prepared review RAG; use get_review_context_batch."""
+        """Use this when a user needs article text by PMID; returns citable passages (title, abstract and, for open-access PMC articles, full text incl. figure captions and tables), not raw BioC. For article-local answers use mode='full_abstract' first (untruncated); sections (FIG, TABLE, RESULTS, ...) select full text; check coverage_by_pmid. For prepared reviews use get_review_context_batch."""
 
         async def call() -> dict[str, Any]:
             selected_pmids, resolved_from = await resolve_pmids(pmids, max_items=25)
@@ -350,7 +342,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             Field(
                 min_length=1,
                 max_length=100,
-                description="PMIDs (or PMCIDs/DOIs, converted) to fetch citation-grade metadata for.",
+                description="PMIDs (or PMCIDs/DOIs, converted).",
                 examples=[["25741868"]],
             ),
         ],
@@ -360,13 +352,13 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         ] = True,
         include_citations: Annotated[
             Literal["none", "nlm", "bibtex", "both"],
-            Field(description="Citation rendering: 'none', 'nlm', 'bibtex', or 'both' (default)."),
+            Field(description="Citation format."),
         ] = "both",
         include_coverage: Annotated[
             bool, Field(description="Include per-PMID source-coverage hints.")
         ] = True,
     ) -> dict[str, Any]:
-        """Use this when a user needs citation-grade metadata for known PMIDs: returns title, authors, journal, year, DOI and formatted citations per PMID. Do not use this for article text or annotations; use get_publication_passages. Next: get_publication_passages."""
+        """Use this when a user needs citation metadata for known PMIDs; returns title, authors, journal, year, DOI and formatted citations. For text use get_publication_passages. Next: get_publication_passages."""
 
         async def call() -> dict[str, Any]:
             selected_pmids, resolved_from = await resolve_pmids(pmids, max_items=100)
@@ -399,17 +391,17 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             ArticleId,
             Field(
                 min_length=1,
-                description="PMID (or PMCID/DOI, converted) of the publication whose citation neighbors are wanted.",
+                description="PMID (or PMCID/DOI, converted) to get citation neighbors for.",
                 examples=["40562663"],
             ),
         ],
         direction: Annotated[
             Literal["references", "cited_by", "both"],
-            Field(description="Which neighbors: 'references', 'cited_by', or 'both' (default)."),
+            Field(description="Neighbors to return."),
         ] = "both",
         response_mode: Annotated[
             LiteratureGraphResponseModeArg,
-            Field(description="Payload shape: 'compact' (default), 'nodes_edges', or 'full'."),
+            Field(description="Payload shape."),
         ] = "compact",
         resolve_metadata: Annotated[
             bool, Field(description="Resolve title/author metadata for neighbor PMIDs.")
@@ -430,7 +422,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             int, Field(ge=1, le=100, description="Maximum neighbor publications to return.")
         ] = 50,
     ) -> dict[str, Any]:
-        """Use this when a user needs reference or cited-by neighbors for one publication: returns reference and cited-by PMIDs with bounded summaries. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: get_publication_passages."""
+        """Use this when a user needs reference or cited-by neighbors of one publication; returns their PMIDs with bounded summaries and response_size_class. response_mode='compact' (default) suits candidate selection; full can be large (debug). Next: get_publication_passages."""
 
         async def call() -> dict[str, Any]:
             selected_pmids, resolved_from = await resolve_pmids(None, pmid)
@@ -467,7 +459,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             ArticleId,
             Field(
                 min_length=1,
-                description="Seed PMID (or PMCID/DOI, converted) to find related evidence candidates for.",
+                description="Seed PMID (or PMCID/DOI, converted).",
                 examples=["40562663"],
             ),
         ],
@@ -476,7 +468,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         ] = 12,
         response_mode: Annotated[
             LiteratureGraphResponseModeArg,
-            Field(description="Payload shape: 'compact' (default), 'nodes_edges', or 'full'."),
+            Field(description="Payload shape."),
         ] = "compact",
         prefer_full_text: Annotated[
             bool, Field(description="Prefer open-access full-text candidates.")
@@ -490,7 +482,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         publication_types: Annotated[
             list[PublicationType] | None,
             Field(
-                description="Restrict candidates to these PubMed publication types.",
+                description="PubMed publication types to keep.",
                 examples=[["Review"]],
             ),
         ] = None,
@@ -508,11 +500,9 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
         metadata_timeout_ms: Annotated[
             int, Field(ge=1, le=120_000, description="Per-step timeout for metadata resolution.")
         ] = 20_000,
-        include_meta: Annotated[
-            bool, Field(description="Include the _meta orientation block.")
-        ] = True,
+        include_meta: Annotated[bool, Field(description="Include the _meta block.")] = True,
     ) -> dict[str, Any]:
-        """Use this when a user has one PMID and needs related full-text-preferred candidates: returns related candidate PMIDs with bounded summaries. Returns response_size_class. response_mode='compact' is the MCP default for LLM candidate selection; full can be large and is for explicit debug graph inspection. Next: get_publication_passages."""
+        """Use this when a user has one PMID and needs related candidates, full text preferred; returns candidate PMIDs with bounded summaries and response_size_class. response_mode='compact' (default) suits candidate selection; full can be large (debug). Next: get_publication_passages."""
 
         async def call() -> dict[str, Any]:
             selected_pmids, resolved_from = await resolve_pmids(None, pmid)
@@ -544,18 +534,18 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
     if profile != "lean":
 
         @mcp.tool(
-            name="estimate_publication_context",
+            name="compute_publication_context",
             title="Estimate Publication Context",
             output_schema=None,
             annotations=READ_ONLY_OPEN_WORLD,
         )
-        async def estimate_publication_context(
+        async def compute_publication_context(
             pmids: Annotated[
                 list[ArticleId],
                 Field(
                     min_length=1,
                     max_length=25,
-                    description="PMIDs (or PMCIDs/DOIs, converted) to estimate passage count and context size for.",
+                    description="PMIDs (or PMCIDs/DOIs, converted) to estimate.",
                     examples=[["25741868"]],
                 ),
             ],
@@ -563,15 +553,10 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             mode: Annotated[
                 PublicationPassageMode,
                 Field(
-                    description=(
-                        "Passage selection to estimate under: 'compact_passages' (default), "
-                        "'full_abstract', 'abstracts', or 'section_text'."
-                    ),
+                    description=("Passage selection to estimate under."),
                 ),
             ] = "compact_passages",
-            full: Annotated[
-                bool, Field(description="Estimate under full-text retrieval where available.")
-            ] = False,
+            full: Annotated[bool, Field(description="Estimate under full-text retrieval.")] = False,
             max_passages_per_pmid: Annotated[
                 int, Field(ge=1, le=30, description="Maximum passages per PMID to assume.")
             ] = 6,
@@ -582,12 +567,12 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                 bool, Field(description="Count reference-list passages in the estimate.")
             ] = False,
         ) -> dict[str, Any]:
-            """Use this when a user needs to estimate passage count and context size before fetching publication passages; returns estimated passage and character counts plus a recommended passage mode. Do not use this for text retrieval; use get_publication_passages. Next: get_publication_passages."""
+            """Use this when a user needs passage-count and size estimates before fetching passages; returns estimated passage and character counts plus a recommended mode. Next: get_publication_passages."""
 
             async def call() -> dict[str, Any]:
                 selected_pmids, resolved_from = await resolve_pmids(pmids, max_items=25)
                 service = await get_publication_passage_service()
-                result = await estimate_publication_context_impl(
+                result = await compute_publication_context_impl(
                     service=service,
                     pmids=selected_pmids,
                     sections=cast("list[str] | None", sections),
@@ -604,7 +589,7 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
             except ValueError:
                 tool_pmids = None
             return await run_mcp_tool(
-                "estimate_publication_context",
+                "compute_publication_context",
                 call,
                 pmids=tool_pmids,
             )
@@ -623,16 +608,16 @@ def register_publication_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -
                     Field(
                         min_length=1,
                         max_length=50,
-                        description="PMC IDs to export raw PubTator full-text BioC annotations for.",
+                        description="PMC IDs to export.",
                         examples=[["PMC5334499"]],
                     ),
                 ],
                 format: Annotated[
                     Literal["biocxml", "biocjson"],
-                    Field(description="Export serialization: 'biocjson' (default) or 'biocxml'."),
+                    Field(description="Export format."),
                 ] = "biocjson",
             ) -> dict[str, Any]:
-                """Use this when a user provides PMC IDs and needs raw PubTator full-text BioC annotation export; returns BioC documents with passages and entity annotations. Do not use this for compact grounded answers; use get_publication_passages. Next: get_publication_passages."""
+                """Use this when a user needs raw PubTator full-text BioC annotations for PMC IDs; returns BioC documents with passages and entity annotations. For grounded answers use get_publication_passages. Next: get_publication_passages."""
 
                 async def call() -> dict[str, Any]:
                     service = await get_publication_service()

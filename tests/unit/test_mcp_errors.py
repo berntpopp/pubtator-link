@@ -114,7 +114,7 @@ def test_plain_value_error_keeps_tool_recovery_advice() -> None:
     # A server-side ValueError is not an argument error: keep the tool's own fallback advice.
     payload = mcp_tool_error(
         ValueError("index state mismatch"),
-        McpErrorContext(tool_name="preflight_review_sources", pmids=["10490564"]),
+        McpErrorContext(tool_name="get_review_source_coverage", pmids=["10490564"]),
     )
 
     assert payload["recovery_action"].startswith("Call get_publication_passages")
@@ -122,11 +122,11 @@ def test_plain_value_error_keeps_tool_recovery_advice() -> None:
     assert {"tool": "diagnostics", "arguments": {}} in payload["_meta"]["next_commands"]
 
 
-def test_preflight_review_sources_error_points_to_publication_passages() -> None:
+def test_get_review_source_coverage_error_points_to_publication_passages() -> None:
     payload = mcp_tool_error(
         RuntimeError("temporary preflight failure"),
         McpErrorContext(
-            tool_name="preflight_review_sources",
+            tool_name="get_review_source_coverage",
             pmids=["10490564", "10927144"],
         ),
     )
@@ -142,7 +142,7 @@ def test_preflight_review_sources_error_points_to_publication_passages() -> None
         "Use mode='full_abstract' for article-local answering; run diagnostics only if "
         "passage retrieval also fails."
     )
-    assert payload["_meta"]["tool"] == "preflight_review_sources"
+    assert payload["_meta"]["tool"] == "get_review_source_coverage"
     assert payload["_meta"]["next_commands"][0] == {
         "tool": "get_publication_passages",
         "arguments": {
@@ -257,7 +257,7 @@ def test_schema_stale_recovery_is_reserved_for_schema_errors() -> None:
 
 def test_tool_specific_recovery_text_for_discovery_text_and_audit_errors() -> None:
     cases = {
-        "convert_article_ids": "Retry with one identifier at a time",
+        "map_article_ids": "Retry with one identifier at a time",
         "submit_text_annotation": "Retry with a shorter text",
         "export_review_audit_bundle": "Use fallback_inline=True",
     }

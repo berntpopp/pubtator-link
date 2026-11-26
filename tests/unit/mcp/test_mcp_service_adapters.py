@@ -361,8 +361,8 @@ async def test_get_publication_metadata_impl_preserves_public_100_pmid_cap() -> 
 @pytest.mark.asyncio
 async def test_graph_adapters_default_omitted_response_mode_to_compact() -> None:
     from pubtator_link.mcp.service_adapters import (
-        build_topic_literature_map_impl,
         find_related_evidence_candidates_impl,
+        generate_topic_literature_map_impl,
         get_publication_citation_graph_impl,
     )
     from pubtator_link.models.literature_graph import (
@@ -414,7 +414,7 @@ async def test_graph_adapters_default_omitted_response_mode_to_compact() -> None
         service=related,
         pmid="1",
     )
-    topic_result = await build_topic_literature_map_impl(
+    topic_result = await generate_topic_literature_map_impl(
         service=topic,
         query="FMF",
         timeout_ms=1234,
@@ -471,8 +471,8 @@ async def test_readonly_citation_graph_hides_indexing_follow_up() -> None:
 
 
 @pytest.mark.asyncio
-async def test_preflight_review_sources_adapter_returns_hints() -> None:
-    from pubtator_link.mcp.service_adapters import preflight_review_sources_impl
+async def test_get_review_source_coverage_adapter_returns_hints() -> None:
+    from pubtator_link.mcp.service_adapters import get_review_source_coverage_impl
     from pubtator_link.models.review_rerag import SourceCoverageHint
 
     class FakeService:
@@ -485,7 +485,7 @@ async def test_preflight_review_sources_adapter_returns_hints() -> None:
                 )
             ]
 
-    result = await preflight_review_sources_impl(
+    result = await get_review_source_coverage_impl(
         service=FakeService(),
         pmids=["40234174"],
     )
@@ -496,8 +496,8 @@ async def test_preflight_review_sources_adapter_returns_hints() -> None:
 
 
 @pytest.mark.asyncio
-async def test_inspect_review_index_adapter_calls_service() -> None:
-    from pubtator_link.mcp.service_adapters import inspect_review_index_impl
+async def test_get_review_index_status_adapter_calls_service() -> None:
+    from pubtator_link.mcp.service_adapters import get_review_index_status_impl
     from pubtator_link.models.review_rerag import (
         InspectReviewIndexResponse,
         PreparationStatus,
@@ -505,7 +505,7 @@ async def test_inspect_review_index_adapter_calls_service() -> None:
     )
 
     class FakeService:
-        async def inspect_review_index(self, review_id, request):
+        async def get_review_index_status(self, review_id, request):
             return InspectReviewIndexResponse(
                 review_id=review_id,
                 preparation_status=PreparationStatus(complete=1),
@@ -515,7 +515,7 @@ async def test_inspect_review_index_adapter_calls_service() -> None:
                 index_snapshot_date="2026-05-02",
             )
 
-    result = await inspect_review_index_impl(
+    result = await get_review_index_status_impl(
         service=FakeService(),
         review_id="rev_123",
     )
@@ -526,8 +526,8 @@ async def test_inspect_review_index_adapter_calls_service() -> None:
 
 
 @pytest.mark.asyncio
-async def test_inspect_review_index_adapter_wires_limit_cursor_and_next_command() -> None:
-    from pubtator_link.mcp.service_adapters import inspect_review_index_impl
+async def test_get_review_index_status_adapter_wires_limit_cursor_and_next_command() -> None:
+    from pubtator_link.mcp.service_adapters import get_review_index_status_impl
     from pubtator_link.models.review_rerag import (
         InspectReviewIndexResponse,
         PreparationStatus,
@@ -537,7 +537,7 @@ async def test_inspect_review_index_adapter_wires_limit_cursor_and_next_command(
     class RecordingService:
         request = None
 
-        async def inspect_review_index(self, review_id, request):
+        async def get_review_index_status(self, review_id, request):
             self.request = request
             return InspectReviewIndexResponse(
                 review_id=review_id,
@@ -553,7 +553,7 @@ async def test_inspect_review_index_adapter_wires_limit_cursor_and_next_command(
 
     service = RecordingService()
 
-    result = await inspect_review_index_impl(
+    result = await get_review_index_status_impl(
         service=service,
         review_id="review-1",
         response_mode="compact",
@@ -564,7 +564,7 @@ async def test_inspect_review_index_adapter_wires_limit_cursor_and_next_command(
     assert service.request.limit == 1
     assert service.request.cursor == "cursor-1"
     assert result["next_cursor"] == "cursor-2"
-    assert result["_meta"]["next_commands"][0]["tool"] == "inspect_review_index"
+    assert result["_meta"]["next_commands"][0]["tool"] == "get_review_index_status"
     assert result["_meta"]["next_commands"][0]["arguments"]["cursor"] == "cursor-2"
 
 
@@ -864,7 +864,7 @@ async def test_stage_research_session_impl_calls_service() -> None:
 
 
 @pytest.mark.asyncio
-async def test_suggest_corpus_impl_returns_candidate_pmids() -> None:
+async def test_find_review_corpus_impl_returns_candidate_pmids() -> None:
     from pubtator_link.mcp import service_adapters
     from pubtator_link.models.corpus_suggestion import CorpusSuggestionResponse
 
@@ -879,7 +879,7 @@ async def test_suggest_corpus_impl_returns_candidate_pmids() -> None:
                 _meta={"next_commands": ["index_review_evidence"]},
             )
 
-    result = await service_adapters.suggest_corpus_impl(
+    result = await service_adapters.find_review_corpus_impl(
         service=FakeService(),
         question="FMF MEFV VUS colchicine",
         max_pmids=8,
@@ -944,7 +944,7 @@ async def test_review_quickstart_adapter_returns_retrieval_handoff() -> None:
             )
 
     class ContextService:
-        async def inspect_review_index(self, review_id, request):
+        async def get_review_index_status(self, review_id, request):
             assert request.session_id == "session-1"
             return InspectReviewIndexResponse(
                 review_id=review_id,
@@ -1002,7 +1002,7 @@ async def test_review_quickstart_adapter_honors_wait_until_ready() -> None:
             )
 
     class ContextService:
-        async def inspect_review_index(self, review_id, request):
+        async def get_review_index_status(self, review_id, request):
             return InspectReviewIndexResponse(
                 review_id=review_id,
                 preparation_status=PreparationStatus(complete=0),
@@ -1218,7 +1218,7 @@ async def _run_ground_question_fixture(service_adapters, **kwargs):
         retrieve_review_id = None
         retrieve_request = None
 
-        async def inspect_review_index(self, review_id, request):
+        async def get_review_index_status(self, review_id, request):
             self.inspect_review_id = review_id
             self.inspect_request = request
             return InspectReviewIndexResponse(
@@ -1341,7 +1341,7 @@ async def test_ground_question_adapter_no_pmids_returns_search_recovery() -> Non
         repository = object()
 
     class FakeContextService:
-        async def inspect_review_index(self, review_id, request):
+        async def get_review_index_status(self, review_id, request):
             raise AssertionError("inspect should not be called without selected PMIDs")
 
         async def retrieve_context_batch(self, review_id, request):
@@ -1382,7 +1382,7 @@ async def test_ground_question_long_natural_language_query_returns_warning() -> 
         repository = object()
 
     class FakeContextService:
-        async def inspect_review_index(self, review_id, request):
+        async def get_review_index_status(self, review_id, request):
             raise AssertionError("inspect should not be called without selected PMIDs")
 
         async def retrieve_context_batch(self, review_id, request):
@@ -1421,7 +1421,7 @@ async def test_ground_question_long_query_attempts_shortened_variant_before_reco
         repository = object()
 
     class FakeContextService:
-        async def inspect_review_index(self, review_id, request):
+        async def get_review_index_status(self, review_id, request):
             raise AssertionError("inspect should not be called without selected PMIDs")
 
         async def retrieve_context_batch(self, review_id, request):
@@ -1469,7 +1469,7 @@ async def test_ground_question_long_query_uses_decomposed_variant_hits() -> None
         repository = object()
 
     class FakeContextService:
-        async def inspect_review_index(self, review_id, request):
+        async def get_review_index_status(self, review_id, request):
             return type(
                 "InspectResponse",
                 (),
@@ -1531,7 +1531,7 @@ async def test_ground_question_short_failed_query_uses_anchor_fallback() -> None
         repository = object()
 
     class FakeContextService:
-        async def inspect_review_index(self, review_id, request):
+        async def get_review_index_status(self, review_id, request):
             return type(
                 "InspectResponse",
                 (),
@@ -1600,7 +1600,7 @@ async def test_ground_question_adapter_waits_when_selected_pmids_are_not_ready()
             return {"success": True}
 
     class FakeContextService:
-        async def inspect_review_index(self, review_id, request):
+        async def get_review_index_status(self, review_id, request):
             return InspectReviewIndexResponse(
                 review_id=review_id,
                 preparation_status=PreparationStatus(complete=1),
@@ -1626,7 +1626,7 @@ async def test_ground_question_adapter_waits_when_selected_pmids_are_not_ready()
     assert result["ready_to_retrieve"] is False
     assert result["context"] is None
     assert result["next_tools"] == [
-        "inspect_review_index",
+        "get_review_index_status",
         "get_review_context_batch",
     ]
 
@@ -1679,7 +1679,7 @@ async def test_index_review_evidence_adapter_returns_lifecycle_guidance() -> Non
     assert result["source_preflight_summary"]["abstract_only"] == 2
     assert "abstract_only" in result["source_preflight_message"]
     assert "already indexed sources are no-ops" in result["lifecycle_note"]
-    assert "inspect_review_index" in result["lifecycle_note"]
+    assert "get_review_index_status" in result["lifecycle_note"]
 
 
 @pytest.mark.asyncio
@@ -1741,13 +1741,13 @@ async def test_readonly_review_context_batch_hides_indexing_recovery_hints() -> 
                     QueryDiagnosticsSummary(
                         query="MEFV",
                         query_tokens=["mefv"],
-                        next_steps=["index_review_evidence", "inspect_review_index"],
+                        next_steps=["index_review_evidence", "get_review_index_status"],
                     )
                 ],
                 recovery=RecoveryHint(
                     reason="review_not_indexed",
                     message="No passages returned.",
-                    next_steps=["index_review_evidence", "inspect_review_index"],
+                    next_steps=["index_review_evidence", "get_review_index_status"],
                 ),
             )
 
@@ -1759,8 +1759,8 @@ async def test_readonly_review_context_batch_hides_indexing_recovery_hints() -> 
         profile="readonly",
     )
 
-    assert result["query_summaries"][0]["next_steps"] == ["inspect_review_index"]
-    assert result["recovery"]["next_steps"] == ["inspect_review_index"]
+    assert result["query_summaries"][0]["next_steps"] == ["get_review_index_status"]
+    assert result["recovery"]["next_steps"] == ["get_review_index_status"]
 
 
 @pytest.mark.asyncio
@@ -2403,8 +2403,8 @@ async def test_readonly_retrieval_preserves_tool_named_query_and_passage_quote()
 
 
 @pytest.mark.asyncio
-async def test_inspect_review_index_adapter_builds_request_from_flat_args() -> None:
-    from pubtator_link.mcp.service_adapters import inspect_review_index_impl
+async def test_get_review_index_status_adapter_builds_request_from_flat_args() -> None:
+    from pubtator_link.mcp.service_adapters import get_review_index_status_impl
     from pubtator_link.models.review_rerag import (
         InspectReviewIndexResponse,
         PreparationStatus,
@@ -2415,7 +2415,7 @@ async def test_inspect_review_index_adapter_builds_request_from_flat_args() -> N
         review_id = None
         request = None
 
-        async def inspect_review_index(self, review_id, request):
+        async def get_review_index_status(self, review_id, request):
             self.review_id = review_id
             self.request = request
             return InspectReviewIndexResponse(
@@ -2430,7 +2430,7 @@ async def test_inspect_review_index_adapter_builds_request_from_flat_args() -> N
 
     service = RecordingService()
 
-    result = await inspect_review_index_impl(
+    result = await get_review_index_status_impl(
         service=service,
         review_id="rev",
         pmids=["40234174"],
@@ -2500,7 +2500,7 @@ async def test_search_literature_meta_uses_short_next_tool_hints() -> None:
 
     meta = result["_meta"]
     assert meta["next_tools"] == [
-        "preflight_review_sources",
+        "get_review_source_coverage",
         "index_review_evidence",
     ]
     assert meta["workflow"] == "search -> preflight -> index -> inspect -> retrieve"
@@ -2523,7 +2523,7 @@ async def test_readonly_search_literature_meta_ends_in_direct_passage_retrieval(
     )
 
     assert result["_meta"]["next_tools"] == [
-        "preflight_review_sources",
+        "get_review_source_coverage",
         "get_publication_passages",
     ]
     assert result["_meta"]["workflow"] == "search -> preflight -> direct passages"
@@ -2580,7 +2580,7 @@ async def test_search_literature_default_does_not_require_preflight_service() ->
     assert "review database unavailable" not in str(result).lower()
     assert result["_meta"]["coverage_note"].startswith("Search is read-only metadata discovery.")
     assert result["_meta"]["next_tools"] == [
-        "preflight_review_sources",
+        "get_review_source_coverage",
         "index_review_evidence",
     ]
     assert "next_commands" not in result["_meta"]
@@ -3425,8 +3425,8 @@ async def test_publication_passages_adapter_builds_request_from_flat_args() -> N
 
 
 @pytest.mark.asyncio
-async def test_estimate_publication_context_adapter_returns_recommended_max_chars() -> None:
-    from pubtator_link.mcp.service_adapters import estimate_publication_context_impl
+async def test_compute_publication_context_adapter_returns_recommended_max_chars() -> None:
+    from pubtator_link.mcp.service_adapters import compute_publication_context_impl
     from pubtator_link.models.publication_passages import PublicationContextEstimateResponse
 
     class EstimateService:
@@ -3440,7 +3440,7 @@ async def test_estimate_publication_context_adapter_returns_recommended_max_char
                 recommended_mode="compact_passages",
             )
 
-    result = await estimate_publication_context_impl(
+    result = await compute_publication_context_impl(
         service=EstimateService(),
         pmids=["29355051"],
     )

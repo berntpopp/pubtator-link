@@ -511,7 +511,9 @@ class DiscoveryService:
             meta=_candidate_meta(candidate_pmids),
         )
 
-    async def lookup_mesh(self, *, query: str, limit: int = 10, exact: bool = False) -> MeshLookupResponse:
+    async def lookup_mesh(
+        self, *, query: str, limit: int = 10, exact: bool = False
+    ) -> MeshLookupResponse:
         descriptors = await self.client.lookup_mesh(query, limit, exact)
         return MeshLookupResponse(
             query=query,
@@ -521,7 +523,11 @@ class DiscoveryService:
                 next_commands=[
                     {
                         "tool": "pubtator.search_literature",
-                        "arguments": {"text": descriptor.search_terms[0] if descriptor.search_terms else descriptor.name},
+                        "arguments": {
+                            "text": descriptor.search_terms[0]
+                            if descriptor.search_terms
+                            else descriptor.name
+                        },
                     }
                     for descriptor in descriptors[:3]
                 ],
@@ -542,7 +548,9 @@ class DiscoveryService:
     ) -> RelatedArticlesResponse:
         related = await self.client.find_related_articles(pmids, mode, limit)
         candidate_pmids = _dedupe(record.pmid for record in related)
-        unresolved = [pmid for pmid in pmids if pmid not in {record.source_pmid for record in related}]
+        unresolved = [
+            pmid for pmid in pmids if pmid not in {record.source_pmid for record in related}
+        ]
         return RelatedArticlesResponse(
             source_pmids=list(pmids),
             mode=mode,
@@ -664,50 +672,56 @@ Expected: FAIL with `NotImplementedError`.
 Replace `NcbiDiscoveryClient.convert_article_ids`:
 
 ```python
-    async def convert_article_ids(
-        self, ids: Sequence[str], source: ArticleIdKind
-    ) -> list[ArticleIdConversionRecord]:
-        response = await self._get(
-            "idconv/v1.0/",
-            {
-                "ids": ",".join(ids),
-                "format": "json",
-                "tool": "pubtator-link",
-            },
+async def convert_article_ids(
+    self, ids: Sequence[str], source: ArticleIdKind
+) -> list[ArticleIdConversionRecord]:
+    response = await self._get(
+        "idconv/v1.0/",
+        {
+            "ids": ",".join(ids),
+            "format": "json",
+            "tool": "pubtator-link",
+        },
+    )
+    payload = response.json()
+    records_by_requested: dict[str, ArticleIdConversionRecord] = {}
+    for item in payload.get("records", []):
+        requested = str(
+            item.get("requested-id")
+            or item.get("pmcid")
+            or item.get("pmid")
+            or item.get("doi")
+            or ""
         )
-        payload = response.json()
-        records_by_requested: dict[str, ArticleIdConversionRecord] = {}
-        for item in payload.get("records", []):
-            requested = str(item.get("requested-id") or item.get("pmcid") or item.get("pmid") or item.get("doi") or "")
-            pmid = item.get("pmid")
-            pmcid = item.get("pmcid")
-            doi = item.get("doi")
-            status = "resolved" if pmid or pmcid or doi else "unresolved"
-            record = ArticleIdConversionRecord(
-                input_id=requested,
-                input_kind=source,
-                status=status,
-                pmid=str(pmid) if pmid else None,
-                pmcid=str(pmcid) if pmcid else None,
-                doi=str(doi) if doi else None,
-                reason=None if status == "resolved" else "not_found",
-            )
-            records_by_requested[requested] = record
+        pmid = item.get("pmid")
+        pmcid = item.get("pmcid")
+        doi = item.get("doi")
+        status = "resolved" if pmid or pmcid or doi else "unresolved"
+        record = ArticleIdConversionRecord(
+            input_id=requested,
+            input_kind=source,
+            status=status,
+            pmid=str(pmid) if pmid else None,
+            pmcid=str(pmcid) if pmcid else None,
+            doi=str(doi) if doi else None,
+            reason=None if status == "resolved" else "not_found",
+        )
+        records_by_requested[requested] = record
 
-        results: list[ArticleIdConversionRecord] = []
-        for requested in ids:
-            results.append(
-                records_by_requested.get(
-                    requested,
-                    ArticleIdConversionRecord(
-                        input_id=requested,
-                        input_kind=source,
-                        status="unresolved",
-                        reason="not_found",
-                    ),
-                )
+    results: list[ArticleIdConversionRecord] = []
+    for requested in ids:
+        results.append(
+            records_by_requested.get(
+                requested,
+                ArticleIdConversionRecord(
+                    input_id=requested,
+                    input_kind=source,
+                    status="unresolved",
+                    reason="not_found",
+                ),
             )
-        return results
+        )
+    return results
 ```
 
 - [ ] **Step 4: Run focused tests**
@@ -866,10 +880,7 @@ Append:
 ```python
 async def test_ncbi_client_parses_ecitmatch_lines() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
-        text = (
-            "Ann Rheum Dis|2024|83|1|Author|Title|39596913|\n"
-            "Unknown||||||NOT_FOUND|\n"
-        )
+        text = "Ann Rheum Dis|2024|83|1|Author|Title|39596913|\nUnknown||||||NOT_FOUND|\n"
         return httpx.Response(200, text=text, request=request)
 
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))

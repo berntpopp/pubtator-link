@@ -281,9 +281,9 @@ client.get("/api/reviews/review-1/certainty/00000000-0000-0000-0000-000000000001
 In `tests/unit/mcp/test_mcp_facade.py`, add public tools:
 
 ```python
-"pubtator.add_evidence_certainty",
-"pubtator.list_evidence_certainty",
-"pubtator.get_evidence_certainty",
+("pubtator.add_evidence_certainty",)
+("pubtator.list_evidence_certainty",)
+("pubtator.get_evidence_certainty",)
 ```
 
 Assert `pubtator.delete_evidence_certainty` is absent by default.
@@ -307,21 +307,20 @@ async def upsert_evidence_certainty(
     request: UpsertEvidenceCertaintyRequest,
     *,
     certainty_id: str | None = None,
-) -> EvidenceCertaintyRecord:
-    ...
+) -> EvidenceCertaintyRecord: ...
 
-async def list_evidence_certainty(self, review_id: str) -> list[EvidenceCertaintyRecord]:
-    ...
+
+async def list_evidence_certainty(self, review_id: str) -> list[EvidenceCertaintyRecord]: ...
+
 
 async def get_evidence_certainty(
     self,
     review_id: str,
     certainty_id: str,
-) -> EvidenceCertaintyRecord | None:
-    ...
+) -> EvidenceCertaintyRecord | None: ...
 
-async def delete_evidence_certainty(self, review_id: str, certainty_id: str) -> bool:
-    ...
+
+async def delete_evidence_certainty(self, review_id: str, certainty_id: str) -> bool: ...
 ```
 
 When `request.validate_passages` is true, query existing `review_passages` and
@@ -419,7 +418,10 @@ async def test_europe_pmc_client_returns_open_access_xml() -> None:
                             "license": "CC BY",
                             "fullTextUrlList": {
                                 "fullTextUrl": [
-                                    {"availability": "Open access", "url": "https://example.org/full.xml"}
+                                    {
+                                        "availability": "Open access",
+                                        "url": "https://example.org/full.xml",
+                                    }
                                 ]
                             },
                         }

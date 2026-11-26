@@ -126,12 +126,12 @@ Do not commit failing tests by themselves. Continue to Task 2 and commit after t
 In `pubtator_link/mcp/facade.py`, remove these imports from `pubtator_link.mcp.service_adapters`:
 
 ```python
-get_publication_passages_v2_impl,
-inspect_review_index_v2_impl,
-retrieve_review_context_batch_v2_impl,
-retrieve_review_context_v2_impl,
-search_biomedical_entities_v2_impl,
-search_literature_v2_impl,
+(get_publication_passages_v2_impl,)
+(inspect_review_index_v2_impl,)
+(retrieve_review_context_batch_v2_impl,)
+(retrieve_review_context_v2_impl,)
+(search_biomedical_entities_v2_impl,)
+(search_literature_v2_impl,)
 ```
 
 - [ ] **Step 2: Remove obsolete request-model imports**
@@ -139,24 +139,24 @@ search_literature_v2_impl,
 Remove these imports from `pubtator_link.mcp.tools` if they are no longer needed after the flat conversion:
 
 ```python
-GetPublicationPassagesMcpRequest,
-InspectReviewIndexMcpRequest,
-RetrieveReviewContextBatchMcpRequest,
-RetrieveReviewContextMcpRequest,
-SearchBiomedicalEntitiesRequest,
-SearchLiteratureRequest,
+(GetPublicationPassagesMcpRequest,)
+(InspectReviewIndexMcpRequest,)
+(RetrieveReviewContextBatchMcpRequest,)
+(RetrieveReviewContextMcpRequest,)
+(SearchBiomedicalEntitiesRequest,)
+(SearchLiteratureRequest,)
 ```
 
 Keep these request model imports because they remain wrapper-style and are not part of the duplicate cleanup:
 
 ```python
-EstimatePublicationContextMcpRequest,
-FetchPmcAnnotationsRequest,
-FetchPublicationAnnotationsRequest,
-FindEntityRelationsRequest,
-GetTextAnnotationResultsRequest,
-IndexReviewEvidenceMcpRequest,
-SubmitTextAnnotationRequest,
+(EstimatePublicationContextMcpRequest,)
+(FetchPmcAnnotationsRequest,)
+(FetchPublicationAnnotationsRequest,)
+(FindEntityRelationsRequest,)
+(GetTextAnnotationResultsRequest,)
+(IndexReviewEvidenceMcpRequest,)
+(SubmitTextAnnotationRequest,)
 ```
 
 - [ ] **Step 3: Replace `pubtator.search_literature` registration with flat arguments**
@@ -224,8 +224,7 @@ Change the canonical `search_biomedical_entities` function to:
 ```python
 async def search_biomedical_entities(
     query: str,
-    concept: Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"]
-    | None = None,
+    concept: Literal["Gene", "Disease", "Chemical", "Species", "Variant", "CellLine"] | None = None,
     limit: int = 10,
 ) -> dict[str, Any]:
     """Use this when a user needs canonical PubTator biomedical entity IDs for genes, diseases, chemicals, species, variants, or cell lines. Research use only; not for diagnosis, treatment, triage, patient management, or clinical decision support."""

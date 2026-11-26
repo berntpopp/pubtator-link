@@ -366,7 +366,7 @@ async def find_related_evidence_candidates_impl(
     return filter_reachable_hints(profile, response.model_dump(by_alias=True))
 
 
-async def build_topic_literature_map_impl(
+async def generate_topic_literature_map_impl(
     *,
     service: TopicLiteratureMapService,
     query: str | None = None,
@@ -427,7 +427,7 @@ async def build_topic_literature_map_impl(
     return filter_reachable_hints(profile, response.model_dump(by_alias=True))
 
 
-async def suggest_corpus_impl(
+async def find_review_corpus_impl(
     *,
     service: CorpusSuggestionService,
     question: str,
@@ -452,7 +452,7 @@ async def suggest_corpus_impl(
     return response.model_dump(by_alias=True)
 
 
-async def estimate_publication_context_impl(
+async def compute_publication_context_impl(
     *,
     service: PublicationPassageService,
     pmids: list[str],
@@ -560,15 +560,15 @@ async def search_literature_impl(
         "coverage_note": (
             "Search is read-only metadata discovery. Use coverage='preflight' or "
             + (
-                "preflight_review_sources before direct passage retrieval if source coverage matters."
+                "get_review_source_coverage before direct passage retrieval if source coverage matters."
                 if profile == "readonly"
-                else "preflight_review_sources before indexing if source coverage matters."
+                else "get_review_source_coverage before indexing if source coverage matters."
             )
         ),
         "next_tools": (
-            ["preflight_review_sources", "get_publication_passages"]
+            ["get_review_source_coverage", "get_publication_passages"]
             if profile == "readonly"
-            else ["preflight_review_sources", "index_review_evidence"]
+            else ["get_review_source_coverage", "index_review_evidence"]
         ),
         "workflow": (
             "search -> preflight -> direct passages"
@@ -796,7 +796,7 @@ async def index_review_evidence_impl(
     return response.model_dump()
 
 
-async def preflight_review_sources_impl(
+async def get_review_source_coverage_impl(
     *,
     service: SourcePreflightService,
     pmids: list[str],
@@ -883,7 +883,7 @@ async def review_quickstart_impl(
             timeout_ms=timeout_ms,
             review_indexing_service_factory=review_indexing_service_factory,
         )
-    inspect_response = await context_service.inspect_review_index(
+    inspect_response = await context_service.get_review_index_status(
         selected_review_id,
         InspectReviewIndexRequest(session_id=manifest.session_id),
     )
@@ -896,7 +896,7 @@ async def review_quickstart_impl(
     warnings: list[str] = []
     if wait_until_ready and not ready_to_retrieve:
         warnings.append(
-            "quickstart queued sources but no passages are ready yet; poll inspect_review_index"
+            "quickstart queued sources but no passages are ready yet; poll get_review_index_status"
         )
     response = ReviewQuickstartResponse(
         review_id=selected_review_id,
@@ -908,7 +908,7 @@ async def review_quickstart_impl(
         indexed_totals=inspect_response.totals,
         ready_to_retrieve=ready_to_retrieve,
         next_commands=[
-            "get_review_context_batch" if ready_to_retrieve else "inspect_review_index",
+            "get_review_context_batch" if ready_to_retrieve else "get_review_index_status",
             "get_review_context_batch",
         ],
         warnings=warnings,
@@ -981,7 +981,7 @@ async def ground_question_impl(
                 timeout_ms=timeout_ms,
             ),
         )
-        inspect_response = await context_service.inspect_review_index(
+        inspect_response = await context_service.get_review_index_status(
             review_id=selected_review_id,
             request=InspectReviewIndexRequest(pmids=selected_pmids),
         )
@@ -1012,7 +1012,7 @@ async def ground_question_impl(
                 "Indexing has not produced passages yet; inspect the review index and retry retrieval."
             )
             next_tools = [
-                "inspect_review_index",
+                "get_review_index_status",
                 "get_review_context_batch",
             ]
     except Exception as exc:
@@ -1399,7 +1399,7 @@ async def record_review_context_impl(
     return _dump_mapping(response)
 
 
-async def inspect_review_index_impl(
+async def get_review_index_status_impl(
     *,
     service: ReviewContextService,
     review_id: str,
@@ -1415,7 +1415,7 @@ async def inspect_review_index_impl(
     limit: int | None = 50,
     cursor: str | None = None,
 ) -> dict[str, Any]:
-    response = await service.inspect_review_index(
+    response = await service.get_review_index_status(
         review_id=review_id,
         request=InspectReviewIndexRequest(
             session_id=session_id,
@@ -1435,7 +1435,7 @@ async def inspect_review_index_impl(
     if response.next_cursor:
         result.setdefault("_meta", {})["next_commands"] = [
             {
-                "tool": "inspect_review_index",
+                "tool": "get_review_index_status",
                 "arguments": {
                     "review_id": review_id,
                     "session_id": session_id,

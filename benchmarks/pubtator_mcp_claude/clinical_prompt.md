@@ -22,11 +22,11 @@ Available workflow:
 - `find_entity_relations`
 - `search_literature`
 - `index_review_evidence`
-- `inspect_review_index`
+- `get_review_index_status`
 - `get_review_context_batch`
 - `get_review_context`
 - `get_publication_passages`
-- `estimate_publication_context`
+- `compute_publication_context`
 - `get_publication_annotations`
 
 PHASE 1 - SCOPE AND ENTITY GROUNDING
@@ -57,7 +57,7 @@ Prefer papers that recur across searches or clearly match the sub-question.
 PHASE 3 - REVIEW-SCOPED RAG
 1. Select a tight corpus: usually 4-8 PMIDs, maximum 10 unless the user explicitly asks for a broader review.
 2. Index once with `index_review_evidence(review_id="<stable-slug>", pmids=[...], prepare_mode="selected")`.
-3. Inspect with `inspect_review_index(review_id="<stable-slug>", include_passage_samples=true)`.
+3. Inspect with `get_review_index_status(review_id="<stable-slug>", include_passage_samples=true)`.
 4. Retrieve with short single-concept queries using batch retrieval:
    `get_review_context_batch(review_id="<stable-slug>", queries=[...], response_mode="compact", max_chars=12000, max_response_chars=24000, max_passages_per_query=4, max_total_passages=16, include_diagnostics=true)`.
 5. If a query returns no passages, read diagnostics, retry shorter keywords or PMID filters, and mark unresolved sub-questions as not retrievable if still empty.

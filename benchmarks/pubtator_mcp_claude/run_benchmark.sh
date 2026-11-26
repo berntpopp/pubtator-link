@@ -8,7 +8,7 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT_DIR="${ROOT_DIR}/results/${STAMP}"
 RUNS_DIR="${OUT_DIR}/runs"
 SUMMARY_DIR="${OUT_DIR}/summary"
-PUBTATOR_TOOLS="mcp__pubtator-link__pubtator_search_biomedical_entities,mcp__pubtator-link__pubtator_find_entity_relations,mcp__pubtator-link__pubtator_search_literature,mcp__pubtator-link__pubtator_index_review_evidence,mcp__pubtator-link__pubtator_inspect_review_index,mcp__pubtator-link__pubtator_retrieve_review_context_batch,mcp__pubtator-link__pubtator_retrieve_review_context,mcp__pubtator-link__pubtator_get_publication_passages,mcp__pubtator-link__pubtator_estimate_publication_context,mcp__pubtator-link__pubtator_fetch_publication_annotations"
+PUBTATOR_TOOLS="mcp__pubtator-link__pubtator_search_biomedical_entities,mcp__pubtator-link__pubtator_find_entity_relations,mcp__pubtator-link__pubtator_search_literature,mcp__pubtator-link__pubtator_index_review_evidence,mcp__pubtator-link__pubtator_get_review_index_status,mcp__pubtator-link__pubtator_retrieve_review_context_batch,mcp__pubtator-link__pubtator_retrieve_review_context,mcp__pubtator-link__pubtator_get_publication_passages,mcp__pubtator-link__pubtator_compute_publication_context,mcp__pubtator-link__pubtator_fetch_publication_annotations"
 
 mkdir -p "${RUNS_DIR}" "${SUMMARY_DIR}"
 cp "${ROOT_DIR}/clinical_prompt.md" "${OUT_DIR}/clinical_prompt.md"

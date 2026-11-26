@@ -19,12 +19,12 @@ EXPECTED_PUBLIC_TOOL_NAMES = {
     "get_server_capabilities",
     "search_literature",
     "review_quickstart",
-    "convert_article_ids",
+    "map_article_ids",
     "get_mesh",
     "get_citation",
     "find_related_articles",
-    "suggest_corpus",
-    "build_topic_literature_map",
+    "find_review_corpus",
+    "generate_topic_literature_map",
     "diagnostics",
     "search_guidelines",
     "get_publication_annotations",
@@ -32,16 +32,16 @@ EXPECTED_PUBLIC_TOOL_NAMES = {
     "get_publication_passages",
     "get_publication_citation_graph",
     "find_related_evidence_candidates",
-    "estimate_publication_context",
+    "compute_publication_context",
     "get_pmc_annotations",
     "search_biomedical_entities",
     "find_entity_relations",
     "get_variant_evidence",
     "submit_text_annotation",
     "get_text_annotation_results",
-    "preflight_review_sources",
+    "get_review_source_coverage",
     "index_review_evidence",
-    "inspect_review_index",
+    "get_review_index_status",
     "ground_question",
     "get_review_context",
     "get_review_context_batch",
@@ -299,7 +299,7 @@ def test_related_evidence_tool_schema_is_flat() -> None:
 def test_topic_literature_map_tool_schema_is_flat() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["build_topic_literature_map"]
+    tool = create_pubtator_mcp(profile="full")._tool_manager._tools["generate_topic_literature_map"]
     properties = tool.parameters["properties"]
 
     assert "query" in properties
@@ -331,7 +331,7 @@ def test_literature_graph_mcp_schemas_default_to_compact() -> None:
     for name in (
         "get_publication_citation_graph",
         "find_related_evidence_candidates",
-        "build_topic_literature_map",
+        "generate_topic_literature_map",
     ):
         response_mode = tools[name].parameters["properties"]["response_mode"]
         assert response_mode["default"] == "compact"
@@ -700,14 +700,14 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
         for workflow in capabilities["recommended_workflows"]
     )
     assert "get_publication_passages" in capabilities["tool_groups"]["publication_grounding"]
-    assert "inspect_review_index" in capabilities["tool_groups"]["review_grounding"]
+    assert "get_review_index_status" in capabilities["tool_groups"]["review_grounding"]
     assert "get_mesh" in capabilities["tool_groups"]["discovery"]
     assert capabilities["output_cheatsheet"]["discovery_candidate_pmids"] == "candidate_pmids"
     assert capabilities["output_cheatsheet"]["handoff_next_commands"] == "_meta.next_commands"
     assert "workflow_help" in capabilities["tools"]
     assert "workflow_help" in capabilities["tool_groups"]["workflow"]
     assert "get_publication_metadata" in capabilities["tools"]
-    assert "suggest_corpus" in capabilities["tool_groups"]["discovery"]
+    assert "find_review_corpus" in capabilities["tool_groups"]["discovery"]
     assert capabilities["search_defaults"]["metadata_modes"] == [
         "none",
         "basic",
@@ -727,7 +727,7 @@ def test_capabilities_resource_advertises_grounding_workflows() -> None:
     assert "max_results" not in sample_calls["find_related_articles"]
     MeshLookupRequest(**sample_calls["get_mesh"])
     RelatedArticlesRequest(**sample_calls["find_related_articles"])
-    CorpusSuggestionRequest(**sample_calls["suggest_corpus"])
+    CorpusSuggestionRequest(**sample_calls["find_review_corpus"])
     PublicationMetadataRequest(**sample_calls["get_publication_metadata"])
 
 
@@ -775,7 +775,7 @@ def test_capabilities_expose_literature_graph_workflow_bundle() -> None:
     bundle = payload["workflow_bundles"]["literature_graph"]
     assert bundle["tools"] == [
         "search_literature",
-        "build_topic_literature_map",
+        "generate_topic_literature_map",
         "get_publication_citation_graph",
         "find_related_evidence_candidates",
         "index_review_evidence",
@@ -867,9 +867,9 @@ async def test_diagnostics_response_includes_minimum_workflow() -> None:
 
     assert result.minimum_workflow["grounded_review"] == [
         "search_literature",
-        "preflight_review_sources",
+        "get_review_source_coverage",
         "index_review_evidence",
-        "inspect_review_index",
+        "get_review_index_status",
         "get_review_context_batch",
     ]
     assert result.minimum_workflow["workflow_resource"] == "pubtator://workflow-help"
@@ -888,9 +888,9 @@ async def test_readonly_diagnostics_minimum_workflow_uses_direct_passage_retriev
                 minimum_workflow={
                     "grounded_review": [
                         "search_literature",
-                        "preflight_review_sources",
+                        "get_review_source_coverage",
                         "index_review_evidence",
-                        "inspect_review_index",
+                        "get_review_index_status",
                         "get_review_context_batch",
                     ],
                     "workflow_resource": "pubtator://workflow-help",
@@ -902,7 +902,7 @@ async def test_readonly_diagnostics_minimum_workflow_uses_direct_passage_retriev
 
     assert result["minimum_workflow"]["grounded_review"] == [
         "search_literature",
-        "preflight_review_sources",
+        "get_review_source_coverage",
         "get_publication_passages",
     ]
     assert "one_call" not in result["minimum_workflow"]
@@ -928,7 +928,7 @@ async def test_readonly_diagnostics_redact_historical_write_tool_failures() -> N
                                 "message": "index_review_evidence review store was unavailable",
                             },
                             {
-                                "tool_name": "inspect_review_index",
+                                "tool_name": "get_review_index_status",
                                 "message": "read-only index probe timed out",
                             },
                         ],
@@ -937,10 +937,10 @@ async def test_readonly_diagnostics_redact_historical_write_tool_failures() -> N
                 recovery=[
                     "Recent MCP tool failure in index_review_evidence: "
                     "index_review_evidence review store was unavailable",
-                    "Recent MCP tool failure in inspect_review_index: read-only index probe timed out",
+                    "Recent MCP tool failure in get_review_index_status: read-only index probe timed out",
                 ],
                 minimum_workflow={
-                    "grounded_review": ["index_review_evidence", "inspect_review_index"],
+                    "grounded_review": ["index_review_evidence", "get_review_index_status"],
                     "one_call": "ground_question",
                 },
             )
@@ -953,7 +953,7 @@ async def test_readonly_diagnostics_redact_historical_write_tool_failures() -> N
     assert "index_review_evidence" not in serialized
     assert "ground_question" not in serialized
     assert "review store was unavailable" in serialized
-    assert "inspect_review_index" in serialized
+    assert "get_review_index_status" in serialized
     assert "read-only index probe timed out" in serialized
 
 
@@ -977,7 +977,7 @@ async def test_lean_diagnostics_redact_unavailable_tool_in_allowed_error_message
                         "count": 1,
                         "latest": [
                             {
-                                "tool_name": "inspect_review_index",
+                                "tool_name": "get_review_index_status",
                                 "message": "Use stage_research_session before retrying.",
                             }
                         ],
@@ -1000,7 +1000,7 @@ async def test_lean_diagnostics_redact_unavailable_tool_in_allowed_error_message
     payload = result.structured_content
     assert isinstance(payload, dict)
     error = payload["subsystems"]["recent_mcp_errors"]["latest"][0]
-    assert error["tool_name"] == "inspect_review_index"
+    assert error["tool_name"] == "get_review_index_status"
     assert "stage_research_session" not in json.dumps(payload, sort_keys=True)
     assert "an unavailable tool" in error["message"]
     assert "before retrying" in error["message"]
@@ -1084,7 +1084,7 @@ def test_discovery_tools_are_registered_and_suppress_output_schema() -> None:
     tools = mcp._tool_manager._tools
 
     expected_tools = {
-        "convert_article_ids",
+        "map_article_ids",
         "get_mesh",
         "get_citation",
         "find_related_articles",
@@ -1136,11 +1136,11 @@ def test_common_mcp_tools_are_flat_and_unversioned() -> None:
         "search_literature": ("text",),
         "search_biomedical_entities": ("query",),
         "get_publication_passages": ("pmids",),
-        "convert_article_ids": ("ids",),
+        "map_article_ids": ("ids",),
         "get_mesh": ("query",),
         "get_citation": ("citations",),
         "find_related_articles": ("pmids",),
-        "inspect_review_index": ("review_id",),
+        "get_review_index_status": ("review_id",),
         "get_review_context": ("review_id", "question"),
         "get_review_context_batch": ("review_id", "queries"),
     }
@@ -1212,7 +1212,7 @@ def test_repeated_call_tools_expose_include_meta_default_true() -> None:
         "get_review_context",
         "get_review_context_batch",
         "find_related_evidence_candidates",
-        "build_topic_literature_map",
+        "generate_topic_literature_map",
     ):
         properties = tools[tool_name].parameters["properties"]
         assert properties["include_meta"]["default"] is True
@@ -1618,18 +1618,18 @@ def test_public_mcp_tools_use_flat_arguments_consistently() -> None:
 
     required_properties = {
         "get_publication_annotations": ("pmids",),
-        "estimate_publication_context": ("pmids",),
+        "compute_publication_context": ("pmids",),
         "get_pmc_annotations": ("pmcids",),
         "find_entity_relations": ("entity_id",),
         "submit_text_annotation": ("text",),
         "get_text_annotation_results": ("session_id",),
-        "preflight_review_sources": ("pmids",),
+        "get_review_source_coverage": ("pmids",),
         "index_review_evidence": ("review_id",),
         "get_review_passages_by_id": ("review_id", "passage_ids"),
         "get_review_audit_trail": ("review_id",),
         "get_neighboring_review_passages": ("review_id", "passage_id"),
         "export_review_audit_bundle": ("review_id",),
-        "convert_article_ids": ("ids",),
+        "map_article_ids": ("ids",),
         "get_mesh": ("query",),
         "get_citation": ("citations",),
         "find_related_articles": ("pmids",),
@@ -1712,14 +1712,14 @@ def test_high_use_mcp_tools_suppress_output_schemas() -> None:
     high_use_tools = {
         "search_literature",
         "workflow_help",
-        "convert_article_ids",
+        "map_article_ids",
         "get_mesh",
         "get_citation",
         "find_related_articles",
-        "suggest_corpus",
-        "preflight_review_sources",
+        "find_review_corpus",
+        "get_review_source_coverage",
         "index_review_evidence",
-        "inspect_review_index",
+        "get_review_index_status",
         "get_review_context",
         "get_review_context_batch",
         "get_review_passages_by_id",
@@ -1840,7 +1840,7 @@ def test_public_hosted_tools_have_expected_annotations() -> None:
         "search_biomedical_entities",
         "find_entity_relations",
         "get_server_capabilities",
-        "convert_article_ids",
+        "map_article_ids",
         "get_mesh",
         "get_citation",
         "find_related_articles",

@@ -161,7 +161,11 @@ Append to `tests/unit/test_mcp_errors.py`:
 
 ```python
 def test_recent_mcp_errors_are_bounded_and_clearable() -> None:
-    from pubtator_link.mcp.errors import clear_recent_mcp_errors, get_recent_mcp_errors, record_mcp_error
+    from pubtator_link.mcp.errors import (
+        clear_recent_mcp_errors,
+        get_recent_mcp_errors,
+        record_mcp_error,
+    )
 
     clear_recent_mcp_errors()
     record_mcp_error(
@@ -208,7 +212,10 @@ async def test_diagnostics_reports_recent_review_database_tool_error() -> None:
 
     assert response.status == "degraded"
     assert response.subsystems["recent_mcp_errors"]["count"] == 1
-    assert response.subsystems["recent_mcp_errors"]["latest"][0]["error_code"] == "review_index_unavailable"
+    assert (
+        response.subsystems["recent_mcp_errors"]["latest"][0]["error_code"]
+        == "review_index_unavailable"
+    )
     assert any("pubtator.index_review_evidence" in item for item in response.recovery)
 ```
 
@@ -225,6 +232,7 @@ In `pubtator_link/mcp/errors.py`, add pure functions:
 ```python
 RECENT_MCP_ERROR_LIMIT = 50
 _RECENT_MCP_ERRORS: list[dict[str, Any]] = []
+
 
 def record_mcp_error(
     *,
@@ -243,8 +251,10 @@ def record_mcp_error(
     _RECENT_MCP_ERRORS.append(entry)
     del _RECENT_MCP_ERRORS[:-RECENT_MCP_ERROR_LIMIT]
 
+
 def get_recent_mcp_errors(limit: int = 10) -> list[dict[str, Any]]:
     return [dict(item) for item in _RECENT_MCP_ERRORS[-limit:]]
+
 
 def clear_recent_mcp_errors() -> None:
     _RECENT_MCP_ERRORS.clear()
@@ -348,9 +358,21 @@ CORE_WORKFLOW_TOOLS = [
 ]
 
 TOOL_CATEGORIES = {
-    "discovery": ["pubtator.search_literature", "pubtator.lookup_citation", "pubtator.convert_article_ids"],
-    "review": ["pubtator.preflight_review_sources", "pubtator.index_review_evidence", "pubtator.inspect_review_index"],
-    "retrieval": ["pubtator.retrieve_review_context_batch", "pubtator.get_review_passages_by_id", "pubtator.get_review_audit_trail"],
+    "discovery": [
+        "pubtator.search_literature",
+        "pubtator.lookup_citation",
+        "pubtator.convert_article_ids",
+    ],
+    "review": [
+        "pubtator.preflight_review_sources",
+        "pubtator.index_review_evidence",
+        "pubtator.inspect_review_index",
+    ],
+    "retrieval": [
+        "pubtator.retrieve_review_context_batch",
+        "pubtator.get_review_passages_by_id",
+        "pubtator.get_review_audit_trail",
+    ],
     "diagnostics": ["pubtator.diagnostics"],
 }
 ```
@@ -456,6 +478,7 @@ class InputNormalizationError(ValueError):
         self.field_errors = field_errors
         self.recovery_hint = recovery_hint
 
+
 def normalize_retrieve_review_context_batch_args(
     args: dict[str, Any],
 ) -> tuple[dict[str, Any], list[dict[str, str]]]:
@@ -463,6 +486,7 @@ def normalize_retrieve_review_context_batch_args(
     warnings: list[dict[str, str]] = []
     # Fill in the alias and enum rules listed below.
     return normalized, warnings
+
 
 def attach_normalization_meta(
     result: dict[str, Any],
@@ -527,11 +551,17 @@ async def test_lookup_citation_extracts_nbk_and_adds_recovery_hint() -> None:
     class Client(FakeDiscoveryClient):
         async def lookup_citations(self, citations):
             assert citations == ["GeneReviews NBK1139 familial Mediterranean fever"]
-            return [CitationLookupRecord(citation=citations[0], status="not_found", reason="not_found")]
+            return [
+                CitationLookupRecord(citation=citations[0], status="not_found", reason="not_found")
+            ]
 
         async def convert_article_ids(self, ids, source):
             assert ids == ["NBK1139"]
-            return [ArticleIdConversionRecord(input_id="NBK1139", input_kind="auto", status="unresolved", reason="not_found")]
+            return [
+                ArticleIdConversionRecord(
+                    input_id="NBK1139", input_kind="auto", status="unresolved", reason="not_found"
+                )
+            ]
 
     service = DiscoveryService(Client())
 
@@ -587,6 +617,7 @@ In `pubtator_link/services/ncbi_discovery.py`, add a small helper:
 
 ```python
 NBK_RE = re.compile(r"\bNBK\d+\b", re.IGNORECASE)
+
 
 def extract_nbk_ids(values: Sequence[str]) -> list[str]:
     ids: list[str] = []
@@ -897,6 +928,7 @@ In `review_rerag.py`:
 ```python
 ReviewBatchResponseMode = Literal["compact", "merged_only", "full", "diagnostics", "quotes"]
 
+
 class ReviewQuote(BaseModel):
     stable_citation_key: str
     pmid: str | None = None
@@ -962,7 +994,9 @@ def test_audit_bundle_response_can_report_field_errors() -> None:
         audit_bundle=None,
         error={
             "code": "validation_failed",
-            "field_errors": [{"field": "export_path", "reason": "parent directory is not writable"}],
+            "field_errors": [
+                {"field": "export_path", "reason": "parent directory is not writable"}
+            ],
             "recovery_hint": "Use fallback_inline=True or choose a writable path.",
         },
     )
@@ -978,7 +1012,11 @@ Append to `tests/unit/mcp/test_mcp_service_adapters.py`:
 @pytest.mark.asyncio
 async def test_export_review_audit_bundle_adapter_returns_inline_fallback() -> None:
     from pubtator_link.mcp.service_adapters import export_review_audit_bundle_impl
-    from pubtator_link.models.review_rerag import PreparationStatus, ReviewAuditBundle, ReviewIndexTotals
+    from pubtator_link.models.review_rerag import (
+        PreparationStatus,
+        ReviewAuditBundle,
+        ReviewIndexTotals,
+    )
 
     class Service:
         async def export_bundle(self, review_id, session_id=None):

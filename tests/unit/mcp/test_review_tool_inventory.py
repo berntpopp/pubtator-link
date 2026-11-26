@@ -53,9 +53,9 @@ LEGACY_PUBLIC_IMPORTS = {
 
 REVIEW_TOOLS_IN_LEAN = frozenset(
     {
-        "preflight_review_sources",
+        "get_review_source_coverage",
         "index_review_evidence",
-        "inspect_review_index",
+        "get_review_index_status",
         "ground_question",
         "get_review_context_batch",
         "get_review_audit_trail",

@@ -42,14 +42,14 @@ def register_passages_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         ],
         session_id: Annotated[
             str | None,
-            Field(description="Optional staged session to scope the lookup to."),
+            Field(description="Staged session to scope to."),
         ] = None,
         max_chars_per_passage: Annotated[
             int,
             Field(ge=100, le=20000, description="Character cap per returned passage."),
         ] = 2200,
     ) -> dict[str, Any]:
-        """Use this when a user needs exact prepared review passages by stable passage IDs from prior context packs or audit bundles; returns those passages with text and citation metadata. This only reads the review index and does not call upstream APIs."""
+        """Use this when a user needs prepared review passages by stable passage ID; returns them with text and citation metadata. Reads only the review index (no upstream calls)."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_review_context_service()
@@ -84,20 +84,20 @@ def register_passages_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         passage_ids: Annotated[
             list[str] | None,
             Field(
-                description="Specific prepared passage IDs to audit; omit for the latest recorded set.",
+                description="Passage IDs to audit; omit for the latest recorded set.",
                 examples=[["p1"]],
             ),
         ] = None,
         session_id: Annotated[
             str | None,
-            Field(description="Optional staged session to scope the audit to."),
+            Field(description="Staged session to scope to."),
         ] = None,
         max_chars_per_passage: Annotated[
             int,
             Field(ge=100, le=20000, description="Character cap per audited passage."),
         ] = 500,
     ) -> dict[str, Any]:
-        """Use this when a user needs a copy-ready audit block for selected prepared review passage IDs or the latest recorded audit passages without calling upstream APIs; returns that audit block."""
+        """Use this when a user needs a copy-ready audit block for selected or the latest recorded review passage IDs; returns that block without upstream calls."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_review_context_service()
@@ -138,7 +138,7 @@ def register_passages_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         ],
         session_id: Annotated[
             str | None,
-            Field(description="Optional staged session to scope the lookup to."),
+            Field(description="Staged session to scope to."),
         ] = None,
         before: Annotated[
             int,
@@ -157,7 +157,7 @@ def register_passages_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             Field(ge=100, le=20000, description="Character cap per returned passage."),
         ] = 2200,
     ) -> dict[str, Any]:
-        """Use this when a user needs prepared review passages near a cited stable passage ID for local context expansion; returns the neighboring passages with stable passage IDs and text. This only reads the review index and does not call upstream APIs."""
+        """Use this when a user needs prepared review passages near a cited passage ID; returns the neighbors with stable IDs and text. Reads only the review index (no upstream calls)."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_review_context_service()

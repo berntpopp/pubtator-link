@@ -74,7 +74,7 @@ class DiscoveryWithConversion:
     def __init__(self) -> None:
         self.calls: list[tuple[list[str], str]] = []
 
-    async def convert_article_ids(
+    async def map_article_ids(
         self,
         ids: list[str],
         source: str = "auto",

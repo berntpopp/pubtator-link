@@ -56,11 +56,11 @@ async def get_publication_passages(
 @router.post(
     "/context-estimate",
     response_model=PublicationContextEstimateResponse,
-    operation_id="estimate_publication_context",
+    operation_id="compute_publication_context",
     summary="Estimate compact publication context size",
 )
 @handle_api_errors
-async def estimate_publication_context(
+async def compute_publication_context(
     request: PublicationContextEstimateRequest,
     service: PublicationPassageServiceDep,
 ) -> PublicationContextEstimateResponse:
@@ -116,11 +116,11 @@ async def find_related_evidence_candidates(
 @router.post(
     "/topic-literature-map",
     response_model=TopicLiteratureMapResponse,
-    operation_id="build_topic_literature_map",
+    operation_id="generate_topic_literature_map",
     summary="Build topic literature map",
 )
 @handle_api_errors
-async def build_topic_literature_map(
+async def generate_topic_literature_map(
     request: TopicLiteratureMapRequest,
     service: TopicLiteratureMapServiceDep,
 ) -> TopicLiteratureMapResponse:

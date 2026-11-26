@@ -99,8 +99,11 @@ Add one module-level internal batching helper in
 
 ```python
 class PublicationMetadataLookup(Protocol):
-    async def get_metadata(self, request: PublicationMetadataRequest) -> PublicationMetadataResponse:
+    async def get_metadata(
+        self, request: PublicationMetadataRequest
+    ) -> PublicationMetadataResponse:
         """Return publication metadata for PMIDs."""
+
 
 async def lookup_metadata_batched(
     metadata_service: PublicationMetadataLookup,
@@ -111,8 +114,7 @@ async def lookup_metadata_batched(
     include_citations: Literal["none", "nlm", "bibtex", "both"] = "none",
     include_coverage: bool = True,
     batch_size: int = 100,
-) -> PublicationMetadataResponse:
-    ...
+) -> PublicationMetadataResponse: ...
 ```
 
 The helper accepts large internal sequences, normalizes and validates PMIDs with
@@ -138,8 +140,7 @@ and topic maps must still pass `include_mesh=include_entities`.
 async def get_metadata(
     self,
     request: PublicationMetadataRequest,
-) -> PublicationMetadataResponse:
-    ...
+) -> PublicationMetadataResponse: ...
 ```
 
 Public REST and MCP callers continue to construct `PublicationMetadataRequest`

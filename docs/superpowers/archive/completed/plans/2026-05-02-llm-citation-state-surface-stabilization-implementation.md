@@ -322,7 +322,10 @@ import httpx
 import pytest
 
 from pubtator_link.models.publication_metadata import PublicationMetadataRequest
-from pubtator_link.services.publication_metadata import NcbiPublicationMetadataClient, PublicationMetadataService
+from pubtator_link.services.publication_metadata import (
+    NcbiPublicationMetadataClient,
+    PublicationMetadataService,
+)
 
 
 @pytest.mark.asyncio
@@ -374,7 +377,9 @@ async def test_publication_metadata_service_parses_esummary_and_mesh() -> None:
             )
         return httpx.Response(404)
 
-    client = NcbiPublicationMetadataClient(http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    client = NcbiPublicationMetadataClient(
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    )
     service = PublicationMetadataService(client=client)
 
     response = await service.get_metadata(
@@ -400,10 +405,14 @@ async def test_publication_metadata_service_reports_missing_pmids() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"result": {"uids": []}})
 
-    client = NcbiPublicationMetadataClient(http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    client = NcbiPublicationMetadataClient(
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    )
     service = PublicationMetadataService(client=client)
 
-    response = await service.get_metadata(PublicationMetadataRequest(pmids=["999999999"], include_mesh=False))
+    response = await service.get_metadata(
+        PublicationMetadataRequest(pmids=["999999999"], include_mesh=False)
+    )
 
     assert response.success is True
     assert response.metadata == []
@@ -484,15 +493,26 @@ class PublicationMetadataService:
         self,
         client: NcbiPublicationMetadataClient,
         *,
-        coverage_provider: Callable[[list[str]], Awaitable[dict[str, tuple[CoverageTier, CoverageReason]]]] | None = None,
+        coverage_provider: Callable[
+            [list[str]], Awaitable[dict[str, tuple[CoverageTier, CoverageReason]]]
+        ]
+        | None = None,
     ) -> None:
         self._client = client
         self._coverage_provider = coverage_provider
 
-    async def get_metadata(self, request: PublicationMetadataRequest) -> PublicationMetadataResponse:
+    async def get_metadata(
+        self, request: PublicationMetadataRequest
+    ) -> PublicationMetadataResponse:
         esummary = await self._client.fetch_esummary(request.pmids)
-        mesh_by_pmid = await self._client.fetch_mesh_headings(request.pmids) if request.include_mesh else {}
-        coverage_by_pmid = await self._coverage_provider(request.pmids) if request.include_coverage and self._coverage_provider else {}
+        mesh_by_pmid = (
+            await self._client.fetch_mesh_headings(request.pmids) if request.include_mesh else {}
+        )
+        coverage_by_pmid = (
+            await self._coverage_provider(request.pmids)
+            if request.include_coverage and self._coverage_provider
+            else {}
+        )
 
         metadata: list[PublicationMetadata] = []
         failed_pmids: dict[str, str] = {}
@@ -565,7 +585,11 @@ git commit -m "feat: fetch publication metadata from NCBI"
 from fastapi.testclient import TestClient
 
 from pubtator_link.api.routes.dependencies import get_publication_metadata_service
-from pubtator_link.models.publication_metadata import PublicationAuthor, PublicationMetadata, PublicationMetadataResponse
+from pubtator_link.models.publication_metadata import (
+    PublicationAuthor,
+    PublicationMetadata,
+    PublicationMetadataResponse,
+)
 from pubtator_link.server_manager import UnifiedServerManager
 
 
@@ -645,10 +669,7 @@ async def _publication_metadata_coverage_provider(
 ) -> dict[str, tuple[CoverageTier, CoverageReason]]:
     preflight = get_source_preflight_service()
     response = await preflight.preflight_pmids(pmids)
-    return {
-        item.pmid: (item.expected_coverage, item.coverage_reason)
-        for item in response.items
-    }
+    return {item.pmid: (item.expected_coverage, item.coverage_reason) for item in response.items}
 ```
 
 - [ ] Add the route in `pubtator_link/api/routes/publications.py`.
@@ -699,7 +720,7 @@ git commit -m "feat: add publication metadata route"
 - [ ] Add `pubtator.get_publication_metadata` to `EXPECTED_PUBLIC_TOOL_NAMES` in `tests/unit/mcp/test_mcp_facade.py`.
 
 ```python
-"pubtator.get_publication_metadata",
+("pubtator.get_publication_metadata",)
 ```
 
 - [ ] Add an adapter test.
@@ -712,7 +733,9 @@ async def test_get_publication_metadata_impl_returns_typed_payload(monkeypatch):
     class FakeService:
         async def get_metadata(self, request):
             assert request.pmids == ["33454820"]
-            return PublicationMetadataResponse(success=True, metadata=[], failed_pmids={}, _meta={"next_commands": []})
+            return PublicationMetadataResponse(
+                success=True, metadata=[], failed_pmids={}, _meta={"next_commands": []}
+            )
 
     result = await service_adapters.get_publication_metadata_impl(
         service=FakeService(),
@@ -847,7 +870,13 @@ def test_shaped_search_response_can_merge_basic_metadata():
     metadata_by_pmid = {
         "33454820": {
             "pmid": "33454820",
-            "authors": [{"last_name": "Kavrul Kayaalp", "initials": "GK", "display_name": "Kavrul Kayaalp GK"}],
+            "authors": [
+                {
+                    "last_name": "Kavrul Kayaalp",
+                    "initials": "GK",
+                    "display_name": "Kavrul Kayaalp GK",
+                }
+            ],
             "journal": "Rheumatology International",
             "pub_year": 2022,
             "doi": "10.1007/s00296-020-04776-1",
@@ -856,7 +885,9 @@ def test_shaped_search_response_can_merge_basic_metadata():
         }
     }
 
-    shaped = shaped_search_response(raw, response_mode="compact", metadata="basic", metadata_by_pmid=metadata_by_pmid)
+    shaped = shaped_search_response(
+        raw, response_mode="compact", metadata="basic", metadata_by_pmid=metadata_by_pmid
+    )
 
     assert shaped["results"][0]["authors"][0]["display_name"] == "Kavrul Kayaalp GK"
     assert shaped["results"][0]["journal"] == "Rheumatology International"
@@ -910,7 +941,17 @@ def _merge_metadata_fields(
     if metadata == "none" or metadata_item is None:
         return
 
-    basic_fields = ("authors", "journal", "pub_year", "volume", "issue", "pages", "doi", "pmcid", "publication_types")
+    basic_fields = (
+        "authors",
+        "journal",
+        "pub_year",
+        "volume",
+        "issue",
+        "pages",
+        "doi",
+        "pmcid",
+        "publication_types",
+    )
     full_fields = basic_fields + ("mesh_headings", "nlm_citation", "bibtex")
     fields = full_fields if metadata == "full" else basic_fields
     for field_name in fields:
@@ -1501,7 +1542,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-WorkflowTask = Literal["clinical_genetics_review", "literature_review", "citation_audit", "entity_discovery"]
+WorkflowTask = Literal[
+    "clinical_genetics_review", "literature_review", "citation_audit", "entity_discovery"
+]
 
 
 class WorkflowStep(BaseModel):
@@ -1529,7 +1572,12 @@ class WorkflowHelpResponse(BaseModel):
 - [ ] Add `services/workflow_help.py` returning fixed typed responses.
 
 ```python
-from pubtator_link.models.workflow_help import WorkflowFallback, WorkflowHelpResponse, WorkflowStep, WorkflowTask
+from pubtator_link.models.workflow_help import (
+    WorkflowFallback,
+    WorkflowHelpResponse,
+    WorkflowStep,
+    WorkflowTask,
+)
 
 
 class WorkflowHelpService:
@@ -1544,16 +1592,48 @@ class WorkflowHelpService:
 
     def _clinical_or_literature_review(self, task: WorkflowTask) -> WorkflowHelpResponse:
         steps = [
-            WorkflowStep(order=1, tool_name="pubtator.search_biomedical_entities", purpose="Resolve canonical entity IDs for genes, diseases, chemicals, and variants."),
-            WorkflowStep(order=2, tool_name="pubtator.search_literature", purpose="Find candidate PMIDs with compact results and optional metadata."),
-            WorkflowStep(order=3, tool_name="pubtator.get_publication_metadata", purpose="Fetch citation-grade author and journal metadata for selected PMIDs."),
-            WorkflowStep(order=4, tool_name="pubtator.index_review_evidence", purpose="Prepare the selected corpus for review-scoped retrieval."),
-            WorkflowStep(order=5, tool_name="pubtator.inspect_review_index", purpose="Verify indexed coverage, source status, and sample passages."),
-            WorkflowStep(order=6, tool_name="pubtator.retrieve_review_context_batch", purpose="Retrieve citable passages for final claims."),
+            WorkflowStep(
+                order=1,
+                tool_name="pubtator.search_biomedical_entities",
+                purpose="Resolve canonical entity IDs for genes, diseases, chemicals, and variants.",
+            ),
+            WorkflowStep(
+                order=2,
+                tool_name="pubtator.search_literature",
+                purpose="Find candidate PMIDs with compact results and optional metadata.",
+            ),
+            WorkflowStep(
+                order=3,
+                tool_name="pubtator.get_publication_metadata",
+                purpose="Fetch citation-grade author and journal metadata for selected PMIDs.",
+            ),
+            WorkflowStep(
+                order=4,
+                tool_name="pubtator.index_review_evidence",
+                purpose="Prepare the selected corpus for review-scoped retrieval.",
+            ),
+            WorkflowStep(
+                order=5,
+                tool_name="pubtator.inspect_review_index",
+                purpose="Verify indexed coverage, source status, and sample passages.",
+            ),
+            WorkflowStep(
+                order=6,
+                tool_name="pubtator.retrieve_review_context_batch",
+                purpose="Retrieve citable passages for final claims.",
+            ),
         ]
         fallbacks = [
-            WorkflowFallback(condition="review indexing is unavailable", tool_name="pubtator.get_publication_passages", action="Fetch direct passages for the same selected PMIDs."),
-            WorkflowFallback(condition="search results lack authors", tool_name="pubtator.get_publication_metadata", action="Fetch citation metadata before drafting references."),
+            WorkflowFallback(
+                condition="review indexing is unavailable",
+                tool_name="pubtator.get_publication_passages",
+                action="Fetch direct passages for the same selected PMIDs.",
+            ),
+            WorkflowFallback(
+                condition="search results lack authors",
+                tool_name="pubtator.get_publication_metadata",
+                action="Fetch citation metadata before drafting references.",
+            ),
         ]
         return WorkflowHelpResponse(
             task=task,
@@ -1663,7 +1743,10 @@ async def test_corpus_suggestion_service_deduplicates_and_assigns_roles():
 
     class FakeMetadata:
         async def get_metadata(self, request):
-            from pubtator_link.models.publication_metadata import PublicationMetadata, PublicationMetadataResponse
+            from pubtator_link.models.publication_metadata import (
+                PublicationMetadata,
+                PublicationMetadataResponse,
+            )
 
             return PublicationMetadataResponse(
                 success=True,
@@ -1685,11 +1768,18 @@ async def test_corpus_suggestion_service_deduplicates_and_assigns_roles():
 
     class FakePreflight:
         async def preflight_pmids(self, pmids):
-            from pubtator_link.models.review_rerag import SourcePreflightItem, SourcePreflightResponse
+            from pubtator_link.models.review_rerag import (
+                SourcePreflightItem,
+                SourcePreflightResponse,
+            )
 
             return SourcePreflightResponse(
                 items=[
-                    SourcePreflightItem(pmid=pmid, expected_coverage="abstract_only", coverage_reason="pubtator_abstract")
+                    SourcePreflightItem(
+                        pmid=pmid,
+                        expected_coverage="abstract_only",
+                        coverage_reason="pubtator_abstract",
+                    )
                     for pmid in pmids
                 ]
             )
@@ -1700,7 +1790,9 @@ async def test_corpus_suggestion_service_deduplicates_and_assigns_roles():
         source_preflight_service=FakePreflight(),
     )
 
-    response = await service.suggest(CorpusSuggestionRequest(question="FMF MEFV VUS colchicine", max_pmids=2))
+    response = await service.suggest(
+        CorpusSuggestionRequest(question="FMF MEFV VUS colchicine", max_pmids=2)
+    )
 
     assert response.candidate_pmids == ["26802180", "33726481"]
     assert response.candidates[0].role == "guideline"
@@ -1731,7 +1823,9 @@ from pubtator_link.models.publication_metadata import PublicationMetadata
 from pubtator_link.models.review_rerag import SourcePreflightItem
 
 
-CorpusCandidateRole = Literal["guideline", "systematic_review", "cohort", "mechanism", "treatment", "background", "other"]
+CorpusCandidateRole = Literal[
+    "guideline", "systematic_review", "cohort", "mechanism", "treatment", "background", "other"
+]
 
 
 class CorpusSuggestionRequest(BaseModel):

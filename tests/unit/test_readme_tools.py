@@ -73,7 +73,7 @@ def test_readme_documents_the_safe_readonly_evidence_contract() -> None:
     text = " ".join(README.read_text(encoding="utf-8").split())
 
     expected = (
-        "`search_literature` → `preflight_review_sources` → `get_publication_passages`",
+        "`search_literature` → `get_review_source_coverage` → `get_publication_passages`",
         "`index_review_evidence` is available only to configured, authenticated "
         "non-readonly profiles.",
         "Candidate variants are not classifications for the query.",

@@ -13,7 +13,7 @@ from pubtator_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from pubtator_link.mcp.argument_aliases import merge_pmids, resolve_pmids, with_resolved_from
 from pubtator_link.mcp.errors import run_mcp_tool
 from pubtator_link.mcp.profiles import MCPToolProfile
-from pubtator_link.mcp.service_adapters import suggest_corpus_impl
+from pubtator_link.mcp.service_adapters import find_review_corpus_impl
 from pubtator_link.mcp.tools._vocab import ArticleId, Pmid
 from pubtator_link.models.discovery import ArticleIdKind, RelatedArticleMode
 
@@ -23,18 +23,18 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
         return
 
     @mcp.tool(
-        name="suggest_corpus",
+        name="find_review_corpus",
         title="Suggest Corpus",
         output_schema=None,
         annotations=READ_ONLY_OPEN_WORLD,
     )
-    async def suggest_corpus(
+    async def find_review_corpus(
         question: Annotated[
             str,
             Field(
                 min_length=3,
                 max_length=1000,
-                description="Research question to assemble a compact candidate PMID corpus for.",
+                description="Research question to build the PMID corpus for.",
                 examples=["Does colchicine prevent FMF flares?"],
             ),
         ],
@@ -45,7 +45,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
         entity_ids: Annotated[
             list[str] | None,
             Field(
-                description="Optional PubTator entity IDs to anchor the corpus on.",
+                description="PubTator entity IDs to anchor on.",
                 examples=[["@GENE_MEFV"]],
             ),
         ] = None,
@@ -62,10 +62,10 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
         ] = True,
         include_metadata: Annotated[
             bool,
-            Field(description="Attach per-PMID citation metadata to each candidate."),
+            Field(description="Attach per-PMID citation metadata."),
         ] = True,
     ) -> dict[str, Any]:
-        """Use this when a user needs a compact, review-feeding PMID corpus for a research question: returns candidate PMIDs, roles, coverage hints, metadata, and next commands."""
+        """Use this when a user needs a compact PMID corpus for a research question; returns candidate PMIDs, roles, coverage hints, metadata and next commands."""
 
         async def call() -> dict[str, Any]:
             selected_question = question
@@ -75,7 +75,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
                 else must_include_pmids
             )
             service = await get_corpus_suggestion_service()
-            return await suggest_corpus_impl(
+            return await find_review_corpus_impl(
                 service=service,
                 question=selected_question,
                 max_pmids=max_pmids,
@@ -86,41 +86,39 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
                 profile=profile,
             )
 
-        return await run_mcp_tool("suggest_corpus", call)
+        return await run_mcp_tool("find_review_corpus", call)
 
     @mcp.tool(
-        name="convert_article_ids",
+        name="map_article_ids",
         title="Convert Article IDs",
         output_schema=None,
         annotations=READ_ONLY_OPEN_WORLD,
     )
-    async def convert_article_ids(
+    async def map_article_ids(
         ids: Annotated[
             list[str],
             Field(
                 min_length=1,
                 max_length=200,
-                description="Article identifiers (PMIDs, PMCIDs, or DOIs) to normalize to PMIDs.",
+                description="PMIDs, PMCIDs or DOIs to normalize.",
                 examples=[["PMC123456", "10.1000/example"]],
             ),
         ],
         source: Annotated[
             ArticleIdKind,
             Field(
-                description=(
-                    "Identifier kind: 'auto' (default, detect), 'pmid', 'pmcid', or 'doi'."
-                ),
+                description=("Identifier kind; 'auto' detects."),
             ),
         ] = "auto",
     ) -> dict[str, Any]:
-        """Use this when a user provides article identifiers such as PMIDs, PMCIDs, or DOIs and needs normalized candidate PMIDs for research workflows; returns the normalized PMID, PMCID and DOI for each input identifier."""
+        """Use this when a user has PMIDs, PMCIDs or DOIs to normalize; returns the PMID, PMCID and DOI for each input."""
 
         async def call() -> dict[str, Any]:
             service = await get_discovery_service()
-            response = await service.convert_article_ids(ids=ids, source=source, profile=profile)
+            response = await service.map_article_ids(ids=ids, source=source, profile=profile)
             return response.model_dump(by_alias=True)
 
-        return await run_mcp_tool("convert_article_ids", call)
+        return await run_mcp_tool("map_article_ids", call)
 
     @mcp.tool(
         name="get_mesh",
@@ -134,7 +132,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
             Field(
                 min_length=1,
                 max_length=500,
-                description="Term to resolve to MeSH descriptors and candidate search terms.",
+                description="Term to resolve to MeSH descriptors.",
                 examples=["breast cancer"],
             ),
         ],
@@ -144,10 +142,10 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
         ] = 10,
         exact: Annotated[
             bool,
-            Field(description="Require an exact descriptor match instead of prefix/fuzzy."),
+            Field(description="Exact descriptor match only (no prefix/fuzzy)."),
         ] = False,
     ) -> dict[str, Any]:
-        """Use this when a user needs MeSH descriptors and candidate PubMed search terms for a biomedical research query; returns matching MeSH descriptors and suggested PubMed query terms."""
+        """Use this when a user needs MeSH descriptors for a biomedical query; returns matching descriptors and suggested PubMed query terms."""
 
         async def call() -> dict[str, Any]:
             selected_query = query
@@ -169,12 +167,12 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
             Field(
                 min_length=1,
                 max_length=100,
-                description="Free-text citation strings to resolve to candidate PMIDs.",
+                description="Free-text citation strings.",
                 examples=[["Smith J. Example disease study. 2024."]],
             ),
         ],
     ) -> dict[str, Any]:
-        """Use this when a user provides free-text citations and needs candidate PMIDs for research evidence gathering; returns candidate PMID matches per citation."""
+        """Use this when a user has free-text citations; returns candidate PMID matches per citation."""
 
         async def call() -> dict[str, Any]:
             service = await get_discovery_service()
@@ -195,16 +193,14 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
             Field(
                 min_length=1,
                 max_length=100,
-                description="Seed PMIDs (or PMCIDs/DOIs, converted) to expand from.",
+                description="Seed PMIDs (or PMCIDs/DOIs, converted).",
                 examples=[["25741868"]],
             ),
         ],
         mode: Annotated[
             RelatedArticleMode,
             Field(
-                description=(
-                    "Relation to follow: 'similar' (default), 'cited_by', or 'references'."
-                ),
+                description=("Relation to follow."),
             ),
         ] = "similar",
         limit: Annotated[
@@ -212,7 +208,7 @@ def register_discovery_tools(mcp: FastMCP, profile: MCPToolProfile = "lean") -> 
             Field(ge=1, le=100, description="Maximum related articles to return."),
         ] = 20,
     ) -> dict[str, Any]:
-        """Use this when a user has seed PMIDs and needs similar, cited-by, or reference-linked articles to expand a research corpus; returns related PMIDs with title, journal, year and relation."""
+        """Use this when a user has seed PMIDs and needs similar, cited-by or reference-linked articles; returns related PMIDs with title, journal, year and relation."""
 
         async def call() -> dict[str, Any]:
             selected_pmids, resolved_from = await resolve_pmids(pmids, max_items=100)

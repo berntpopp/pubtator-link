@@ -34,7 +34,7 @@ from pubtator_link.services.discovery_metadata import (
 from pubtator_link.services.ncbi_eutils_rate import eutils_get
 from pubtator_link.services.ncbi_id_conversion import (
     conversion_records_from_response,
-    convert_article_ids_individually,
+    map_article_ids_individually,
 )
 from pubtator_link.services.ncbi_mesh import lookup_mesh_descriptors
 
@@ -66,7 +66,7 @@ def extract_nbk_ids(values: Sequence[str]) -> list[str]:
 
 
 class NcbiDiscoveryClientProtocol(Protocol):
-    async def convert_article_ids(
+    async def map_article_ids(
         self,
         ids: Sequence[str],
         source: ArticleIdKind,
@@ -137,7 +137,7 @@ class NcbiDiscoveryClient:
         response.raise_for_status()
         return response
 
-    async def convert_article_ids(
+    async def map_article_ids(
         self,
         ids: Sequence[str],
         source: ArticleIdKind,
@@ -149,7 +149,7 @@ class NcbiDiscoveryClient:
             response = await self._get_absolute(self.id_converter_url, params)
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code == 400 and len(ids) > 1:
-                return await convert_article_ids_individually(
+                return await map_article_ids_individually(
                     ids=ids,
                     source=source,
                     url=self.id_converter_url,
@@ -363,14 +363,14 @@ class DiscoveryService:
         self.client = client
         self.metadata_service = metadata_service
 
-    async def convert_article_ids(
+    async def map_article_ids(
         self,
         ids: Sequence[str],
         source: ArticleIdKind = "auto",
         *,
         profile: MCPToolProfile = "full",
     ) -> ArticleIdConversionResponse:
-        records = await self.client.convert_article_ids(ids, source)
+        records = await self.client.map_article_ids(ids, source)
         candidate_pmids = _dedupe(record.pmid for record in records if record.pmid is not None)
         unresolved = [record.input_id for record in records if record.status != "resolved"]
         return ArticleIdConversionResponse(
@@ -427,7 +427,7 @@ class DiscoveryService:
         nbk_ids = extract_nbk_ids(citations)
         nbk_conversion_records: list[ArticleIdConversionRecord] = []
         if nbk_ids:
-            nbk_conversion_records = await self.client.convert_article_ids(nbk_ids, "auto")
+            nbk_conversion_records = await self.client.map_article_ids(nbk_ids, "auto")
             records = [
                 record.model_copy(update={"reason": "nbk_not_mapped"})
                 if record.status == "not_found" and extract_nbk_ids([record.citation])
@@ -651,7 +651,7 @@ def _candidate_meta(
     next_commands: list[dict[str, object]] = []
     if candidate_pmids:
         preferred = (
-            ("preflight_review_sources", "get_publication_passages")
+            ("get_review_source_coverage", "get_publication_passages")
             if profile == "readonly"
             else ("stage_research_session", "index_review_evidence")
         )

@@ -26,11 +26,11 @@ ROLE
   - `find_entity_relations`
   - `search_literature`
   - `index_review_evidence`
-  - `inspect_review_index`
+  - `get_review_index_status`
   - `get_review_context_batch`
   - `get_review_context`
   - `get_publication_passages`
-  - `estimate_publication_context`
+  - `compute_publication_context`
   - `get_publication_annotations`
 
   ────────────────────────────────────────
@@ -88,7 +88,7 @@ ROLE
      `index_review_evidence(review_id="<stable-slug>", pmids=[...], prepare_mode="selected")`
 
   3. Inspect:
-     `inspect_review_index(review_id="<stable-slug>", include_passage_samples=true)`
+     `get_review_index_status(review_id="<stable-slug>", include_passage_samples=true)`
 
   Check:
   - `preparation_status`

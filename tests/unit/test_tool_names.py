@@ -20,8 +20,8 @@ that the known operational/help tools are registered *and* actually carry
 the carve-out tag — the exemption itself is tag-based, not name-based.
 
 **Per-tool orchestration allowlist (``_ACTION_VERB_EXEMPT``):** a documented
-set of genuine orchestration / workflow tools whose verbs (build/index/stage/
-ground/preflight/record/estimate/inspect/convert/suggest/add) are intentionally
+set of genuine orchestration / workflow tools whose verbs (index/stage/
+ground/record/add) are intentionally
 outside both the Tier-1 and Tier-2 canon. Per issue #57, a fleet-level rename
 decision is deferred; no new entries may be added without a standards decision.
 ``submit`` and ``export`` moved from this list to Tier-2 (v1.1).
@@ -84,16 +84,10 @@ _META_TOOL_NAMES = frozenset(
 _ACTION_VERB_EXEMPT = frozenset(
     {
         "add_evidence_certainty",  # verb 'add'      — evidence management
-        "build_topic_literature_map",  # verb 'build'    — corpus orchestration
-        "convert_article_ids",  # verb 'convert'  — ID translation
-        "estimate_publication_context",  # verb 'estimate' — context sizing
         "ground_question",  # verb 'ground'   — RAG grounding
         "index_review_evidence",  # verb 'index'    — indexing operation
-        "inspect_review_index",  # verb 'inspect'  — index introspection
-        "preflight_review_sources",  # verb 'preflight'— pre-flight check
         "record_review_context",  # verb 'record'   — context recording
         "stage_research_session",  # verb 'stage'    — session staging
-        "suggest_corpus",  # verb 'suggest'  — corpus suggestion
     }
 )
 

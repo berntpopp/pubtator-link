@@ -117,9 +117,7 @@ def test_guideline_boost_prioritizes_source_recommendations_over_adherence_studi
         },
         {
             "pmid": "27422211",
-            "title": (
-                "EULAR recommendations for the management of familial Mediterranean fever"
-            ),
+            "title": ("EULAR recommendations for the management of familial Mediterranean fever"),
             "abstract": (
                 "These evidence based recommendations were developed by EULAR for "
                 "the management of familial Mediterranean fever."
@@ -129,9 +127,7 @@ def test_guideline_boost_prioritizes_source_recommendations_over_adherence_studi
         {
             "pmid": "adh2",
             "title": "Implementation of SHARE recommendations in autoinflammatory disease clinics",
-            "abstract": (
-                "This study evaluates implementation and adherence to SHARE guidance."
-            ),
+            "abstract": ("This study evaluates implementation and adherence to SHARE guidance."),
             "publication_types": ["Observational Study"],
         },
         {
@@ -149,8 +145,7 @@ def test_guideline_boost_prioritizes_source_recommendations_over_adherence_studi
         {
             "pmid": "source-printo",
             "title": (
-                "Eurofever/PRINTO recommendations for the management of "
-                "autoinflammatory diseases"
+                "Eurofever/PRINTO recommendations for the management of autoinflammatory diseases"
             ),
             "abstract": (
                 "The 2019 recommendations provide consensus guidance for clinical "
@@ -429,8 +424,8 @@ from pubtator_link.services.review_context.budgets import resolve_max_response_c
 Update `retrieve_review_context_batch_impl()` signature:
 
 ```python
-    max_response_chars: MaxResponseChars = "auto",
-    verbosity: ReviewResponseVerbosity = "standard",
+max_response_chars: MaxResponseChars = ("auto",)
+verbosity: ReviewResponseVerbosity = ("standard",)
 ```
 
 Add `verbosity` to the raw `args` dictionary and resolve the model request value:
@@ -602,7 +597,10 @@ async def test_ground_question_impl_chains_search_index_and_retrieve() -> None:
     assert index_service.request.wait_for_completion is True
     assert context_service.request.queries == ["What is first line FMF treatment?"]
     assert context_service.request.max_response_chars == 24000
-    assert result["retrieval"]["merged_context_pack"]["question"] == "What is first line FMF treatment?"
+    assert (
+        result["retrieval"]["merged_context_pack"]["question"]
+        == "What is first line FMF treatment?"
+    )
 
 
 @pytest.mark.asyncio
@@ -735,9 +733,7 @@ async def ground_question_impl(
     )
     results = search_result.get("results", [])
     selected_pmids = [
-        str(item["pmid"])
-        for item in results
-        if isinstance(item, dict) and item.get("pmid")
+        str(item["pmid"]) for item in results if isinstance(item, dict) and item.get("pmid")
     ]
     selected_pmids = list(dict.fromkeys(selected_pmids))[:max_pmids]
     if not selected_pmids:
@@ -875,9 +871,11 @@ def test_ground_question_schema_exposes_one_call_grounding_arguments() -> None:
 def test_retrieve_review_context_batch_schema_exposes_auto_budget_and_verbosity() -> None:
     from pubtator_link.mcp.facade import create_pubtator_mcp
 
-    properties = create_pubtator_mcp()._tool_manager._tools[
-        "pubtator.retrieve_review_context_batch"
-    ].parameters["properties"]
+    properties = (
+        create_pubtator_mcp()
+        ._tool_manager._tools["pubtator.retrieve_review_context_batch"]
+        .parameters["properties"]
+    )
 
     assert properties["verbosity"]["default"] == "standard"
     assert "auto" in _schema_enum_values(properties["max_response_chars"])
@@ -910,20 +908,20 @@ Expected: FAIL because the new tool and schema fields are not registered yet.
 In `pubtator_link/mcp/tools/review.py`, import the new adapter and model:
 
 ```python
-    ground_question_impl,
+(ground_question_impl,)
 ```
 
 ```python
-    GroundQuestionResponse,
-    MaxResponseChars,
-    ReviewResponseVerbosity,
+(GroundQuestionResponse,)
+(MaxResponseChars,)
+(ReviewResponseVerbosity,)
 ```
 
 Update `retrieve_review_context_batch()` signature:
 
 ```python
-        max_response_chars: MaxResponseChars = "auto",
-        verbosity: ReviewResponseVerbosity = "standard",
+max_response_chars: MaxResponseChars = ("auto",)
+verbosity: ReviewResponseVerbosity = ("standard",)
 ```
 
 Pass `verbosity=verbosity` to `retrieve_review_context_batch_impl()`.
@@ -977,7 +975,7 @@ Register `ground_question` near `review_quickstart`:
 In `pubtator_link/mcp/facade.py`, adjust the instructions sentence to mention the one-call path:
 
 ```python
-"For grounded answers, prefer pubtator.ground_question when a one-call workflow is suitable; otherwise use search -> preflight -> index -> inspect -> retrieve. "
+"For grounded answers, prefer pubtator.ground_question when a one-call workflow is suitable; otherwise use search -> preflight -> index -> inspect -> retrieve."
 ```
 
 In `pubtator_link/mcp/resources.py`, add `pubtator.ground_question` to the review/grounding workflow capability list where `search_literature`, `index_review_evidence`, and `retrieve_review_context_batch` are already documented.

@@ -40,7 +40,7 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             Field(ge=0, description="Zero-based row offset for pagination."),
         ] = 0,
     ) -> dict[str, Any]:
-        """Use this when a user needs persisted review indexes with preparation status, source counts, passage counts, and approximate storage size; returns one row per index with those fields."""
+        """Use this when a user needs the persisted review indexes; returns one row per index with preparation status, source and passage counts and approximate storage size."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_review_index_lifecycle_service()
@@ -63,12 +63,12 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             str,
             Field(
                 min_length=1,
-                description="Identifier of the persisted review index to summarize.",
+                description="Review index to summarize.",
                 examples=["demo"],
             ),
         ],
     ) -> dict[str, Any]:
-        """Use this when a user needs one persisted review index summary without loading passage samples; returns its preparation status, source counts and passage counts."""
+        """Use this when a user needs one review index summary without passage samples; returns its preparation status, source and passage counts."""
 
         async def call() -> dict[str, Any]:
             service = await review_tools.get_review_index_lifecycle_service()
@@ -179,12 +179,12 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         "lean",
         "full",
         "readonly",
-        name="inspect_review_index",
+        name="get_review_index_status",
         title="Inspect Review Index",
         output_schema=None,
         annotations=READ_ONLY_OPEN_WORLD,
     )
-    async def inspect_review_index(
+    async def get_review_index_status(
         review_id: Annotated[
             str,
             Field(
@@ -195,7 +195,7 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         ],
         session_id: Annotated[
             str | None,
-            Field(description="Optional staged session to scope the inspection to."),
+            Field(description="Staged session to scope to."),
         ] = None,
         pmids: Annotated[
             list[Pmid] | None,
@@ -218,7 +218,7 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         ] = 80,
         sample_section_policy: Annotated[
             SampleSectionPolicy,
-            Field(description="Sampling order: 'evidence_first' (default) or 'original_order'."),
+            Field(description="Sampling order."),
         ] = "evidence_first",
         include_metadata: Annotated[
             bool,
@@ -226,11 +226,11 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
         ] = False,
         metadata: Annotated[
             Literal["basic", "full"],
-            Field(description="Metadata depth when included: 'basic' (default) or 'full'."),
+            Field(description="Metadata depth when included."),
         ] = "basic",
         response_mode: Annotated[
             Literal["compact", "full"],
-            Field(description="Payload verbosity: 'compact' (default) or 'full'."),
+            Field(description="Payload verbosity."),
         ] = "compact",
         limit: Annotated[
             int | None,
@@ -241,12 +241,12 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
             Field(description="Opaque pagination cursor from a prior page."),
         ] = None,
     ) -> dict[str, Any]:
-        """Use this when a user needs to inspect indexed PMIDs, sections, passage counts, and failures for a review_id, including source coverage; returns per-source summaries, totals and failures."""
+        """Use this when a user needs to inspect indexed PMIDs, sections, passage counts, and failures for a review_id; returns per-source coverage summaries, totals and failures."""
 
         async def call() -> dict[str, Any]:
             selected_pmids = merge_pmids(pmids) if pmids else pmids
             service = await review_tools.get_review_context_service()
-            return await review_tools.inspect_review_index_impl(
+            return await review_tools.get_review_index_status_impl(
                 service=service,
                 review_id=review_id,
                 session_id=session_id,
@@ -262,4 +262,4 @@ def register_indexes_tools(mcp: FastMCP, profile: MCPToolProfile) -> None:
                 cursor=cursor,
             )
 
-        return await run_mcp_tool("inspect_review_index", call, pmids=pmids)
+        return await run_mcp_tool("get_review_index_status", call, pmids=pmids)

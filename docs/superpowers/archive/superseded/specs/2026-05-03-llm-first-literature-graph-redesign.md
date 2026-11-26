@@ -177,7 +177,9 @@ class LiteratureCandidateSummary(BaseModel):
     year: int | None = None
     publication_types: list[str] = Field(default_factory=list)
     access: Literal["full_text", "open_access", "metadata_only", "unresolved"]
-    access_flags: dict[Literal["has_pmc_full_text", "is_open_access", "has_pdf"], bool] = Field(default_factory=dict)
+    access_flags: dict[Literal["has_pmc_full_text", "is_open_access", "has_pdf"], bool] = Field(
+        default_factory=dict
+    )
     score: float | None = None
     relevance_to_query: LiteratureQueryRelevance | None = None
     rank_reasons: list[str] = Field(default_factory=list)

@@ -221,17 +221,19 @@ Expected: PASS.
 In `pubtator_link/api/routes/cache.py`, update the delete route metadata:
 
 ```python
-summary="Clear all caches",
-description=(
-    "Clear all server-side async-lru publication caches. Pattern-based clearing "
-    "is not supported."
-),
+summary = ("Clear all caches",)
+description = (
+    (
+        "Clear all server-side async-lru publication caches. Pattern-based clearing "
+        "is not supported."
+    ),
+)
 ```
 
 Change the `pattern` query description to:
 
 ```python
-description="Unsupported. Any supplied pattern returns HTTP 400.",
+description = ("Unsupported. Any supplied pattern returns HTTP 400.",)
 ```
 
 At the start of `clear_cache()`, replace the current pattern validation block with:
@@ -779,6 +781,7 @@ def _retry_metadata_dict(self, metadata: Any) -> dict[str, Any]:
     if hasattr(metadata, "__dict__"):
         return dict(metadata.__dict__)
     return dict(metadata)
+
 
 async def _export_publications_with_retry_metadata(
     self,

@@ -78,7 +78,7 @@ sidecar metadata returned by `export_publications_with_metadata()` rather than
 shared mutable client state.
 
 For source coverage failures, inspect `coverage_reason` and
-`resolver_attempts` on `inspect_review_index` or
+`resolver_attempts` on `get_review_index_status` or
 `export_review_audit_bundle`. Common reasons include `no_pmcid`,
 `abstract_fallback_used`, `upstream_timeout`, `upstream_404`, and
 `retry_exhausted`. Treat abstract-only and title-only coverage as scientific

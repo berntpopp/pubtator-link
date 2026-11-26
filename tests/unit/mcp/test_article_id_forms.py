@@ -18,7 +18,7 @@ class FakeDiscovery:
         self.mapping = mapping
         self.calls: list[list[str]] = []
 
-    async def convert_article_ids(self, ids: list[str]) -> ArticleIdConversionResponse:
+    async def map_article_ids(self, ids: list[str]) -> ArticleIdConversionResponse:
         self.calls.append(list(ids))
         records = [
             ArticleIdConversionRecord(

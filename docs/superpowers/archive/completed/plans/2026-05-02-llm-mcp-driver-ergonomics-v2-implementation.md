@@ -358,7 +358,9 @@ def test_context_passage_quote_offsets_use_returned_and_original_text() -> None:
     assert "MEFV variants respond to colchicine" in passage.quote.text
     assert passage.quote.returned_start_offset >= 0
     assert passage.quote.returned_end_offset <= len(passage.text)
-    assert passage.quote.passage_start_char == passage.start_char + passage.quote.returned_start_offset
+    assert (
+        passage.quote.passage_start_char == passage.start_char + passage.quote.returned_start_offset
+    )
     assert passage.quote.passage_end_char == passage.start_char + passage.quote.returned_end_offset
 
 
@@ -511,12 +513,14 @@ text, start_char, end_char, truncated = excerpt_text(
     allow_truncated=request.allow_truncated_passages,
 )
 ...
-quote=passage_quote(text, passage_start_char=start_char, query_tokens=tokens),
-confidence_for_grounding=grounding_confidence_from_row(
-    row,
-    truncated=truncated,
-    query_tokens=tokens,
-),
+quote = (passage_quote(text, passage_start_char=start_char, query_tokens=tokens),)
+confidence_for_grounding = (
+    grounding_confidence_from_row(
+        row,
+        truncated=truncated,
+        query_tokens=tokens,
+    ),
+)
 ```
 
 - [ ] **Step 4: Run packing tests**
@@ -706,7 +710,11 @@ In `pubtator_link/services/review_context/batch_budgeting.py`, import:
 
 ```python
 from collections import Counter
-from pubtator_link.models.review_rerag import RecoveryBudgetAdvice, RecoverySuggestedFilters, SourceDroppedSummary
+from pubtator_link.models.review_rerag import (
+    RecoveryBudgetAdvice,
+    RecoverySuggestedFilters,
+    SourceDroppedSummary,
+)
 ```
 
 Change `MergedBatchContext.dropped_summary` annotation:
@@ -735,7 +743,9 @@ def build_dropped_summary(
     budget_advice = None
     if budget_reasons.intersection(by_reason):
         budget_advice = RecoveryBudgetAdvice(
-            increase_max_chars_to=min(50000, max(request.max_chars + 2000, int(request.max_chars * 1.5))),
+            increase_max_chars_to=min(
+                50000, max(request.max_chars + 2000, int(request.max_chars * 1.5))
+            ),
             increase_max_response_chars_to=min(
                 100000,
                 max(request.max_response_chars + 4000, int(request.max_response_chars * 1.5)),
@@ -795,7 +805,11 @@ For batch retrieval, compute:
 
 ```python
 recovery = next(
-    (hint for hint in (recovery_from_query_summary(summary) for summary in merged.query_summaries) if hint is not None),
+    (
+        hint
+        for hint in (recovery_from_query_summary(summary) for summary in merged.query_summaries)
+        if hint is not None
+    ),
     None,
 )
 ```
@@ -879,33 +893,33 @@ Expected: FAIL because new fields are not populated.
 In `pubtator_link/services/source_preflight.py`, update successful full-text returns:
 
 ```python
-expected_coverage_after_index="full_text",
-expected_coverage_confidence="high",
-coverage_resolution_stage="preflight_resolver_chain",
+expected_coverage_after_index = ("full_text",)
+expected_coverage_confidence = ("high",)
+coverage_resolution_stage = ("preflight_resolver_chain",)
 ```
 
 Update abstract fallback return:
 
 ```python
-expected_coverage_after_index="abstract_only",
-expected_coverage_confidence="moderate",
-coverage_resolution_stage="preflight_resolver_chain",
+expected_coverage_after_index = ("abstract_only",)
+expected_coverage_confidence = ("moderate",)
+coverage_resolution_stage = ("preflight_resolver_chain",)
 ```
 
 Update timeout returns:
 
 ```python
-expected_coverage_after_index="unknown",
-expected_coverage_confidence="unknown",
-coverage_resolution_stage="not_resolved",
+expected_coverage_after_index = ("unknown",)
+expected_coverage_confidence = ("unknown",)
+coverage_resolution_stage = ("not_resolved",)
 ```
 
 Update final no-coverage return:
 
 ```python
-expected_coverage_after_index="unknown",
-expected_coverage_confidence="unknown",
-coverage_resolution_stage="not_resolved",
+expected_coverage_after_index = ("unknown",)
+expected_coverage_confidence = ("unknown",)
+coverage_resolution_stage = ("not_resolved",)
 ```
 
 When Europe PMC is configured and succeeds, use the same high-confidence full-text fields.
@@ -1020,8 +1034,14 @@ async def get_audit_trail(
     items: list[ReviewAuditTrailItem] = []
     lines: list[str] = []
     for passage in lookup.passages:
-        quote = passage.quote.text if passage.quote is not None else passage.text[:max_chars_per_passage]
-        stable_key = passage.stable_citation_key or stable_citation_key_for_passage(passage.passage_id)
+        quote = (
+            passage.quote.text
+            if passage.quote is not None
+            else passage.text[:max_chars_per_passage]
+        )
+        stable_key = passage.stable_citation_key or stable_citation_key_for_passage(
+            passage.passage_id
+        )
         item = ReviewAuditTrailItem(
             pmid=passage.pmid,
             pmcid=passage.pmcid,
@@ -1266,7 +1286,13 @@ result = await index_review_evidence_impl(...)
 if wait_until_ready:
     status = result.get("preparation_status", {})
     complete = int(status.get("complete", 0)) + int(status.get("partial", 0))
-    total = max(1, int(status.get("queued", 0)) + int(status.get("running", 0)) + complete + int(status.get("failed", 0)))
+    total = max(
+        1,
+        int(status.get("queued", 0))
+        + int(status.get("running", 0))
+        + complete
+        + int(status.get("failed", 0)),
+    )
     progress = 100 if result.get("timed_out") is False else min(95, (complete / total) * 100)
     await _report_index_progress(ctx, progress=progress)
 ```

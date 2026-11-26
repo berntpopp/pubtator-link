@@ -24,4 +24,4 @@ runs:
     timeout_s: 300
     prompt: benchmarks/prompts/provider_pubmedqa_mcp_article_local_v1.md
     prompt_version: pubmedqa_mcp_article_local_v1
-    tool_workflow: preflight_review_sources>get_publication_passages
+    tool_workflow: get_review_source_coverage>get_publication_passages

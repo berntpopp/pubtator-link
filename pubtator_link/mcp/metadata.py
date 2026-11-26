@@ -146,15 +146,12 @@ def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
             ]
             | None,
             Field(
-                description=(
-                    "Optional capability sections to expand (e.g. 'tools', 'workflow_help'); "
-                    "omit for the default summary."
-                ),
+                description=("Capability sections to expand; omit for the summary."),
                 examples=[["tools", "workflow_help"]],
             ),
         ] = None,
     ) -> dict[str, Any]:
-        """Use this when a client needs supported tools, transports, formats, and limitations; returns those lists in one capability record. Do not use this for task-specific workflow guidance; use workflow_help. Next: workflow_help."""
+        """Use this when a client needs supported tools, transports, formats and limitations; returns one capability record. Not for workflow guidance. Next: workflow_help."""
 
         async def call() -> dict[str, Any]:
             return get_capabilities_resource(
@@ -174,15 +171,12 @@ def register_metadata(mcp: FastMCP, profile: MCPToolProfile = "lean") -> None:
         task: Annotated[
             str,
             Field(
-                description=(
-                    "Workflow to describe; defaults to the canonical "
-                    "'clinical_genetics_review' pipeline."
-                ),
+                description=("Workflow to describe."),
                 examples=["clinical_genetics_review"],
             ),
         ] = "clinical_genetics_review",
     ) -> dict[str, Any]:
-        """Use this when a fresh context needs the canonical PubTator-Link research workflow: returns ordered workflow steps with the tool to call at each."""
+        """Use this when a fresh context needs the canonical research workflow; returns ordered steps with the tool to call at each."""
 
         async def call() -> dict[str, Any]:
             return WorkflowHelpService(profile=profile).get_help(task).model_dump(by_alias=True)

@@ -140,7 +140,9 @@ class EvidencePassage(BaseModel):
     section: str = Field(..., description="Document section, such as title or abstract")
     text: str = Field(..., description="Passage text")
     offset: int = Field(default=0, description="Character offset in source document")
-    relevance_score: float | None = Field(default=None, description="Deterministic query match score")
+    relevance_score: float | None = Field(
+        default=None, description="Deterministic query match score"
+    )
 
 
 class EvidenceEntity(BaseModel):
@@ -162,7 +164,9 @@ class EvidenceRelation(BaseModel):
     relation_type: str | None = Field(default=None, description="Relation type")
     source: str | None = Field(default=None, description="Source entity identifier")
     target: str | None = Field(default=None, description="Target entity identifier")
-    passage_id: str | None = Field(default=None, description="Passage containing supporting evidence")
+    passage_id: str | None = Field(
+        default=None, description="Passage containing supporting evidence"
+    )
     raw: dict[str, Any] = Field(default_factory=dict, description="Original PubTator relation")
 
 
@@ -174,8 +178,12 @@ class EvidencePacket(BaseModel):
     doi: str | None = Field(default=None, description="DOI")
     title: str = Field(..., description="Article title")
     journal: str | None = Field(default=None, description="Journal name when available")
-    publication_date: str | None = Field(default=None, description="Publication date when available")
-    matched_query: str | None = Field(default=None, description="Query used to retrieve this record")
+    publication_date: str | None = Field(
+        default=None, description="Publication date when available"
+    )
+    matched_query: str | None = Field(
+        default=None, description="Query used to retrieve this record"
+    )
     relevant_passages: list[EvidencePassage] = Field(default_factory=list)
     entities: list[EvidenceEntity] = Field(default_factory=list)
     relations: list[EvidenceRelation] = Field(default_factory=list)
@@ -221,8 +229,16 @@ from pubtator_link.services.evidence_service import EvidenceService
 def test_rank_passages_prefers_focus_query_terms() -> None:
     service = EvidenceService(client=None)  # type: ignore[arg-type]
     passages = [
-        {"section": "abstract", "text": "This study discusses general cancer biology.", "offset": 0},
-        {"section": "abstract", "text": "BRCA1 mutations increase breast cancer risk.", "offset": 50},
+        {
+            "section": "abstract",
+            "text": "This study discusses general cancer biology.",
+            "offset": 0,
+        },
+        {
+            "section": "abstract",
+            "text": "BRCA1 mutations increase breast cancer risk.",
+            "offset": 50,
+        },
     ]
 
     ranked = service.rank_passages(passages, focus_query="BRCA1 breast cancer", max_passages=1)
@@ -247,7 +263,9 @@ def test_parse_bioc_document_creates_packet() -> None:
         "relations": [],
     }
 
-    packet = service.document_to_packet(document, focus_query="BRCA1", max_passages=2, max_chars=500)
+    packet = service.document_to_packet(
+        document, focus_query="BRCA1", max_passages=2, max_chars=500
+    )
 
     assert packet.pmid == "12345678"
     assert packet.title == "BRCA1 mutations in breast cancer"
@@ -280,7 +298,9 @@ class EvidenceService:
     def __init__(self, client: PubTator3Client):
         self.client = client
 
-    async def search_evidence(self, query: str, page: int = 1, sort: str | None = None) -> dict[str, Any]:
+    async def search_evidence(
+        self, query: str, page: int = 1, sort: str | None = None
+    ) -> dict[str, Any]:
         """Search PubTator literature and return raw search data."""
         return await self.client.search_publications(text=query, page=page, sort=sort)
 
@@ -316,7 +336,9 @@ class EvidenceService:
         infons = document.get("infons", {}) if isinstance(document.get("infons"), dict) else {}
         passages = document.get("passages", [])
         title = self._find_title(passages) or pmid
-        ranked_passages = self.rank_passages(passages, focus_query=focus_query, max_passages=max_passages)
+        ranked_passages = self.rank_passages(
+            passages, focus_query=focus_query, max_passages=max_passages
+        )
 
         evidence_passages = [
             EvidencePassage(
@@ -462,7 +484,9 @@ from pubtator_link.server_manager import UnifiedServerManager
 
 
 class FakeClient:
-    async def export_publications(self, pmids: list[str], format: str = "biocjson", full: bool = False):
+    async def export_publications(
+        self, pmids: list[str], format: str = "biocjson", full: bool = False
+    ):
         return {
             "PubTator3": [
                 {
@@ -1229,7 +1253,9 @@ class FullTextService:
         try:
             response = await client.get(url)
         except httpx.HTTPError as exc:
-            return FullTextRetrievalAttempt(source=source, status="failed", url=url, reason=str(exc))
+            return FullTextRetrievalAttempt(
+                source=source, status="failed", url=url, reason=str(exc)
+            )
         if response.status_code != 200:
             return FullTextRetrievalAttempt(
                 source=source,
@@ -2189,7 +2215,9 @@ class ReviewCorpusService:
                 continue
             selected.append(passage)
             used_chars += len(passage.text)
-        citation_map = {f"S{index + 1}": passage.passage_id for index, passage in enumerate(selected)}
+        citation_map = {
+            f"S{index + 1}": passage.passage_id for index, passage in enumerate(selected)
+        }
         return ContextPack(
             context_pack_id=f"ctx_{uuid4().hex}",
             review_id=review_id,

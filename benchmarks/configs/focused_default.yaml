@@ -44,7 +44,7 @@ runs:
     timeout_s: 300
     prompt: benchmarks/prompts/provider_bioasq_mcp_review_rag_v1.md
     prompt_version: bioasq_mcp_review_rag_v1
-    tool_workflow: index_review_evidence>inspect_review_index>retrieve_review_context_batch
+    tool_workflow: index_review_evidence>get_review_index_status>retrieve_review_context_batch
 judge:
   provider: claude
   model: sonnet

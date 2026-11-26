@@ -355,9 +355,7 @@ GRAPH_PAYLOAD_CONTRACT_VERSION = "literature_graph_payload_controls_v1"
 def graph_payload_json_bytes(payload: Any) -> int:
     if hasattr(payload, "model_dump_json"):
         return len(payload.model_dump_json(by_alias=True).encode("utf-8"))
-    return len(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    )
+    return len(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8"))
 
 
 def graph_request_metadata(
@@ -487,8 +485,7 @@ async def test_citation_graph_compact_populates_cache_snapshot_and_versions() ->
     )
     assert response.meta.source_versions["crossref"] == "live"
     assert any(
-        command["arguments"]["response_mode"] == "full"
-        for command in response.meta.next_commands
+        command["arguments"]["response_mode"] == "full" for command in response.meta.next_commands
     )
     assert any(
         command["arguments"]["response_mode"] == "nodes_edges"
@@ -641,8 +638,8 @@ def _enforce_citation_graph_budget(
         }
     )
     if graph_payload_json_bytes(compacted) <= budget:
-        omitted["candidate_details"] = (
-            len(response.reference_candidates) + len(response.cited_by_candidates)
+        omitted["candidate_details"] = len(response.reference_candidates) + len(
+            response.cited_by_candidates
         )
         return compacted.model_copy(
             update={
@@ -707,9 +704,9 @@ def _drop_citation_candidates_to_budget(
     if graph_payload_json_bytes(trimmed) <= budget:
         return trimmed, omitted_counts
 
-    omitted_counts["reference_candidates"] = omitted_counts.get(
-        "reference_candidates", 0
-    ) + len(trimmed.reference_candidates)
+    omitted_counts["reference_candidates"] = omitted_counts.get("reference_candidates", 0) + len(
+        trimmed.reference_candidates
+    )
     omitted_counts["cited_by_candidates"] = omitted_counts.get("cited_by_candidates", 0) + len(
         trimmed.cited_by_candidates
     )
@@ -797,8 +794,7 @@ async def test_topic_map_compact_serialization_omits_empty_nodes_edges() -> None
     assert response.meta.request_signature is not None
     assert response.meta.cache_key == response.meta.request_signature
     assert any(
-        command["arguments"]["response_mode"] == "full"
-        for command in response.meta.next_commands
+        command["arguments"]["response_mode"] == "full" for command in response.meta.next_commands
     )
 
 
@@ -854,8 +850,7 @@ async def test_related_evidence_compact_populates_cache_and_omitted_candidate_co
     assert response.meta.truncated is True
     assert response.meta.omitted_counts["candidates"] > 0
     assert any(
-        command["arguments"]["response_mode"] == "full"
-        for command in response.meta.next_commands
+        command["arguments"]["response_mode"] == "full" for command in response.meta.next_commands
     )
 
 
@@ -959,9 +954,7 @@ def _compact_summary(
         recent_connected_papers=[
             _compact_paper(paper) for paper in summary.recent_connected_papers if paper.pmid
         ][:5],
-        bridge_papers=[_compact_paper(paper) for paper in summary.bridge_papers if paper.pmid][
-            :5
-        ],
+        bridge_papers=[_compact_paper(paper) for paper in summary.bridge_papers if paper.pmid][:5],
         dominant_author_groups=summary.dominant_author_groups,
         accessible_full_text_candidates=[],
         closed_central_sources=[
@@ -1534,15 +1527,15 @@ Expected: FAIL because repository methods and the service do not accept paginati
 In `pubtator_link/services/review_context_service.py` and `pubtator_link/repositories/review_rerag.py`, extend `list_review_sources()` signatures:
 
 ```python
-limit: int | None = None,
-offset: int = 0,
+limit: int | None = (None,)
+offset: int = (0,)
 ```
 
 Extend `list_review_failed_sources()` signatures:
 
 ```python
-limit: int | None = None,
-offset: int = 0,
+limit: int | None = (None,)
+offset: int = (0,)
 ```
 
 - [ ] **Step 5: Add SQL limit and offset**
@@ -1557,11 +1550,11 @@ offset $5::int
 Pass parameters:
 
 ```python
-review_id,
-pmid_filter,
-session_id,
-limit,
-offset,
+(review_id,)
+(pmid_filter,)
+(session_id,)
+(limit,)
+(offset,)
 ```
 
 For the passage sample query, keep using the paged `source_ids` list already derived from returned sources.
@@ -1576,10 +1569,10 @@ offset $4::int
 Pass parameters:
 
 ```python
-review_id,
-session_id,
-limit,
-offset,
+(review_id,)
+(session_id,)
+(limit,)
+(offset,)
 ```
 
 - [ ] **Step 6: Implement service pagination**
@@ -1811,8 +1804,8 @@ Expected: FAIL because MCP and REST wiring does not expose `limit` or `cursor`.
 In `inspect_review_index_impl()` in `pubtator_link/mcp/service_adapters.py`, add parameters:
 
 ```python
-limit: int | None = 50,
-cursor: str | None = None,
+limit: int | None = (50,)
+cursor: str | None = (None,)
 ```
 
 Pass them into `InspectReviewIndexRequest`.
@@ -1843,8 +1836,8 @@ return result
 In `pubtator_link/mcp/tools/review.py`, add tool parameters:
 
 ```python
-limit: Annotated[int | None, Field(ge=1, le=100)] = 50,
-cursor: str | None = None,
+limit: Annotated[int | None, Field(ge=1, le=100)] = (50,)
+cursor: str | None = (None,)
 ```
 
 Pass `limit=limit` and `cursor=cursor` into `inspect_review_index_impl()`.
@@ -1854,8 +1847,8 @@ Pass `limit=limit` and `cursor=cursor` into `inspect_review_index_impl()`.
 In `pubtator_link/api/routes/reviews.py`, add route parameters:
 
 ```python
-limit: int | None = Query(default=None, ge=1, le=100),
-cursor: str | None = None,
+limit: int | None = (Query(default=None, ge=1, le=100),)
+cursor: str | None = (None,)
 ```
 
 Pass `limit=limit` and `cursor=cursor` into `InspectReviewIndexRequest`.
@@ -2308,8 +2301,8 @@ from pubtator_link.services.review_context.budgets import resolve_batch_budget_a
 Change `retrieve_review_context_batch_impl()` signature:
 
 ```python
-max_response_chars: int | Literal["auto"] | None = "auto",
-verbosity: ReviewResponseVerbosity | str = "standard",
+max_response_chars: int | Literal["auto"] | None = ("auto",)
+verbosity: ReviewResponseVerbosity | str = ("standard",)
 ```
 
 Add `verbosity` to the args dict. Replace `_review_batch_budget_args()` use with:
@@ -2366,8 +2359,8 @@ In `pubtator_link/mcp/tools/review.py`, import `MaxResponseChars` and `ReviewRes
 Change `retrieve_review_context_batch()` signature:
 
 ```python
-max_response_chars: MaxResponseChars = "auto",
-verbosity: ReviewResponseVerbosity = "standard",
+max_response_chars: MaxResponseChars = ("auto",)
+verbosity: ReviewResponseVerbosity = ("standard",)
 ```
 
 Pass `verbosity=verbosity`.
@@ -2375,8 +2368,8 @@ Pass `verbosity=verbosity`.
 Change `ground_question()` signature:
 
 ```python
-verbosity: ReviewResponseVerbosity = "lean",
-max_response_chars: MaxResponseChars = "auto",
+verbosity: ReviewResponseVerbosity = ("lean",)
+max_response_chars: MaxResponseChars = ("auto",)
 ```
 
 Pass both into `ground_question_impl()`.
@@ -2386,8 +2379,8 @@ Pass both into `ground_question_impl()`.
 In `ground_question_impl()` in `pubtator_link/mcp/service_adapters.py`, add parameters:
 
 ```python
-verbosity: ReviewResponseVerbosity | str = "lean",
-max_response_chars: int | Literal["auto"] = "auto",
+verbosity: ReviewResponseVerbosity | str = ("lean",)
+max_response_chars: int | Literal["auto"] = ("auto",)
 ```
 
 Before constructing `RetrieveReviewContextBatchRequest`, resolve:
@@ -2402,8 +2395,8 @@ resolved_max_response_chars = resolve_max_response_chars(
 Set downstream request:
 
 ```python
-verbosity=verbosity,
-max_response_chars=resolved_max_response_chars,
+verbosity = (verbosity,)
+max_response_chars = (resolved_max_response_chars,)
 ```
 
 - [ ] **Step 10: Run focused tests**
