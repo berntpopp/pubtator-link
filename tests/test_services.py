@@ -147,7 +147,8 @@ class TestPublicationService:
         )
 
         assert result.get("error_code") != "not_found"
-        assert result["export_data"]["documents"][0]["passages"] == [passage]
+        (kept,) = result["export_data"]["documents"][0]["passages"]
+        assert kept["text"]["text"] == "Full text body."  # fenced untrusted_text (#293)
 
     @pytest.mark.asyncio
     async def test_export_pmc_publications_list_interface(self, publication_service, mock_client):

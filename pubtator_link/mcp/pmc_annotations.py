@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from pubtator_link.api.client import PubTatorAPIError
 from pubtator_link.mcp.input_normalization import InputNormalizationError
+from pubtator_link.mcp.untrusted_content import fence_export_documents
 from pubtator_link.models.responses import PublicationExportResponse
 
 _PMCID = re.compile(r"^PMC(?P<number>[1-9][0-9]*)$")
@@ -121,7 +122,7 @@ async def fetch_pmc_annotations_impl(
     found_documents, unavailable_pmcids = classify_pmc_documents(canonical_pmcids, documents)
     if unavailable_pmcids:
         return pmc_not_found_envelope(unavailable_pmcids)
-    return PublicationExportResponse(
+    dumped = PublicationExportResponse(
         format=result.format,
         pmcids=canonical_pmcids,
         full_text=True,
@@ -130,3 +131,4 @@ async def fetch_pmc_annotations_impl(
         coverage_by_pmcid=dict.fromkeys(canonical_pmcids, "full_text"),
         coverage_reason_by_pmcid=dict.fromkeys(canonical_pmcids, "full_text_available"),
     ).model_dump()
+    return fence_export_documents(dumped, source="pubtator_pmc_export")
