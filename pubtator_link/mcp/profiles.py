@@ -69,8 +69,12 @@ WRITE_TOOLS: frozenset[str] = frozenset(
     }
 )
 
+# A text-annotation session id only comes from `submit_text_annotation` (a write tool), so the
+# results tool is listed only where a session can be created (#295).
 READONLY_TOOLS: tuple[str, ...] = tuple(
-    name for name in (*LEAN_TOOLS, *FULL_ONLY_TOOLS) if name not in WRITE_TOOLS
+    name
+    for name in (*LEAN_TOOLS, *FULL_ONLY_TOOLS)
+    if name not in WRITE_TOOLS and name != "get_text_annotation_results"
 )
 
 _PROFILE_SAFE_LLM_CONTEXT_FIELDS = frozenset(

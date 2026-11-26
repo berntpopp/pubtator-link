@@ -13,6 +13,7 @@ import uuid
 from time import perf_counter
 from typing import Any
 
+from pubtator_link.mcp.untrusted_content import fence_passages
 from pubtator_link.services.provenance import start_fetch_log, utc_now, utc_z
 
 # Tools that orient a client and return no upstream data (outside the v1.2 rule).
@@ -139,6 +140,7 @@ class EgressCall:
             # served now, or the stored evidence of the review index that was read.
             stored = await _review_evidence_fetched_at(arguments.get("review_id"), envelope)
             _frame(envelope, tool_name)
+            fence_passages(envelope)
             meta.setdefault("source", "ncbi" if tool_name in _NCBI_TOOLS else "pubtator")
             # PubTator3 and the NCBI services behind it publish no release identifier.
             meta.setdefault("data_version", "live")

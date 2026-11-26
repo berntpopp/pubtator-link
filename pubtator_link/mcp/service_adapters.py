@@ -762,7 +762,7 @@ async def get_text_annotation_results_impl(
         bioconcept=str(result.get("bioconcept", "")),
         annotations=annotations,
         processing_time=result.get("processing_time"),
-        message="Processing in progress. Please try again in a few moments."
+        message="Not ready (or an unknown session). Results can take minutes; retry later."
         if status in {"processing", "submitted"}
         else None,
     ).model_dump()

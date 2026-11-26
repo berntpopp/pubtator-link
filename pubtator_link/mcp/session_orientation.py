@@ -23,6 +23,7 @@ async def research_session_status_payload(
             "manifest": None,
             "error_code": "not_found",
             "message": "Research session not found.",
+            "retryable": False,
         }
     except ValueError:
         return {
@@ -30,6 +31,7 @@ async def research_session_status_payload(
             "manifest": None,
             "error_code": "invalid_input",
             "message": "Research session request was invalid or ambiguous.",
+            "retryable": False,
         }
     return cast(dict[str, Any], response.model_dump(by_alias=True))
 

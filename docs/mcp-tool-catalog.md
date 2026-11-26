@@ -162,7 +162,7 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Stability: `advanced`
 - Description: Use this when a user needs one user-supplied evidence certainty judgment: returns that judgment with its linked passage IDs.
 - Do not use for: `listing all judgments`
-- Example: `{"review_id":"demo","certainty_id":"certainty-1"}`
+- Example: `{"review_id":"demo","certainty_id":"3f2b8c1e-5d47-4a9b-8c21-6e0f4d2a9b17"}`
 - Next tools by profile: full: `list_evidence_certainty`; readonly: `list_evidence_certainty`
 - Resource links: None
 - Input schema: `review_id` (string); `certainty_id` (string)
@@ -385,10 +385,10 @@ Do not edit by hand; run `uv run python scripts/generate_mcp_tool_catalog.py`.
 - Category: `annotation`
 - Profiles: `full`, `readonly`
 - Stability: `advanced`
-- Description: Use this when a user has a PubTator text annotation session ID and needs its results; returns the annotated text with entity mentions and IDs once ready. Do not use this for entity lookup from names; use search_biomedical_entities. Next: search_biomedical_entities.
+- Description: Use this when a user has a PubTator text annotation session ID and needs its results; returns the annotated text with entity mentions and IDs once ready; status 'processing' means not ready yet or an unknown session (results can take minutes). Do not use this for entity lookup from names; use search_biomedical_entities. Next: search_biomedical_entities.
 - Do not use for: `submitting new text`
-- Example: `{"session_id":"session-12345678"}`
-- Next tools by profile: full: `search_biomedical_entities`; readonly: `search_biomedical_entities`
+- Example: `{"session_id":"794821B26B4C6F78B645"}`
+- Next tools by profile: full: `search_biomedical_entities`
 - Resource links: None
 - Input schema: `session_id` (string)
 - Output schema: `None`; has_output_schema: `no`

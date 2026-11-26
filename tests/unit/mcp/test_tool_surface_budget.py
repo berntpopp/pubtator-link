@@ -7,7 +7,7 @@ so the ~73k-token / 87%-outputSchema surface this change removed can never silen
 Two ceilings:
 
 * Per tool: 1,200 tokens (B1). This is a firm rule and is met.
-* Whole server: the standard's target is 10,000 tokens (B2). A *fully documented* 35-tool surface
+* Whole server: the standard's target is 10,000 tokens (B2). A *fully documented* 34-tool surface
   (every input property carries a description, every required/array property an example, every
   closed vocabulary an enum — Tool-Schema Documentation Standard v1) does not fit under 10,000
   without splitting tools, which is out of scope here (it would force a router drift recapture).
@@ -26,7 +26,8 @@ MAX_TOOL_TOKENS = 1_200
 # Guard ceiling for the readonly surface. NOT the 10k B2 target (see module docstring); it locks in
 # the reduction from ~73k and fails loudly on any regression. Achieved surface is ~14.2k.
 # Raised 14,000 -> 14,250: 8 entry-point PMID inputs advertise the PMCID/DOI pattern (router #319).
-MAX_SERVER_TOKENS = 14_250
+# Lowered 14,250 -> 14,100: get_text_annotation_results left the readonly profile (#295).
+MAX_SERVER_TOKENS = 14_100
 
 
 def _tool_entries() -> list[dict[str, object]]:

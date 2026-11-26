@@ -65,6 +65,32 @@ def _fence_key(holder: Any, key: str, *, source: str, record_id: str) -> None:
         ).model_dump(mode="json")
 
 
+def fence_passages(node: Any, record_id: str | None = None) -> None:
+    """Fence the prose (`text`, `tail_preview`, `quote`) of every passage in a payload, in place.
+
+    A passage is any object with a `passage_id`; its quote inherits the id. Run at the shared
+    MCP egress, so stored review-index passages leave fenced like live publication passages.
+    """
+    if isinstance(node, list):
+        for item in node:
+            fence_passages(item, record_id)
+    if not isinstance(node, dict) or node.get("kind") == "untrusted_text":
+        return
+    own = node.get("passage_id")
+    record_id = own if isinstance(own, str) else record_id
+    if record_id is not None:
+        source = node.get("source_kind")
+        for key in ("text", "tail_preview", "quote"):  # `quote` is a string in the audit trail
+            _fence_key(
+                node,
+                key,
+                source=source if isinstance(source, str) else "review_index",
+                record_id=record_id,
+            )
+    for value in node.values():
+        fence_passages(value, record_id)
+
+
 def fence_export_documents(dumped: dict[str, Any], *, source: str) -> dict[str, Any]:
     """Fence the upstream prose of a dumped annotation export, in place (#293).
 

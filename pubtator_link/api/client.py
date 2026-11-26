@@ -14,6 +14,7 @@ from .retry import RetryAttemptMetadata, RetryPolicy, call_with_retries
 from .text_annotation_polling import (
     TRANSIENT_TEXT_ANNOTATION_STATUS_CODES,
     poll_text_annotation_until_ready,
+    retrieve_text_annotation_result,
 )
 
 
@@ -565,12 +566,8 @@ class PubTator3Client:
         url = f"{self.text_config.base_url}/retrieve.cgi"
         data = {"id": session_id}
 
-        return await self._make_request(
-            "POST",
-            url,
-            data=data,
-            use_text_client=True,
-            retry=True,
+        return await retrieve_text_annotation_result(
+            lambda: self._make_request("POST", url, data=data, use_text_client=True, retry=True)
         )
 
     async def retrieve_text_annotation_until_ready(

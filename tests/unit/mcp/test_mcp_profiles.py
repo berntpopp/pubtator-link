@@ -80,7 +80,8 @@ def test_readonly_preserves_full_surface_read_tools() -> None:
     full_names = _tool_names("full")
     readonly_names = _tool_names("readonly")
     assert full_names >= EXPECTED_WRITE_TOOLS
-    assert readonly_names == full_names - EXPECTED_WRITE_TOOLS
+    # The results tool needs a session that only the write tool submit_text_annotation issues.
+    assert readonly_names == full_names - EXPECTED_WRITE_TOOLS - {"get_text_annotation_results"}
     assert {
         "get_publication_annotations",
         "get_pmc_annotations",

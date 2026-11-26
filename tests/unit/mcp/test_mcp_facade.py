@@ -1289,7 +1289,8 @@ async def test_retrieve_review_context_batch_tool_include_meta_false_strips_meta
     assert passage["passage_id"] == "rev:40234174:abstract:0"
     assert passage["pmid"] == "40234174"
     assert passage["title"] == "FMF colchicine"
-    assert passage["text"] == "Colchicine reduced attacks."
+    assert passage["text"]["kind"] == "untrusted_text"
+    assert passage["text"]["text"] == "Colchicine reduced attacks."
 
 
 @pytest.mark.asyncio

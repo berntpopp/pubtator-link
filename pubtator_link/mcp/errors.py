@@ -615,6 +615,7 @@ def mcp_tool_error(exc: Exception, context: McpErrorContext) -> dict[str, Any]:
     if isinstance(exc, InputNormalizationError):
         payload["field_errors"] = _sever_validation_frame(exc.field_errors)
         payload["recovery_hint"] = sanitize_message(exc.recovery_hint)
+        payload |= exc.extra
     if context.degraded_mode is not None:
         payload["degraded_mode"] = context.degraded_mode
     diagnostics_snapshot = bounded_diagnostics_snapshot(context.diagnostics_snapshot)
