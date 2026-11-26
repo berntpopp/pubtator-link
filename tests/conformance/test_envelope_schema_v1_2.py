@@ -8,8 +8,7 @@ and post-processing run -- including every ``include_meta=false`` path, which mu
 remove a required ``_meta`` field.
 
 Scope: this checks the ``_meta`` contract (v1 section 4, v1.2) of every tool. The payload is
-canned, so the frame rule (``result`` or ``results``) is checked for real payloads only where
-a test below runs a real tool body (``search_literature``).
+canned; ``test_envelope_real_payloads.py`` validates every data tool's real payload.
 """
 
 from __future__ import annotations

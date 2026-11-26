@@ -143,15 +143,17 @@ Recommended batch modes:
 
 Useful output paths:
 
+- Every successful data result carries its payload under `results` (array) or `result`
+  (object); `CHANGELOG.md` 7.9.0 lists the former domain keys.
 - Search PMIDs: `results[].pmid`
-- Single retrieval passages: `context_pack.passages[]`
-- Batch merged passages: `merged_context_pack.passages[]`
+- Single retrieval passages: `result.passages[]` (`get_review_context`)
+- Batch merged passages: `result.passages[]` (`get_review_context_batch`)
 - Batch query summaries: `query_summaries[]`
-- Batch compact/diagnostics responses may omit empty `results`; use `merged_context_pack`
+- Batch compact/diagnostics responses may omit the per-query `results`; use `result`
   and `query_summaries` as the primary response surface.
 - Batch zero-result guidance: `query_summaries[].next_steps`
-- Citation map: `merged_context_pack.citation_map`
-- Stable citation keys: `merged_context_pack.passages[].stable_citation_key`
+- Citation map: `result.citation_map`
+- Stable citation keys: `result.passages[].stable_citation_key`
 - Budget estimate: `budget`
 
 Request-local citation labels such as `S1` and `S2` are only stable within the current
@@ -254,10 +256,10 @@ For review-grounded work, start with `workflow_help` or
 fields an LLM should inspect:
 
 - `recovery` for empty, degraded, or high-drop retrievals,
-- `merged_context_pack.passages[].quote` for bounded citation snippets,
-- `merged_context_pack.passages[].confidence_for_grounding` for deterministic
+- `result.passages[].quote` for bounded citation snippets,
+- `result.passages[].confidence_for_grounding` for deterministic
   retrieval confidence as `level` plus compact `basis` codes,
-- `merged_context_pack.dropped_summary` for reason counts and suggested filters,
+- `result.dropped_summary` for reason counts and suggested filters,
 - `get_review_audit_trail` for copy-ready selected-passage audit blocks.
 - Review resources such as `pubtator://reviews/{review_id}`,
   `pubtator://reviews/{review_id}/sessions/{session_id}`,

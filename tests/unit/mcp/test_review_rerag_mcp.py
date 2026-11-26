@@ -189,7 +189,7 @@ async def test_index_review_evidence_accepts_legacy_prepare_mode_without_schema_
 
     assert "prepare_mode" not in tool.parameters["properties"]
     assert result.structured_content["success"] is True
-    assert result.structured_content["queued"] == 1
+    assert result.structured_content["result"]["queued"] == 1
 
 
 @pytest.mark.asyncio
@@ -302,7 +302,7 @@ async def test_record_review_context_records_audit_event(
     )
 
     assert result.structured_content["success"] is True
-    assert result.structured_content["context"]["context_id"] == "ctx-1"
+    assert result.structured_content["result"]["context"]["context_id"] == "ctx-1"
     assert recorded[0][0] == "review-1"
     assert recorded[0][1].passage_ids == ["PMID:1:abstract:0"]
     assert recorded[0][1].selected_passage_ids == ["PMID:1:abstract:0"]
