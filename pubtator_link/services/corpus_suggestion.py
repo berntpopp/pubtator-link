@@ -357,7 +357,8 @@ def _next_commands(
         f"get_publication_metadata(pmids={pmids!r})",
         f"index_review_evidence(review_id='{review_id}', pmids={pmids!r})",
         f"get_review_index_status(review_id='{review_id}')",
-        f"get_review_context_batch(review_id='{review_id}', queries={[request.question]!r})",
+        # The caller fills in its own question; echoing it back would carry raw input into a hint.
+        f"get_review_context_batch(review_id='{review_id}', queries=['<question>'])",
     ]
 
 

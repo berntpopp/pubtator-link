@@ -22,7 +22,8 @@ pubtator_link/repositories/review_rerag.py:2393
 # for search abstract fill/fencing (#246) + title promotion (#243); the search
 # adapter is the next split candidate (decomposition plan above).
 pubtator_link/mcp/service_adapters.py:1869
-pubtator_link/services/topic_literature_map.py:1821
+# Raised 1821 -> 1822: next_commands replay the resolved seeds, never the raw query (GTS-CORE-TXT-04).
+pubtator_link/services/topic_literature_map.py:1822
 pubtator_link/models/review_rerag.py:1253
 pubtator_link/services/citation_graph.py:1244
 # Raised 1160 -> 1169: per-response ranking + rerank warnings (#182); split plan above.

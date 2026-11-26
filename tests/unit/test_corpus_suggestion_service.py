@@ -79,7 +79,9 @@ async def test_corpus_suggestion_service_deduplicates_and_assigns_roles() -> Non
     assert response.candidates[0].role == "guideline"
     assert response.candidates[1].role == "cohort"
     assert "index_review_evidence" in response.meta["next_commands"][1]
-    assert "FMF MEFV VUS colchicine" in response.meta["next_commands"][3]
+    # The caller's free-text question is never echoed into a hint (GTS-CORE-TXT-04).
+    assert "FMF MEFV VUS colchicine" not in " ".join(response.meta["next_commands"])
+    assert "queries=['<question>']" in response.meta["next_commands"][3]
 
 
 @pytest.mark.asyncio

@@ -150,7 +150,10 @@ async def test_enqueue_preparation_job_requeues_failed_job() -> None:
     )
 
     assert result == "previously_failed_requeued"
-    assert any("status = 'queued'" in sql.lower() for sql, _ in connection.executed)
+    requeue = next(sql for sql, _ in connection.executed if "status = 'queued'" in sql.lower())
+    # review_preparation_jobs has no updated_at column; setting it fails every requeue.
+    assert "updated_at" not in requeue
+    assert "queued_at = now()" in requeue
 
 
 @pytest.mark.asyncio
