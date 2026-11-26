@@ -113,9 +113,20 @@ broader lookup candidates. Candidate variants are not classifications for the qu
 | `get_research_session_status` | Staged candidate, coverage, and preparation status |
 | `list_research_sessions` | Compact cursor-paginated session summaries; status provides details |
 
-That is the default `readonly` surface. The `lean` and `full` profiles add write tools
-(indexing, staging, recording, audit-bundle export) and require service auth —
-[Security](docs/SECURITY.md) explains why.
+That is the default `readonly` surface. The write tools below declare `readOnlyHint: false`,
+are absent from `readonly`, and require service auth ([Security](docs/SECURITY.md)). `lean`
+adds the first three; `full` adds all of them.
+
+### Tools that write
+
+- `index_review_evidence`: fetches sources and stores review-scoped passages for a `review_id`.
+- `ground_question`: searches, then indexes candidate PMIDs into a review (as above).
+- `record_review_context`: stores compact review context, evidence IDs, and decisions.
+- `stage_research_session`: stores a research session of candidate PMIDs and queues preparation.
+- `review_quickstart`: stages and indexes up to `n_pmids` PMIDs for a new review.
+- `add_evidence_certainty`: stores a user-supplied evidence-certainty judgment.
+- `export_review_audit_bundle`: with `save_to_file`, writes the bundle to the export directory.
+- `submit_text_annotation`: submits caller text to PubTator as a remote annotation job.
 
 Leaf names are unprefixed per [Tool-Naming Standard v1](https://github.com/berntpopp/genefoundry-router/blob/main/docs/TOOL-NAMING-STANDARD-v1.md);
 `serverInfo.name` is `pubtator-link` and the canonical gateway namespace token is

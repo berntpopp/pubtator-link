@@ -13,8 +13,8 @@ Profile: ``readonly`` is pinned deliberately. It is the default
 ``genefoundry-router`` fleet baseline harvest, so it is what the README documents.
 Pinning it also keeps the assertion deterministic regardless of any
 ``PUBTATOR_LINK_MCP_PROFILE`` value in the developer's environment or ``.env``.
-The write tools that ``lean``/``full`` add are described in prose beneath the
-table, not enumerated in it.
+The write tools that ``lean``/``full`` add are listed as bullets beneath the
+table, not as table rows; ``test_readme_names_every_write_tool`` keeps that list complete.
 """
 
 from __future__ import annotations
@@ -83,3 +83,21 @@ def test_readme_documents_the_safe_readonly_evidence_contract() -> None:
 
     for requirement in expected:
         assert requirement in text
+
+
+async def test_readme_names_every_write_tool() -> None:
+    """GTS-CORE-RO-01: each tool declaring ``readOnlyHint: false`` is named in the README.
+
+    The ``full`` profile is the superset of every write tool; ``lean`` adds a subset.
+    """
+    facade: Any = create_pubtator_mcp(profile="full")
+    writers = {
+        tool.name
+        for tool in await facade.list_tools()
+        if tool.annotations is not None and tool.annotations.readOnlyHint is False
+    }
+    text = README.read_text(encoding="utf-8")
+
+    assert writers, "the full profile registers no write tools"
+    missing = sorted(name for name in writers if f"`{name}`" not in text)
+    assert not missing, f"write tools absent from the README: {missing}"
